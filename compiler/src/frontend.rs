@@ -7,7 +7,11 @@ pub struct Compilation {
     pub json: String,
 }
 
-pub fn compile(entry: &str) -> Result<Compilation, String> {
+pub fn compile(
+    entry: &str,
+    aliases: &[String],
+    api_aliases: &[String],
+) -> Result<Compilation, String> {
     let root = repository_root();
     let script = root.join("frontend/dist/src/cli.js");
     if !script.is_file() {
@@ -17,11 +21,19 @@ pub fn compile(entry: &str) -> Result<Compilation, String> {
         ));
     }
 
-    let output = Command::new("node")
+    let mut command = Command::new("node");
+    command
         .arg(&script)
         .arg(entry)
         .arg("--sdk")
-        .arg(root.join("sdk/index.d.ts"))
+        .arg(root.join("sdk/index.d.ts"));
+    for alias in aliases {
+        command.arg("--alias").arg(alias);
+    }
+    for alias in api_aliases {
+        command.arg("--api").arg(alias);
+    }
+    let output = command
         .output()
         .map_err(|error| format!("failed to start the TypeScript frontend: {error}"))?;
 

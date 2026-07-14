@@ -22,6 +22,8 @@ pub struct Options {
     pub emit_hir: bool,
     pub emit_asm: bool,
     pub keep_temps: bool,
+    pub aliases: Vec<String>,
+    pub api_aliases: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -44,7 +46,7 @@ struct BuildReport<'a> {
 
 pub fn execute(options: &Options) -> Result<PathBuf, String> {
     ensure_supported_host()?;
-    let compilation = frontend::compile(&options.entry)?;
+    let compilation = frontend::compile(&options.entry, &options.aliases, &options.api_aliases)?;
     let assembly = codegen::emit_macos_arm64(
         &compilation.program,
         CodegenOptions {

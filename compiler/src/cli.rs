@@ -6,7 +6,7 @@ const USAGE: &str = "\
 TinyTSX native TSX compiler
 
 Usage:
-  tinytsx check <entry.tsx> [--emit-hir | --emit-asm]
+  tinytsx check <entry.tsx> [--emit-hir | --emit-asm] [--alias specifier=path] [--api specifier=path]
   tinytsx build <entry.tsx> [options]
   tinytsx run <entry.tsx> [options]
 ";
@@ -64,6 +64,8 @@ fn parse_build_options(
         emit_hir: false,
         emit_asm: false,
         keep_temps: false,
+        aliases: Vec::new(),
+        api_aliases: Vec::new(),
     };
     let mut index = 0;
     while index < arguments.len() {
@@ -83,6 +85,12 @@ fn parse_build_options(
                 options.request_memory =
                     parse_number(option_value(arguments, &mut index)?, "request memory")?
             }
+            "--alias" => options
+                .aliases
+                .push(option_value(arguments, &mut index)?.to_owned()),
+            "--api" => options
+                .api_aliases
+                .push(option_value(arguments, &mut index)?.to_owned()),
             "--runtime" => {
                 let runtime = option_value(arguments, &mut index)?;
                 if runtime != "bootstrap" {
@@ -142,24 +150,30 @@ fn check(arguments: &[String]) -> Result<(), String> {
     let mut entry = None;
     let mut emit_hir = false;
     let mut emit_asm = false;
+    let mut aliases = Vec::new();
+    let mut api_aliases = Vec::new();
 
-    for argument in arguments {
-        match argument.as_str() {
+    let mut index = 0;
+    while index < arguments.len() {
+        match arguments[index].as_str() {
             "--emit-hir" => emit_hir = true,
             "--emit-asm" => emit_asm = true,
+            "--alias" => aliases.push(option_value(arguments, &mut index)?.to_owned()),
+            "--api" => api_aliases.push(option_value(arguments, &mut index)?.to_owned()),
             option if option.starts_with('-') => {
                 return Err(format!("unknown check option `{option}`"));
             }
             value if entry.is_none() => entry = Some(value),
             value => return Err(format!("unexpected argument `{value}`")),
         }
+        index += 1;
     }
 
     if emit_hir && emit_asm {
         return Err("--emit-hir and --emit-asm cannot be used together".to_owned());
     }
     let entry = entry.ok_or_else(|| format!("check requires an entry module\n\n{USAGE}"))?;
-    let compilation = frontend::compile(entry)?;
+    let compilation = frontend::compile(entry, &aliases, &api_aliases)?;
 
     if emit_hir {
         println!("{}", compilation.json);

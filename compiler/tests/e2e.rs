@@ -58,7 +58,31 @@ fn builds_and_serves_native_text_through_direct_function_calls() {
     );
 }
 
+#[test]
+fn builds_and_serves_the_pinned_hono_basic_route() {
+    build_and_serve_with_options(
+        "tests/compat/hono/basic-smoke.ts",
+        "Hono!!",
+        "text/plain; charset=UTF-8",
+        &[
+            "--alias",
+            "hono=vendor/hono/src/index.ts",
+            "--api",
+            "hono=tests/compat/hono/api.d.ts",
+        ],
+    );
+}
+
 fn build_and_serve(entry: &str, expected_body: &str, expected_content_type: &str) {
+    build_and_serve_with_options(entry, expected_body, expected_content_type, &[]);
+}
+
+fn build_and_serve_with_options(
+    entry: &str,
+    expected_body: &str,
+    expected_content_type: &str,
+    frontend_options: &[&str],
+) {
     let _build_guard = NATIVE_BUILD.lock().expect("lock native E2E build");
     let root = repository_root();
     build_frontend(&root);
@@ -66,14 +90,15 @@ fn build_and_serve(entry: &str, expected_body: &str, expected_content_type: &str
     let binary = directory.join("server");
     let port = available_port();
 
-    let build = Command::new(env!("CARGO_BIN_EXE_tinytsx"))
+    let mut build_command = Command::new(env!("CARGO_BIN_EXE_tinytsx"));
+    build_command
         .current_dir(&root)
         .args(["build", entry, "--port"])
         .arg(port.to_string())
         .arg("--output")
         .arg(&binary)
-        .output()
-        .expect("start TinyTSX compiler");
+        .args(frontend_options);
+    let build = build_command.output().expect("start TinyTSX compiler");
     assert!(
         build.status.success(),
         "build failed:\nstdout:\n{}\nstderr:\n{}",
@@ -119,7 +144,10 @@ fn build_and_serve(entry: &str, expected_body: &str, expected_content_type: &str
         missing_response.starts_with("HTTP/1.1 404 Not Found\r\n"),
         "{missing_response}"
     );
-    assert!(missing_response.ends_with("not found"), "{missing_response}");
+    assert!(
+        missing_response.ends_with("not found"),
+        "{missing_response}"
+    );
 
     fs::remove_dir_all(directory).expect("remove test artifacts");
 }

@@ -26,12 +26,14 @@ fn request_without_query_exposes_an_empty_query_view() {
 fn request_path_matching_uses_the_path_without_the_query() {
     let request = request(b"GET", b"/users?expand=true");
 
-    assert_eq!(unsafe {
-        tinytsx_request_path_equals(&request, b"/users".as_ptr(), b"/users".len())
-    }, 1);
-    assert_eq!(unsafe {
-        tinytsx_request_path_equals(&request, b"/other".as_ptr(), b"/other".len())
-    }, 0);
+    assert_eq!(
+        unsafe { tinytsx_request_path_equals(&request, b"/users".as_ptr(), b"/users".len()) },
+        1
+    );
+    assert_eq!(
+        unsafe { tinytsx_request_path_equals(&request, b"/other".as_ptr(), b"/other".len()) },
+        0
+    );
 }
 
 #[test]
