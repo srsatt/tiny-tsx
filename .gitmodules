@@ -6,3 +6,6 @@
 	path = vendor/test262
 	url = https://github.com/tc39/test262.git
 	shallow = true
+[submodule "vendor/hono-examples"]
+	path = vendor/hono-examples
+	url = https://github.com/honojs/examples.git

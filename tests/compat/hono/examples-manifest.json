@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "upstream": {
+    "repository": "https://github.com/honojs/examples.git",
+    "path": "vendor/hono-examples",
+    "commit": "3b0b62875a0e1265763fea1c6388866d5697ef81"
+  },
+  "basic": {
+    "entry": "vendor/hono-examples/basic/src/index.ts",
+    "test": "vendor/hono-examples/basic/src/index.test.ts",
+    "expectedRoutes": 16,
+    "behavior": {
+      "method": "GET",
+      "path": "/",
+      "status": 200,
+      "header": {
+        "name": "x-powered-by",
+        "value": "Hono"
+      },
+      "body": "Hono!!"
+    }
+  }
+}
