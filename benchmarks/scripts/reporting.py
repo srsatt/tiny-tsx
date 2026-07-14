@@ -74,7 +74,7 @@ def render_markdown(result: dict[str, Any]) -> str:
         "",
         "## Footprint and startup",
         "",
-        "| Target | Startup median | Idle RSS median | App artifact | Runtime executable |",
+        "| Target | Startup-to-first-response median | Idle RSS median | App artifact | Runtime executable |",
         "| --- | ---: | ---: | ---: | ---: |",
         _footprint_row("TinyTSX", tiny),
         _footprint_row("Bun", bun),
@@ -120,11 +120,16 @@ def _footprint_row(label: str, target: dict[str, Any]) -> str:
     return (
         f"| {label} | {target['startupMedianMs']:.2f} ms | "
         f"{_mib(target['idleRssMedianBytes']):.2f} MiB | "
-        f"{_mib(target['artifactBytes']):.2f} MiB | "
-        f"{_mib(target['runtimeExecutableBytes']):.2f} MiB |"
+        f"{_size(target['artifactBytes'])} | "
+        f"{_size(target['runtimeExecutableBytes'])} |"
     )
 
 
 def _mib(value: int) -> float:
     return value / 1024 / 1024
 
+
+def _size(value: int) -> str:
+    if value < 1024 * 1024:
+        return f"{value / 1024:.2f} KiB"
+    return f"{_mib(value):.2f} MiB"

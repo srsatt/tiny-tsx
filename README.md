@@ -145,6 +145,17 @@ cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 ```
 
+An exploratory static performance comparison against an equivalent idiomatic Bun
+server is available separately:
+
+```bash
+npm run benchmark:static
+```
+
+The harness verifies equivalent status, content type, content length, and body,
+then records repeated startup-to-first-response, RSS, throughput, and latency
+samples through `oha`. See `benchmarks/README.md` for methodology and limitations.
+
 The present bootstrap accepts GET requests with `Connection: close` on one
 worker. Dynamic expressions, escaping, the reusable request arena, and the
 fixed worker pool are subsequent milestones tracked in `doc/BACKLOG.md`.

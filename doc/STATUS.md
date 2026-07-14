@@ -33,6 +33,12 @@ produces and serves a native Mach-O executable from the example TSX source.
 - Native E2E coverage checks Mach-O magic, starts the executable, sends a real
   TCP request, and asserts the complete 200 response and 53-byte HTML body.
 - A stripped release build measured 393,920 bytes on the development machine.
+- The static benchmark harness verifies equivalent TinyTSX/Bun responses, then
+  records all repeated `oha` samples plus startup-to-first-response and idle RSS.
+- The initial three-run preview found essentially equal static throughput. Its
+  material difference was footprint: TinyTSX measured 5.64 ms startup and
+  1.78 MiB idle RSS versus Bun at 12.87 ms and 31.53 MiB. This is exploratory
+  evidence only; it does not cover dynamic rendering or keep-alive HTTP.
 
 Verification:
 
@@ -46,6 +52,8 @@ rtk cargo clippy --workspace --all-targets -- -D warnings
 rtk cargo run -q -p tinytsx -- check examples/static-page/server.tsx --emit-asm
 rtk cargo run -q -p tinytsx -- build examples/static-page/server.tsx --port 3017 --output dist/static-server --release --emit-hir --emit-asm
 rtk curl -i --max-time 5 http://127.0.0.1:3017/
+rtk npm run test:benchmarks
+rtk python3 benchmarks/scripts/run_static.py --duration 2 --runs 3 --startup-runs 5 --concurrency 1,8,32 --output-prefix benchmarks/results/2026-07-14-m5-max-static-preview
 ```
 
 ## Active slice

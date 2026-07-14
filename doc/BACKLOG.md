@@ -18,6 +18,15 @@ commit message.
 - [x] Add a real HTTP end-to-end test and report executable size.
 - [x] Update README with exact working commands.
 
+## Benchmark evidence
+
+- [x] Add an idiomatic Bun static server with equivalent response semantics.
+- [x] Add repeated startup, RSS, throughput, and latency measurement via `oha`.
+- [x] Retain machine-readable samples and a readable static preview report.
+- [ ] Add the exact-source Bun compatibility runtime after dynamic TSX lands.
+- [ ] Benchmark dynamic escaping, request arenas, and the native worker pool.
+- [ ] Run controlled, longer-duration release comparisons before publishing claims.
+
 ## Next slice
 
 - [ ] Dynamic component props and request query lookup.
