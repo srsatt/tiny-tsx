@@ -8,6 +8,7 @@ import ts from "typescript";
 import {lowerStagedConstants} from "../src/constant-lowering.js";
 import {loadModuleGraph} from "../src/module-graph.js";
 import {analyzeStaging, evaluateConstantExpression} from "../src/staging.js";
+import {STAGED_UNDEFINED} from "../src/staged-value.js";
 
 const directory = mkdtempSync(path.join(tmpdir(), "tinytsx-staging-"));
 const repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -26,6 +27,8 @@ test("folds closed arrays and records across ESM imports", () => {
     const options = {...DEFAULTS, strict: false};
     const source = {first: 1, second: 2};
     const {first, ...remaining} = source;
+    const closedRecord = {name: "tiny", missing: undefined};
+    const dynamicMap = new Map([["name", "tiny"]]);
     function append(values: string[]) { return [...values, "tail"]; }
   `);
 
@@ -34,8 +37,30 @@ test("folds closed arrays and records across ESM imports", () => {
   assert.deepEqual(binding(report, "allMethods"), ["get", "post", "all"]);
   assert.deepEqual(binding(report, "options"), {strict: false, workers: 1});
   assert.deepEqual(binding(report, "remaining"), {second: 2});
+  assert.deepEqual(binding(report, "closedRecord"), {
+    name: "tiny",
+    missing: STAGED_UNDEFINED,
+  });
+  assert.equal(report.bindings.some(binding => binding.name === "dynamicMap"), false);
   assert.equal(report.spreads.filter(spread => spread.disposition === "constant").length, 3);
   assert.equal(report.spreads.filter(spread => spread.disposition === "runtime").length, 1);
+});
+
+test("stages undefined and bigint without conflating undefined with failure", () => {
+  const sourceFile = ts.createSourceFile(
+    "primitives.ts",
+    "[undefined, -9007199254740993n]",
+    ts.ScriptTarget.ESNext,
+    true,
+    ts.ScriptKind.TS,
+  );
+  const statement = sourceFile.statements[0];
+  assert.ok(statement && ts.isExpressionStatement(statement));
+
+  assert.deepEqual(
+    evaluateConstantExpression(statement.expression),
+    [STAGED_UNDEFINED, -9007199254740993n],
+  );
 });
 
 test("folds Hono's method-table spread during process initialization", () => {

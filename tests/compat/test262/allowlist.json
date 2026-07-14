@@ -29,6 +29,16 @@
       "path": "test/language/expressions/array/spread-sngl-literal.js",
       "feature": "constant-array-spread",
       "mode": "syntax"
+    },
+    {
+      "path": "test/language/expressions/typeof/undefined.js",
+      "feature": "undefined-primitive",
+      "mode": "syntax"
+    },
+    {
+      "path": "test/language/expressions/typeof/bigint.js",
+      "feature": "bigint-primitive",
+      "mode": "syntax"
     }
   ]
 }

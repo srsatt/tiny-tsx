@@ -12,9 +12,11 @@ export interface StaticString {
 }
 
 export type ConstantValue =
+  | {kind: "undefined"}
   | {kind: "null"}
   | {kind: "boolean"; value: boolean}
   | {kind: "number"; value: number}
+  | {kind: "bigint"; value: string}
   | {kind: "string"; value: string}
   | {kind: "array"; items: ConstantValue[]}
   | {kind: "record"; fields: ConstantField[]};

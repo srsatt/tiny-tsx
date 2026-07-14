@@ -1,11 +1,15 @@
 import ts from "typescript";
 import type {ModuleGraph} from "./module-graph.js";
 
+export const STAGED_UNDEFINED: unique symbol = Symbol("tinytsx.staged.undefined");
+
 export type StagedValue =
   | string
   | number
+  | bigint
   | boolean
   | null
+  | typeof STAGED_UNDEFINED
   | StagedValue[]
   | {[key: string]: StagedValue};
 
@@ -47,6 +51,9 @@ export function evaluateStagedValue(
   if (ts.isNumericLiteral(value)) {
     return Number(value.text);
   }
+  if (ts.isBigIntLiteral(value)) {
+    return BigInt(value.text.slice(0, -1).replaceAll("_", ""));
+  }
   if (value.kind === ts.SyntaxKind.TrueKeyword) {
     return true;
   }
@@ -61,9 +68,13 @@ export function evaluateStagedValue(
     && (value.operator === ts.SyntaxKind.MinusToken || value.operator === ts.SyntaxKind.PlusToken)
   ) {
     const operand = evaluateStagedValue(value.operand, module, context);
-    return typeof operand === "number"
-      ? (value.operator === ts.SyntaxKind.MinusToken ? -operand : operand)
-      : undefined;
+    if (typeof operand === "number") {
+      return value.operator === ts.SyntaxKind.MinusToken ? -operand : operand;
+    }
+    if (typeof operand === "bigint" && value.operator === ts.SyntaxKind.MinusToken) {
+      return -operand;
+    }
+    return undefined;
   }
   if (ts.isIdentifier(value)) {
     return evaluateIdentifier(value.text, module, context);
@@ -166,7 +177,7 @@ function evaluateIdentifier(
   }
   const binding = context.bindings.get(key);
   if (binding === undefined) {
-    return undefined;
+    return imported === undefined && name === "undefined" ? STAGED_UNDEFINED : undefined;
   }
   context.active.add(key);
   const value = evaluateStagedValue(binding.initializer, binding.module, context);

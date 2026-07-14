@@ -61,9 +61,11 @@ pub struct Constant {
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum ConstantValue {
+    Undefined,
     Null,
     Boolean { value: bool },
     Number { value: f64 },
+    Bigint { value: String },
     String { value: String },
     Array { items: Vec<ConstantValue> },
     Record { fields: Vec<ConstantField> },
@@ -171,6 +173,9 @@ fn validate_constant_value(value: &ConstantValue, depth: usize) -> Result<(), St
         ConstantValue::Number { value } if !value.is_finite() => {
             Err("constant number must be finite".to_owned())
         }
+        ConstantValue::Bigint { value } if !is_canonical_bigint(value) => {
+            Err("constant bigint must use canonical decimal notation".to_owned())
+        }
         ConstantValue::Array { items } => {
             for item in items {
                 validate_constant_value(item, depth + 1)?;
@@ -189,4 +194,14 @@ fn validate_constant_value(value: &ConstantValue, depth: usize) -> Result<(), St
         }
         _ => Ok(()),
     }
+}
+
+fn is_canonical_bigint(value: &str) -> bool {
+    if value == "0" {
+        return true;
+    }
+    let digits = value.strip_prefix('-').unwrap_or(value);
+    !digits.is_empty()
+        && !digits.starts_with('0')
+        && digits.bytes().all(|byte| byte.is_ascii_digit())
 }

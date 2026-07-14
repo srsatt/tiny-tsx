@@ -86,6 +86,8 @@ test("carries staged closed values into the typed HIR constant pool", () => {
       strict: true,
       retries: 2,
       fallback: null,
+      timeout: undefined,
+      generation: 9007199254740993n,
     } as const;
     function Page(): JSX.Element { return <h1>Hello</h1>; }
     export function GET(request: Request): Response { return Response.html(<Page />); }
@@ -106,6 +108,8 @@ test("carries staged closed values into the typed HIR constant pool", () => {
       {name: "strict", value: {kind: "boolean", value: true}},
       {name: "retries", value: {kind: "number", value: 2}},
       {name: "fallback", value: {kind: "null"}},
+      {name: "timeout", value: {kind: "undefined"}},
+      {name: "generation", value: {kind: "bigint", value: "9007199254740993"}},
     ],
   });
 });

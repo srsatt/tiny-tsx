@@ -1,5 +1,6 @@
 import type {Constant, ConstantValue} from "./hir.js";
 import type {StagedBinding, StagedValue} from "./staging.js";
+import {STAGED_UNDEFINED} from "./staged-value.js";
 
 export function lowerStagedConstants(bindings: readonly StagedBinding[]): Constant[] {
   return bindings.map((binding, id) => ({
@@ -12,6 +13,9 @@ export function lowerStagedConstants(bindings: readonly StagedBinding[]): Consta
 }
 
 function lowerValue(value: StagedValue): ConstantValue {
+  if (value === STAGED_UNDEFINED) {
+    return {kind: "undefined"};
+  }
   if (value === null) {
     return {kind: "null"};
   }
@@ -20,6 +24,9 @@ function lowerValue(value: StagedValue): ConstantValue {
   }
   if (typeof value === "number") {
     return {kind: "number", value};
+  }
+  if (typeof value === "bigint") {
+    return {kind: "bigint", value: value.toString()};
   }
   if (typeof value === "string") {
     return {kind: "string", value};

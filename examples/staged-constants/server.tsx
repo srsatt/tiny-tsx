@@ -2,6 +2,8 @@ const METHODS = ["get", "post"] as const;
 const ROUTER_CONFIG = {
   methods: [...METHODS, "all"],
   strict: true,
+  timeout: undefined,
+  generation: 9007199254740993n,
 } as const;
 
 function Page(): JSX.Element {
