@@ -33,7 +33,7 @@ export function compileEntry(entryPath: string, options: CompileOptions): HirPro
     module: ts.ModuleKind.ESNext,
     moduleResolution: ts.ModuleResolutionKind.Bundler,
     jsx: ts.JsxEmit.Preserve,
-    lib: ["lib.es2022.d.ts"],
+    lib: ["lib.es2022.d.ts", "lib.dom.d.ts", "lib.dom.iterable.d.ts"],
   };
   const typeAliases = {...options.aliases, ...options.apiAliases};
   if (Object.keys(typeAliases).length > 0) {
@@ -66,18 +66,20 @@ export function compileEntry(entryPath: string, options: CompileOptions): HirPro
     return loaded;
   });
   validateForbiddenSyntax(sourceFile, staging.computedAccesses);
-  const entryDiagnostics = ts.getPreEmitDiagnostics(program, sourceFile);
+  const entryDiagnostics = ts.getPreEmitDiagnostics(program, sourceFile)
+    .filter(diagnostic => !isResponseIntrinsicDiagnostic(diagnostic));
   if (entryDiagnostics.length > 0) {
     throw new CompileFailure(entryDiagnostics.map(fromTypeScript));
+  }
+  const typeScriptDiagnostics = ts.getPreEmitDiagnostics(program)
+    .filter(diagnostic => !isResponseIntrinsicDiagnostic(diagnostic));
+  if (typeScriptDiagnostics.length > 0) {
+    throw new CompileFailure(typeScriptDiagnostics.map(fromTypeScript));
   }
   for (const module of sourceFiles) {
     if (module !== sourceFile) {
       validateForbiddenSyntax(module, staging.computedAccesses);
     }
-  }
-  const typeScriptDiagnostics = ts.getPreEmitDiagnostics(program);
-  if (typeScriptDiagnostics.length > 0) {
-    throw new CompileFailure(typeScriptDiagnostics.map(fromTypeScript));
   }
   const componentDeclarations = sourceFiles.flatMap(module =>
     module.statements.filter(isComponentDeclaration)
@@ -147,6 +149,27 @@ export function compileEntry(entryPath: string, options: CompileOptions): HirPro
       dynamicHtmlExpressions: 0,
     },
   };
+}
+
+function isResponseIntrinsicDiagnostic(diagnostic: ts.Diagnostic): boolean {
+  if (diagnostic.code !== 2339 || diagnostic.file === undefined || diagnostic.start === undefined) {
+    return false;
+  }
+  const token = tokenAtPosition(diagnostic.file, diagnostic.start);
+  return ts.isIdentifier(token)
+    && (token.text === "html" || token.text === "text")
+    && ts.isPropertyAccessExpression(token.parent)
+    && ts.isIdentifier(token.parent.expression)
+    && token.parent.expression.text === "Response";
+}
+
+function tokenAtPosition(node: ts.Node, position: number): ts.Node {
+  for (const child of node.getChildren(node.getSourceFile())) {
+    if (child.getStart(node.getSourceFile()) <= position && position < child.getEnd()) {
+      return tokenAtPosition(child, position);
+    }
+  }
+  return node;
 }
 
 function isComponentDeclaration(statement: ts.Statement): statement is ts.FunctionDeclaration {

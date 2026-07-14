@@ -37,6 +37,33 @@ test("lowers a static component to one coalesced HTML fragment", () => {
   assert.ok(hir.components[0]?.span.line);
 });
 
+test("type-checks Web standard constructors with the DOM declarations", () => {
+  const hir = compileSource(`
+    const headers = new Headers({"content-type": "text/plain"});
+    const url = new URL("https://example.test/path");
+    const request = new Request(url, {headers});
+    const response = new Response("unused");
+    function Page(): JSX.Element { return <p>Web types</p>; }
+    export function GET(input: Request): Response {
+      return Response.html(<Page />);
+    }
+  `);
+
+  assert.equal(hir.handlers[0]?.response.kind, "html");
+});
+
+test("does not hide unknown Response static properties", () => {
+  assert.throws(
+    () => compileSource(`
+      export function GET(request: Request): Response {
+        return Response.missing("bad");
+      }
+    `),
+    (error: unknown) => error instanceof CompileFailure
+      && error.diagnostics[0]?.code === "TS2339",
+  );
+});
+
 test("lowers nested component calls without a JSX object tree", () => {
   const hir = compileSource(`
     function Heading(): JSX.Element { return <h1>Hello</h1>; }

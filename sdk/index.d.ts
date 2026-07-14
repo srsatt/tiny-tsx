@@ -3,16 +3,6 @@ type u32 = number;
 type i64 = number;
 type u64 = number;
 
-declare class Request {
-  query(name: string): string | null;
-}
-
-declare class Response {
-  static html(element: JSX.Element): Response;
-  /** TinyTSX lowering intrinsic; not a Web-standard static Response method. */
-  static text(body: string): Response;
-}
-
 declare namespace JSX {
   interface Element {
     readonly __tinytsxElement: unique symbol;
