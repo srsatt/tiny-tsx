@@ -1,0 +1,275 @@
+{
+  "schemaVersion": 1,
+  "timestamp": "2026-07-14T23:32:17+00:00",
+  "workload": "hono-basic",
+  "scope": "same pinned Hono GET / source; HTTP/1.1; connection close; localhost",
+  "environment": {
+    "machine": "Model Name: MacBook Pro; Model Identifier: Mac17,6; Chip: Apple M5 Max; Total Number of Cores: 18 (6 Super and 12 Performance); Memory: 128 GB",
+    "os": "macOS 26.5.2",
+    "architecture": "arm64",
+    "rustVersion": "rustc 1.96.0 (ac68faa20 2026-05-25)",
+    "bunVersion": "1.3.13",
+    "ohaVersion": "oha 1.15.0",
+    "commit": "77c95a1",
+    "dirty": false,
+    "powerAndBackgroundState": "not controlled"
+  },
+  "configuration": {
+    "runs": 3,
+    "startupRuns": 5,
+    "durationSeconds": 1,
+    "concurrency": [
+      1,
+      8
+    ],
+    "workers": 1,
+    "requestMemoryBytes": 262144,
+    "keepAlive": false
+  },
+  "correctness": {
+    "status": 200,
+    "contentType": "text/plain;charset=UTF-8",
+    "contentLength": 6,
+    "bodyUtf8": "Hono!!"
+  },
+  "targets": {
+    "tinytsx": {
+      "artifactBytes": 394064,
+      "runtimeExecutableBytes": 394064,
+      "startupSamplesMs": [
+        380.062958,
+        9.31825,
+        6.603916,
+        5.498958,
+        6.652083
+      ],
+      "idleRssSamplesBytes": [
+        1851392,
+        1851392,
+        1802240
+      ],
+      "throughput": {
+        "1": {
+          "samples": [
+            {
+              "requests_per_second": 10460.91581754571,
+              "success_rate": 1.0,
+              "p50_ms": 0.092583,
+              "p95_ms": 0.10162500000000001,
+              "p99_ms": 0.108417,
+              "max_ms": 23.429958,
+              "total_seconds": 1.002971459,
+              "status_codes": {
+                "200": 10492
+              }
+            },
+            {
+              "requests_per_second": 10151.368972110296,
+              "success_rate": 1.0,
+              "p50_ms": 0.092458,
+              "p95_ms": 0.10245900000000001,
+              "p99_ms": 0.111042,
+              "max_ms": 48.179208,
+              "total_seconds": 1.002426375,
+              "status_codes": {
+                "200": 10176
+              }
+            },
+            {
+              "requests_per_second": 10122.331016796763,
+              "success_rate": 1.0,
+              "p50_ms": 0.092292,
+              "p95_ms": 0.102042,
+              "p99_ms": 0.109333,
+              "max_ms": 58.026832999999996,
+              "total_seconds": 1.003227417,
+              "status_codes": {
+                "200": 10155
+              }
+            }
+          ],
+          "median": {
+            "requests_per_second": 10151.368972110296,
+            "p50_ms": 0.092458,
+            "p95_ms": 0.102042,
+            "p99_ms": 0.109333,
+            "max_ms": 48.179208
+          }
+        },
+        "8": {
+          "samples": [
+            {
+              "requests_per_second": 33498.51977629447,
+              "success_rate": 1.0,
+              "p50_ms": 0.221333,
+              "p95_ms": 0.24850000000000003,
+              "p99_ms": 0.27920799999999996,
+              "max_ms": 56.863333000000004,
+              "total_seconds": 1.001536791,
+              "status_codes": {
+                "200": 33550
+              }
+            },
+            {
+              "requests_per_second": 33819.07960239973,
+              "success_rate": 1.0,
+              "p50_ms": 0.224834,
+              "p95_ms": 0.252875,
+              "p99_ms": 0.302833,
+              "max_ms": 31.808666,
+              "total_seconds": 1.0018605,
+              "status_codes": {
+                "200": 33882
+              }
+            },
+            {
+              "requests_per_second": 34528.931585401326,
+              "success_rate": 1.0,
+              "p50_ms": 0.22320900000000002,
+              "p95_ms": 0.24774999999999997,
+              "p99_ms": 0.265834,
+              "max_ms": 24.429833000000002,
+              "total_seconds": 1.000610167,
+              "status_codes": {
+                "200": 34550
+              }
+            }
+          ],
+          "median": {
+            "requests_per_second": 33819.07960239973,
+            "p50_ms": 0.22320900000000002,
+            "p95_ms": 0.24850000000000003,
+            "p99_ms": 0.27920799999999996,
+            "max_ms": 31.808666
+          }
+        }
+      },
+      "startupMedianMs": 6.652083,
+      "idleRssMedianBytes": 1851392
+    },
+    "bun": {
+      "artifactBytes": 352,
+      "runtimeExecutableBytes": 63072928,
+      "startupSamplesMs": [
+        21.021333,
+        17.641083,
+        17.504084,
+        17.260458,
+        15.317958
+      ],
+      "idleRssSamplesBytes": [
+        51281920,
+        52133888,
+        52019200
+      ],
+      "throughput": {
+        "1": {
+          "samples": [
+            {
+              "requests_per_second": 10609.67372686594,
+              "success_rate": 1.0,
+              "p50_ms": 0.08887500000000001,
+              "p95_ms": 0.10258300000000001,
+              "p99_ms": 0.112583,
+              "max_ms": 31.845041,
+              "total_seconds": 1.003235375,
+              "status_codes": {
+                "200": 10644
+              }
+            },
+            {
+              "requests_per_second": 10415.755086656205,
+              "success_rate": 1.0,
+              "p50_ms": 0.09000000000000001,
+              "p95_ms": 0.10437500000000001,
+              "p99_ms": 0.115791,
+              "max_ms": 39.37625,
+              "total_seconds": 1.003191791,
+              "status_codes": {
+                "200": 10449
+              }
+            },
+            {
+              "requests_per_second": 10570.43608287659,
+              "success_rate": 1.0,
+              "p50_ms": 0.087542,
+              "p95_ms": 0.102167,
+              "p99_ms": 0.11333299999999999,
+              "max_ms": 46.018167,
+              "total_seconds": 1.002134625,
+              "status_codes": {
+                "200": 10593
+              }
+            }
+          ],
+          "median": {
+            "requests_per_second": 10570.43608287659,
+            "p50_ms": 0.08887500000000001,
+            "p95_ms": 0.10258300000000001,
+            "p99_ms": 0.11333299999999999,
+            "max_ms": 39.37625
+          }
+        },
+        "8": {
+          "samples": [
+            {
+              "requests_per_second": 34273.95454480793,
+              "success_rate": 1.0,
+              "p50_ms": 0.21862499999999999,
+              "p95_ms": 0.24783299999999997,
+              "p99_ms": 0.28858300000000003,
+              "max_ms": 49.115375,
+              "total_seconds": 1.00172275,
+              "status_codes": {
+                "200": 34333
+              }
+            },
+            {
+              "requests_per_second": 33380.789422768205,
+              "success_rate": 1.0,
+              "p50_ms": 0.221042,
+              "p95_ms": 0.25116700000000003,
+              "p99_ms": 0.292792,
+              "max_ms": 40.738417,
+              "total_seconds": 1.001773792,
+              "status_codes": {
+                "200": 33440
+              }
+            },
+            {
+              "requests_per_second": 34982.09821528722,
+              "success_rate": 1.0,
+              "p50_ms": 0.223166,
+              "p95_ms": 0.254792,
+              "p99_ms": 0.305042,
+              "max_ms": 7.151667,
+              "total_seconds": 1.001483667,
+              "status_codes": {
+                "200": 35034
+              }
+            }
+          ],
+          "median": {
+            "requests_per_second": 34273.95454480793,
+            "p50_ms": 0.221042,
+            "p95_ms": 0.25116700000000003,
+            "p99_ms": 0.292792,
+            "max_ms": 40.738417
+          }
+        }
+      },
+      "startupMedianMs": 17.504084,
+      "idleRssMedianBytes": 52019200
+    }
+  },
+  "comparisons": {
+    "1": {
+      "tinytsxToBunRps": 0.9603547944965909,
+      "tinytsxToBunP99": 0.9647057785464076
+    },
+    "8": {
+      "tinytsxToBunRps": 0.9867282620739454,
+      "tinytsxToBunP99": 0.9536052897620152
+    }
+  }
+}

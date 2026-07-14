@@ -46,8 +46,8 @@ produces and serves a native Mach-O executable from the example TSX source.
   evidence only; it does not cover dynamic rendering or keep-alive HTTP.
 - An exact-source Hono preview runs the pinned `basic-smoke.ts` through both
   runtimes. Across three one-second samples, TinyTSX measured 0.96x Bun request
-  throughput at concurrency 1 and 1.00x at 8. Median startup was 5.70 ms versus
-  16.98 ms, and idle RSS was 1.77 MiB versus 49.06 MiB. This remains a closed
+  throughput at concurrency 1 and 0.99x at 8. Median startup was 6.65 ms versus
+  17.50 ms, and idle RSS was 1.77 MiB versus 49.61 MiB. This remains a closed
   six-byte response with connection-close HTTP, not a general Hono benchmark.
 - Hono and Test262 are shallow Git submodules pinned respectively to Hono
   `v4.12.30` (`b2ae3a22`) and Test262 `f2d14356`.
