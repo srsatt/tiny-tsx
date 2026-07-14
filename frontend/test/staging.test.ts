@@ -5,6 +5,7 @@ import path from "node:path";
 import {after, test} from "node:test";
 import {fileURLToPath} from "node:url";
 import ts from "typescript";
+import {lowerStagedConstants} from "../src/constant-lowering.js";
 import {loadModuleGraph} from "../src/module-graph.js";
 import {analyzeStaging, evaluateConstantExpression} from "../src/staging.js";
 
@@ -44,10 +45,19 @@ test("folds Hono's method-table spread during process initialization", () => {
   });
 
   const report = analyzeStaging(graph);
+  const constants = lowerStagedConstants(report.bindings);
 
   assert.deepEqual(binding(report, "allMethods"), [
     "get", "post", "put", "delete", "options", "patch", "all",
   ]);
+  assert.deepEqual(
+    constants.find(constant => constant.name === "allMethods")?.value,
+    {
+      kind: "array",
+      items: ["get", "post", "put", "delete", "options", "patch", "all"]
+        .map(value => ({kind: "string", value})),
+    },
+  );
   assert.ok(report.spreads.some(spread =>
     spread.disposition === "constant"
     && spread.span.file.endsWith("vendor/hono/src/hono-base.ts")

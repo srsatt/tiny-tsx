@@ -11,6 +11,27 @@ export interface StaticString {
   value: string;
 }
 
+export type ConstantValue =
+  | {kind: "null"}
+  | {kind: "boolean"; value: boolean}
+  | {kind: "number"; value: number}
+  | {kind: "string"; value: string}
+  | {kind: "array"; items: ConstantValue[]}
+  | {kind: "record"; fields: ConstantField[]};
+
+export interface ConstantField {
+  name: string;
+  value: ConstantValue;
+}
+
+export interface Constant {
+  id: number;
+  module: string;
+  name: string;
+  span: SourceSpan;
+  value: ConstantValue;
+}
+
 export type HtmlOp =
   | {
       kind: "writeStatic";
@@ -44,9 +65,11 @@ export interface HirProgram {
   components: Component[];
   handlers: Handler[];
   staticStrings: StaticString[];
+  constants: Constant[];
   statistics: {
     modules: number;
     components: number;
+    constants: number;
     staticHtmlBytes: number;
     dynamicHtmlExpressions: number;
   };
@@ -68,4 +91,3 @@ export class StringTable {
     return id;
   }
 }
-

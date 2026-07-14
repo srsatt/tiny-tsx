@@ -78,6 +78,38 @@ test("compiles an imported component through the runtime module graph", () => {
     : -1, 1);
 });
 
+test("carries staged closed values into the typed HIR constant pool", () => {
+  const hir = compileSource(`
+    const METHODS = ["get", "post"] as const;
+    const CONFIG = {
+      methods: [...METHODS, "all"],
+      strict: true,
+      retries: 2,
+      fallback: null,
+    } as const;
+    function Page(): JSX.Element { return <h1>Hello</h1>; }
+    export function GET(request: Request): Response { return Response.html(<Page />); }
+  `);
+
+  assert.equal(hir.statistics.constants, 2);
+  assert.deepEqual(hir.constants.map(constant => constant.name), ["METHODS", "CONFIG"]);
+  assert.deepEqual(hir.constants[1]?.value, {
+    kind: "record",
+    fields: [
+      {
+        name: "methods",
+        value: {
+          kind: "array",
+          items: ["get", "post", "all"].map(value => ({kind: "string", value})),
+        },
+      },
+      {name: "strict", value: {kind: "boolean", value: true}},
+      {name: "retries", value: {kind: "number", value: 2}},
+      {name: "fallback", value: {kind: "null"}},
+    ],
+  });
+});
+
 for (const [name, source, code] of [
   ["any", `function Bad(value: any): JSX.Element { return <p>Bad</p>; }`, "TINY1001"],
   ["classes", `class Bad {}`, "TINY1002"],

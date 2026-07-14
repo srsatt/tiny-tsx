@@ -36,6 +36,7 @@ struct BuildReport<'a> {
     gc: &'a str,
     modules: usize,
     components: usize,
+    constants: usize,
     static_html_bytes: usize,
     dynamic_html_expressions: usize,
     runtime_features: [&'a str; 3],
@@ -209,6 +210,7 @@ fn write_report(output: &Path, compilation: &Compilation, options: &Options) -> 
         gc: "disabled",
         modules: compilation.program.statistics.modules,
         components: compilation.program.statistics.components,
+        constants: compilation.program.statistics.constants,
         static_html_bytes: compilation.program.statistics.static_html_bytes,
         dynamic_html_expressions: compilation.program.statistics.dynamic_html_expressions,
         runtime_features: ["http1", "bounded-writer", "connection-close"],
@@ -240,6 +242,10 @@ fn print_summary(
     println!(
         "Components:          {}",
         compilation.program.statistics.components
+    );
+    println!(
+        "Staged constants:    {}",
+        compilation.program.statistics.constants
     );
     println!(
         "Static HTML bytes:   {}",

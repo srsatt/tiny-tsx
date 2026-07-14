@@ -5,6 +5,8 @@ use crate::{
     hir::{HtmlOp, Program},
 };
 
+use super::constant_data;
+
 pub fn emit(program: &Program, options: Options) -> Result<String, String> {
     program.validate()?;
     let mut assembly = String::new();
@@ -23,7 +25,7 @@ pub fn emit(program: &Program, options: Options) -> Result<String, String> {
     let handler = &program.handlers[0];
     emit_handler(&mut assembly, handler.component);
     emit_config(&mut assembly, options);
-    emit_static_data(&mut assembly, program);
+    emit_static_data(&mut assembly, program)?;
     Ok(assembly)
 }
 
@@ -97,26 +99,35 @@ fn emit_epilogue(assembly: &mut String) {
     writeln!(assembly, "    ret").unwrap();
 }
 
-fn emit_static_data(assembly: &mut String, program: &Program) {
+fn emit_static_data(assembly: &mut String, program: &Program) -> Result<(), String> {
     writeln!(assembly, "\n.section __TEXT,__const").unwrap();
     for string in &program.static_strings {
         writeln!(assembly, ".p2align 3").unwrap();
         writeln!(assembly, "Ltinytsx_string_{}:", string.id).unwrap();
-        let bytes = string.value.as_bytes();
-        if bytes.is_empty() {
-            writeln!(assembly, "    .byte 0").unwrap();
-            continue;
-        }
-        for chunk in bytes.chunks(16) {
-            write!(assembly, "    .byte ").unwrap();
-            for (index, byte) in chunk.iter().enumerate() {
-                if index > 0 {
-                    write!(assembly, ", ").unwrap();
-                }
-                write!(assembly, "{byte}").unwrap();
+        emit_bytes(assembly, string.value.as_bytes());
+    }
+    for constant in &program.constants {
+        writeln!(assembly, ".p2align 3").unwrap();
+        writeln!(assembly, "Ltinytsx_constant_{}:", constant.id).unwrap();
+        emit_bytes(assembly, &constant_data::encode(&constant.value)?);
+    }
+    Ok(())
+}
+
+fn emit_bytes(assembly: &mut String, bytes: &[u8]) {
+    if bytes.is_empty() {
+        writeln!(assembly, "    .byte 0").unwrap();
+        return;
+    }
+    for chunk in bytes.chunks(16) {
+        write!(assembly, "    .byte ").unwrap();
+        for (index, byte) in chunk.iter().enumerate() {
+            if index > 0 {
+                write!(assembly, ", ").unwrap();
             }
-            writeln!(assembly).unwrap();
+            write!(assembly, "{byte}").unwrap();
         }
+        writeln!(assembly).unwrap();
     }
 }
 
@@ -172,7 +183,14 @@ mod tests {
                 "span": {"file":"server.tsx","line":2,"column":1,"endLine":2,"endColumn":2}
               }],
               "staticStrings": [{"id":0,"value":"<h1>Hello</h1>"}],
-              "statistics": {"modules":1,"components":1,"staticHtmlBytes":14,"dynamicHtmlExpressions":0}
+              "constants": [{
+                "id": 0,
+                "module": "server.tsx",
+                "name": "methods",
+                "span": {"file":"server.tsx","line":1,"column":1,"endLine":1,"endColumn":2},
+                "value": {"kind":"array","items":[{"kind":"string","value":"get"}]}
+              }],
+              "statistics": {"modules":1,"components":1,"constants":1,"staticHtmlBytes":14,"dynamicHtmlExpressions":0}
             }"#,
         )
         .unwrap();
@@ -184,7 +202,9 @@ mod tests {
         assert!(first.contains(".globl _tinytsx_handle_get"));
         assert!(first.contains("bl _tinytsx_html_write_static"));
         assert!(first.contains("Ltinytsx_string_0:"));
+        assert!(first.contains("Ltinytsx_constant_0:"));
         assert!(first.contains(".byte 60, 104, 49"));
+        assert!(first.contains(".byte 5, 1, 0, 0, 0, 4, 3, 0, 0, 0, 103, 101, 116"));
         assert!(first.contains("_tinytsx_config_port:\n    movz x0, #3000"));
     }
 }

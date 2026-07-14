@@ -35,6 +35,14 @@ fn builds_and_serves_an_imported_component() {
     );
 }
 
+#[test]
+fn builds_staged_constants_into_the_native_object() {
+    build_and_serve(
+        "examples/staged-constants/server.tsx",
+        "<html><body><h1>Staged constants</h1></body></html>",
+    );
+}
+
 fn build_and_serve(entry: &str, expected_body: &str) {
     let root = repository_root();
     build_frontend(&root);

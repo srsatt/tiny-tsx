@@ -1,10 +1,12 @@
 import path from "node:path";
 import ts from "typescript";
+import {lowerStagedConstants} from "./constant-lowering.js";
 import {CompileFailure, fromTypeScript, spanOf, tinyError} from "./diagnostics.js";
 import type {Component, Handler, HirProgram} from "./hir.js";
 import {StringTable} from "./hir.js";
 import {lowerComponentBody} from "./jsx-lowering.js";
 import {loadModuleGraph} from "./module-graph.js";
+import {analyzeStaging} from "./staging.js";
 import {validateForbiddenSyntax} from "./subset-validator.js";
 
 export interface CompileOptions {
@@ -116,6 +118,7 @@ export function compileEntry(entryPath: string, options: CompileOptions): HirPro
     (total, value) => total + Buffer.byteLength(value.value, "utf8"),
     0,
   );
+  const constants = lowerStagedConstants(analyzeStaging(graph).bindings);
   return {
     version: 1,
     target: "aarch64-apple-darwin",
@@ -124,9 +127,11 @@ export function compileEntry(entryPath: string, options: CompileOptions): HirPro
     components,
     handlers: [handler],
     staticStrings: strings.values,
+    constants,
     statistics: {
       modules: graph.modules.length,
       components: components.length,
+      constants: constants.length,
       staticHtmlBytes,
       dynamicHtmlExpressions: 0,
     },
