@@ -84,9 +84,11 @@ produces and serves a native Mach-O executable from the example TSX source.
   blobs. `examples/staged-constants/server.tsx` passes the complete native build
   and HTTP E2E path, while the Hono test proves its seven-method array reaches
   the same typed HIR representation.
-- Reachable named zero-parameter string functions now lower across ESM modules.
-  They can return a string literal, a staged string constant, or another direct
-  call. Native code returns pointer/length string views and rejects recursion.
+- Reachable named string functions now lower across ESM modules with up to four
+  required string parameters. Expressions can return literals, parameters,
+  staged string constants, or nested direct calls. Native code passes and
+  returns pointer/length register pairs, uses bounded stack frames for argument
+  evaluation, and rejects recursion.
 - HIR/ABI v2 adds tagged text responses and explicit HTTP status/content type
   metadata. A native E2E compiles the Hono basic route body `Hono!!` through the
   general function path and verifies `text/plain; charset=UTF-8` over TCP.
@@ -122,9 +124,9 @@ rtk python3 benchmarks/scripts/run_static.py --duration 2 --runs 3 --startup-run
 
 ## Active slice
 
-Compatibility substrate: extend the executable function slice with parameters,
-locals, record property access, and branches, then add closures, native
-record/array layouts, and loops. Type-layout specialization should handle closed
+Compatibility substrate: extend the executable function slice with locals,
+record property access, and branches, then add closures, native record/array
+layouts, and loops. Type-layout specialization should handle closed
 request-time records without pretending their values are compile-time constants.
 Test262 cases move from syntax intake to native execution only when their
 complete semantics are implemented.
@@ -133,6 +135,6 @@ complete semantics are implemented.
 
 Read `README.md`, `doc/COMPATIBILITY.md`, and `doc/BACKLOG.md`. Run
 `npm run audit:hono-basic` to see the full-package requirement frontier. Extend
-the native string-function HIR with parameters and closed-record property access;
+the native string-function HIR with locals and closed-record property access;
 do not special-case Hono routing. Run the verification commands recorded here
 before moving an item to verified.

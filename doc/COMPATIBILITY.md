@@ -154,11 +154,16 @@ compilable staged-constants example passes frontend lowering, Rust HIR parsing,
 native assembly/linking, and a real HTTP test.
 
 Generated string expressions now reference staged string blobs. Reachable named
-zero-parameter functions can return string literals, imported string constants,
-or another direct function call. The arm64 backend emits those calls as native
-functions and returns pointer/length string views; it does not introduce a
-JavaScript call stack or object model. Parameters, locals, branches, closures,
-arrays, and records remain outside this first executable function slice.
+functions can accept up to four required string parameters and return string
+literals, parameters, imported string constants, or another direct function
+call. Direct-call arguments may use the same expression forms. The arm64 backend
+passes each string as a pointer/length register pair (`x0`/`x1` through
+`x6`/`x7`) and returns a string in `x0`/`x1`. Call arguments and parameters are
+spilled into a bounded native frame when nested evaluation requires it.
+
+This does not introduce a JavaScript call stack or object model. Optional,
+default, and rest parameters, locals, branches, closures, arrays, and records
+remain outside this executable function slice.
 
 ### Text response bridge
 

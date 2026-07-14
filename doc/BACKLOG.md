@@ -64,12 +64,13 @@ commit message.
       read-only data blobs.
 - [x] Preserve `undefined` and arbitrary-precision bigint staged constants and
       add their allowlisted Test262 syntax cases.
-- [x] Lower reachable named zero-parameter string functions, imported direct
-      calls, and staged string constants through native code generation.
+- [x] Lower reachable named functions with up to four required string
+      parameters, imported direct calls, and staged string constants through
+      native code generation.
 - [x] Emit native text response metadata and verify the Hono basic route body
       and content type through a real HTTP request.
-- [ ] Expand ordinary functions to parameters, locals, branches, closures, and
-      general typed expressions and statements.
+- [ ] Expand ordinary functions to locals, branches, closures, additional
+      native types, and general typed expressions and statements.
 - [ ] Compile the restricted class semantics required by `hono/tiny`.
 - [ ] Compile the required rest/spread operations.
 - [ ] Add a native RegExp backend and allowlisted Test262 cases.
