@@ -76,6 +76,11 @@ commit message.
 - [ ] Compile the restricted class semantics required by `hono/tiny`.
 - [ ] Specialize Hono's constant method-name computed assignments into closed
       class fields without enabling arbitrary dynamic object properties.
+- [x] Prove the constructor's closed `forEach` assignment enumerates exactly
+      `get`, `post`, `put`, `delete`, `options`, `patch`, and `all`, and admit
+      that site while retaining diagnostics for dynamic computed keys.
+- [ ] Replace whole-module forbidden-syntax rejection with reachability from
+      default-exported application initialization and request dispatch.
 - [ ] Compile the required rest/spread operations.
 - [ ] Add a native RegExp backend and allowlisted Test262 cases.
 - [ ] Add Request, Response, Headers, URL, and encoding native APIs.

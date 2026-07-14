@@ -48,18 +48,19 @@ that the default export exposes `fetch(Request): Response | Promise<Response>`,
 but it must not replace Hono's router or context implementation.
 
 The initial compiling probe resolves the bare import to the pinned submodule,
-passes its first class declaration, and currently reports `TINY1004` at
-`src/hono-base.ts:130` for the runtime computed assignment `this[method] = ...`.
-This expected failure is a tested compatibility frontier, not a passing Hono
-result.
+passes its first class declaration and the closed computed method-table write at
+`src/hono-base.ts:130`. The whole-module validator currently reports `TINY1003`
+at `src/hono-base.ts:224` for an async closure in the unused `route()` method.
+This is a tested syntax frontier, not evidence that the basic application's
+reachable path needs `route()` or async execution.
 
 The upstream basic example imports the full `hono` entry rather than
 `hono/tiny`. `tests/compat/hono/basic-smoke.ts` preserves its first `GET /`
 route as a second tracer. That graph reaches 27 runtime modules, 4,177 lines,
 and 117,684 source bytes. It also passes the exported Hono class and reaches the
-same computed assignment in `HonoBase`. The complete 110-line basic example and
-its middleware imports remain future intake work; this first-route tracer is not
-presented as full example compatibility.
+same async closure in `HonoBase.route()`. The complete 110-line basic example
+and its middleware imports remain future intake work; this first-route tracer is
+not presented as full example compatibility.
 
 ### Type-only API overlay
 
@@ -67,8 +68,8 @@ The compiling frontend accepts `--api <specifier>=<api.d.ts>` independently of
 the runtime `--alias`. The application is type-checked against the narrow API,
 while every runtime source module still comes from pinned upstream Hono. A
 negative test proves an invalid route path is rejected by the overlay, and the
-valid smoke tests then continue into upstream source until computed property
-lowering.
+valid smoke tests then continue into upstream source through the closed computed
+method table.
 
 This separation is a compile-time contract only. It does not authorize replacing
 Hono methods or Web APIs with different behavior. The initial overlay exposes
@@ -134,6 +135,19 @@ closed-shape field projection, but its value is not a compile-time constant.
 The compiler records that distinction instead of treating all spread syntax as
 equivalent.
 
+The constructor's `allMethods.forEach(...)` is also analyzed as a closed
+initialization loop. Its `this[method]` assignment is classified as one closed
+computed write with seven exact keys: `get`, `post`, `put`, `delete`, `options`,
+`patch`, and `all`. The compiling validator admits this site. The remaining 98
+computed accesses in the `hono/tiny` graph stay classified as runtime and retain
+their unsupported boundary.
+
+This is specialization evidence, not route-table code generation yet. The next
+frontend architecture step is reachability from the default-exported app:
+execute supported module/class initialization at compile time, retain the route
+closures it installs, and avoid rejecting unused methods such as `route()` just
+because their bodies contain async syntax.
+
 The allowlisted Test262 array-spread source is parsed by the intake suite and
 its closed literal `[...[3, 4, 5]]` is folded by a frontend test. The complete
 Test262 program is still not executed natively, so this is staging evidence, not
@@ -150,8 +164,8 @@ Mach-O read-only data section. The encoding is recorded in
 
 The pinned Hono staging test now proves that `allMethods` reaches this final HIR
 shape as an array of seven typed strings. This happens below the whole-program
-compile boundary: the exact-source Hono probe still stops at its first runtime
-computed assignment, so no claim is made that a Hono executable is produced yet.
+compile boundary: the exact-source Hono probe still stops during whole-module
+syntax validation, so no claim is made that a Hono executable is produced yet.
 A separate compilable staged-constants example passes frontend lowering, Rust
 HIR parsing, native assembly/linking, and a real HTTP test.
 
@@ -194,8 +208,9 @@ The native response uses status 200 and `text/plain; charset=UTF-8`, matching th
 pinned Hono `Context.text()` contract. The first Hono basic route's `"Hono!!"`
 body is compiled through the general string-function path and checked through a
 real HTTP request. This is response-semantics evidence, not a claim that upstream
-Hono compiles: the exact-source probes stop at computed method installation in
-`HonoBase`. Once that class initialization and `Context.text()` lower, they
+Hono compiles: the exact-source probes stop in an unused async method because
+reachability is not yet driving validation. Once app initialization and
+`Context.text()` lower, they
 should reach the same HIR response operation rather than depend on the temporary
 source intrinsic.
 
