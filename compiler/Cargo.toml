@@ -1,0 +1,12 @@
+[package]
+name = "tinytsx"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "tinytsx"
+path = "src/main.rs"
+
+[dependencies]
+

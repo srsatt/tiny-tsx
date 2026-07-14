@@ -1,0 +1,10 @@
+{
+  "name": "tinytsx-workspace",
+  "private": true,
+  "scripts": {
+    "build:frontend": "npm --prefix frontend run build",
+    "test:frontend": "npm --prefix frontend test",
+    "test": "npm run test:frontend && cargo test --workspace"
+  }
+}
+

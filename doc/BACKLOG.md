@@ -5,7 +5,7 @@ commit message.
 
 ## Milestones 0–2
 
-- [ ] Add compact Cargo/npm workspace, SDK declarations, and static example.
+- [x] Add compact Cargo/npm workspace, SDK declarations, and static example.
 - [ ] Define versioned, source-located JSON HIR shared by frontend and compiler.
 - [ ] Collect TypeScript diagnostics and validate the static TinyTSX subset.
 - [ ] Lower static TSX and component calls into coalesced HTML operations.
@@ -24,4 +24,3 @@ commit message.
 - [ ] HTML text and quoted-attribute escaping.
 - [ ] Fixed request arena and recoverable request OOM.
 - [ ] Fixed native worker pool and bounded dispatch queue.
-
