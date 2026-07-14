@@ -17,8 +17,9 @@ produces and serves a native Mach-O executable from the example TSX source.
   constants, and build statistics.
 - Official TypeScript frontend validates the initial static subset and coalesces
   the example page into one 53-byte HTML fragment.
-- Frontend coverage includes static and nested components plus rejection of
-  `any`, classes, async functions, computed properties, and event attributes.
+- Frontend coverage includes static and nested components, closed class method
+  lowering, and rejection of unsupported component props, inheritance, async
+  functions, computed properties, and event attributes.
 - Rust `tinytsx check` drives the build-time frontend, validates HIR v2, and can
   print readable HIR or deterministic Apple arm64 assembly.
 - Assembly uses native component functions, the documented writer helper, static
@@ -49,13 +50,13 @@ produces and serves a native Mach-O executable from the example TSX source.
   closures, loops, rest/spread, RegExp, exceptions, async/await, and required
   built-ins without pretending they compile yet.
 - The same smoke entry now enters the normal compiling frontend through a pinned
-  bare-import alias. Compilation traverses into upstream Hono and currently stops
-  at `vendor/hono/src/preset/tiny.ts:11` with `TINY1002` for its class declaration;
-  a regression test preserves that frontier.
+  bare-import alias. Compilation passes the exported preset class and currently
+  stops at `vendor/hono/src/hono-base.ts:130` with `TINY1004` for the runtime
+  computed assignment `this[method]`; a regression test preserves that frontier.
 - A second tracer imports the full `hono` entry and preserves the upstream basic
   example's first route. Its graph contains 27 modules, 4,177 lines, and 117,684
-  bytes; compilation currently reaches `vendor/hono/src/hono.ts:16` before the
-  same class diagnostic. This is not yet the complete basic example.
+  bytes; compilation passes `vendor/hono/src/hono.ts` and reaches the same
+  computed assignment in `HonoBase`. This is not yet the complete basic example.
 - Application imports can use a narrow `api.d.ts` declaration alias while the
   compiler independently loads real upstream Hono runtime source. An invalid
   route-path test proves the overlay participates in TypeScript checking.
@@ -89,6 +90,12 @@ produces and serves a native Mach-O executable from the example TSX source.
   staged string constants, or nested direct calls. Native code passes and
   returns pointer/length register pairs, uses bounded stack frames for argument
   evaluation, and rejects recursion.
+- Closed classes can expose required string parameter properties to an immediate
+  method call. The call is devirtualized into ordinary HIR with no heap object or
+  prototype runtime; inheritance and persistent identity remain unsupported.
+- Erased `any` annotations in upstream TypeScript no longer fail global syntax
+  validation. Reachable runtime values still require a concrete supported HIR
+  type, so this does not introduce dynamic `any` semantics.
 - HIR/ABI v2 adds tagged text responses and explicit HTTP status/content type
   metadata. A native E2E compiles the Hono basic route body `Hono!!` through the
   general function path and verifies `text/plain; charset=UTF-8` over TCP.
@@ -114,9 +121,9 @@ rtk cargo run -q -p tinytsx -- build examples/static-page/server.tsx --port 3017
 rtk curl -i --max-time 5 http://127.0.0.1:3017/
 rtk npm run test:benchmarks
 rtk npm run audit:hono
-rtk npm run try:compile:hono  # expected TINY1002 until class lowering lands
+rtk npm run try:compile:hono  # expected TINY1004 at hono-base.ts:130
 rtk npm run audit:hono-basic
-rtk npm run try:compile:hono-basic  # expected TINY1002 at src/hono.ts:16
+rtk npm run try:compile:hono-basic  # expected TINY1004 at hono-base.ts:130
 rtk npm run test:test262-intake
 rtk npm run test:native-api
 rtk python3 benchmarks/scripts/run_static.py --duration 2 --runs 3 --startup-runs 5 --concurrency 1,8,32 --output-prefix benchmarks/results/2026-07-14-m5-max-static-preview

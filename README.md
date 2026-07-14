@@ -689,13 +689,13 @@ Do not permit prototype-based behavior.
 
 Reject the following at compile time:
 
-* `any`;
+* reachable runtime values whose only representation is `any`;
 * unrestricted `unknown`;
 * unsafe type assertions;
 * `eval`;
 * the `Function` constructor;
 * `Proxy`;
-* classes in the MVP;
+* classes outside the documented closed-class subset;
 * prototypes;
 * prototype mutation;
 * `Object.defineProperty`;
@@ -729,14 +729,14 @@ Every rejected construct must produce a source-level diagnostic.
 Example:
 
 ```text
-error[TINY1001]: `any` is not supported by TinyTSX
+error[TINY1311]: native function parameters must be required strings
 
   src/server.tsx:14:18
    |
 14 | function parse(value: any) {
    |                       ^^^
 
-help: replace `any` with a closed static type
+help: replace `any` with a supported concrete runtime type
 ```
 
 Never silently miscompile unsupported syntax.
@@ -2065,8 +2065,8 @@ Add:
 
 Add negative tests for:
 
-* `any`;
-* classes;
+* runtime `any` values;
+* unsupported class forms;
 * async functions;
 * dynamic properties;
 * unsupported JSX attributes.

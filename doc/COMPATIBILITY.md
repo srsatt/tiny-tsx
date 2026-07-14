@@ -47,18 +47,19 @@ The compiler must consume upstream Hono code. It may recognize the host contract
 that the default export exposes `fetch(Request): Response | Promise<Response>`,
 but it must not replace Hono's router or context implementation.
 
-The initial compiling probe resolves the bare import to the pinned submodule and
-currently reaches `src/preset/tiny.ts:11`, where it reports `TINY1002` because
-class lowering has not landed. This expected failure is a tested compatibility
-frontier, not a passing Hono result.
+The initial compiling probe resolves the bare import to the pinned submodule,
+passes its first class declaration, and currently reports `TINY1004` at
+`src/hono-base.ts:130` for the runtime computed assignment `this[method] = ...`.
+This expected failure is a tested compatibility frontier, not a passing Hono
+result.
 
 The upstream basic example imports the full `hono` entry rather than
 `hono/tiny`. `tests/compat/hono/basic-smoke.ts` preserves its first `GET /`
 route as a second tracer. That graph reaches 27 runtime modules, 4,177 lines,
-and 117,684 source bytes, and currently stops at the upstream class in
-`src/hono.ts:16`. The complete 110-line basic example and its middleware imports
-remain future intake work; this first-route tracer is not presented as full
-example compatibility.
+and 117,684 source bytes. It also passes the exported Hono class and reaches the
+same computed assignment in `HonoBase`. The complete 110-line basic example and
+its middleware imports remain future intake work; this first-route tracer is not
+presented as full example compatibility.
 
 ### Type-only API overlay
 
@@ -66,7 +67,8 @@ The compiling frontend accepts `--api <specifier>=<api.d.ts>` independently of
 the runtime `--alias`. The application is type-checked against the narrow API,
 while every runtime source module still comes from pinned upstream Hono. A
 negative test proves an invalid route path is rejected by the overlay, and the
-valid smoke tests then continue into upstream source until class lowering.
+valid smoke tests then continue into upstream source until computed property
+lowering.
 
 This separation is a compile-time contract only. It does not authorize replacing
 Hono methods or Web APIs with different behavior. The initial overlay exposes
@@ -148,10 +150,10 @@ Mach-O read-only data section. The encoding is recorded in
 
 The pinned Hono staging test now proves that `allMethods` reaches this final HIR
 shape as an array of seven typed strings. This happens below the whole-program
-compile boundary: the exact-source Hono probe still stops at its first upstream
-class, so no claim is made that a Hono executable is produced yet. A separate
-compilable staged-constants example passes frontend lowering, Rust HIR parsing,
-native assembly/linking, and a real HTTP test.
+compile boundary: the exact-source Hono probe still stops at its first runtime
+computed assignment, so no claim is made that a Hono executable is produced yet.
+A separate compilable staged-constants example passes frontend lowering, Rust
+HIR parsing, native assembly/linking, and a real HTTP test.
 
 Generated string expressions now reference staged string blobs. Reachable named
 functions can accept up to four required string parameters and return string
@@ -165,21 +167,37 @@ This does not introduce a JavaScript call stack or object model. Optional,
 default, and rest parameters, locals, branches, closures, arrays, and records
 remain outside this executable function slice.
 
+### Closed class slice
+
+A restricted class expression can now use required string parameter properties
+as closed fields and invoke a method immediately on a freshly constructed value.
+The frontend devirtualizes that method into the ordinary function HIR, passing
+closed fields before explicit method arguments. This preserves the native
+record-style representation: no heap object, prototype table, dynamic property
+set, or object identity is created.
+
+TypeScript `any` annotations are no longer rejected merely for appearing in
+erased upstream declarations. Every reachable runtime value must still acquire
+a concrete supported HIR representation; for example, an `any` function
+parameter is rejected by string-function lowering. Inheritance, persistent
+instances, mutable fields, private fields, and virtual dispatch remain pending.
+
 ### Text response bridge
 
 The SDK's static `Response.text(string)` is a temporary TinyTSX compiler
 intrinsic, not a Web-standard `Response` method. It gives the current GET
-entrypoint an expressible lowering target before constructor and class support
-exist. HIR v2 records a tagged text response, and ABI v2 carries HTTP status and
+entrypoint an expressible lowering target before the required Web constructor
+path exists. HIR v2 records a tagged text response, and ABI v2 carries HTTP status and
 content type from generated code to the runtime.
 
 The native response uses status 200 and `text/plain; charset=UTF-8`, matching the
 pinned Hono `Context.text()` contract. The first Hono basic route's `"Hono!!"`
 body is compiled through the general string-function path and checked through a
 real HTTP request. This is response-semantics evidence, not a claim that upstream
-Hono compiles: the exact-source probes still stop at their first classes. Once
-Hono's class and constructor path lowers, `Context.text()` should reach the same
-HIR response operation rather than depend on the temporary source intrinsic.
+Hono compiles: the exact-source probes stop at computed method installation in
+`HonoBase`. Once that class initialization and `Context.text()` lower, they
+should reach the same HIR response operation rather than depend on the temporary
+source intrinsic.
 
 Closed records and dynamic maps are separate compiler concepts. A record has a
 known layout and may use direct field offsets; a map has runtime membership and

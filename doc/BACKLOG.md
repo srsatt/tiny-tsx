@@ -40,7 +40,7 @@ commit message.
 - [x] Compile a relative ESM component through HIR, assembly, native linking,
       and a real HTTP test.
 - [x] Route the pinned bare `hono/tiny` import through the compiling frontend and
-      assert that the first unsupported boundary is the upstream Hono class.
+      preserve its exact-source unsupported boundary as capabilities advance.
 - [ ] Resolve bare package imports and combine runtime source with package
       declarations in the compiling frontend.
 - [x] Allow a type-only `api.d.ts` alias while retaining the upstream package
@@ -71,7 +71,11 @@ commit message.
       and content type through a real HTTP request.
 - [ ] Expand ordinary functions to locals, branches, closures, additional
       native types, and general typed expressions and statements.
+- [x] Lower closed constructor string fields and an immediate class method call
+      through the ordinary function HIR and native calling convention.
 - [ ] Compile the restricted class semantics required by `hono/tiny`.
+- [ ] Specialize Hono's constant method-name computed assignments into closed
+      class fields without enabling arbitrary dynamic object properties.
 - [ ] Compile the required rest/spread operations.
 - [ ] Add a native RegExp backend and allowlisted Test262 cases.
 - [ ] Add Request, Response, Headers, URL, and encoding native APIs.
