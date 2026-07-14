@@ -18,6 +18,10 @@ this persistent project record are being established as Milestone 0.
   the example page into one 53-byte HTML fragment.
 - Frontend coverage includes static and nested components plus rejection of
   `any`, classes, async functions, computed properties, and event attributes.
+- Rust `tinytsx check` drives the build-time frontend, validates HIR v1, and can
+  print readable HIR or deterministic Apple arm64 assembly.
+- Assembly uses native component functions, the documented writer helper, static
+  bytes in `__TEXT,__const`, and a global `tinytsx_handle_get` entrypoint.
 
 Verification:
 
@@ -26,6 +30,9 @@ rtk cargo check --workspace
 rtk npm install --prefix frontend
 rtk npm test --prefix frontend
 rtk node frontend/dist/src/cli.js examples/static-page/server.tsx
+rtk cargo test --workspace
+rtk cargo clippy --workspace --all-targets -- -D warnings
+rtk cargo run -q -p tinytsx -- check examples/static-page/server.tsx --emit-asm
 ```
 
 ## Active slice

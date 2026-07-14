@@ -10,8 +10,8 @@ commit message.
 - [x] Collect TypeScript diagnostics and validate the static TinyTSX subset.
 - [x] Lower static TSX and component calls into coalesced HTML operations.
 - [x] Add frontend positive and negative tests.
-- [ ] Implement `tinytsx check` and `--emit-hir`.
-- [ ] Emit deterministic Apple arm64 assembly and expose `--emit-asm`.
+- [x] Implement `tinytsx check` and `--emit-hir`.
+- [x] Emit deterministic Apple arm64 assembly and expose `--emit-asm`.
 - [ ] Implement the single-worker bootstrap HTTP runtime.
 - [ ] Assemble and link a native Mach-O executable through the Rust toolchain.
 - [ ] Implement `tinytsx build`, output selection, and temporary artifacts.
