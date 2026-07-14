@@ -116,6 +116,11 @@ produces and serves a native Mach-O executable from the example TSX source.
 - The application-entry analyzer records a default binding, named constructor,
   constructor arguments, and ordered top-level method calls. The pinned basic
   trace is `app = new Hono(); app.get("/", function); export default app`.
+- Runtime-source resolution follows imports, local re-exports, export aliases,
+  and inheritance without consulting the declaration overlay. The full Hono
+  trace resolves `vendor/hono/src/hono.ts:Hono` followed by
+  `vendor/hono/src/hono-base.ts:Hono`, with both constructor operation sequences
+  pinned by a regression test.
 - Closed object literals are records with compile-time fields; explicit `Map`
   construction remains unstaged dynamic work. The two models and declaration-
   overlay boundary are persisted in `doc/OBJECT_MODEL.md`.

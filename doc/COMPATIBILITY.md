@@ -51,8 +51,9 @@ The initial compiling probe resolves the bare import to the pinned submodule,
 passes its first class declaration and the closed computed method-table write at
 `src/hono-base.ts:130`. The compiler now recognizes `new Hono()`, the ordered
 `app.get(...)` call, and the default export before validating unused imported
-methods. It reports `TINY1400` at the application export because compile-time
-constructor execution has not landed.
+methods. Runtime resolution follows the full package's `index.ts` re-export to
+`hono.ts:Hono` and then its `HonoBase` import. It reports `TINY1400` at the
+application export because compile-time constructor execution has not landed.
 
 The upstream basic example imports the full `hono` entry rather than
 `hono/tiny`. `tests/compat/hono/basic-smoke.ts` preserves its first `GET /`

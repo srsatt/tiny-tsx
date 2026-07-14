@@ -86,6 +86,9 @@ commit message.
       default-exported application initialization and request dispatch.
 - [x] Recognize a constructed default application, preserve its ordered
       top-level calls, and select it before validating unused imported methods.
+- [x] Resolve the constructed binding through runtime imports/re-exports and
+      preserve the derived/base class constructor chain with source spans and
+      ordered operation kinds.
 - [ ] Execute the traced constructor and registration calls against upstream
       class/function source to produce an immutable native route artifact.
 - [ ] Compile the required rest/spread operations.

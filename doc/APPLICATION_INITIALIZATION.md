@@ -25,12 +25,19 @@ constructor: Hono
 constructor arguments: []
 calls:
   - get(string "/", function)
+runtime constructor chain:
+  - vendor/hono/src/hono.ts:Hono
+      operations: superCall, assignment
+  - vendor/hono/src/hono-base.ts:Hono
+      operations: variable, forEach, assignment, assignment, variable, call, assignment
 ```
 
 This trace is now selected before validating bodies in imported modules. An
 unused async closure in `HonoBase.route()` therefore no longer blocks the basic
 entry. Compilation currently emits `TINY1400` because the initialization plan
-is recognized but not executed yet.
+is recognized and its runtime class chain is resolved, but its constructor
+operations are not executed yet. Resolution follows runtime imports and
+re-exports independently of the application-facing `api.d.ts` overlay.
 
 The next evaluator must follow the actual imported implementation and support:
 
