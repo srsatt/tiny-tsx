@@ -1,0 +1,116 @@
+#![cfg(all(target_os = "macos", target_arch = "aarch64"))]
+
+use std::{
+    fs,
+    io::{Read, Write},
+    net::{TcpListener, TcpStream},
+    path::{Path, PathBuf},
+    process::{Child, Command},
+    thread,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
+
+struct Server(Child);
+
+impl Drop for Server {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
+}
+
+#[test]
+fn builds_and_serves_static_tsx_as_native_macho() {
+    let root = repository_root();
+    build_frontend(&root);
+    let directory = temporary_directory();
+    let binary = directory.join("server");
+    let port = available_port();
+
+    let build = Command::new(env!("CARGO_BIN_EXE_tinytsx"))
+        .current_dir(&root)
+        .args(["build", "examples/static-page/server.tsx", "--port"])
+        .arg(port.to_string())
+        .arg("--output")
+        .arg(&binary)
+        .output()
+        .expect("start TinyTSX compiler");
+    assert!(
+        build.status.success(),
+        "build failed:\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&build.stdout),
+        String::from_utf8_lossy(&build.stderr),
+    );
+
+    let bytes = fs::read(&binary).expect("read native executable");
+    assert_eq!(&bytes[..4], &[0xcf, 0xfa, 0xed, 0xfe], "Mach-O 64 magic");
+    assert!(with_suffix(&binary, ".build.json").is_file());
+
+    let child = Command::new(&binary)
+        .spawn()
+        .expect("start generated server");
+    let _server = Server(child);
+    let mut stream = connect_with_retry(port);
+    stream
+        .write_all(b"GET / HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
+        .expect("send request");
+    let mut response = String::new();
+    stream.read_to_string(&mut response).expect("read response");
+
+    assert!(response.starts_with("HTTP/1.1 200 OK\r\n"), "{response}");
+    assert!(response.contains("Content-Type: text/html; charset=utf-8\r\n"));
+    assert!(response.contains("Content-Length: 53\r\n"));
+    assert!(response.ends_with("<html><body><h1>Hello from TinyTSX</h1></body></html>"));
+
+    fs::remove_dir_all(directory).expect("remove test artifacts");
+}
+
+fn repository_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("compiler is in repository")
+        .to_owned()
+}
+
+fn build_frontend(root: &Path) {
+    let status = Command::new("npm")
+        .current_dir(root)
+        .args(["run", "build", "--prefix", "frontend"])
+        .status()
+        .expect("start TypeScript build");
+    assert!(status.success(), "TypeScript frontend build failed");
+}
+
+fn temporary_directory() -> PathBuf {
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("valid clock")
+        .as_nanos();
+    let path = std::env::temp_dir().join(format!("tinytsx-e2e-{timestamp}"));
+    fs::create_dir_all(&path).expect("create test directory");
+    path
+}
+
+fn available_port() -> u16 {
+    TcpListener::bind(("127.0.0.1", 0))
+        .expect("bind temporary port")
+        .local_addr()
+        .expect("read temporary address")
+        .port()
+}
+
+fn connect_with_retry(port: u16) -> TcpStream {
+    for _ in 0..100 {
+        match TcpStream::connect(("127.0.0.1", port)) {
+            Ok(stream) => return stream,
+            Err(_) => thread::sleep(Duration::from_millis(25)),
+        }
+    }
+    panic!("generated server did not listen on port {port}");
+}
+
+fn with_suffix(path: &Path, suffix: &str) -> PathBuf {
+    let mut value = path.as_os_str().to_owned();
+    value.push(suffix);
+    PathBuf::from(value)
+}
