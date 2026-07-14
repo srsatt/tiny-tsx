@@ -34,19 +34,36 @@ runtime constructor chain:
 
 This trace is now selected before validating bodies in imported modules. An
 unused async closure in `HonoBase.route()` therefore no longer blocks the basic
-entry. Compilation currently emits `TINY1400` because the initialization plan
-is recognized and its runtime class chain is resolved, but its constructor
-operations are not executed yet. Resolution follows runtime imports and
-re-exports independently of the application-facing `api.d.ts` overlay.
+entry. Resolution follows runtime imports and re-exports independently of the
+application-facing `api.d.ts` overlay.
+
+The symbolic evaluator now executes both constructor bodies with the empty
+default options record. It evaluates `super(options)`, instance field
+initializers, the closed seven-key `forEach`, closure assignments, destructuring
+rest, `Object.assign`, nullish/conditional selection, and symbolic router
+construction. Full Hono initializes 21 closed fields with no unsupported
+constructor effects, including:
+
+```text
+_basePath = "/"
+#path = "/"
+routes = []
+get/post/put/delete/options/patch/all = closures
+on/use = closures
+getPath = imported getPath function
+router = constructed SmartRouter
+```
+
+Compilation currently emits `TINY1401`: constructor execution is complete, but
+the traced `app.get(...)` closure invocation and its route effects are not yet
+lowered.
 
 The next evaluator must follow the actual imported implementation and support:
 
-1. imported class resolution and `new Hono()`;
-2. base/subclass constructor execution and `super`;
-3. closed fields and the staged seven-key method installation loop;
-4. closures capturing `this`, method name, path, and route handler;
-5. the selected `app.get(...)` call and its `#addRoute` effects;
-6. an immutable route artifact consumed by native request dispatch.
+1. closures capturing `this`, method name, path, and route handler;
+2. the selected `app.get(...)` call and its `#addRoute` effects;
+3. router insertion and an immutable route artifact;
+4. native request dispatch consuming that artifact.
 
 Partial evaluation must execute the upstream source semantics. The trace is not
 permission to replace Hono routing with a separately implemented interface. If

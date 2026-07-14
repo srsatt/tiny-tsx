@@ -54,8 +54,9 @@ produces and serves a native Mach-O executable from the example TSX source.
   built-ins without pretending they compile yet.
 - The same smoke entry now enters the normal compiling frontend through a pinned
   bare-import alias. Compilation selects `new Hono()`, its ordered `app.get(...)`
-  call, and the default export before scanning unused imported method bodies. It
-  now reports `TINY1400` at the application export pending constructor execution.
+  call, and the default export before scanning unused imported method bodies.
+  Both constructors execute symbolically, and compilation now reports
+  `TINY1401` pending invocation of the installed `get` closure.
 - A second tracer imports the full `hono` entry and preserves the upstream basic
   example's first route. Its graph contains 27 modules, 4,177 lines, and 117,684
   bytes and selects the same constructed application root. This is not yet the
@@ -121,6 +122,9 @@ produces and serves a native Mach-O executable from the example TSX source.
   trace resolves `vendor/hono/src/hono.ts:Hono` followed by
   `vendor/hono/src/hono-base.ts:Hono`, with both constructor operation sequences
   pinned by a regression test.
+- Constructor evaluation produces 21 closed fields with zero issues for full
+  Hono. Tests pin base/private state, route storage, handler closures, all seven
+  HTTP method closures, `getPath`, and symbolic `SmartRouter` construction.
 - Closed object literals are records with compile-time fields; explicit `Map`
   construction remains unstaged dynamic work. The two models and declaration-
   overlay boundary are persisted in `doc/OBJECT_MODEL.md`.
@@ -140,9 +144,9 @@ rtk cargo run -q -p tinytsx -- build examples/static-page/server.tsx --port 3017
 rtk curl -i --max-time 5 http://127.0.0.1:3017/
 rtk npm run test:benchmarks
 rtk npm run audit:hono
-rtk npm run try:compile:hono  # expected TINY1400 at the default export
+rtk npm run try:compile:hono  # expected TINY1401 at the default export
 rtk npm run audit:hono-basic
-rtk npm run try:compile:hono-basic  # expected TINY1400 at the default export
+rtk npm run try:compile:hono-basic  # expected TINY1401 at the default export
 rtk npm run test:test262-intake
 rtk npm run test:native-api
 rtk python3 benchmarks/scripts/run_static.py --duration 2 --runs 3 --startup-runs 5 --concurrency 1,8,32 --output-prefix benchmarks/results/2026-07-14-m5-max-static-preview
@@ -161,6 +165,6 @@ complete semantics are implemented.
 
 Read `README.md`, `doc/COMPATIBILITY.md`, and `doc/BACKLOG.md`. Run
 `npm run audit:hono-basic` to see the full-package requirement frontier. Extend
-the traced default application by resolving and executing upstream constructors,
-then retain its installed route closures; do not special-case Hono routing. Run
+the installed `get` closure from the traced default application and execute its
+upstream `#addRoute` effects; do not special-case Hono routing. Run
 the verification commands recorded here before moving an item to verified.
