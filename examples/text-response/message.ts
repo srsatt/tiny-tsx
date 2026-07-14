@@ -1,5 +1,3 @@
-import {MESSAGE} from "./constants.js";
-
-export function message(): string {
-  return MESSAGE;
+export function message(value: string): string {
+  return value;
 }

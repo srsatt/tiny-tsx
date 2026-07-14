@@ -64,7 +64,12 @@ pub struct Function {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-pub struct FunctionParameter {}
+pub struct FunctionParameter {
+    pub name: String,
+    #[serde(rename = "type")]
+    pub value_type: String,
+    pub span: SourceSpan,
+}
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
@@ -75,6 +80,10 @@ pub enum ValueExpression {
     },
     Constant {
         constant: usize,
+        span: SourceSpan,
+    },
+    Parameter {
+        parameter: usize,
         span: SourceSpan,
     },
     DirectCall {
@@ -159,7 +168,7 @@ impl Program {
             HandlerResponse::Html { component } if *component >= self.components.len() => {
                 return Err("GET handler references a missing component".to_owned());
             }
-            HandlerResponse::Text { value } => self.validate_expression(value)?,
+            HandlerResponse::Text { value } => self.validate_expression(value, 0)?,
             _ => {}
         }
         for (index, component) in self.components.iter().enumerate() {
@@ -195,13 +204,22 @@ impl Program {
             if function.id != index {
                 return Err(format!("function id {} is not canonical", function.id));
             }
-            if !function.parameters.is_empty() || function.result != "string" {
+            if function.parameters.len() > 4 || function.result != "string" {
                 return Err(format!(
-                    "function {} must have type () -> string in this HIR slice",
+                    "function {} must have at most four string parameters and return string",
                     function.name
                 ));
             }
-            self.validate_expression(&function.body)?;
+            let mut parameter_names = HashSet::new();
+            for parameter in &function.parameters {
+                if parameter.value_type != "string" || !parameter_names.insert(&parameter.name) {
+                    return Err(format!(
+                        "function {} has invalid or duplicate parameters",
+                        function.name
+                    ));
+                }
+            }
+            self.validate_expression(&function.body, function.parameters.len())?;
         }
         if self.statistics.constants != self.constants.len() {
             return Err("HIR constant statistic does not match the constant pool".to_owned());
@@ -235,7 +253,11 @@ impl Program {
         Ok(())
     }
 
-    fn validate_expression(&self, expression: &ValueExpression) -> Result<(), String> {
+    fn validate_expression(
+        &self,
+        expression: &ValueExpression,
+        parameter_count: usize,
+    ) -> Result<(), String> {
         match expression {
             ValueExpression::StringLiteral { string, .. } => {
                 if *string >= self.static_strings.len() {
@@ -250,6 +272,11 @@ impl Program {
                     return Err("string expression references a non-string constant".to_owned());
                 }
             }
+            ValueExpression::Parameter { parameter, .. } => {
+                if *parameter >= parameter_count {
+                    return Err("expression references a missing parameter".to_owned());
+                }
+            }
             ValueExpression::DirectCall {
                 function,
                 arguments,
@@ -258,8 +285,11 @@ impl Program {
                 if *function >= self.functions.len() {
                     return Err("expression calls a missing function".to_owned());
                 }
-                if !arguments.is_empty() {
-                    return Err("direct calls cannot have arguments in this HIR slice".to_owned());
+                if arguments.len() != self.functions[*function].parameters.len() {
+                    return Err("direct call argument count does not match its function".to_owned());
+                }
+                for argument in arguments {
+                    self.validate_expression(argument, parameter_count)?;
                 }
             }
         }
@@ -280,10 +310,27 @@ impl Program {
             2 => return Ok(()),
             _ => state[id] = 1,
         }
-        if let ValueExpression::DirectCall { function, .. } = self.functions[id].body {
-            self.visit_function(function, state)?;
-        }
+        self.visit_expression_functions(&self.functions[id].body, state)?;
         state[id] = 2;
+        Ok(())
+    }
+
+    fn visit_expression_functions(
+        &self,
+        expression: &ValueExpression,
+        state: &mut [u8],
+    ) -> Result<(), String> {
+        if let ValueExpression::DirectCall {
+            function,
+            arguments,
+            ..
+        } = expression
+        {
+            self.visit_function(*function, state)?;
+            for argument in arguments {
+                self.visit_expression_functions(argument, state)?;
+            }
+        }
         Ok(())
     }
 }

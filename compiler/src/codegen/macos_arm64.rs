@@ -48,7 +48,8 @@ fn emit_config(assembly: &mut String, options: Options) {
 fn emit_function(assembly: &mut String, symbol: &str, operations: &[HtmlOp], program: &Program) {
     writeln!(assembly, "\n.private_extern {symbol}").unwrap();
     writeln!(assembly, "{symbol}:").unwrap();
-    emit_prologue(assembly);
+    emit_prologue(assembly, 32);
+    preserve_request_context(assembly);
     let return_label = format!("L{}_return", symbol.trim_start_matches('_'));
 
     if operations.is_empty() {
@@ -78,7 +79,7 @@ fn emit_function(assembly: &mut String, symbol: &str, operations: &[HtmlOp], pro
     }
     writeln!(assembly, "    mov w0, #0").unwrap();
     writeln!(assembly, "{return_label}:").unwrap();
-    emit_epilogue(assembly);
+    emit_epilogue(assembly, 32);
 }
 
 fn emit_value_function(
@@ -87,14 +88,28 @@ fn emit_value_function(
     body: &ValueExpression,
     program: &Program,
 ) -> Result<(), String> {
+    let function = &program.functions[id];
+    let scratch_base = 16 + function.parameters.len() * 16;
+    let frame_size = value_frame_size(scratch_base, body)?;
     writeln!(assembly, "\n.private_extern _tinytsx_function_{id}").unwrap();
     writeln!(assembly, "_tinytsx_function_{id}:").unwrap();
-    if let ValueExpression::DirectCall { function, .. } = body {
-        writeln!(assembly, "    b _tinytsx_function_{function}").unwrap();
-        return Ok(());
+    emit_prologue(assembly, frame_size);
+    for (index, (first, second)) in [("x0", "x1"), ("x2", "x3"), ("x4", "x5"), ("x6", "x7")]
+        .into_iter()
+        .take(function.parameters.len())
+        .enumerate()
+    {
+        writeln!(
+            assembly,
+            "    stp {}, {}, [sp, #{}]",
+            first,
+            second,
+            16 + index * 16
+        )
+        .unwrap();
     }
-    emit_value_expression(assembly, body, program)?;
-    writeln!(assembly, "    ret").unwrap();
+    emit_value_expression(assembly, body, program, scratch_base)?;
+    emit_epilogue(assembly, frame_size);
     Ok(())
 }
 
@@ -105,7 +120,12 @@ fn emit_handler(
 ) -> Result<(), String> {
     writeln!(assembly, "\n.globl _tinytsx_handle_get").unwrap();
     writeln!(assembly, "_tinytsx_handle_get:").unwrap();
-    emit_prologue(assembly);
+    let frame_size = match response {
+        HandlerResponse::Text { value } => value_frame_size(32, value)?,
+        HandlerResponse::Html { .. } => 32,
+    };
+    emit_prologue(assembly, frame_size);
+    preserve_request_context(assembly);
     let return_label = "Ltinytsx_handle_get_return";
     match response {
         HandlerResponse::Html { component } => {
@@ -116,7 +136,7 @@ fn emit_handler(
         }
         HandlerResponse::Text { value } => {
             emit_response_begin(assembly, 2, return_label);
-            emit_value_expression(assembly, value, program)?;
+            emit_value_expression(assembly, value, program, 32)?;
             writeln!(assembly, "    mov x2, x1").unwrap();
             writeln!(assembly, "    mov x1, x0").unwrap();
             writeln!(assembly, "    ldr x0, [sp, #16]").unwrap();
@@ -124,7 +144,7 @@ fn emit_handler(
         }
     }
     writeln!(assembly, "{return_label}:").unwrap();
-    emit_epilogue(assembly);
+    emit_epilogue(assembly, frame_size);
     Ok(())
 }
 
@@ -140,6 +160,7 @@ fn emit_value_expression(
     assembly: &mut String,
     expression: &ValueExpression,
     program: &Program,
+    scratch_base: usize,
 ) -> Result<(), String> {
     match expression {
         ValueExpression::StringLiteral { string, .. } => {
@@ -164,23 +185,73 @@ fn emit_value_expression(
             writeln!(assembly, "    add x0, x0, #5").unwrap();
             emit_immediate(assembly, "x1", value.len() as u64);
         }
-        ValueExpression::DirectCall { function, .. } => {
+        ValueExpression::Parameter { parameter, .. } => {
+            writeln!(assembly, "    ldp x0, x1, [sp, #{}]", 16 + parameter * 16).unwrap();
+        }
+        ValueExpression::DirectCall {
+            function,
+            arguments,
+            ..
+        } => {
+            let nested_scratch = scratch_base + arguments.len() * 16;
+            for (index, argument) in arguments.iter().enumerate() {
+                emit_value_expression(assembly, argument, program, nested_scratch)?;
+                writeln!(
+                    assembly,
+                    "    stp x0, x1, [sp, #{}]",
+                    scratch_base + index * 16
+                )
+                .unwrap();
+            }
+            for (index, (first, second)) in [("x0", "x1"), ("x2", "x3"), ("x4", "x5"), ("x6", "x7")]
+                .into_iter()
+                .take(arguments.len())
+                .enumerate()
+            {
+                writeln!(
+                    assembly,
+                    "    ldp {first}, {second}, [sp, #{}]",
+                    scratch_base + index * 16
+                )
+                .unwrap();
+            }
             writeln!(assembly, "    bl _tinytsx_function_{function}").unwrap();
         }
     }
     Ok(())
 }
 
-fn emit_prologue(assembly: &mut String) {
-    writeln!(assembly, "    stp x29, x30, [sp, #-32]!").unwrap();
+fn emit_prologue(assembly: &mut String, frame_size: usize) {
+    writeln!(assembly, "    stp x29, x30, [sp, #-{frame_size}]!").unwrap();
     writeln!(assembly, "    mov x29, sp").unwrap();
+}
+
+fn preserve_request_context(assembly: &mut String) {
     writeln!(assembly, "    str x1, [sp, #16]").unwrap();
     writeln!(assembly, "    str x0, [sp, #24]").unwrap();
 }
 
-fn emit_epilogue(assembly: &mut String) {
-    writeln!(assembly, "    ldp x29, x30, [sp], #32").unwrap();
+fn emit_epilogue(assembly: &mut String, frame_size: usize) {
+    writeln!(assembly, "    ldp x29, x30, [sp], #{frame_size}").unwrap();
     writeln!(assembly, "    ret").unwrap();
+}
+
+fn value_frame_size(base: usize, expression: &ValueExpression) -> Result<usize, String> {
+    let required = base + scratch_slots(expression) * 16;
+    let frame_size = required.max(16).div_ceil(16) * 16;
+    if frame_size > 496 {
+        return Err("function call expression requires more than 496 bytes of stack".to_owned());
+    }
+    Ok(frame_size)
+}
+
+fn scratch_slots(expression: &ValueExpression) -> usize {
+    match expression {
+        ValueExpression::DirectCall { arguments, .. } => {
+            arguments.len() + arguments.iter().map(scratch_slots).max().unwrap_or(0)
+        }
+        _ => 0,
+    }
 }
 
 fn emit_static_data(assembly: &mut String, program: &Program) -> Result<(), String> {
@@ -255,7 +326,11 @@ mod tests {
                 "id": 0,
                 "module": "server.tsx",
                 "name": "greeting",
-                "parameters": [],
+                "parameters": [{
+                  "name": "value",
+                  "type": "string",
+                  "span": {"file":"server.tsx","line":1,"column":1,"endLine":1,"endColumn":2}
+                }],
                 "result": "string",
                 "body": {
                   "kind": "directCall",
@@ -294,7 +369,11 @@ mod tests {
                   "value": {
                     "kind": "directCall",
                     "function": 0,
-                    "arguments": [],
+                    "arguments": [{
+                      "kind": "constant",
+                      "constant": 0,
+                      "span": {"file":"server.tsx","line":2,"column":1,"endLine":2,"endColumn":2}
+                    }],
                     "span": {"file":"server.tsx","line":2,"column":1,"endLine":2,"endColumn":2}
                   }
                 },
@@ -322,7 +401,12 @@ mod tests {
         assert!(first.contains("bl _tinytsx_response_begin"));
         assert!(first.contains("bl _tinytsx_function_0"));
         assert!(first.contains("_tinytsx_function_0:"));
-        assert!(first.contains("_tinytsx_function_0:\n    b _tinytsx_function_1"));
+        assert!(first.contains("stp x0, x1, [sp, #16]"));
+        assert!(first.contains("ldp x0, x1, [sp, #32]"));
+        assert!(first.contains("bl _tinytsx_function_1"));
+        assert!(first.contains(
+            "_tinytsx_function_1:\n    stp x29, x30, [sp, #-16]!\n    mov x29, sp\n    adrp"
+        ));
         assert!(first.contains("Ltinytsx_string_0:"));
         assert!(first.contains("Ltinytsx_constant_0:"));
         assert!(first.contains(".byte 60, 104, 49"));

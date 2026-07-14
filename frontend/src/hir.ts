@@ -65,17 +65,28 @@ export type ValueExpression =
       span: SourceSpan;
     }
   | {
+      kind: "parameter";
+      parameter: number;
+      span: SourceSpan;
+    }
+  | {
       kind: "directCall";
       function: number;
       arguments: ValueExpression[];
       span: SourceSpan;
     };
 
+export interface FunctionParameter {
+  name: string;
+  type: "string";
+  span: SourceSpan;
+}
+
 export interface HirFunction {
   id: number;
   module: string;
   name: string;
-  parameters: [];
+  parameters: FunctionParameter[];
   result: "string";
   body: ValueExpression;
   span: SourceSpan;

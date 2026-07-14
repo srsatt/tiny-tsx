@@ -7,6 +7,7 @@ export class FunctionLowerer {
   readonly #functions: Array<HirFunction | undefined> = [];
   readonly #ids = new Map<ts.FunctionDeclaration, number>();
   readonly #active = new Set<ts.FunctionDeclaration>();
+  readonly #parameters = new Map<ts.ParameterDeclaration, {function: number; parameter: number}>();
   readonly #constants: ReadonlyMap<string, Constant>;
 
   constructor(
@@ -20,7 +21,7 @@ export class FunctionLowerer {
     ]));
   }
 
-  lower(expression: ts.Expression): ValueExpression {
+  lower(expression: ts.Expression, currentFunction?: number): ValueExpression {
     const value = unwrap(expression);
     if (ts.isStringLiteral(value) || ts.isNoSubstitutionTemplateLiteral(value)) {
       return {
@@ -30,13 +31,25 @@ export class FunctionLowerer {
       };
     }
     if (ts.isIdentifier(value)) {
+      const declaration = this.resolveDeclaration(value);
+      if (declaration !== undefined && ts.isParameter(declaration)) {
+        const parameter = this.#parameters.get(declaration);
+        if (parameter === undefined || parameter.function !== currentFunction) {
+          throw tinyError("TINY1308", "captured parameters require closure lowering", value);
+        }
+        return {
+          kind: "parameter",
+          parameter: parameter.parameter,
+          span: spanOf(value, value.getSourceFile()),
+        };
+      }
       return this.lowerConstant(value);
     }
     if (ts.isCallExpression(value)) {
-      if (value.arguments.length !== 0 || !ts.isIdentifier(value.expression)) {
+      if (!ts.isIdentifier(value.expression)) {
         throw tinyError(
           "TINY1301",
-          "the first function slice supports only zero-argument direct calls",
+          "the function slice supports only direct calls to named declarations",
           value,
         );
       }
@@ -44,10 +57,21 @@ export class FunctionLowerer {
       if (declaration === undefined || !ts.isFunctionDeclaration(declaration)) {
         throw tinyError("TINY1302", "call target must be a named function declaration", value.expression);
       }
+      if (declaration.parameters.length > 4) {
+        throw tinyError("TINY1309", "native string functions support at most four parameters", declaration);
+      }
+      if (value.arguments.length !== declaration.parameters.length) {
+        throw tinyError(
+          "TINY1310",
+          `function \`${declaration.name?.text ?? "<anonymous>"}\` expects ${declaration.parameters.length} arguments`,
+          value,
+        );
+      }
+      const functionId = this.lowerFunction(declaration);
       return {
         kind: "directCall",
-        function: this.lowerFunction(declaration),
-        arguments: [],
+        function: functionId,
+        arguments: value.arguments.map(argument => this.lower(argument, currentFunction)),
         span: spanOf(value, value.getSourceFile()),
       };
     }
@@ -98,8 +122,8 @@ export class FunctionLowerer {
     if (existing !== undefined) {
       return existing;
     }
-    if (declaration.name === undefined || declaration.parameters.length !== 0) {
-      throw tinyError("TINY1306", "lowered functions must be named and accept no parameters", declaration);
+    if (declaration.name === undefined || declaration.parameters.length > 4) {
+      throw tinyError("TINY1306", "lowered functions must be named and accept at most four parameters", declaration);
     }
     if (declaration.body?.statements.length !== 1) {
       throw tinyError("TINY1307", "a lowered function must contain one return statement", declaration);
@@ -112,14 +136,31 @@ export class FunctionLowerer {
     const id = this.#functions.length;
     this.#ids.set(declaration, id);
     this.#functions.push(undefined);
+    const parameters = declaration.parameters.map((parameter, index) => {
+      if (
+        !ts.isIdentifier(parameter.name)
+        || parameter.dotDotDotToken !== undefined
+        || parameter.questionToken !== undefined
+        || parameter.initializer !== undefined
+        || (this.checker.getTypeAtLocation(parameter).flags & ts.TypeFlags.StringLike) === 0
+      ) {
+        throw tinyError("TINY1311", "native function parameters must be required strings", parameter);
+      }
+      this.#parameters.set(parameter, {function: id, parameter: index});
+      return {
+        name: parameter.name.text,
+        type: "string" as const,
+        span: spanOf(parameter, parameter.getSourceFile()),
+      };
+    });
     this.#active.add(declaration);
-    const body = this.lower(statement.expression);
+    const body = this.lower(statement.expression, id);
     this.#active.delete(declaration);
     this.#functions[id] = {
       id,
       module: declaration.getSourceFile().fileName,
       name: declaration.name.text,
-      parameters: [],
+      parameters,
       result: "string",
       body,
       span: spanOf(declaration, declaration.getSourceFile()),

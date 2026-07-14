@@ -170,6 +170,40 @@ test("rejects recursive functions before native code generation", () => {
   );
 });
 
+test("lowers string parameters and direct-call arguments", () => {
+  const hir = compileSource(`
+    const MESSAGE = "Hono!!";
+    function identity(value: string): string { return value; }
+    function greeting(value: string): string { return identity(value); }
+    export function GET(request: Request): Response {
+      return Response.text(greeting(MESSAGE));
+    }
+  `);
+
+  assert.deepEqual(hir.functions.map(func => ({
+    name: func.name,
+    parameters: func.parameters.map(parameter => [parameter.name, parameter.type]),
+  })), [
+    {name: "greeting", parameters: [["value", "string"]]},
+    {name: "identity", parameters: [["value", "string"]]},
+  ]);
+  assert.equal(hir.functions[0]?.body.kind, "directCall");
+  assert.deepEqual(
+    hir.functions[0]?.body.kind === "directCall"
+      ? hir.functions[0].body.arguments.map(argument => argument.kind)
+      : [],
+    ["parameter"],
+  );
+  assert.equal(hir.handlers[0]?.response.kind, "text");
+  assert.deepEqual(
+    hir.handlers[0]?.response.kind === "text"
+      && hir.handlers[0].response.value.kind === "directCall"
+      ? hir.handlers[0].response.value.arguments.map(argument => argument.kind)
+      : [],
+    ["constant"],
+  );
+});
+
 for (const [name, source, code] of [
   ["any", `function Bad(value: any): JSX.Element { return <p>Bad</p>; }`, "TINY1001"],
   ["classes", `class Bad {}`, "TINY1002"],
