@@ -154,3 +154,6 @@ fn _assert_views_are_readable(view: &TinyStringView) -> &[u8] {
         unsafe { slice::from_raw_parts(view.ptr, view.len) }
     }
 }
+
+#[cfg(test)]
+mod tests;
