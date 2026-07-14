@@ -84,6 +84,14 @@ export function resolveApplicationRuntimeClass(
     : resolveLocal(entry, application.constructorName, modules, new Set());
 }
 
+export function resolveRuntimeClass(
+  module: SourceModule,
+  localName: string,
+  modules: ReadonlyMap<string, SourceModule>,
+): ResolvedRuntimeClass | undefined {
+  return resolveLocal(module, localName, modules, new Set());
+}
+
 export function resolveBaseRuntimeClass(
   resolved: ResolvedRuntimeClass,
   modules: ReadonlyMap<string, SourceModule>,

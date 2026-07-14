@@ -160,6 +160,12 @@ test("executes the pinned Hono get registration through addRoute", () => {
     path: "/",
     basePath: "/",
     handlerKind: "closure",
+    response: {
+      kind: "text",
+      body: "Hono!!",
+      status: 200,
+      contentType: "text/plain; charset=UTF-8",
+    },
   }]);
   assert.equal(result?.routerInsertions, 1);
 });
@@ -172,7 +178,7 @@ test("the compiling frontend selects default Hono application initialization", (
       apiAliases: {"hono/tiny": path.join(repository, "tests/compat/hono/api.d.ts")},
     }),
     (error: unknown) => error instanceof CompileFailure
-      && error.diagnostics[0]?.code === "TINY1402"
+      && error.diagnostics[0]?.code === "TINY1403"
       && error.diagnostics[0]?.span?.file.endsWith("tests/compat/hono/smoke.ts") === true,
   );
 });
@@ -185,7 +191,7 @@ test("the upstream basic route enters the full Hono package runtime graph", () =
       apiAliases: {"hono": path.join(repository, "tests/compat/hono/api.d.ts")},
     }),
     (error: unknown) => error instanceof CompileFailure
-      && error.diagnostics[0]?.code === "TINY1402"
+      && error.diagnostics[0]?.code === "TINY1403"
       && error.diagnostics[0]?.span?.file.endsWith("tests/compat/hono/basic-smoke.ts") === true,
   );
 });

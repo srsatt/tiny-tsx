@@ -93,6 +93,14 @@ export function compileEntry(entryPath: string, options: CompileOptions): HirPro
         : displayRuntimeClassPlan(classPlan, process.cwd());
       const initialization = evaluateApplicationInitialization(graph, application);
       if (initialization !== undefined && initialization.issues.length === 0) {
+        const responses = initialization.routes.filter(route => route.response !== undefined).length;
+        if (responses === initialization.routes.length && responses > 0) {
+          throw tinyError(
+            "TINY1403",
+            `default application \`${application.binding}\` evaluated ${responses} route handlers through upstream Context and Response semantics; native route HIR is not lowered yet`,
+            sourceFile.statements.find(statement => ts.isExportAssignment(statement)) ?? sourceFile,
+          );
+        }
         throw tinyError(
           "TINY1402",
           `default application \`${application.binding}\` executed calls [${calls}] into ${initialization.routes.length} closed routes and ${initialization.routerInsertions} router insertions; native dispatch is not lowered yet`,

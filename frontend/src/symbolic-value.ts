@@ -22,6 +22,7 @@ export type Value =
     }
   | {kind: "reference"; name: string; module: string; callable?: ResolvedCallable}
   | {kind: "constructed"; name: string; module: string}
+  | {kind: "response"; body: string; status: number; contentType: string}
   | {kind: "instance"; fields: Map<string, Value>}
   | {kind: "unknown"; reason: string};
 
@@ -68,6 +69,7 @@ export function detail(value: Value): {detail?: string} {
     case "string": return {detail: value.value};
     case "reference": return {detail: value.name};
     case "constructed": return {detail: value.name};
+    case "response": return {detail: `${value.status} ${value.contentType}`};
     case "unknown": return {detail: value.reason};
     default: return {};
   }
@@ -103,6 +105,7 @@ export function truthiness(value: Value): boolean | undefined {
     case "closure":
     case "reference":
     case "constructed":
+    case "response":
     case "instance": return true;
     case "unknown": return undefined;
   }

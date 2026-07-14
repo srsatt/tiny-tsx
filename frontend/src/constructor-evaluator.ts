@@ -6,6 +6,7 @@ import type {ModuleGraph, SourceModule} from "./module-graph.js";
 import {
   resolveApplicationRuntimeClass,
   resolveBaseRuntimeClass,
+  resolveRuntimeClass,
   type ResolvedRuntimeClass,
 } from "./runtime-class-plan.js";
 import {
@@ -50,6 +51,14 @@ export interface EvaluatedRoute {
   path: string;
   basePath: string;
   handlerKind: "closure" | "reference" | "unknown";
+  response?: EvaluatedResponse;
+}
+
+export interface EvaluatedResponse {
+  kind: "text";
+  body: string;
+  status: number;
+  contentType: string;
 }
 
 export interface ApplicationInitializationEvaluation extends ConstructorEvaluation {
@@ -91,7 +100,7 @@ export function evaluateApplicationInitialization(
   const summary = summarize(evaluator, instance);
   return {
     ...summary,
-    routes: summarizeRoutes(instance),
+    routes: summarizeRoutes(evaluator, instance),
     routerInsertions: evaluator.routerInsertions,
   };
 }
@@ -163,7 +172,10 @@ function executeApplicationCalls(
   }
 }
 
-function summarizeRoutes(instance: Value & {kind: "instance"}): EvaluatedRoute[] {
+function summarizeRoutes(
+  evaluator: Evaluator,
+  instance: Value & {kind: "instance"},
+): EvaluatedRoute[] {
   const routes = instance.fields.get("routes");
   if (routes?.kind !== "array") {
     return [];
@@ -179,6 +191,9 @@ function summarizeRoutes(instance: Value & {kind: "instance"}): EvaluatedRoute[]
     if (method?.kind !== "string" || path?.kind !== "string" || basePath?.kind !== "string") {
       return [];
     }
+    const response = handler?.kind === "closure"
+      ? evaluateRouteHandler(evaluator, handler)
+      : undefined;
     return [{
       method: method.value,
       path: path.value,
@@ -188,8 +203,47 @@ function summarizeRoutes(instance: Value & {kind: "instance"}): EvaluatedRoute[]
         : handler?.kind === "reference"
           ? "reference" as const
           : "unknown" as const,
+      ...(response === undefined ? {} : {response}),
     }];
   });
+}
+
+function evaluateRouteHandler(
+  evaluator: Evaluator,
+  handler: Value & {kind: "closure"},
+): EvaluatedResponse | undefined {
+  const contextClass = findRuntimeClass(evaluator, "Context");
+  if (contextClass === undefined) {
+    return undefined;
+  }
+  const context: Value & {kind: "instance"} = {kind: "instance", fields: new Map()};
+  executeClass(
+    evaluator,
+    contextClass,
+    [unknown("runtime Request"), UNDEFINED],
+    context,
+  );
+  const response = invokeClosure(evaluator, handler, [context], context);
+  return response.kind === "response"
+    ? {
+      kind: "text",
+      body: response.body,
+      status: response.status,
+      contentType: response.contentType,
+    }
+    : undefined;
+}
+
+function findRuntimeClass(evaluator: Evaluator, name: string): ResolvedRuntimeClass | undefined {
+  let current: ResolvedRuntimeClass | undefined = evaluator.root;
+  while (current !== undefined) {
+    const resolved = resolveRuntimeClass(current.module, name, evaluator.modules);
+    if (resolved !== undefined) {
+      return resolved;
+    }
+    current = resolveBaseRuntimeClass(current, evaluator.modules);
+  }
+  return undefined;
 }
 
 function executeClass(
@@ -564,6 +618,12 @@ function evaluateCall(
   if (ts.isPropertyAccessExpression(call.expression)) {
     const receiver = evaluate(evaluator, call.expression.expression, module, environment, instance);
     const name = memberName(call.expression.name);
+    if (receiver.kind === "instance") {
+      const callable = receiver.fields.get(name);
+      if (callable?.kind === "closure") {
+        return invokeClosure(evaluator, callable, arguments_, receiver);
+      }
+    }
     if (receiver.kind === "string") {
       if (name === "toUpperCase") return {kind: "string", value: receiver.value.toUpperCase()};
       if (name === "at") {
@@ -702,6 +762,14 @@ function evaluate(
   if (ts.isBinaryExpression(expression)) {
     const operator = expression.operatorToken.kind;
     const left = evaluate(evaluator, expression.left, module, environment, instance);
+    if (operator === ts.SyntaxKind.AmpersandAmpersandToken) {
+      const decision = truthiness(left);
+      return decision === undefined
+        ? unknown("logical AND operand is not closed")
+        : decision
+          ? evaluate(evaluator, expression.right, module, environment, instance)
+          : left;
+    }
     if (operator === ts.SyntaxKind.QuestionQuestionToken) {
       return left.kind === "undefined" || left.kind === "null"
         ? evaluate(evaluator, expression.right, module, environment, instance)
@@ -733,7 +801,28 @@ function evaluate(
       : unknown("conditional test is not a closed boolean");
   }
   if (ts.isNewExpression(expression) && ts.isIdentifier(expression.expression)) {
+    if (expression.expression.text === "Response") {
+      const body = expression.arguments?.[0] === undefined
+        ? UNDEFINED
+        : evaluate(evaluator, expression.arguments[0], module, environment, instance);
+      if (body.kind !== "string" && body.kind !== "undefined" && body.kind !== "null") {
+        return unknown("Response body is not a closed string or null");
+      }
+      return {
+        kind: "response",
+        body: body.kind === "string" ? body.value : "",
+        status: 200,
+        contentType: body.kind === "string" ? "text/plain; charset=UTF-8" : "",
+      };
+    }
     return {kind: "constructed", name: expression.expression.text, module: module.path};
+  }
+  if (ts.isPrefixUnaryExpression(expression) && expression.operator === ts.SyntaxKind.ExclamationToken) {
+    const operand = evaluate(evaluator, expression.operand, module, environment, instance);
+    const decision = truthiness(operand);
+    return decision === undefined
+      ? unknown("logical NOT operand is not closed")
+      : {kind: "boolean", value: !decision};
   }
   if (ts.isTypeOfExpression(expression)) {
     const value = evaluate(evaluator, expression.expression, module, environment, instance);
