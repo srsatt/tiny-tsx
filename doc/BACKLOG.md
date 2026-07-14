@@ -51,7 +51,10 @@ commit message.
       prove the method-table spread folds to seven static method names.
 - [ ] Use TypeScript record layouts to specialize request-time closed-shape
       object rest such as Hono's `optionsWithoutStrict`.
-- [ ] Feed staged values into the general typed HIR and native data sections.
+- [x] Feed staged values into a typed HIR constant pool and deterministic native
+      read-only data blobs.
+- [ ] Lower ordinary functions, expressions, and statements into the general
+      typed HIR and reference staged constant IDs from generated code.
 - [ ] Compile the restricted class semantics required by `hono/tiny`.
 - [ ] Compile the required rest/spread operations.
 - [ ] Add a native RegExp backend and allowlisted Test262 cases.

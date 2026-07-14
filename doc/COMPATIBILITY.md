@@ -114,6 +114,25 @@ its closed literal `[...[3, 4, 5]]` is folded by a frontend test. The complete
 Test262 program is still not executed natively, so this is staging evidence, not
 an ECMAScript conformance claim.
 
+### Typed constant materialization
+
+Closed staged bindings now enter HIR v1 as source-located, tagged constants.
+Null, boolean, finite number, string, array, and record values retain their type
+and recursive structure. The Rust compiler validates the pool and emits each
+constant as a deterministic, eight-byte-aligned blob in the Mach-O read-only
+data section. The encoding is recorded in `doc/CONSTANT_DATA.md`.
+
+The pinned Hono staging test now proves that `allMethods` reaches this final HIR
+shape as an array of seven typed strings. This happens below the whole-program
+compile boundary: the exact-source Hono probe still stops at its first upstream
+class, so no claim is made that a Hono executable is produced yet. A separate
+compilable staged-constants example passes frontend lowering, Rust HIR parsing,
+native assembly/linking, and a real HTTP test.
+
+The blobs are not yet referenced by generated expression code. They establish
+the data boundary for the next function/record/array lowering slice without
+introducing runtime JavaScript object semantics.
+
 ## Compatibility order
 
 1. ESM runtime graph loading and aggregate diagnostics.

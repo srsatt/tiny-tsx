@@ -13,7 +13,7 @@ produces and serves a native Mach-O executable from the example TSX source.
 - Pinned TypeScript frontend package and TinyTSX SDK declarations.
 - Static TSX example matching the first deliverable.
 - Versioned JSON HIR with source spans, components, GET handler, HTML operations,
-  interned static strings, and build statistics.
+  interned static strings, typed staged constants, and build statistics.
 - Official TypeScript frontend validates the initial static subset and coalesces
   the example page into one 53-byte HTML fragment.
 - Frontend coverage includes static and nested components plus rejection of
@@ -53,9 +53,9 @@ produces and serves a native Mach-O executable from the example TSX source.
   a regression test preserves that frontier.
 - Relative ESM components now compile through multi-module HIR into the native
   server; a second real HTTP E2E test verifies the imported component output.
-- Test262 intake validates the pin, provenance metadata, and parsing of four
-  allowlisted class, loop, RegExp, and async cases. These are explicitly
-  syntax-only and are not semantic conformance results.
+- Test262 intake validates the pin, provenance metadata, and parsing of five
+  allowlisted class, loop, RegExp, async, and array-spread cases. These are
+  explicitly syntax-only and are not semantic conformance results.
 - The dedicated native API suite currently covers Request method/path/query
   views and exact-fit, OOM, and invalid response-writer behavior.
 - A conservative AOT staging pass now evaluates imported closed arrays and
@@ -68,6 +68,15 @@ produces and serves a native Mach-O executable from the example TSX source.
   specialization work.
 - The fifth Test262 intake case covers array spread. Its closed literal is also
   consumed by the staging test, without claiming execution of the full case.
+- Closed staged values now lower into a canonical HIR constant pool with tagged
+  null, boolean, number, string, array, and record values. HIR validation checks
+  their IDs, modules, shapes, depth, and statistics.
+- The arm64 backend serializes those constants into deterministic read-only
+  blobs. `examples/staged-constants/server.tsx` passes the complete native build
+  and HTTP E2E path, while the Hono test proves its seven-method array reaches
+  the same typed HIR representation.
+- Generated expressions do not load constant blobs yet; their current purpose
+  is to pin the frontend/backend data boundary before function lowering.
 
 Verification:
 
@@ -79,6 +88,7 @@ rtk node frontend/dist/src/cli.js examples/static-page/server.tsx
 rtk cargo test --workspace
 rtk cargo clippy --workspace --all-targets -- -D warnings
 rtk cargo run -q -p tinytsx -- check examples/static-page/server.tsx --emit-asm
+rtk cargo run -q -p tinytsx -- check examples/staged-constants/server.tsx --emit-hir
 rtk cargo run -q -p tinytsx -- build examples/static-page/server.tsx --port 3017 --output dist/static-server --release --emit-hir --emit-asm
 rtk curl -i --max-time 5 http://127.0.0.1:3017/
 rtk npm run test:benchmarks
@@ -91,16 +101,16 @@ rtk python3 benchmarks/scripts/run_static.py --duration 2 --runs 3 --startup-run
 
 ## Active slice
 
-Compatibility substrate: feed staged closed values into the general typed HIR,
-then lower ordinary function values, closures, records, arrays, and loops.
-Type-layout specialization should handle closed request-time records without
-pretending their values are compile-time constants. Test262 cases move from
-syntax intake to native execution only when their complete semantics are
-implemented.
+Compatibility substrate: lower ordinary functions, expressions, and statements
+into the general typed HIR, reference the new constant pool, then add closures,
+native record/array layouts, and loops. Type-layout specialization should handle
+closed request-time records without pretending their values are compile-time
+constants. Test262 cases move from syntax intake to native execution only when
+their complete semantics are implemented.
 
 ## Resume point
 
 Read `README.md`, `doc/COMPATIBILITY.md`, and `doc/BACKLOG.md`. Run
 `npm run audit:hono` to see the pinned requirement frontier. Begin with bare
-package resolution and the general typed HIR; do not special-case Hono routing.
+package resolution and function/expression HIR; do not special-case Hono routing.
 Run the verification commands recorded here before moving an item to verified.
