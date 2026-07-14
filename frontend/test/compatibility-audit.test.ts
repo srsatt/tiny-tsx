@@ -5,7 +5,9 @@ import path from "node:path";
 import {after, test} from "node:test";
 import {fileURLToPath} from "node:url";
 import {auditCompatibility} from "../src/compatibility-audit.js";
+import {CompileFailure} from "../src/diagnostics.js";
 import {loadModuleGraph} from "../src/module-graph.js";
+import {compileEntry} from "../src/program.js";
 
 const directory = mkdtempSync(path.join(tmpdir(), "tinytsx-compat-"));
 const repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -51,6 +53,18 @@ test("audits the pinned hono/tiny runtime graph", () => {
   assert.ok(requirement(report, "loops") > 0);
   assert.ok(requirement(report, "regular-expressions") > 0);
   assert.ok(report.builtins.some(builtin => builtin.name === "Response"));
+});
+
+test("the compiling frontend reaches the first unsupported Hono class", () => {
+  assert.throws(
+    () => compileEntry(path.join(repository, "tests/compat/hono/smoke.ts"), {
+      sdkPath: path.join(repository, "sdk/index.d.ts"),
+      aliases: {"hono/tiny": path.join(repository, "vendor/hono/src/preset/tiny.ts")},
+    }),
+    (error: unknown) => error instanceof CompileFailure
+      && error.diagnostics[0]?.code === "TINY1002"
+      && error.diagnostics[0]?.span?.file.endsWith("vendor/hono/src/preset/tiny.ts") === true,
+  );
 });
 
 function write(name: string, source: string): string {

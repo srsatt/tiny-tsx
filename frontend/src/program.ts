@@ -9,28 +9,36 @@ import {validateForbiddenSyntax} from "./subset-validator.js";
 
 export interface CompileOptions {
   sdkPath: string;
+  aliases?: Readonly<Record<string, string>>;
 }
 
 export function compileEntry(entryPath: string, options: CompileOptions): HirProgram {
   const entry = path.resolve(entryPath);
   const sdk = path.resolve(options.sdkPath);
-  const graph = loadModuleGraph(entry);
+  const graph = loadModuleGraph(entry, options.aliases === undefined ? {} : {aliases: options.aliases});
   if (graph.diagnostics.length > 0) {
     throw new CompileFailure(graph.diagnostics);
   }
+  const compilerOptions: ts.CompilerOptions = {
+    noEmit: true,
+    allowJs: true,
+    strict: true,
+    skipLibCheck: true,
+    target: ts.ScriptTarget.ES2022,
+    module: ts.ModuleKind.ESNext,
+    moduleResolution: ts.ModuleResolutionKind.Bundler,
+    jsx: ts.JsxEmit.Preserve,
+    lib: ["lib.es2022.d.ts"],
+  };
+  if (options.aliases !== undefined) {
+    compilerOptions.paths = Object.fromEntries(Object.entries(options.aliases).map(([specifier, target]) => [
+      specifier,
+      [path.resolve(target)],
+    ]));
+  }
   const program = ts.createProgram({
     rootNames: [entry, sdk],
-    options: {
-      noEmit: true,
-      allowJs: true,
-      strict: true,
-      skipLibCheck: true,
-      target: ts.ScriptTarget.ES2022,
-      module: ts.ModuleKind.ESNext,
-      moduleResolution: ts.ModuleResolutionKind.Bundler,
-      jsx: ts.JsxEmit.Preserve,
-      lib: ["lib.es2022.d.ts"],
-    },
+    options: compilerOptions,
   });
 
   const sourceFile = program.getSourceFile(entry);

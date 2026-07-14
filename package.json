@@ -9,6 +9,7 @@
     "test:frontend": "npm --prefix frontend test",
     "test:native-api": "cargo test -p tinytsx-runtime-bootstrap abi::tests",
     "test:test262-intake": "node --test tests/compat/test262/*.test.mjs",
+    "try:compile:hono": "npm run build:frontend && node frontend/dist/src/cli.js tests/compat/hono/smoke.ts --alias hono/tiny=vendor/hono/src/preset/tiny.ts",
     "test": "npm run test:frontend && npm run test:test262-intake && npm run test:benchmarks && cargo test --workspace"
   }
 }
