@@ -227,16 +227,20 @@ def assert_correct(response: dict[str, Any], workload: dict[str, Any]) -> None:
     headers = response["headers"]
     expected = {
         "status": 200,
-        "content-type": workload["content_type"],
+        "content-type": normalize_content_type(workload["content_type"]),
         "content-length": str(len(workload["body"])),
     }
     actual = {
         "status": response["status"],
-        "content-type": headers.get("content-type"),
+        "content-type": normalize_content_type(headers.get("content-type")),
         "content-length": headers.get("content-length"),
     }
     if actual != expected or response["body"] != workload["body"]:
         raise RuntimeError(f"response mismatch: expected={expected}, actual={actual}")
+
+
+def normalize_content_type(value: str | None) -> str | None:
+    return value.lower().replace(" ", "") if value is not None else None
 
 
 def stop_server(process: subprocess.Popen[bytes]) -> None:
