@@ -181,7 +181,7 @@ function summarizeRoutes(
   if (routes?.kind !== "array") {
     return [];
   }
-  return routes.items.flatMap(route => {
+  return routes.items.flatMap((route, routeIndex) => {
     if (route.kind !== "record") {
       return [];
     }
@@ -192,8 +192,11 @@ function summarizeRoutes(
     if (method?.kind !== "string" || path?.kind !== "string" || basePath?.kind !== "string") {
       return [];
     }
-    const response = handler?.kind === "closure"
-      ? evaluateRouteHandler(evaluator, handler)
+    const middleware = routes.items.slice(0, routeIndex).flatMap(candidate =>
+      matchingMiddleware(candidate, path.value)
+    );
+    const response = method.value === "GET" && handler?.kind === "closure"
+      ? evaluateRouteHandler(evaluator, handler, middleware)
       : undefined;
     return [{
       method: method.value,
@@ -212,6 +215,7 @@ function summarizeRoutes(
 function evaluateRouteHandler(
   evaluator: Evaluator,
   handler: Value & {kind: "closure"},
+  middleware: Array<Value & {kind: "closure"}>,
 ): EvaluatedResponse | undefined {
   const contextClass = findRuntimeClass(evaluator, "Context");
   if (contextClass === undefined) {
@@ -225,6 +229,29 @@ function evaluateRouteHandler(
     context,
   );
   const response = invokeClosure(evaluator, handler, [context], context);
+  if (response.kind === "response") {
+    for (const middlewareHandler of [...middleware].reverse()) {
+      const middlewareContext: Value & {kind: "instance"} = {kind: "instance", fields: new Map()};
+      executeClass(
+        evaluator,
+        contextClass,
+        [unknown("runtime Request"), UNDEFINED],
+        middlewareContext,
+      );
+      middlewareContext.fields.set("#res", response);
+      middlewareContext.fields.set("finalized", {kind: "boolean", value: true});
+      invokeClosure(
+        evaluator,
+        middlewareHandler,
+        [middlewareContext, {
+          kind: "reference",
+          name: "next",
+          module: middlewareHandler.module.path,
+        }],
+        middlewareContext,
+      );
+    }
+  }
   return response.kind === "response"
     ? {
       kind: "text",
@@ -234,6 +261,28 @@ function evaluateRouteHandler(
       ...(response.headers.size === 0 ? {} : {headers: [...response.headers.values()]}),
     }
     : undefined;
+}
+
+function matchingMiddleware(
+  route: Value,
+  requestPath: string,
+): Array<Value & {kind: "closure"}> {
+  if (route.kind !== "record") return [];
+  const method = route.fields.get("method");
+  const path = route.fields.get("path");
+  const handler = route.fields.get("handler");
+  if (
+    method?.kind !== "string"
+    || method.value !== "ALL"
+    || path?.kind !== "string"
+    || handler?.kind !== "closure"
+  ) {
+    return [];
+  }
+  const matches = path.value === "/*"
+    || path.value === requestPath
+    || (path.value.endsWith("*") && requestPath.startsWith(path.value.slice(0, -1)));
+  return matches ? [handler] : [];
 }
 
 function findRuntimeClass(evaluator: Evaluator, name: string): ResolvedRuntimeClass | undefined {
@@ -382,6 +431,10 @@ function executeStatement(
       environment,
       instance,
     ), module, environment, instance);
+    return continued();
+  }
+  if (ts.isAwaitExpression(expression)) {
+    evaluate(evaluator, expression.expression, module, environment, instance);
     return continued();
   }
   if (ts.isCallExpression(expression)) {
@@ -559,6 +612,17 @@ function executeEffectCall(
   if (receiver.kind === "constructed" && name === "add") {
     evaluator.routerInsertions++;
     return true;
+  }
+  if (receiver.kind === "headers" && name === "set") {
+    const headerName = arguments_[0];
+    const headerValue = arguments_[1];
+    if (headerName?.kind === "string" && headerValue?.kind === "string") {
+      receiver.entries.set(headerName.value.toLowerCase(), {
+        name: headerName.value,
+        value: headerValue.value,
+      });
+      return true;
+    }
   }
   if (receiver.kind === "instance") {
     const method = findInstanceMethod(evaluator, name);
@@ -845,6 +909,9 @@ function evaluate(
   }
   if (ts.isCallExpression(expression)) {
     return evaluateCall(evaluator, expression, module, environment, instance);
+  }
+  if (ts.isAwaitExpression(expression)) {
+    return evaluate(evaluator, expression.expression, module, environment, instance);
   }
   if (ts.isTemplateExpression(expression)) {
     let value = expression.head.text;

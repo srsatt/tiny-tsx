@@ -17,6 +17,7 @@
   "basicSmokeEntry": "tests/compat/hono/basic-smoke.ts",
   "multiRouteSmokeEntry": "tests/compat/hono/multi-route-smoke.ts",
   "responseHeadersSmokeEntry": "tests/compat/hono/response-headers-smoke.ts",
+  "poweredBySmokeEntry": "tests/compat/hono/powered-by-smoke.ts",
   "basicSource": "https://github.com/honojs/examples/tree/main/basic",
   "behaviorContracts": {
     "textResponse": {

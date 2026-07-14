@@ -222,6 +222,25 @@ test("lowers closed Response init headers from a Hono route", () => {
   assert.deepEqual(hir.staticStrings, [{id: 0, value: "Headers"}]);
 });
 
+test("applies the upstream poweredBy middleware after the root handler", () => {
+  const entry = path.join(repository, "tests/compat/hono/powered-by-smoke.ts");
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    aliases: {
+      hono: path.join(repository, "vendor/hono/src/index.ts"),
+      "hono/powered-by": path.join(repository, "vendor/hono/src/middleware/powered-by/index.ts"),
+    },
+    apiAliases: {
+      hono: path.join(repository, "tests/compat/hono/api.d.ts"),
+      "hono/powered-by": path.join(repository, "tests/compat/hono/powered-by-api.d.ts"),
+    },
+  });
+
+  assert.equal(hir.handlers.length, 1);
+  assert.equal(hir.handlers[0]?.path, "/");
+  assert.deepEqual(hir.handlers[0]?.headers, [{name: "X-Powered-By", value: "Hono"}]);
+});
+
 test("lowers the tiny-preset Hono route into native HIR", () => {
   const hir = compileEntry(path.join(repository, "tests/compat/hono/smoke.ts"), {
     sdkPath: path.join(repository, "sdk/index.d.ts"),

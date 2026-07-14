@@ -112,6 +112,28 @@ fn builds_and_serves_static_response_headers() {
     );
 }
 
+#[test]
+fn builds_and_serves_the_upstream_powered_by_middleware() {
+    build_and_serve_with_options(
+        "tests/compat/hono/powered-by-smoke.ts",
+        "Hono!!",
+        "text/plain;charset=UTF-8",
+        "/",
+        &[("X-Powered-By", "Hono")],
+        &[
+            "--alias",
+            "hono=vendor/hono/src/index.ts",
+            "--alias",
+            "hono/powered-by=vendor/hono/src/middleware/powered-by/index.ts",
+            "--api",
+            "hono=tests/compat/hono/api.d.ts",
+            "--api",
+            "hono/powered-by=tests/compat/hono/powered-by-api.d.ts",
+        ],
+        &[],
+    );
+}
+
 fn build_and_serve(entry: &str, expected_body: &str, expected_content_type: &str) {
     build_and_serve_with_options(
         entry,

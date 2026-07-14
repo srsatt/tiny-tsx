@@ -198,12 +198,15 @@ function lowerApplicationInitialization(
   sourceFile: ts.SourceFile,
   initialization: ApplicationInitializationEvaluation,
 ): HirProgram | undefined {
-  if (initialization.routes.length === 0) {
+  const routes = initialization.routes.filter(route => route.method === "GET");
+  if (
+    routes.length === 0
+    || initialization.routes.some(route => route.method !== "GET" && route.method !== "ALL")
+  ) {
     return undefined;
   }
-  if (initialization.routes.some(route =>
-    route.method !== "GET"
-    || route.response === undefined
+  if (routes.some(route =>
+    route.response === undefined
     || route.response.kind !== "text"
     || route.response.status !== 200
     || route.response.contentType !== "text/plain;charset=UTF-8"
@@ -213,7 +216,7 @@ function lowerApplicationInitialization(
   const exportNode = sourceFile.statements.find(statement => ts.isExportAssignment(statement)) ?? sourceFile;
   const span = spanOf(exportNode, sourceFile);
   const strings = new StringTable();
-  const handlers = initialization.routes.map(route => {
+  const handlers = routes.map(route => {
     const response = route.response!;
     const body = strings.intern(response.body);
     return {

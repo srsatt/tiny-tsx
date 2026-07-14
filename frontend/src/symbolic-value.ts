@@ -13,6 +13,7 @@ export type Value =
   | {kind: "string"; value: string}
   | {kind: "array"; items: Value[]}
   | {kind: "record"; fields: Map<string, Value>}
+  | {kind: "headers"; entries: Map<string, {name: string; value: string}>}
   | {
       kind: "closure";
       span: SourceSpan;
@@ -40,6 +41,12 @@ export interface ExecutionResult {
 export const UNDEFINED: Value = {kind: "undefined"};
 
 export function readProperty(value: Value, name: string): Value {
+  if (value.kind === "instance" && name === "res") {
+    return value.fields.get("#res") ?? UNDEFINED;
+  }
+  if (value.kind === "response" && name === "headers") {
+    return {kind: "headers", entries: value.headers};
+  }
   if (value.kind === "record" || value.kind === "instance") {
     return value.fields.get(name) ?? UNDEFINED;
   }
@@ -108,6 +115,7 @@ export function truthiness(value: Value): boolean | undefined {
     case "string": return value.value.length > 0;
     case "array":
     case "record":
+    case "headers":
     case "closure":
     case "reference":
     case "constructed":
