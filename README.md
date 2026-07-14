@@ -84,6 +84,71 @@ The central product idea is:
 > Bounded request memory.
 > No JavaScript runtime.
 
+## Current implementation: static native vertical slice
+
+The repository currently implements Milestones 0–2 for the static-page example
+on Apple Silicon macOS. Install the pinned build-time frontend and compile the
+Rust driver:
+
+```bash
+npm install --prefix frontend
+npm run build --prefix frontend
+cargo build -p tinytsx
+```
+
+Inspect the source, HIR, or generated Apple arm64 assembly:
+
+```bash
+./target/debug/tinytsx check examples/static-page/server.tsx
+./target/debug/tinytsx check examples/static-page/server.tsx --emit-hir
+./target/debug/tinytsx check examples/static-page/server.tsx --emit-asm
+```
+
+Build and run the native bootstrap server:
+
+```bash
+./target/debug/tinytsx build examples/static-page/server.tsx \
+  --port 3000 \
+  --workers 1 \
+  --request-memory 262144 \
+  --runtime bootstrap \
+  --release \
+  --emit-hir \
+  --emit-asm \
+  --output dist/static-server
+
+./dist/static-server
+```
+
+In another terminal:
+
+```bash
+curl -i http://127.0.0.1:3000/
+```
+
+The response body is:
+
+```html
+<html><body><h1>Hello from TinyTSX</h1></body></html>
+```
+
+`tinytsx run examples/static-page/server.tsx --port 3000` combines the build and
+run steps for development. `--emit-hir` and `--emit-asm` on `build` preserve
+`<output>.hir.json` and `<output>.s`; every build also writes
+`<output>.build.json`.
+
+Run all implemented checks, including the native HTTP end-to-end test:
+
+```bash
+npm test --prefix frontend
+cargo test --workspace
+cargo clippy --workspace --all-targets -- -D warnings
+```
+
+The present bootstrap accepts GET requests with `Connection: close` on one
+worker. Dynamic expressions, escaping, the reusable request arena, and the
+fixed worker pool are subsequent milestones tracked in `doc/BACKLOG.md`.
+
 ---
 
 # 1. Core product definition

@@ -12,11 +12,11 @@ commit message.
 - [x] Add frontend positive and negative tests.
 - [x] Implement `tinytsx check` and `--emit-hir`.
 - [x] Emit deterministic Apple arm64 assembly and expose `--emit-asm`.
-- [ ] Implement the single-worker bootstrap HTTP runtime.
-- [ ] Assemble and link a native Mach-O executable through the Rust toolchain.
-- [ ] Implement `tinytsx build`, output selection, and temporary artifacts.
-- [ ] Add a real HTTP end-to-end test and report executable size.
-- [ ] Update README with exact working commands.
+- [x] Implement the single-worker bootstrap HTTP runtime.
+- [x] Assemble and link a native Mach-O executable through the Rust toolchain.
+- [x] Implement `tinytsx build`, output selection, and temporary artifacts.
+- [x] Add a real HTTP end-to-end test and report executable size.
+- [x] Update README with exact working commands.
 
 ## Next slice
 
@@ -24,3 +24,4 @@ commit message.
 - [ ] HTML text and quoted-attribute escaping.
 - [ ] Fixed request arena and recoverable request OOM.
 - [ ] Fixed native worker pool and bounded dispatch queue.
+- [ ] Add request parsing and response equivalence cases beyond the static page.
