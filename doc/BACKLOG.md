@@ -89,12 +89,14 @@ commit message.
 - [x] Resolve the constructed binding through runtime imports/re-exports and
       preserve the derived/base class constructor chain with source spans and
       ordered operation kinds.
-- [ ] Execute the traced constructor and registration calls against upstream
-      class/function source to produce an immutable native route artifact.
+- [x] Execute the traced constructor and registration calls against upstream
+      class/function source to produce an immutable compile-time route artifact.
 - [x] Symbolically execute Hono/HonoBase default parameters, field initializers,
       `super`, the closed method loop, assignments, destructuring,
       `Object.assign`, conditionals, closures, and router construction.
-- [ ] Invoke the installed `get` closure and execute its `#addRoute` effects.
+- [x] Invoke the installed `get` closure and execute its `#addRoute` effects.
+- [ ] Lower the evaluated route artifact and retained handler closure into HIR
+      and native request dispatch.
 - [ ] Compile the required rest/spread operations.
 - [ ] Add a native RegExp backend and allowlisted Test262 cases.
 - [ ] Add Request, Response, Headers, URL, and encoding native APIs.

@@ -54,16 +54,27 @@ getPath = imported getPath function
 router = constructed SmartRouter
 ```
 
-Compilation currently emits `TINY1401`: constructor execution is complete, but
-the traced `app.get(...)` closure invocation and its route effects are not yet
-lowered.
+The evaluator now invokes the actual installed `get` closure from upstream
+Hono. It binds the rest parameter, evaluates the closure's branch and
+`forEach`, resolves private `#addRoute`, executes imported `mergePath`, and
+records both `router.add(...)` and `routes.push(...)`. The pinned full-package
+tracer produces this closed initialization artifact with zero issues:
 
-The next evaluator must follow the actual imported implementation and support:
+```text
+routes:
+  - method: GET
+    path: /
+    basePath: /
+    handler: closure
+router insertions: 1
+```
 
-1. closures capturing `this`, method name, path, and route handler;
-2. the selected `app.get(...)` call and its `#addRoute` effects;
-3. router insertion and an immutable route artifact;
-4. native request dispatch consuming that artifact.
+Compilation currently emits `TINY1402`: upstream constructor and registration
+execution are complete, but this route artifact does not yet enter HIR or native
+request dispatch.
+
+The next compiler slice must lower the immutable route artifact into HIR,
+preserve its handler closure, and make native request dispatch consume it.
 
 Partial evaluation must execute the upstream source semantics. The trace is not
 permission to replace Hono routing with a separately implemented interface. If
