@@ -22,7 +22,7 @@ test("lowers a static component to one coalesced HTML fragment", () => {
     }
   `);
 
-  assert.equal(hir.version, 1);
+  assert.equal(hir.version, 2);
   assert.equal(hir.components.length, 1);
   assert.deepEqual(hir.components[0]?.html.map(op => op.kind), ["writeStatic"]);
   const stringId = hir.components[0]?.html[0]?.kind === "writeStatic"
@@ -32,7 +32,7 @@ test("lowers a static component to one coalesced HTML fragment", () => {
     hir.staticStrings[stringId]?.value,
     '<html lang="en"><body><h1 class="title">Hello</h1></body></html>',
   );
-  assert.equal(hir.handlers[0]?.component, 0);
+  assert.deepEqual(hir.handlers[0]?.response, {kind: "html", component: 0});
   assert.equal(hir.statistics.dynamicHtmlExpressions, 0);
   assert.ok(hir.components[0]?.span.line);
 });
@@ -112,6 +112,62 @@ test("carries staged closed values into the typed HIR constant pool", () => {
       {name: "generation", value: {kind: "bigint", value: "9007199254740993"}},
     ],
   });
+});
+
+test("lowers imported string functions and direct calls for Response.text", () => {
+  const suffix = crypto.randomUUID();
+  const constants = path.join(directory, `constants-${suffix}.ts`);
+  const functions = path.join(directory, `functions-${suffix}.ts`);
+  writeFileSync(constants, 'export const MESSAGE = "Hello from native functions";');
+  writeFileSync(functions, `
+    import {MESSAGE} from "./constants-${suffix}.js";
+    export function message(): string { return MESSAGE; }
+  `);
+  const entry = path.join(directory, `text-${suffix}.ts`);
+  writeFileSync(entry, `
+    import {message} from "./functions-${suffix}.js";
+    function greeting(): string { return message(); }
+    export function GET(request: Request): Response { return Response.text(greeting()); }
+  `);
+
+  const hir = compileEntry(entry, {sdkPath});
+
+  assert.equal(hir.components.length, 0);
+  assert.equal(hir.statistics.functions, 2);
+  assert.deepEqual(hir.functions.map(func => func.name), ["greeting", "message"]);
+  assert.deepEqual(hir.functions[0]?.body, {
+    kind: "directCall",
+    function: 1,
+    arguments: [],
+    span: hir.functions[0]?.body.span,
+  });
+  assert.deepEqual(hir.functions[1]?.body, {
+    kind: "constant",
+    constant: 0,
+    span: hir.functions[1]?.body.span,
+  });
+  assert.deepEqual(hir.handlers[0]?.response, {
+    kind: "text",
+    value: {
+      kind: "directCall",
+      function: 0,
+      arguments: [],
+      span: hir.handlers[0]?.response.kind === "text"
+        ? hir.handlers[0].response.value.span
+        : undefined,
+    },
+  });
+});
+
+test("rejects recursive functions before native code generation", () => {
+  assert.throws(
+    () => compileSource(`
+      function recursive(): string { return recursive(); }
+      export function GET(request: Request): Response { return Response.text(recursive()); }
+    `),
+    (error: unknown) => error instanceof CompileFailure
+      && error.diagnostics[0]?.code === "TINY1305",
+  );
 });
 
 for (const [name, source, code] of [

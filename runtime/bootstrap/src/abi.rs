@@ -7,6 +7,10 @@ pub const RENDER_ERROR: u32 = 3;
 pub const INTERNAL_ERROR: u32 = 4;
 pub const NOT_FOUND: u32 = 5;
 
+pub const CONTENT_TYPE_HTML: u16 = 1;
+pub const CONTENT_TYPE_TEXT: u16 = 2;
+pub const CONTENT_TYPE_JSON: u16 = 3;
+
 #[repr(C)]
 pub struct TinyStringView {
     pub ptr: *const u8,
@@ -36,16 +40,18 @@ pub struct TinyRequest {
 }
 
 #[repr(C)]
-pub struct TinyHtmlWriter {
+pub struct TinyResponseWriter {
     pub start: *mut u8,
     pub cursor: *mut u8,
     pub end: *mut u8,
     pub status: u32,
+    pub http_status: u16,
+    pub content_type: u16,
 }
 
 #[cfg(feature = "generated")]
 unsafe extern "C" {
-    pub fn tinytsx_handle_get(request: *const TinyRequest, writer: *mut TinyHtmlWriter) -> u32;
+    pub fn tinytsx_handle_get(request: *const TinyRequest, writer: *mut TinyResponseWriter) -> u32;
     pub fn tinytsx_config_port() -> u16;
     pub fn tinytsx_config_request_memory() -> usize;
 }
@@ -53,7 +59,7 @@ unsafe extern "C" {
 #[cfg(not(feature = "generated"))]
 unsafe extern "C" fn tinytsx_handle_get(
     _request: *const TinyRequest,
-    _writer: *mut TinyHtmlWriter,
+    _writer: *mut TinyResponseWriter,
 ) -> u32 {
     OK
 }
@@ -70,7 +76,7 @@ unsafe extern "C" fn tinytsx_config_request_memory() -> usize {
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn tinytsx_html_write_static(
-    writer: *mut TinyHtmlWriter,
+    writer: *mut TinyResponseWriter,
     bytes: *const u8,
     len: usize,
 ) -> u32 {
@@ -98,16 +104,50 @@ pub unsafe extern "C" fn tinytsx_html_write_static(
     OK
 }
 
-pub fn render(request: &TinyRequest, capacity: usize) -> (u32, Vec<u8>) {
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tinytsx_response_begin(
+    writer: *mut TinyResponseWriter,
+    http_status: u16,
+    content_type: u16,
+) -> u32 {
+    if writer.is_null() {
+        return INTERNAL_ERROR;
+    }
+    // SAFETY: Generated code passes the writer supplied by this runtime.
+    let writer = unsafe { &mut *writer };
+    if !(100..=599).contains(&http_status)
+        || !matches!(
+            content_type,
+            CONTENT_TYPE_HTML | CONTENT_TYPE_TEXT | CONTENT_TYPE_JSON
+        )
+    {
+        writer.status = INTERNAL_ERROR;
+        return INTERNAL_ERROR;
+    }
+    writer.http_status = http_status;
+    writer.content_type = content_type;
+    OK
+}
+
+pub struct RenderedResponse {
+    pub application_status: u32,
+    pub http_status: u16,
+    pub content_type: u16,
+    pub body: Vec<u8>,
+}
+
+pub fn render(request: &TinyRequest, capacity: usize) -> RenderedResponse {
     let mut output = vec![0_u8; capacity];
     let start = output.as_mut_ptr();
     // SAFETY: `start` points at a `capacity`-byte allocation.
     let end = unsafe { start.add(capacity) };
-    let mut writer = TinyHtmlWriter {
+    let mut writer = TinyResponseWriter {
         start,
         cursor: start,
         end,
         status: OK,
+        http_status: 200,
+        content_type: CONTENT_TYPE_HTML,
     };
 
     // SAFETY: The generated handler follows ABI.md and only uses these values
@@ -115,7 +155,12 @@ pub fn render(request: &TinyRequest, capacity: usize) -> (u32, Vec<u8>) {
     let status = unsafe { tinytsx_handle_get(request, &mut writer) };
     let written = writer.cursor as usize - writer.start as usize;
     output.truncate(written);
-    (status, output)
+    RenderedResponse {
+        application_status: status,
+        http_status: writer.http_status,
+        content_type: writer.content_type,
+        body: output,
+    }
 }
 
 pub fn configured_port() -> u16 {

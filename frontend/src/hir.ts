@@ -53,23 +53,57 @@ export interface Component {
   html: HtmlOp[];
 }
 
+export type ValueExpression =
+  | {
+      kind: "stringLiteral";
+      string: number;
+      span: SourceSpan;
+    }
+  | {
+      kind: "constant";
+      constant: number;
+      span: SourceSpan;
+    }
+  | {
+      kind: "directCall";
+      function: number;
+      arguments: ValueExpression[];
+      span: SourceSpan;
+    };
+
+export interface HirFunction {
+  id: number;
+  module: string;
+  name: string;
+  parameters: [];
+  result: "string";
+  body: ValueExpression;
+  span: SourceSpan;
+}
+
+export type HandlerResponse =
+  | {kind: "html"; component: number}
+  | {kind: "text"; value: ValueExpression};
+
 export interface Handler {
   method: "GET";
-  component: number;
+  response: HandlerResponse;
   span: SourceSpan;
 }
 
 export interface HirProgram {
-  version: 1;
+  version: 2;
   target: "aarch64-apple-darwin";
   entry: string;
   modules: Array<{ path: string }>;
+  functions: HirFunction[];
   components: Component[];
   handlers: Handler[];
   staticStrings: StaticString[];
   constants: Constant[];
   statistics: {
     modules: number;
+    functions: number;
     components: number;
     constants: number;
     staticHtmlBytes: number;

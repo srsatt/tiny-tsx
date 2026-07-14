@@ -2,7 +2,7 @@ use std::fmt::Write;
 
 use crate::{
     codegen::Options,
-    hir::{HtmlOp, Program},
+    hir::{ConstantValue, HandlerResponse, HtmlOp, Program, ValueExpression},
 };
 
 use super::constant_data;
@@ -12,6 +12,10 @@ pub fn emit(program: &Program, options: Options) -> Result<String, String> {
     let mut assembly = String::new();
     writeln!(assembly, ".section __TEXT,__text,regular,pure_instructions").unwrap();
     writeln!(assembly, ".p2align 2").unwrap();
+
+    for function in &program.functions {
+        emit_value_function(&mut assembly, function.id, &function.body, program)?;
+    }
 
     for component in &program.components {
         emit_function(
@@ -23,7 +27,7 @@ pub fn emit(program: &Program, options: Options) -> Result<String, String> {
     }
 
     let handler = &program.handlers[0];
-    emit_handler(&mut assembly, handler.component);
+    emit_handler(&mut assembly, &handler.response, program)?;
     emit_config(&mut assembly, options);
     emit_static_data(&mut assembly, program)?;
     Ok(assembly)
@@ -77,14 +81,94 @@ fn emit_function(assembly: &mut String, symbol: &str, operations: &[HtmlOp], pro
     emit_epilogue(assembly);
 }
 
-fn emit_handler(assembly: &mut String, component: usize) {
+fn emit_value_function(
+    assembly: &mut String,
+    id: usize,
+    body: &ValueExpression,
+    program: &Program,
+) -> Result<(), String> {
+    writeln!(assembly, "\n.private_extern _tinytsx_function_{id}").unwrap();
+    writeln!(assembly, "_tinytsx_function_{id}:").unwrap();
+    if let ValueExpression::DirectCall { function, .. } = body {
+        writeln!(assembly, "    b _tinytsx_function_{function}").unwrap();
+        return Ok(());
+    }
+    emit_value_expression(assembly, body, program)?;
+    writeln!(assembly, "    ret").unwrap();
+    Ok(())
+}
+
+fn emit_handler(
+    assembly: &mut String,
+    response: &HandlerResponse,
+    program: &Program,
+) -> Result<(), String> {
     writeln!(assembly, "\n.globl _tinytsx_handle_get").unwrap();
     writeln!(assembly, "_tinytsx_handle_get:").unwrap();
     emit_prologue(assembly);
-    writeln!(assembly, "    ldr x0, [sp, #24]").unwrap();
-    writeln!(assembly, "    ldr x1, [sp, #16]").unwrap();
-    writeln!(assembly, "    bl _tinytsx_component_{component}").unwrap();
+    let return_label = "Ltinytsx_handle_get_return";
+    match response {
+        HandlerResponse::Html { component } => {
+            emit_response_begin(assembly, 1, return_label);
+            writeln!(assembly, "    ldr x0, [sp, #24]").unwrap();
+            writeln!(assembly, "    ldr x1, [sp, #16]").unwrap();
+            writeln!(assembly, "    bl _tinytsx_component_{component}").unwrap();
+        }
+        HandlerResponse::Text { value } => {
+            emit_response_begin(assembly, 2, return_label);
+            emit_value_expression(assembly, value, program)?;
+            writeln!(assembly, "    mov x2, x1").unwrap();
+            writeln!(assembly, "    mov x1, x0").unwrap();
+            writeln!(assembly, "    ldr x0, [sp, #16]").unwrap();
+            writeln!(assembly, "    bl _tinytsx_html_write_static").unwrap();
+        }
+    }
+    writeln!(assembly, "{return_label}:").unwrap();
     emit_epilogue(assembly);
+    Ok(())
+}
+
+fn emit_response_begin(assembly: &mut String, content_type: u16, return_label: &str) {
+    writeln!(assembly, "    ldr x0, [sp, #16]").unwrap();
+    emit_immediate(assembly, "x1", 200);
+    emit_immediate(assembly, "x2", u64::from(content_type));
+    writeln!(assembly, "    bl _tinytsx_response_begin").unwrap();
+    writeln!(assembly, "    cbnz w0, {return_label}").unwrap();
+}
+
+fn emit_value_expression(
+    assembly: &mut String,
+    expression: &ValueExpression,
+    program: &Program,
+) -> Result<(), String> {
+    match expression {
+        ValueExpression::StringLiteral { string, .. } => {
+            writeln!(assembly, "    adrp x0, Ltinytsx_string_{string}@PAGE").unwrap();
+            writeln!(assembly, "    add x0, x0, Ltinytsx_string_{string}@PAGEOFF").unwrap();
+            emit_immediate(
+                assembly,
+                "x1",
+                program.static_strings[*string].value.len() as u64,
+            );
+        }
+        ValueExpression::Constant { constant, .. } => {
+            let ConstantValue::String { value } = &program.constants[*constant].value else {
+                return Err("string expression references a non-string constant".to_owned());
+            };
+            writeln!(assembly, "    adrp x0, Ltinytsx_constant_{constant}@PAGE").unwrap();
+            writeln!(
+                assembly,
+                "    add x0, x0, Ltinytsx_constant_{constant}@PAGEOFF"
+            )
+            .unwrap();
+            writeln!(assembly, "    add x0, x0, #5").unwrap();
+            emit_immediate(assembly, "x1", value.len() as u64);
+        }
+        ValueExpression::DirectCall { function, .. } => {
+            writeln!(assembly, "    bl _tinytsx_function_{function}").unwrap();
+        }
+    }
+    Ok(())
 }
 
 fn emit_prologue(assembly: &mut String) {
@@ -163,10 +247,36 @@ mod tests {
     fn emits_deterministic_handler_and_static_data() {
         let program: Program = serde_json::from_str(
             r#"{
-              "version": 1,
+              "version": 2,
               "target": "aarch64-apple-darwin",
               "entry": "server.tsx",
               "modules": [{"path": "server.tsx"}],
+              "functions": [{
+                "id": 0,
+                "module": "server.tsx",
+                "name": "greeting",
+                "parameters": [],
+                "result": "string",
+                "body": {
+                  "kind": "directCall",
+                  "function": 1,
+                  "arguments": [],
+                  "span": {"file":"server.tsx","line":1,"column":1,"endLine":1,"endColumn":2}
+                },
+                "span": {"file":"server.tsx","line":1,"column":1,"endLine":1,"endColumn":2}
+              }, {
+                "id": 1,
+                "module": "server.tsx",
+                "name": "message",
+                "parameters": [],
+                "result": "string",
+                "body": {
+                  "kind": "constant",
+                  "constant": 0,
+                  "span": {"file":"server.tsx","line":2,"column":1,"endLine":2,"endColumn":2}
+                },
+                "span": {"file":"server.tsx","line":2,"column":1,"endLine":2,"endColumn":2}
+              }],
               "components": [{
                 "id": 0,
                 "name": "Page",
@@ -179,18 +289,26 @@ mod tests {
               }],
               "handlers": [{
                 "method": "GET",
-                "component": 0,
+                "response": {
+                  "kind": "text",
+                  "value": {
+                    "kind": "directCall",
+                    "function": 0,
+                    "arguments": [],
+                    "span": {"file":"server.tsx","line":2,"column":1,"endLine":2,"endColumn":2}
+                  }
+                },
                 "span": {"file":"server.tsx","line":2,"column":1,"endLine":2,"endColumn":2}
               }],
               "staticStrings": [{"id":0,"value":"<h1>Hello</h1>"}],
               "constants": [{
                 "id": 0,
                 "module": "server.tsx",
-                "name": "methods",
+                "name": "message",
                 "span": {"file":"server.tsx","line":1,"column":1,"endLine":1,"endColumn":2},
-                "value": {"kind":"array","items":[{"kind":"string","value":"get"}]}
+                "value": {"kind":"string","value":"Hello"}
               }],
-              "statistics": {"modules":1,"components":1,"constants":1,"staticHtmlBytes":14,"dynamicHtmlExpressions":0}
+              "statistics": {"modules":1,"functions":2,"components":1,"constants":1,"staticHtmlBytes":14,"dynamicHtmlExpressions":0}
             }"#,
         )
         .unwrap();
@@ -201,10 +319,14 @@ mod tests {
         assert_eq!(first, second);
         assert!(first.contains(".globl _tinytsx_handle_get"));
         assert!(first.contains("bl _tinytsx_html_write_static"));
+        assert!(first.contains("bl _tinytsx_response_begin"));
+        assert!(first.contains("bl _tinytsx_function_0"));
+        assert!(first.contains("_tinytsx_function_0:"));
+        assert!(first.contains("_tinytsx_function_0:\n    b _tinytsx_function_1"));
         assert!(first.contains("Ltinytsx_string_0:"));
         assert!(first.contains("Ltinytsx_constant_0:"));
         assert!(first.contains(".byte 60, 104, 49"));
-        assert!(first.contains(".byte 5, 1, 0, 0, 0, 4, 3, 0, 0, 0, 103, 101, 116"));
+        assert!(first.contains(".byte 4, 5, 0, 0, 0, 72, 101, 108, 108, 111"));
         assert!(first.contains("_tinytsx_config_port:\n    movz x0, #3000"));
     }
 }

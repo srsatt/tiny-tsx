@@ -4,8 +4,9 @@ use std::{
 };
 
 use crate::abi::{
-    BAD_REQUEST, INTERNAL_ERROR, NOT_FOUND, OK, RENDER_ERROR, REQUEST_OOM, configured_port,
-    configured_request_memory, render, request,
+    BAD_REQUEST, CONTENT_TYPE_HTML, CONTENT_TYPE_JSON, CONTENT_TYPE_TEXT, INTERNAL_ERROR,
+    NOT_FOUND, OK, RENDER_ERROR, REQUEST_OOM, configured_port, configured_request_memory, render,
+    request,
 };
 
 const MAX_REQUEST_HEAD: usize = 16 * 1024;
@@ -32,24 +33,36 @@ pub fn serve() -> std::io::Result<()> {
 fn handle_connection(stream: &mut TcpStream, request_memory: usize) -> std::io::Result<()> {
     let head = match read_request_head(stream) {
         Ok(head) => head,
-        Err(_) => return write_response(stream, 400, b"bad request"),
+        Err(_) => return write_response(stream, 400, CONTENT_TYPE_TEXT, b"bad request"),
     };
     let Some((method, target)) = parse_request_line(&head) else {
-        return write_response(stream, 400, b"bad request");
+        return write_response(stream, 400, CONTENT_TYPE_TEXT, b"bad request");
     };
     if method != b"GET" {
-        return write_response(stream, 405, b"method not allowed");
+        return write_response(stream, 405, CONTENT_TYPE_TEXT, b"method not allowed");
     }
 
     let request = request(method, target);
-    let (status, body) = render(&request, request_memory);
-    match status {
-        OK => write_response(stream, 200, &body),
-        REQUEST_OOM => write_response(stream, 503, b"request memory exhausted"),
-        BAD_REQUEST => write_response(stream, 400, b"bad request"),
-        NOT_FOUND => write_response(stream, 404, b"not found"),
-        RENDER_ERROR | INTERNAL_ERROR => write_response(stream, 500, b"internal server error"),
-        _ => write_response(stream, 500, b"unknown application status"),
+    let response = render(&request, request_memory);
+    match response.application_status {
+        OK => write_response(
+            stream,
+            response.http_status,
+            response.content_type,
+            &response.body,
+        ),
+        REQUEST_OOM => write_response(stream, 503, CONTENT_TYPE_TEXT, b"request memory exhausted"),
+        BAD_REQUEST => write_response(stream, 400, CONTENT_TYPE_TEXT, b"bad request"),
+        NOT_FOUND => write_response(stream, 404, CONTENT_TYPE_TEXT, b"not found"),
+        RENDER_ERROR | INTERNAL_ERROR => {
+            write_response(stream, 500, CONTENT_TYPE_TEXT, b"internal server error")
+        }
+        _ => write_response(
+            stream,
+            500,
+            CONTENT_TYPE_TEXT,
+            b"unknown application status",
+        ),
     }
 }
 
@@ -90,7 +103,12 @@ fn parse_request_line(request: &[u8]) -> Option<(&[u8], &[u8])> {
     Some((method, target))
 }
 
-fn write_response(stream: &mut TcpStream, status: u16, body: &[u8]) -> std::io::Result<()> {
+fn write_response(
+    stream: &mut TcpStream,
+    status: u16,
+    content_type: u16,
+    body: &[u8],
+) -> std::io::Result<()> {
     let reason = match status {
         200 => "OK",
         400 => "Bad Request",
@@ -100,9 +118,15 @@ fn write_response(stream: &mut TcpStream, status: u16, body: &[u8]) -> std::io::
         503 => "Service Unavailable",
         _ => "Unknown",
     };
+    let content_type = match content_type {
+        CONTENT_TYPE_HTML => "text/html; charset=utf-8",
+        CONTENT_TYPE_TEXT => "text/plain; charset=UTF-8",
+        CONTENT_TYPE_JSON => "application/json; charset=UTF-8",
+        _ => "application/octet-stream",
+    };
     write!(
         stream,
-        "HTTP/1.1 {status} {reason}\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        "HTTP/1.1 {status} {reason}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
         body.len(),
     )?;
     stream.write_all(body)

@@ -9,6 +9,8 @@ declare class Request {
 
 declare class Response {
   static html(element: JSX.Element): Response;
+  /** TinyTSX lowering intrinsic; not a Web-standard static Response method. */
+  static text(body: string): Response;
 }
 
 declare namespace JSX {
@@ -65,4 +67,3 @@ declare namespace JSX {
     button: IntrinsicAttributes;
   }
 }
-

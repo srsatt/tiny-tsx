@@ -27,6 +27,7 @@ fn builds_and_serves_static_tsx_as_native_macho() {
     build_and_serve(
         "examples/static-page/server.tsx",
         "<html><body><h1>Hello from TinyTSX</h1></body></html>",
+        "text/html; charset=utf-8",
     );
 }
 
@@ -35,6 +36,7 @@ fn builds_and_serves_an_imported_component() {
     build_and_serve(
         "examples/multi-module/server.tsx",
         "<html><body><main><h1>Imported component</h1></main></body></html>",
+        "text/html; charset=utf-8",
     );
 }
 
@@ -43,10 +45,20 @@ fn builds_staged_constants_into_the_native_object() {
     build_and_serve(
         "examples/staged-constants/server.tsx",
         "<html><body><h1>Staged constants</h1></body></html>",
+        "text/html; charset=utf-8",
     );
 }
 
-fn build_and_serve(entry: &str, expected_body: &str) {
+#[test]
+fn builds_and_serves_native_text_through_direct_function_calls() {
+    build_and_serve(
+        "examples/text-response/server.ts",
+        "Hono!!",
+        "text/plain; charset=UTF-8",
+    );
+}
+
+fn build_and_serve(entry: &str, expected_body: &str, expected_content_type: &str) {
     let _build_guard = NATIVE_BUILD.lock().expect("lock native E2E build");
     let root = repository_root();
     build_frontend(&root);
@@ -85,7 +97,10 @@ fn build_and_serve(entry: &str, expected_body: &str) {
     stream.read_to_string(&mut response).expect("read response");
 
     assert!(response.starts_with("HTTP/1.1 200 OK\r\n"), "{response}");
-    assert!(response.contains("Content-Type: text/html; charset=utf-8\r\n"));
+    assert!(
+        response.contains(&format!("Content-Type: {expected_content_type}\r\n")),
+        "{response}"
+    );
     assert!(
         response.contains(&format!("Content-Length: {}\r\n", expected_body.len())),
         "{response}"

@@ -1,6 +1,6 @@
 use super::{
-    INTERNAL_ERROR, OK, REQUEST_OOM, TinyHtmlWriter, TinyStringView, request,
-    tinytsx_html_write_static,
+    CONTENT_TYPE_HTML, CONTENT_TYPE_TEXT, INTERNAL_ERROR, OK, REQUEST_OOM, TinyResponseWriter,
+    TinyStringView, request, tinytsx_html_write_static, tinytsx_response_begin,
 };
 
 #[test]
@@ -57,14 +57,39 @@ fn response_writer_rejects_a_null_source_with_nonzero_length() {
     assert_eq!(status, INTERNAL_ERROR);
 }
 
-fn writer(output: &mut [u8]) -> TinyHtmlWriter {
+#[test]
+fn response_begin_sets_valid_http_metadata() {
+    let mut output = [];
+    let mut writer = writer(&mut output);
+
+    let status = unsafe { tinytsx_response_begin(&mut writer, 201, CONTENT_TYPE_TEXT) };
+
+    assert_eq!(status, OK);
+    assert_eq!(writer.http_status, 201);
+    assert_eq!(writer.content_type, CONTENT_TYPE_TEXT);
+}
+
+#[test]
+fn response_begin_rejects_invalid_content_types() {
+    let mut output = [];
+    let mut writer = writer(&mut output);
+
+    let status = unsafe { tinytsx_response_begin(&mut writer, 200, 99) };
+
+    assert_eq!(status, INTERNAL_ERROR);
+    assert_eq!(writer.status, INTERNAL_ERROR);
+}
+
+fn writer(output: &mut [u8]) -> TinyResponseWriter {
     let start = output.as_mut_ptr();
-    TinyHtmlWriter {
+    TinyResponseWriter {
         start,
         cursor: start,
         // SAFETY: `start` points at the beginning of `output`.
         end: unsafe { start.add(output.len()) },
         status: OK,
+        http_status: 200,
+        content_type: CONTENT_TYPE_HTML,
     }
 }
 

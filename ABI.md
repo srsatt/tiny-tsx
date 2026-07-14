@@ -3,7 +3,10 @@
 This document defines the C-compatible boundary between generated application
 code and the bootstrap runtime. Rust-specific layouts never cross this boundary.
 
-## Version 1 structures
+## Version 2 structures
+
+ABI v2 is paired with HIR v2. It adds response metadata to the writer so
+generated code can select HTTP status and content type before writing the body.
 
 ```rust
 #[repr(C)]
@@ -21,19 +24,18 @@ pub struct TinyRequest {
 }
 
 #[repr(C)]
-pub struct TinyHtmlWriter {
+pub struct TinyResponseWriter {
     pub start: *mut u8,
     pub cursor: *mut u8,
     pub end: *mut u8,
     pub status: u32,
+    pub http_status: u16,
+    pub content_type: u16,
 }
 ```
 
 `TinyArena` is opaque to generated code. String views contain UTF-8 bytes and
 are not NUL-terminated. A nullable view uses `{ ptr: null, len: 0 }` for null.
-
-The first static slice does not dereference the request or writer structures;
-it proves the call boundary with the same entrypoint used by later slices.
 
 ## Generated entrypoint
 
@@ -41,39 +43,59 @@ it proves the call boundary with the same entrypoint used by later slices.
 extern "C" {
     fn tinytsx_handle_get(
         request: *const TinyRequest,
-        writer: *mut TinyHtmlWriter,
+        writer: *mut TinyResponseWriter,
     ) -> u32;
 }
 ```
 
 The symbol is globally visible in generated assembly and follows the Apple
-arm64 C ABI. Arguments arrive in `x0` and `x1`; status returns in `w0`/`x0`.
+arm64 C ABI. Arguments arrive in `x0` and `x1`; application status returns in
+`w0`/`x0`.
 
-For the first static slice, generated code calls this runtime helper:
+Generated code begins a response and then appends body bytes with these helpers:
 
 ```rust
+extern "C" fn tinytsx_response_begin(
+    writer: *mut TinyResponseWriter,
+    http_status: u16,
+    content_type: u16,
+) -> u32;
+
 extern "C" fn tinytsx_html_write_static(
-    writer: *mut TinyHtmlWriter,
+    writer: *mut TinyResponseWriter,
     bytes: *const u8,
     len: usize,
 ) -> u32;
 ```
 
-The helper appends all bytes or appends none. Later escaped writer helpers use
-the same status convention.
+`tinytsx_html_write_static` retains its v1 symbol name, but the operation is a
+content-neutral byte append. It appends all bytes or appends none. Later escaped
+writer helpers use the same status convention.
 
-## Status values
+## Content types
 
-| Value | Name | HTTP mapping |
+| Value | Response header |
+| ---: | --- |
+| 1 | `text/html; charset=utf-8` |
+| 2 | `text/plain; charset=UTF-8` |
+| 3 | `application/json; charset=UTF-8` |
+
+The text spelling matches Hono's pinned `Context.text()` response contract.
+Unknown content-type values are rejected by `tinytsx_response_begin`.
+
+## Application status values
+
+| Value | Name | HTTP mapping on failure |
 | ---: | --- | ---: |
-| 0 | `OK` | 200 |
+| 0 | `OK` | generated `http_status` |
 | 1 | `REQUEST_OOM` | 503 |
 | 2 | `BAD_REQUEST` | 400 |
 | 3 | `RENDER_ERROR` | 500 |
 | 4 | `INTERNAL_ERROR` | 500 |
 | 5 | `NOT_FOUND` | 404 |
 
-Unknown nonzero values map to 500.
+Unknown nonzero values map to 500. On `OK`, the runtime sends the HTTP status,
+content type, and body selected through the response writer.
 
 ## Ownership and lifetime
 
@@ -87,4 +109,3 @@ resets the writer and arena between requests.
 The ABI is versioned by this document and by HIR `version`. Additive helper
 symbols are allowed. A structure layout or entrypoint change requires a new ABI
 version and an explicit compiler/runtime compatibility check.
-

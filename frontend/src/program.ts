@@ -2,6 +2,7 @@ import path from "node:path";
 import ts from "typescript";
 import {lowerStagedConstants} from "./constant-lowering.js";
 import {CompileFailure, fromTypeScript, spanOf, tinyError} from "./diagnostics.js";
+import {FunctionLowerer} from "./function-lowering.js";
 import type {Component, Handler, HirProgram} from "./hir.js";
 import {StringTable} from "./hir.js";
 import {lowerComponentBody} from "./jsx-lowering.js";
@@ -80,10 +81,6 @@ export function compileEntry(entryPath: string, options: CompileOptions): HirPro
   const componentDeclarations = sourceFiles.flatMap(module =>
     module.statements.filter(isComponentDeclaration)
   );
-  if (componentDeclarations.length === 0) {
-    throw tinyError("TINY1100", "entry module must declare at least one JSX component", sourceFile);
-  }
-
   const componentIds = new Map<string, number>();
   componentDeclarations.forEach((declaration, id) => {
     const name = declaration.name?.text;
@@ -113,6 +110,8 @@ export function compileEntry(entryPath: string, options: CompileOptions): HirPro
     };
   });
 
+  const constants = lowerStagedConstants(analyzeStaging(graph).bindings);
+  const functionLowerer = new FunctionLowerer(program.getTypeChecker(), constants, strings);
   const getDeclarations = sourceFile.statements.filter(isGetDeclaration);
   if (getDeclarations.length !== 1) {
     throw tinyError(
@@ -121,24 +120,26 @@ export function compileEntry(entryPath: string, options: CompileOptions): HirPro
       getDeclarations[0] ?? sourceFile,
     );
   }
-  const handler = lowerGetHandler(getDeclarations[0]!, componentIds, sourceFile);
+  const handler = lowerGetHandler(getDeclarations[0]!, componentIds, functionLowerer, sourceFile);
+  const functions = functionLowerer.finish();
 
   const staticHtmlBytes = strings.values.reduce(
     (total, value) => total + Buffer.byteLength(value.value, "utf8"),
     0,
   );
-  const constants = lowerStagedConstants(analyzeStaging(graph).bindings);
   return {
-    version: 1,
+    version: 2,
     target: "aarch64-apple-darwin",
     entry,
     modules: graph.modules.map(module => ({path: module.path})),
+    functions,
     components,
     handlers: [handler],
     staticStrings: strings.values,
     constants,
     statistics: {
       modules: graph.modules.length,
+      functions: functions.length,
       components: components.length,
       constants: constants.length,
       staticHtmlBytes,
@@ -190,6 +191,7 @@ function componentReturnExpression(
 function lowerGetHandler(
   declaration: ts.FunctionDeclaration,
   componentIds: ReadonlyMap<string, number>,
+  functions: FunctionLowerer,
   sourceFile: ts.SourceFile,
 ): Handler {
   if (declaration.parameters.length !== 1 || declaration.body?.statements.length !== 1) {
@@ -201,24 +203,38 @@ function lowerGetHandler(
   }
   const statement = declaration.body.statements[0]!;
   if (!ts.isReturnStatement(statement) || statement.expression === undefined) {
-    throw tinyError("TINY1111", "GET must return `Response.html(<Component />)`", statement);
+    throw tinyError("TINY1111", "GET must return `Response.html(...)` or `Response.text(...)`", statement);
   }
   const call = statement.expression;
   if (
     !ts.isCallExpression(call)
     || !ts.isPropertyAccessExpression(call.expression)
     || call.expression.expression.getText(sourceFile) !== "Response"
-    || call.expression.name.text !== "html"
     || call.arguments.length !== 1
   ) {
-    throw tinyError("TINY1111", "GET must return `Response.html(<Component />)`", call);
+    throw tinyError("TINY1111", "GET must return `Response.html(...)` or `Response.text(...)`", call);
+  }
+  const responseKind = call.expression.name.text;
+  if (responseKind === "text") {
+    return {
+      method: "GET",
+      response: {kind: "text", value: functions.lower(call.arguments[0]!)},
+      span: spanOf(declaration, sourceFile),
+    };
+  }
+  if (responseKind !== "html") {
+    throw tinyError("TINY1111", "GET must return `Response.html(...)` or `Response.text(...)`", call);
   }
   const componentName = getInvokedComponent(call.arguments[0]!);
   const component = componentIds.get(componentName);
   if (component === undefined) {
     throw tinyError("TINY1200", `unknown component \`${componentName}\``, call.arguments[0]!);
   }
-  return {method: "GET", component, span: spanOf(declaration, sourceFile)};
+  return {
+    method: "GET",
+    response: {kind: "html", component},
+    span: spanOf(declaration, sourceFile),
+  };
 }
 
 function getInvokedComponent(expression: ts.Expression): string {
