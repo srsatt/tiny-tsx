@@ -56,9 +56,11 @@ test("audits the pinned hono/tiny runtime graph", () => {
   assert.ok(report.staging.constantBindings > 0);
   assert.ok(report.staging.constantSpreads > 0);
   assert.ok(report.staging.runtimeSpreads > 0);
+  assert.ok(report.staging.closedComputedAccesses > 0);
+  assert.ok(report.staging.runtimeComputedAccesses > 0);
 });
 
-test("the compiling frontend reaches Hono's first runtime computed access", () => {
+test("the compiling frontend passes Hono's closed method table and reaches async", () => {
   assert.throws(
     () => compileEntry(path.join(repository, "tests/compat/hono/smoke.ts"), {
       sdkPath: path.join(repository, "sdk/index.d.ts"),
@@ -66,7 +68,7 @@ test("the compiling frontend reaches Hono's first runtime computed access", () =
       apiAliases: {"hono/tiny": path.join(repository, "tests/compat/hono/api.d.ts")},
     }),
     (error: unknown) => error instanceof CompileFailure
-      && error.diagnostics[0]?.code === "TINY1004"
+      && error.diagnostics[0]?.code === "TINY1003"
       && error.diagnostics[0]?.span?.file.endsWith("vendor/hono/src/hono-base.ts") === true,
   );
 });
@@ -79,7 +81,7 @@ test("the upstream basic route enters the full Hono package runtime graph", () =
       apiAliases: {"hono": path.join(repository, "tests/compat/hono/api.d.ts")},
     }),
     (error: unknown) => error instanceof CompileFailure
-      && error.diagnostics[0]?.code === "TINY1004"
+      && error.diagnostics[0]?.code === "TINY1003"
       && error.diagnostics[0]?.span?.file.endsWith("vendor/hono/src/hono-base.ts") === true,
   );
 });

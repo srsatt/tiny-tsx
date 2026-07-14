@@ -22,17 +22,28 @@ export interface SpreadDecision {
   reason: string;
 }
 
+export interface ComputedAccessDecision {
+  operation: "read" | "write";
+  disposition: "closed" | "runtime";
+  keys: string[];
+  span: SourceSpan;
+  reason: string;
+}
+
 export interface StagingReport {
   bindings: StagedBinding[];
   spreads: SpreadDecision[];
+  computedAccesses: ComputedAccessDecision[];
 }
 
 export function analyzeStaging(graph: ModuleGraph): StagingReport {
   const context = createEvaluationContext(graph);
   const stagedBindings: StagedBinding[] = [];
   const spreads: SpreadDecision[] = [];
+  const computedAccesses: ComputedAccessDecision[] = [];
 
   for (const module of graph.modules) {
+    const closedComputed = collectClosedForEachAccesses(module, context);
     function visit(node: ts.Node): void {
       if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && isConstDeclaration(node)) {
         if (node.initializer !== undefined) {
@@ -64,12 +75,21 @@ export function analyzeStaging(graph: ModuleGraph): StagingReport {
           reason: "rest parameter requires runtime argument packing or call-site specialization",
         });
       }
+      if (ts.isElementAccessExpression(node)) {
+        computedAccesses.push(closedComputed.get(node.pos) ?? {
+          operation: isAssignmentTarget(node) ? "write" : "read",
+          disposition: "runtime",
+          keys: [],
+          span: spanOf(node, module.sourceFile),
+          reason: "computed key is not statically enumerable",
+        });
+      }
       ts.forEachChild(node, visit);
     }
     visit(module.sourceFile);
   }
 
-  return {bindings: stagedBindings, spreads};
+  return {bindings: stagedBindings, spreads, computedAccesses};
 }
 
 export function evaluateConstantExpression(expression: ts.Expression): StagedValue | undefined {
@@ -186,4 +206,107 @@ function staticBindingName(element: ts.BindingElement): string | undefined {
 function isConstDeclaration(node: ts.VariableDeclaration): boolean {
   return ts.isVariableDeclarationList(node.parent)
     && (node.parent.flags & ts.NodeFlags.Const) !== 0;
+}
+
+function collectClosedForEachAccesses(
+  module: SourceModule,
+  context: EvaluationContext,
+): ReadonlyMap<number, ComputedAccessDecision> {
+  const decisions = new Map<number, ComputedAccessDecision>();
+
+  function visit(node: ts.Node): void {
+    if (
+      ts.isCallExpression(node)
+      && ts.isPropertyAccessExpression(node.expression)
+      && node.expression.name.text === "forEach"
+      && node.arguments.length >= 1
+      && (ts.isArrowFunction(node.arguments[0]!) || ts.isFunctionExpression(node.arguments[0]!))
+    ) {
+      const values = evaluateForEachSource(
+        node.expression.expression,
+        node,
+        module,
+        context,
+      );
+      const callback = node.arguments[0] as ts.ArrowFunction | ts.FunctionExpression;
+      const parameter = callback.parameters[0];
+      if (
+        Array.isArray(values)
+        && values.every((value): value is string => typeof value === "string")
+        && parameter !== undefined
+        && ts.isIdentifier(parameter.name)
+      ) {
+        const keys = [...new Set(values)];
+        const parameterName = parameter.name.text;
+        function visitCallback(child: ts.Node): void {
+          if (
+            ts.isElementAccessExpression(child)
+            && child.argumentExpression !== undefined
+            && ts.isIdentifier(child.argumentExpression)
+            && child.argumentExpression.text === parameterName
+          ) {
+            decisions.set(child.pos, {
+              operation: isAssignmentTarget(child) ? "write" : "read",
+              disposition: "closed",
+              keys,
+              span: spanOf(child, module.sourceFile),
+              reason: "computed key is enumerated by a closed compile-time forEach source",
+            });
+          }
+          ts.forEachChild(child, visitCallback);
+        }
+        visitCallback(callback.body);
+      }
+    }
+    ts.forEachChild(node, visit);
+  }
+
+  visit(module.sourceFile);
+  return decisions;
+}
+
+function evaluateForEachSource(
+  expression: ts.Expression,
+  call: ts.CallExpression,
+  module: SourceModule,
+  context: EvaluationContext,
+): StagedValue | undefined {
+  const direct = evaluateStagedValue(expression, module.path, context);
+  if (direct !== undefined || !ts.isIdentifier(expression)) {
+    return direct;
+  }
+  let current: ts.Node | undefined = call.parent;
+  while (current !== undefined && !ts.isBlock(current)) {
+    current = current.parent;
+  }
+  if (current === undefined || !ts.isBlock(current)) {
+    return undefined;
+  }
+  for (const statement of current.statements) {
+    if (statement.pos >= call.pos) {
+      break;
+    }
+    if (
+      !ts.isVariableStatement(statement)
+      || (statement.declarationList.flags & ts.NodeFlags.Const) === 0
+    ) {
+      continue;
+    }
+    for (const declaration of statement.declarationList.declarations) {
+      if (
+        ts.isIdentifier(declaration.name)
+        && declaration.name.text === expression.text
+        && declaration.initializer !== undefined
+      ) {
+        return evaluateStagedValue(declaration.initializer, module.path, context);
+      }
+    }
+  }
+  return undefined;
+}
+
+function isAssignmentTarget(node: ts.ElementAccessExpression): boolean {
+  return ts.isBinaryExpression(node.parent)
+    && node.parent.left === node
+    && node.parent.operatorToken.kind === ts.SyntaxKind.EqualsToken;
 }

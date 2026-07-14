@@ -4,7 +4,7 @@ import type {Diagnostic} from "./diagnostics.js";
 import {spanOf} from "./diagnostics.js";
 import type {ModuleGraphOptions} from "./module-graph.js";
 import {loadModuleGraph} from "./module-graph.js";
-import type {SpreadDecision} from "./staging.js";
+import type {ComputedAccessDecision, SpreadDecision} from "./staging.js";
 import {analyzeStaging} from "./staging.js";
 
 export interface CompatibilityAuditOptions extends ModuleGraphOptions {
@@ -30,6 +30,9 @@ export interface CompatibilityReport {
     constantSpreads: number;
     runtimeSpreads: number;
     spreads: SpreadDecision[];
+    closedComputedAccesses: number;
+    runtimeComputedAccesses: number;
+    computedAccesses: ComputedAccessDecision[];
   };
   statistics: {modules: number; sourceBytes: number; sourceLines: number};
 }
@@ -117,6 +120,16 @@ export function auditCompatibility(
       spreads: staging.spreads.map(spread => ({
         ...spread,
         span: relativeSpan(spread.span, root),
+      })),
+      closedComputedAccesses: staging.computedAccesses.filter(access =>
+        access.disposition === "closed"
+      ).length,
+      runtimeComputedAccesses: staging.computedAccesses.filter(access =>
+        access.disposition === "runtime"
+      ).length,
+      computedAccesses: staging.computedAccesses.map(access => ({
+        ...access,
+        span: relativeSpan(access.span, root),
       })),
     },
     statistics: {

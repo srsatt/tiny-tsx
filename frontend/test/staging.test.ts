@@ -88,6 +88,38 @@ test("folds Hono's method-table spread during process initialization", () => {
     && spread.span.file.endsWith("vendor/hono/src/hono-base.ts")
     && spread.span.line === 128
   ));
+  assert.ok(report.computedAccesses.some(access =>
+    access.disposition === "closed"
+    && access.operation === "write"
+    && access.span.file.endsWith("vendor/hono/src/hono-base.ts")
+    && access.span.line === 130
+    && JSON.stringify(access.keys) === JSON.stringify([
+      "get", "post", "put", "delete", "options", "patch", "all",
+    ])
+  ));
+});
+
+test("distinguishes closed forEach keys from dynamic computed access", () => {
+  const entry = path.join(directory, "computed.ts");
+  writeFileSync(entry, `
+    const keys = ["get", "post"] as const;
+    class Routes {
+      constructor(dynamic: string) {
+        keys.forEach((key) => { this[key] = key; });
+        this[dynamic] = dynamic;
+      }
+    }
+  `);
+
+  const report = analyzeStaging(loadModuleGraph(entry));
+
+  assert.deepEqual(report.computedAccesses.map(access => ({
+    disposition: access.disposition,
+    keys: access.keys,
+  })), [
+    {disposition: "closed", keys: ["get", "post"]},
+    {disposition: "runtime", keys: []},
+  ]);
 });
 
 test("folds the array literal in the pinned Test262 spread case", () => {

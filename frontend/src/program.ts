@@ -23,6 +23,7 @@ export function compileEntry(entryPath: string, options: CompileOptions): HirPro
   if (graph.diagnostics.length > 0) {
     throw new CompileFailure(graph.diagnostics);
   }
+  const staging = analyzeStaging(graph);
   const compilerOptions: ts.CompilerOptions = {
     noEmit: true,
     allowJs: true,
@@ -64,14 +65,14 @@ export function compileEntry(entryPath: string, options: CompileOptions): HirPro
     }
     return loaded;
   });
-  validateForbiddenSyntax(sourceFile);
+  validateForbiddenSyntax(sourceFile, staging.computedAccesses);
   const entryDiagnostics = ts.getPreEmitDiagnostics(program, sourceFile);
   if (entryDiagnostics.length > 0) {
     throw new CompileFailure(entryDiagnostics.map(fromTypeScript));
   }
   for (const module of sourceFiles) {
     if (module !== sourceFile) {
-      validateForbiddenSyntax(module);
+      validateForbiddenSyntax(module, staging.computedAccesses);
     }
   }
   const typeScriptDiagnostics = ts.getPreEmitDiagnostics(program);
@@ -110,7 +111,7 @@ export function compileEntry(entryPath: string, options: CompileOptions): HirPro
     };
   });
 
-  const constants = lowerStagedConstants(analyzeStaging(graph).bindings);
+  const constants = lowerStagedConstants(staging.bindings);
   const functionLowerer = new FunctionLowerer(program.getTypeChecker(), constants, strings);
   const getDeclarations = sourceFile.statements.filter(isGetDeclaration);
   if (getDeclarations.length !== 1) {

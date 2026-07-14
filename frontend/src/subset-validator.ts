@@ -1,5 +1,6 @@
 import ts from "typescript";
 import {tinyError} from "./diagnostics.js";
+import type {ComputedAccessDecision} from "./staging.js";
 
 const forbiddenCalls = new Set(["eval", "require", "Function"]);
 const supportedAttributes = new Set([
@@ -7,7 +8,13 @@ const supportedAttributes = new Set([
   "type", "placeholder", "style",
 ]);
 
-export function validateForbiddenSyntax(sourceFile: ts.SourceFile): void {
+export function validateForbiddenSyntax(
+  sourceFile: ts.SourceFile,
+  computedAccesses: readonly ComputedAccessDecision[] = [],
+): void {
+  const closedComputed = new Set(computedAccesses
+    .filter(access => access.disposition === "closed")
+    .map(access => spanKey(access.span)));
   function visit(node: ts.Node): void {
     if (
       (ts.isFunctionLike(node)
@@ -18,7 +25,10 @@ export function validateForbiddenSyntax(sourceFile: ts.SourceFile): void {
       throw tinyError("TINY1003", "async functions are not supported by TinyTSX", node, undefined, sourceFile);
     }
 
-    if (ts.isElementAccessExpression(node)) {
+    if (
+      ts.isElementAccessExpression(node)
+      && !closedComputed.has(spanKeyFromNode(node, sourceFile))
+    ) {
       throw tinyError(
         "TINY1004",
         "computed property access is not supported by TinyTSX",
@@ -53,4 +63,26 @@ export function validateForbiddenSyntax(sourceFile: ts.SourceFile): void {
   }
 
   visit(sourceFile);
+}
+
+function spanKey(span: {
+  file: string;
+  line: number;
+  column: number;
+  endLine: number;
+  endColumn: number;
+}): string {
+  return `${span.file}:${span.line}:${span.column}:${span.endLine}:${span.endColumn}`;
+}
+
+function spanKeyFromNode(node: ts.Node, sourceFile: ts.SourceFile): string {
+  const start = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
+  const end = sourceFile.getLineAndCharacterOfPosition(node.getEnd());
+  return spanKey({
+    file: sourceFile.fileName,
+    line: start.line + 1,
+    column: start.character + 1,
+    endLine: end.line + 1,
+    endColumn: end.character + 1,
+  });
 }
