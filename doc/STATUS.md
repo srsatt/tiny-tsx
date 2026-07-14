@@ -39,6 +39,21 @@ produces and serves a native Mach-O executable from the example TSX source.
   material difference was footprint: TinyTSX measured 5.64 ms startup and
   1.78 MiB idle RSS versus Bun at 12.87 ms and 31.53 MiB. This is exploratory
   evidence only; it does not cover dynamic rendering or keep-alive HTTP.
+- Hono and Test262 are shallow Git submodules pinned respectively to Hono
+  `v4.12.30` (`b2ae3a22`) and Test262 `f2d14356`.
+- The frontend can traverse runtime-only ESM graphs, skip type-only edges, report
+  unresolved imports together, and audit the complete reachable Hono source.
+- The pinned `hono/tiny` smoke graph currently contains 17 runtime modules and
+  3,117 source lines. The audit records classes, private fields, accessors,
+  closures, loops, rest/spread, RegExp, exceptions, async/await, and required
+  built-ins without pretending they compile yet.
+- Relative ESM components now compile through multi-module HIR into the native
+  server; a second real HTTP E2E test verifies the imported component output.
+- Test262 intake validates the pin, provenance metadata, and parsing of four
+  allowlisted class, loop, RegExp, and async cases. These are explicitly
+  syntax-only and are not semantic conformance results.
+- The dedicated native API suite currently covers Request method/path/query
+  views and exact-fit, OOM, and invalid response-writer behavior.
 
 Verification:
 
@@ -53,16 +68,22 @@ rtk cargo run -q -p tinytsx -- check examples/static-page/server.tsx --emit-asm
 rtk cargo run -q -p tinytsx -- build examples/static-page/server.tsx --port 3017 --output dist/static-server --release --emit-hir --emit-asm
 rtk curl -i --max-time 5 http://127.0.0.1:3017/
 rtk npm run test:benchmarks
+rtk npm run audit:hono
+rtk npm run test:test262-intake
+rtk npm run test:native-api
 rtk python3 benchmarks/scripts/run_static.py --duration 2 --runs 3 --startup-runs 5 --concurrency 1,8,32 --output-prefix benchmarks/results/2026-07-14-m5-max-static-preview
 ```
 
 ## Active slice
 
-Milestone 3: add typed dynamic component props, request query lookup, nullish
-coalescing, and correct HTML text/attribute escaping.
+Compatibility substrate: resolve bare package imports with declarations, then
+lower ordinary function values, closures, records, arrays, and loops into a
+general typed HIR. Test262 cases move from syntax intake to native execution only
+when their complete semantics are implemented.
 
 ## Resume point
 
-Read `README.md`, the root contract documents, and `doc/BACKLOG.md`. Begin with
-dynamic component props and extend the HIR before changing code generation. Run
-the verification commands recorded here before moving an item to verified.
+Read `README.md`, `doc/COMPATIBILITY.md`, and `doc/BACKLOG.md`. Run
+`npm run audit:hono` to see the pinned requirement frontier. Begin with bare
+package resolution and the general typed HIR; do not special-case Hono routing.
+Run the verification commands recorded here before moving an item to verified.

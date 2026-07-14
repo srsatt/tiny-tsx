@@ -246,7 +246,7 @@ fn print_summary(
         compilation.program.statistics.static_html_bytes
     );
     println!("GC:                  disabled");
-    println!("JavaScript runtime:  none\n");
+    println!("JavaScript engine:   none\n");
     println!("Output:              {}", output.display());
     println!("Binary size:         {binary_bytes} bytes");
     if options.keep_temps {

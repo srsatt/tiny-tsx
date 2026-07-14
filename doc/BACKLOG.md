@@ -29,14 +29,19 @@ commit message.
 
 ## Next slice
 
-- [ ] Load published ESM runtime graphs, including JavaScript modules plus
-      TypeScript declarations.
-- [ ] Emit aggregate compatibility diagnostics instead of stopping at the first
-      unsupported construct.
-- [ ] Pin an exact-source `hono/tiny` smoke application and continuously audit
+- [x] Load relative ESM runtime graphs for TypeScript, TSX, and JavaScript source.
+- [x] Emit an aggregate compatibility report instead of stopping at the first
+      unsupported Hono construct.
+- [x] Pin an exact-source `hono/tiny` smoke application and continuously audit
       its reachable modules.
-- [ ] Add the Test262 pin, allowlist, provenance validation, and runner contract.
-- [ ] Add focused native API conformance fixtures and a dedicated test command.
+- [x] Add the Test262 pin, allowlist, provenance validation, and syntax-intake
+      runner contract.
+- [x] Add focused native host API conformance tests and a dedicated test command.
+- [x] Compile a relative ESM component through HIR, assembly, native linking,
+      and a real HTTP test.
+- [ ] Resolve bare package imports and combine runtime source with package
+      declarations in the compiling frontend.
+- [ ] Add native Test262 execution; syntax intake alone is not conformance.
 - [ ] Compile function values, closures, records, arrays, and ordinary loops.
 - [ ] Compile the restricted class semantics required by `hono/tiny`.
 - [ ] Compile the required rest/spread operations.

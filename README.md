@@ -82,7 +82,7 @@ The central product idea is:
 > First-class TSX.
 > Native machine code.
 > Bounded request memory.
-> No JavaScript runtime.
+> No JavaScript engine.
 
 ## Current implementation: static native vertical slice
 
@@ -140,10 +140,23 @@ run steps for development. `--emit-hir` and `--emit-asm` on `build` preserve
 Run all implemented checks, including the native HTTP end-to-end test:
 
 ```bash
-npm test --prefix frontend
-cargo test --workspace
+npm test
 cargo clippy --workspace --all-targets -- -D warnings
 ```
+
+The compiler also accepts relative ESM component modules. The compatibility
+program continuously audits the pinned `hono/tiny` source graph and validates
+the initial allowlisted Test262 intake plus native host API behavior:
+
+```bash
+npm run audit:hono
+npm run test:test262-intake
+npm run test:native-api
+```
+
+The Test262 intake is syntax-only at this stage and is not reported as semantic
+conformance. See `doc/COMPATIBILITY.md` for pins, test layers, and completion
+criteria.
 
 An exploratory static performance comparison against an equivalent idiomatic Bun
 server is available separately:
@@ -2196,7 +2209,8 @@ tinytsx build examples/dynamic-page/server.tsx \
 
 creates a native Mach-O executable.
 
-1. The executable contains no JavaScript runtime.
+1. The executable contains no JavaScript engine, interpreter, JIT, or runtime
+   source parser.
 
 2. The executable handles a real HTTP GET request.
 
@@ -2318,7 +2332,7 @@ Components:          1
 Static HTML bytes:   148
 Dynamic insertions:  1
 GC:                  disabled
-JavaScript runtime:  none
+JavaScript engine:   none
 
 Output:              dist/server
 Binary size:         846320 bytes
