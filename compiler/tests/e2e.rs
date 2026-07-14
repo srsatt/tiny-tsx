@@ -6,9 +6,12 @@ use std::{
     net::{TcpListener, TcpStream},
     path::{Path, PathBuf},
     process::{Child, Command},
+    sync::Mutex,
     thread,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
+
+static NATIVE_BUILD: Mutex<()> = Mutex::new(());
 
 struct Server(Child);
 
@@ -44,6 +47,7 @@ fn builds_staged_constants_into_the_native_object() {
 }
 
 fn build_and_serve(entry: &str, expected_body: &str) {
+    let _build_guard = NATIVE_BUILD.lock().expect("lock native E2E build");
     let root = repository_root();
     build_frontend(&root);
     let directory = temporary_directory();
