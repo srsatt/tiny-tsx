@@ -6,7 +6,10 @@ import {after, test} from "node:test";
 import {fileURLToPath} from "node:url";
 import ts from "typescript";
 import {analyzeApplicationEntry} from "../src/application-entry.js";
-import {evaluateApplicationConstructor} from "../src/constructor-evaluator.js";
+import {
+  evaluateApplicationConstructor,
+  evaluateApplicationInitialization,
+} from "../src/constructor-evaluator.js";
 import {auditCompatibility} from "../src/compatibility-audit.js";
 import {CompileFailure} from "../src/diagnostics.js";
 import {loadModuleGraph} from "../src/module-graph.js";
@@ -141,6 +144,26 @@ test("symbolically executes the pinned Hono constructor chain", () => {
   ]);
 });
 
+test("executes the pinned Hono get registration through addRoute", () => {
+  const entry = path.join(repository, "tests/compat/hono/basic-smoke.ts");
+  const graph = loadModuleGraph(entry, {
+    aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+  });
+  const application = analyzeApplicationEntry(graph.modules[0]!.sourceFile);
+  assert.ok(application);
+
+  const result = evaluateApplicationInitialization(graph, application);
+
+  assert.deepEqual(result?.issues, []);
+  assert.deepEqual(result?.routes, [{
+    method: "GET",
+    path: "/",
+    basePath: "/",
+    handlerKind: "closure",
+  }]);
+  assert.equal(result?.routerInsertions, 1);
+});
+
 test("the compiling frontend selects default Hono application initialization", () => {
   assert.throws(
     () => compileEntry(path.join(repository, "tests/compat/hono/smoke.ts"), {
@@ -149,7 +172,7 @@ test("the compiling frontend selects default Hono application initialization", (
       apiAliases: {"hono/tiny": path.join(repository, "tests/compat/hono/api.d.ts")},
     }),
     (error: unknown) => error instanceof CompileFailure
-      && error.diagnostics[0]?.code === "TINY1401"
+      && error.diagnostics[0]?.code === "TINY1402"
       && error.diagnostics[0]?.span?.file.endsWith("tests/compat/hono/smoke.ts") === true,
   );
 });
@@ -162,7 +185,7 @@ test("the upstream basic route enters the full Hono package runtime graph", () =
       apiAliases: {"hono": path.join(repository, "tests/compat/hono/api.d.ts")},
     }),
     (error: unknown) => error instanceof CompileFailure
-      && error.diagnostics[0]?.code === "TINY1401"
+      && error.diagnostics[0]?.code === "TINY1402"
       && error.diagnostics[0]?.span?.file.endsWith("tests/compat/hono/basic-smoke.ts") === true,
   );
 });
