@@ -1,5 +1,6 @@
 import path from "node:path";
 import ts from "typescript";
+import {analyzeApplicationEntry} from "./application-entry.js";
 import {lowerStagedConstants} from "./constant-lowering.js";
 import {CompileFailure, fromTypeScript, spanOf, tinyError} from "./diagnostics.js";
 import {FunctionLowerer} from "./function-lowering.js";
@@ -76,6 +77,25 @@ export function compileEntry(entryPath: string, options: CompileOptions): HirPro
   if (typeScriptDiagnostics.length > 0) {
     throw new CompileFailure(typeScriptDiagnostics.map(fromTypeScript));
   }
+  const getDeclarations = sourceFile.statements.filter(isGetDeclaration);
+  if (getDeclarations.length === 0) {
+    const application = analyzeApplicationEntry(sourceFile);
+    if (application !== undefined) {
+      const calls = application.calls.map(call => call.method).join(", ") || "none";
+      throw tinyError(
+        "TINY1400",
+        `default application \`${application.binding}\` constructs ${application.constructorName} and registers calls [${calls}]; native application initialization is not lowered yet`,
+        sourceFile.statements.find(statement => ts.isExportAssignment(statement)) ?? sourceFile,
+      );
+    }
+  }
+  if (getDeclarations.length !== 1) {
+    throw tinyError(
+      "TINY1103",
+      "entry module must export exactly one GET handler or one constructed default application",
+      getDeclarations[0] ?? sourceFile,
+    );
+  }
   for (const module of sourceFiles) {
     if (module !== sourceFile) {
       validateForbiddenSyntax(module, staging.computedAccesses);
@@ -115,14 +135,6 @@ export function compileEntry(entryPath: string, options: CompileOptions): HirPro
 
   const constants = lowerStagedConstants(staging.bindings);
   const functionLowerer = new FunctionLowerer(program.getTypeChecker(), constants, strings);
-  const getDeclarations = sourceFile.statements.filter(isGetDeclaration);
-  if (getDeclarations.length !== 1) {
-    throw tinyError(
-      "TINY1103",
-      "entry module must export exactly one GET handler",
-      getDeclarations[0] ?? sourceFile,
-    );
-  }
   const handler = lowerGetHandler(getDeclarations[0]!, componentIds, functionLowerer, sourceFile);
   const functions = functionLowerer.finish();
 
