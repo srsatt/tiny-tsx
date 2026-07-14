@@ -170,30 +170,37 @@ test("executes the pinned Hono get registration through addRoute", () => {
   assert.equal(result?.routerInsertions, 1);
 });
 
-test("the compiling frontend selects default Hono application initialization", () => {
-  assert.throws(
-    () => compileEntry(path.join(repository, "tests/compat/hono/smoke.ts"), {
-      sdkPath: path.join(repository, "sdk/index.d.ts"),
-      aliases: {"hono/tiny": path.join(repository, "vendor/hono/src/preset/tiny.ts")},
-      apiAliases: {"hono/tiny": path.join(repository, "tests/compat/hono/api.d.ts")},
-    }),
-    (error: unknown) => error instanceof CompileFailure
-      && error.diagnostics[0]?.code === "TINY1403"
-      && error.diagnostics[0]?.span?.file.endsWith("tests/compat/hono/smoke.ts") === true,
-  );
+test("lowers the tiny-preset Hono route into native HIR", () => {
+  const hir = compileEntry(path.join(repository, "tests/compat/hono/smoke.ts"), {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    aliases: {"hono/tiny": path.join(repository, "vendor/hono/src/preset/tiny.ts")},
+    apiAliases: {"hono/tiny": path.join(repository, "tests/compat/hono/api.d.ts")},
+  });
+
+  assert.equal(hir.modules.length, 17);
+  assert.deepEqual(hir.handlers, [{
+    method: "GET",
+    path: "/",
+    response: {
+      kind: "text",
+      value: {kind: "stringLiteral", string: 0, span: hir.handlers[0]?.span},
+    },
+    span: hir.handlers[0]?.span,
+  }]);
+  assert.deepEqual(hir.staticStrings, [{id: 0, value: "Hello from Hono"}]);
 });
 
-test("the upstream basic route enters the full Hono package runtime graph", () => {
-  assert.throws(
-    () => compileEntry(path.join(repository, "tests/compat/hono/basic-smoke.ts"), {
-      sdkPath: path.join(repository, "sdk/index.d.ts"),
-      aliases: {"hono": path.join(repository, "vendor/hono/src/index.ts")},
-      apiAliases: {"hono": path.join(repository, "tests/compat/hono/api.d.ts")},
-    }),
-    (error: unknown) => error instanceof CompileFailure
-      && error.diagnostics[0]?.code === "TINY1403"
-      && error.diagnostics[0]?.span?.file.endsWith("tests/compat/hono/basic-smoke.ts") === true,
-  );
+test("lowers the upstream basic route through the full Hono runtime graph", () => {
+  const hir = compileEntry(path.join(repository, "tests/compat/hono/basic-smoke.ts"), {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    aliases: {"hono": path.join(repository, "vendor/hono/src/index.ts")},
+    apiAliases: {"hono": path.join(repository, "tests/compat/hono/api.d.ts")},
+  });
+
+  assert.equal(hir.modules.length, 27);
+  assert.equal(hir.handlers[0]?.method, "GET");
+  assert.equal(hir.handlers[0]?.path, "/");
+  assert.deepEqual(hir.staticStrings, [{id: 0, value: "Hono!!"}]);
 });
 
 test("pins the native text response to the upstream Hono contract", () => {

@@ -4,6 +4,7 @@ import {analyzeApplicationEntry} from "./application-entry.js";
 import {
   evaluateApplicationConstructor,
   evaluateApplicationInitialization,
+  type ApplicationInitializationEvaluation,
 } from "./constructor-evaluator.js";
 import {lowerStagedConstants} from "./constant-lowering.js";
 import {CompileFailure, fromTypeScript, spanOf, tinyError} from "./diagnostics.js";
@@ -93,13 +94,9 @@ export function compileEntry(entryPath: string, options: CompileOptions): HirPro
         : displayRuntimeClassPlan(classPlan, process.cwd());
       const initialization = evaluateApplicationInitialization(graph, application);
       if (initialization !== undefined && initialization.issues.length === 0) {
-        const responses = initialization.routes.filter(route => route.response !== undefined).length;
-        if (responses === initialization.routes.length && responses > 0) {
-          throw tinyError(
-            "TINY1403",
-            `default application \`${application.binding}\` evaluated ${responses} route handlers through upstream Context and Response semantics; native route HIR is not lowered yet`,
-            sourceFile.statements.find(statement => ts.isExportAssignment(statement)) ?? sourceFile,
-          );
+        const lowered = lowerApplicationInitialization(graph, sourceFile, initialization);
+        if (lowered !== undefined) {
+          return lowered;
         }
         throw tinyError(
           "TINY1402",
@@ -191,6 +188,55 @@ export function compileEntry(entryPath: string, options: CompileOptions): HirPro
       components: components.length,
       constants: constants.length,
       staticHtmlBytes,
+      dynamicHtmlExpressions: 0,
+    },
+  };
+}
+
+function lowerApplicationInitialization(
+  graph: ReturnType<typeof loadModuleGraph>,
+  sourceFile: ts.SourceFile,
+  initialization: ApplicationInitializationEvaluation,
+): HirProgram | undefined {
+  if (initialization.routes.length !== 1) {
+    return undefined;
+  }
+  const route = initialization.routes[0]!;
+  const response = route.response;
+  if (
+    route.method !== "GET"
+    || response === undefined
+    || response.kind !== "text"
+    || response.status !== 200
+    || response.contentType !== "text/plain; charset=UTF-8"
+  ) {
+    return undefined;
+  }
+  const exportNode = sourceFile.statements.find(statement => ts.isExportAssignment(statement)) ?? sourceFile;
+  const span = spanOf(exportNode, sourceFile);
+  const strings = new StringTable();
+  const body = strings.intern(response.body);
+  return {
+    version: 2,
+    target: "aarch64-apple-darwin",
+    entry: graph.entry,
+    modules: graph.modules.map(module => ({path: module.path})),
+    functions: [],
+    components: [],
+    handlers: [{
+      method: "GET",
+      path: route.path,
+      response: {kind: "text", value: {kind: "stringLiteral", string: body, span}},
+      span,
+    }],
+    staticStrings: strings.values,
+    constants: [],
+    statistics: {
+      modules: graph.modules.length,
+      functions: 0,
+      components: 0,
+      constants: 0,
+      staticHtmlBytes: Buffer.byteLength(response.body, "utf8"),
       dynamicHtmlExpressions: 0,
     },
   };
