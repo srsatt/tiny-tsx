@@ -12,13 +12,14 @@ produces and serves a native Mach-O executable from the example TSX source.
 - Compact Cargo workspace with compiler and bootstrap runtime binaries.
 - Pinned TypeScript frontend package and TinyTSX SDK declarations.
 - Static TSX example matching the first deliverable.
-- Versioned JSON HIR with source spans, components, GET handler, HTML operations,
-  interned static strings, typed staged constants, and build statistics.
+- Versioned JSON HIR with source spans, native string functions, tagged GET
+  responses, components, HTML operations, interned strings, typed staged
+  constants, and build statistics.
 - Official TypeScript frontend validates the initial static subset and coalesces
   the example page into one 53-byte HTML fragment.
 - Frontend coverage includes static and nested components plus rejection of
   `any`, classes, async functions, computed properties, and event attributes.
-- Rust `tinytsx check` drives the build-time frontend, validates HIR v1, and can
+- Rust `tinytsx check` drives the build-time frontend, validates HIR v2, and can
   print readable HIR or deterministic Apple arm64 assembly.
 - Assembly uses native component functions, the documented writer helper, static
   bytes in `__TEXT,__const`, and a global `tinytsx_handle_get` entrypoint.
@@ -30,8 +31,8 @@ produces and serves a native Mach-O executable from the example TSX source.
 - `tinytsx build` supports the first-slice build options, emitted HIR/assembly,
   temporary preservation, stripping, and a machine-readable build report.
 - `tinytsx run` builds and starts the resulting executable.
-- Native E2E coverage checks Mach-O magic, starts the executable, sends a real
-  TCP request, and asserts the complete 200 response and 53-byte HTML body.
+- Native E2E coverage checks Mach-O magic, starts each executable, sends a real
+  TCP request, and asserts complete HTML or text responses.
 - A stripped release build measured 393,920 bytes on the development machine.
 - The static benchmark harness verifies equivalent TinyTSX/Bun responses, then
   records all repeated `oha` samples plus startup-to-first-response and idle RSS.
@@ -60,8 +61,8 @@ produces and serves a native Mach-O executable from the example TSX source.
   route-path test proves the overlay participates in TypeScript checking.
 - Relative ESM components now compile through multi-module HIR into the native
   server; a second real HTTP E2E test verifies the imported component output.
-- Test262 intake validates the pin, provenance metadata, and parsing of seven
-  allowlisted class, loop, RegExp, async, array-spread, undefined, and bigint
+- Test262 intake validates the pin, provenance metadata, and parsing of eight
+  allowlisted class, loop, RegExp, async, array-spread, primitive, and function
   cases. These are explicitly syntax-only and are not semantic conformance
   results.
 - The dedicated native API suite currently covers Request method/path/query
@@ -83,8 +84,15 @@ produces and serves a native Mach-O executable from the example TSX source.
   blobs. `examples/staged-constants/server.tsx` passes the complete native build
   and HTTP E2E path, while the Hono test proves its seven-method array reaches
   the same typed HIR representation.
-- Generated expressions do not load constant blobs yet; their current purpose
-  is to pin the frontend/backend data boundary before function lowering.
+- Reachable named zero-parameter string functions now lower across ESM modules.
+  They can return a string literal, a staged string constant, or another direct
+  call. Native code returns pointer/length string views and rejects recursion.
+- HIR/ABI v2 adds tagged text responses and explicit HTTP status/content type
+  metadata. A native E2E compiles the Hono basic route body `Hono!!` through the
+  general function path and verifies `text/plain; charset=UTF-8` over TCP.
+- Static `Response.text(string)` is currently a compiler intrinsic, not a Web-
+  standard method. It is the temporary source bridge to the response operation
+  that compiled Hono `Context.text()` will use after class lowering.
 - Closed object literals are records with compile-time fields; explicit `Map`
   construction remains unstaged dynamic work. The two models and declaration-
   overlay boundary are persisted in `doc/OBJECT_MODEL.md`.
@@ -114,17 +122,17 @@ rtk python3 benchmarks/scripts/run_static.py --duration 2 --runs 3 --startup-run
 
 ## Active slice
 
-Compatibility substrate: lower ordinary functions, expressions, and statements
-into the general typed HIR, reference the new constant pool, then add closures,
-native record/array layouts, and loops. Type-layout specialization should handle
-closed request-time records without pretending their values are compile-time
-constants. Test262 cases move from syntax intake to native execution only when
-their complete semantics are implemented.
+Compatibility substrate: extend the executable function slice with parameters,
+locals, record property access, and branches, then add closures, native
+record/array layouts, and loops. Type-layout specialization should handle closed
+request-time records without pretending their values are compile-time constants.
+Test262 cases move from syntax intake to native execution only when their
+complete semantics are implemented.
 
 ## Resume point
 
 Read `README.md`, `doc/COMPATIBILITY.md`, and `doc/BACKLOG.md`. Run
-`npm run audit:hono-basic` to see the full-package requirement frontier. Begin
-with bare package resolution and function/expression HIR; do not special-case
-Hono routing. Run the verification commands recorded here before moving an item
-to verified.
+`npm run audit:hono-basic` to see the full-package requirement frontier. Extend
+the native string-function HIR with parameters and closed-record property access;
+do not special-case Hono routing. Run the verification commands recorded here
+before moving an item to verified.

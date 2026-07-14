@@ -1,6 +1,6 @@
 # Constant data format
 
-Closed values found by AOT staging enter HIR v1 as a canonical constant pool.
+Closed values found by AOT staging enter HIR v2 as a canonical constant pool.
 Each entry has a numeric ID, source module, binding name, source span, and a
 tagged value. Supported value kinds are undefined, null, boolean, finite
 JavaScript number, arbitrary-precision bigint, UTF-8 string, ordered array, and
@@ -29,7 +29,7 @@ names, matching pool statistics, and no more than 128 nested value levels.
 Individual lengths and counts are limited to `u32`.
 
 This format is an internal compiler representation, not a runtime ABI and not a
-JavaScript object layout. Constant blobs are linked into compilable programs,
-but expression codegen does not load them yet. That next step will choose native
-array and record layouts and may replace this transport encoding without a HIR
-version change if observable compiler behavior remains compatible.
+JavaScript object layout. Generated string expressions can return a view into a
+staged string blob; arrays and records are not loaded by expression codegen yet.
+Their next slice will choose native layouts and may replace this transport
+encoding with a later HIR version when the compiler/runtime contract changes.

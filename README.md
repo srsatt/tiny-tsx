@@ -350,7 +350,7 @@ should lower to a native render function conceptually equivalent to:
 ```rust
 fn render_greeting(
     request: *const TinyRequest,
-    writer: *mut TinyHtmlWriter,
+    writer: *mut TinyResponseWriter,
     props: *const GreetingProps,
 ) -> TinyStatus;
 ```
@@ -1115,11 +1115,13 @@ pub struct TinyRequest {
 }
 
 #[repr(C)]
-pub struct TinyHtmlWriter {
+pub struct TinyResponseWriter {
     pub start: *mut u8,
     pub cursor: *mut u8,
     pub end: *mut u8,
     pub status: u32,
+    pub http_status: u16,
+    pub content_type: u16,
 }
 ```
 
@@ -1139,7 +1141,7 @@ Generated handler entrypoint:
 ```rust
 extern "C" fn tinytsx_handle_get(
     request: *const TinyRequest,
-    writer: *mut TinyHtmlWriter,
+    writer: *mut TinyResponseWriter,
 ) -> u32;
 ```
 
@@ -1149,7 +1151,7 @@ The runtime is responsible for:
 * parsing HTTP;
 * assigning requests to worker threads;
 * preparing request memory;
-* preparing the HTML writer;
+* preparing the response writer;
 * invoking generated code;
 * converting the status into an HTTP response;
 * writing HTTP headers;

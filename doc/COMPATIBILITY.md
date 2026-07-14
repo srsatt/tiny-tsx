@@ -139,7 +139,7 @@ an ECMAScript conformance claim.
 
 ### Typed constant materialization
 
-Closed staged bindings now enter HIR v1 as source-located, tagged constants.
+Closed staged bindings now enter HIR v2 as source-located, tagged constants.
 Undefined, null, boolean, finite number, bigint, string, array, and record values
 retain their type and recursive structure. The Rust compiler validates the pool
 and emits each constant as a deterministic, eight-byte-aligned blob in the
@@ -153,9 +153,28 @@ class, so no claim is made that a Hono executable is produced yet. A separate
 compilable staged-constants example passes frontend lowering, Rust HIR parsing,
 native assembly/linking, and a real HTTP test.
 
-The blobs are not yet referenced by generated expression code. They establish
-the data boundary for the next function/record/array lowering slice without
-introducing runtime JavaScript object semantics.
+Generated string expressions now reference staged string blobs. Reachable named
+zero-parameter functions can return string literals, imported string constants,
+or another direct function call. The arm64 backend emits those calls as native
+functions and returns pointer/length string views; it does not introduce a
+JavaScript call stack or object model. Parameters, locals, branches, closures,
+arrays, and records remain outside this first executable function slice.
+
+### Text response bridge
+
+The SDK's static `Response.text(string)` is a temporary TinyTSX compiler
+intrinsic, not a Web-standard `Response` method. It gives the current GET
+entrypoint an expressible lowering target before constructor and class support
+exist. HIR v2 records a tagged text response, and ABI v2 carries HTTP status and
+content type from generated code to the runtime.
+
+The native response uses status 200 and `text/plain; charset=UTF-8`, matching the
+pinned Hono `Context.text()` contract. The first Hono basic route's `"Hono!!"`
+body is compiled through the general string-function path and checked through a
+real HTTP request. This is response-semantics evidence, not a claim that upstream
+Hono compiles: the exact-source probes still stop at their first classes. Once
+Hono's class and constructor path lowers, `Context.text()` should reach the same
+HIR response operation rather than depend on the temporary source intrinsic.
 
 Closed records and dynamic maps are separate compiler concepts. A record has a
 known layout and may use direct field offsets; a map has runtime membership and
