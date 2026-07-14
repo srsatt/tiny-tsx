@@ -52,5 +52,11 @@ The harness builds a stripped release TinyTSX executable, alternates target orde
 between runs, warms each process, and retains every sample. It writes adjacent
 JSON and Markdown reports under `benchmarks/results/`.
 
+The first exact-source Hono preview is persisted as
+`2026-07-15-m5-max-hono-preview.{json,md}`. It uses three one-second samples at
+concurrency 1 and 8. Treat it as directional evidence only: the response is six
+closed bytes, both servers close every connection, and no request-dependent
+Hono behavior executes.
+
 For credible comparative runs, connect the Mac to power, disable Low Power Mode,
 close unnecessary applications, and avoid indexing or builds while measuring.

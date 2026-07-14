@@ -221,8 +221,8 @@ entrypoint an expressible lowering target before the required Web constructor
 path exists. HIR v2 records a tagged text response, and ABI v2 carries HTTP status and
 content type from generated code to the runtime.
 
-The native response uses status 200 and `text/plain; charset=UTF-8`, matching the
-pinned Hono `Context.text()` contract. The first Hono basic route's `"Hono!!"`
+The native Hono response uses status 200 and `text/plain;charset=UTF-8`, matching
+the observed `new Response(text)`/Bun wire behavior. The first Hono basic route's `"Hono!!"`
 body is compiled through the general string-function path and checked through a
 real HTTP request. The exact-source Hono E2E reaches the same HIR response
 operation by evaluating upstream `Context.text()` and the standard

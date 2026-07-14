@@ -106,7 +106,10 @@ commit message.
       API implementation; declaration-level type checking is not conformance.
 - [ ] Add exceptions, Promise, async/await, and a bounded native task executor.
 - [ ] Run selected upstream Hono behavior tests as features become available.
-- [ ] Run the exact source under Bun and TinyTSX and compare responses.
+- [x] Run the pinned first-route source under Bun and TinyTSX, require equivalent
+      responses, and persist a repeated exploratory comparison.
+- [ ] Repeat the exact-source comparison once request-dependent handlers and
+      keep-alive HTTP are available.
 - [ ] Dynamic component props and request query lookup.
 - [ ] HTML text and quoted-attribute escaping.
 - [ ] Fixed request arena and recoverable request OOM.

@@ -72,7 +72,7 @@ router insertions: 1
 The retained handler then runs against an initialized upstream `Context`. The
 evaluator follows Hono's actual `Context.text` fast-path condition into the
 standard `new Response(text)` constructor and derives status 200,
-`text/plain; charset=UTF-8`, and the closed body.
+`text/plain;charset=UTF-8`, and the closed body.
 
 The single closed route now enters HIR v2. Generated native code compares the
 borrowed request path with `/`, returns `NOT_FOUND` for a mismatch, and emits

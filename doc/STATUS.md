@@ -44,6 +44,11 @@ produces and serves a native Mach-O executable from the example TSX source.
   material difference was footprint: TinyTSX measured 5.64 ms startup and
   1.78 MiB idle RSS versus Bun at 12.87 ms and 31.53 MiB. This is exploratory
   evidence only; it does not cover dynamic rendering or keep-alive HTTP.
+- An exact-source Hono preview runs the pinned `basic-smoke.ts` through both
+  runtimes. Across three one-second samples, TinyTSX measured 0.96x Bun request
+  throughput at concurrency 1 and 1.00x at 8. Median startup was 5.70 ms versus
+  16.98 ms, and idle RSS was 1.77 MiB versus 49.06 MiB. This remains a closed
+  six-byte response with connection-close HTTP, not a general Hono benchmark.
 - Hono and Test262 are shallow Git submodules pinned respectively to Hono
   `v4.12.30` (`b2ae3a22`) and Test262 `f2d14356`.
 - The frontend can traverse runtime-only ESM graphs, skip type-only edges, report
@@ -160,6 +165,7 @@ rtk cargo run -q -p tinytsx -- build tests/compat/hono/basic-smoke.ts --alias ho
 rtk npm run test:test262-intake
 rtk npm run test:native-api
 rtk python3 benchmarks/scripts/run_static.py --duration 2 --runs 3 --startup-runs 5 --concurrency 1,8,32 --output-prefix benchmarks/results/2026-07-14-m5-max-static-preview
+rtk python3 benchmarks/scripts/run_static.py --workload hono-basic --duration 1 --runs 3 --startup-runs 5 --concurrency 1,8 --output-prefix benchmarks/results/2026-07-15-m5-max-hono-preview
 ```
 
 ## Active slice

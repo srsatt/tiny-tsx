@@ -278,7 +278,7 @@ def environment_metadata() -> dict[str, Any]:
         "bunVersion": command_output("bun", "--version"),
         "ohaVersion": command_output("oha", "--version"),
         "commit": command_output("git", "rev-parse", "--short", "HEAD"),
-        "dirty": bool(command_output("git", "status", "--porcelain")),
+        "dirty": bool(command_output("git", "status", "--porcelain", "--untracked-files=no")),
         "powerAndBackgroundState": "not controlled",
     }
 
