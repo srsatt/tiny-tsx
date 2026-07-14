@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import {mkdtempSync, rmSync, writeFileSync} from "node:fs";
+import {mkdtempSync, readFileSync, rmSync, writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import path from "node:path";
 import {after, test} from "node:test";
@@ -82,6 +82,19 @@ test("the upstream basic route enters the full Hono package runtime graph", () =
       && error.diagnostics[0]?.code === "TINY1002"
       && error.diagnostics[0]?.span?.file.includes("vendor/hono/src/") === true,
   );
+});
+
+test("pins the native text response to the upstream Hono contract", () => {
+  const manifest = JSON.parse(readFileSync(
+    path.join(repository, "tests/compat/hono/manifest.json"),
+    "utf8",
+  ));
+  const contract = manifest.behaviorContracts.textResponse;
+  const contextSource = readFileSync(path.join(repository, contract.source), "utf8");
+  const basicSource = readFileSync(path.join(repository, manifest.basicSmokeEntry), "utf8");
+
+  assert.match(contextSource, new RegExp(`export const TEXT_PLAIN = ['"]${contract.contentType}['"]`));
+  assert.match(basicSource, new RegExp(`context\\.text\\(['"]${contract.body}['"]\\)`));
 });
 
 test("type-checks the entry against the Hono API overlay before runtime lowering", () => {

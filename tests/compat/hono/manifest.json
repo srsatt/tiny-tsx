@@ -15,5 +15,12 @@
   },
   "smokeEntry": "tests/compat/hono/smoke.ts",
   "basicSmokeEntry": "tests/compat/hono/basic-smoke.ts",
-  "basicSource": "https://github.com/honojs/examples/tree/main/basic"
+  "basicSource": "https://github.com/honojs/examples/tree/main/basic",
+  "behaviorContracts": {
+    "textResponse": {
+      "source": "vendor/hono/src/context.ts",
+      "contentType": "text/plain; charset=UTF-8",
+      "body": "Hono!!"
+    }
+  }
 }
