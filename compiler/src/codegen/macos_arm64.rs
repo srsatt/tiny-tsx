@@ -1,8 +1,11 @@
 use std::fmt::Write;
 
-use crate::hir::{HtmlOp, Program};
+use crate::{
+    codegen::Options,
+    hir::{HtmlOp, Program},
+};
 
-pub fn emit(program: &Program) -> Result<String, String> {
+pub fn emit(program: &Program, options: Options) -> Result<String, String> {
     program.validate()?;
     let mut assembly = String::new();
     writeln!(assembly, ".section __TEXT,__text,regular,pure_instructions").unwrap();
@@ -19,8 +22,21 @@ pub fn emit(program: &Program) -> Result<String, String> {
 
     let handler = &program.handlers[0];
     emit_handler(&mut assembly, handler.component);
+    emit_config(&mut assembly, options);
     emit_static_data(&mut assembly, program);
     Ok(assembly)
+}
+
+fn emit_config(assembly: &mut String, options: Options) {
+    writeln!(assembly, "\n.globl _tinytsx_config_port").unwrap();
+    writeln!(assembly, "_tinytsx_config_port:").unwrap();
+    emit_immediate(assembly, "x0", u64::from(options.port));
+    writeln!(assembly, "    ret").unwrap();
+
+    writeln!(assembly, "\n.globl _tinytsx_config_request_memory").unwrap();
+    writeln!(assembly, "_tinytsx_config_request_memory:").unwrap();
+    emit_immediate(assembly, "x0", options.request_memory as u64);
+    writeln!(assembly, "    ret").unwrap();
 }
 
 fn emit_function(assembly: &mut String, symbol: &str, operations: &[HtmlOp], program: &Program) {
@@ -128,6 +144,8 @@ fn emit_immediate(assembly: &mut String, register: &str, value: u64) {
 mod tests {
     use crate::hir::Program;
 
+    use crate::codegen::Options;
+
     use super::emit;
 
     #[test]
@@ -159,12 +177,14 @@ mod tests {
         )
         .unwrap();
 
-        let first = emit(&program).unwrap();
-        let second = emit(&program).unwrap();
+        let options = Options::default();
+        let first = emit(&program, options).unwrap();
+        let second = emit(&program, options).unwrap();
         assert_eq!(first, second);
         assert!(first.contains(".globl _tinytsx_handle_get"));
         assert!(first.contains("bl _tinytsx_html_write_static"));
         assert!(first.contains("Ltinytsx_string_0:"));
         assert!(first.contains(".byte 60, 104, 49"));
+        assert!(first.contains("_tinytsx_config_port:\n    movz x0, #3000"));
     }
 }

@@ -8,3 +8,5 @@ license.workspace = true
 name = "tinytsx-runtime-bootstrap"
 path = "src/main.rs"
 
+[features]
+generated = []

@@ -1,4 +1,9 @@
-fn main() {
-    eprintln!("TinyTSX bootstrap runtime must be linked with generated application code");
-}
+mod abi;
+mod http;
 
+fn main() {
+    if let Err(error) = http::serve() {
+        eprintln!("TinyTSX runtime error: {error}");
+        std::process::exit(1);
+    }
+}

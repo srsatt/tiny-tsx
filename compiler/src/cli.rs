@@ -1,6 +1,6 @@
-use std::ffi::OsString;
+use std::{ffi::OsString, path::PathBuf};
 
-use crate::{codegen, frontend};
+use crate::{build, codegen, frontend};
 
 const USAGE: &str = "\
 TinyTSX native TSX compiler
@@ -22,16 +22,120 @@ pub fn run(arguments: impl Iterator<Item = OsString>) -> Result<(), String> {
 
     match arguments.first().map(String::as_str) {
         Some("check") => check(&arguments[1..]),
-        Some("build" | "run") => Err(
-            "build and run are introduced with the bootstrap runtime in the next implementation slice"
-                .to_owned(),
-        ),
+        Some("build") => build(&arguments[1..]),
+        Some("run") => run_server(&arguments[1..]),
         Some("-h" | "--help") | None => {
             print!("{USAGE}");
             Ok(())
         }
         Some(command) => Err(format!("unknown command `{command}`\n\n{USAGE}")),
     }
+}
+
+fn build(arguments: &[String]) -> Result<(), String> {
+    let options = parse_build_options(arguments, PathBuf::from("dist/server"))?;
+    build::execute(&options).map(|_| ())
+}
+
+fn run_server(arguments: &[String]) -> Result<(), String> {
+    let options = parse_build_options(arguments, PathBuf::from(".tinytsx/run/server"))?;
+    let output = build::execute(&options)?;
+    let status = std::process::Command::new(&output)
+        .status()
+        .map_err(|error| format!("could not start {}: {error}", output.display()))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!("{} exited with {status}", output.display()))
+    }
+}
+
+fn parse_build_options(
+    arguments: &[String],
+    default_output: PathBuf,
+) -> Result<build::Options, String> {
+    let mut options = build::Options {
+        entry: String::new(),
+        output: default_output,
+        port: 3000,
+        workers: 1,
+        request_memory: 262_144,
+        release: false,
+        emit_hir: false,
+        emit_asm: false,
+        keep_temps: false,
+    };
+    let mut index = 0;
+    while index < arguments.len() {
+        let argument = &arguments[index];
+        match argument.as_str() {
+            "--release" => options.release = true,
+            "--emit-hir" => options.emit_hir = true,
+            "--emit-asm" => options.emit_asm = true,
+            "--keep-temps" => options.keep_temps = true,
+            "--print-size" => {}
+            "--output" => options.output = PathBuf::from(option_value(arguments, &mut index)?),
+            "--port" => options.port = parse_number(option_value(arguments, &mut index)?, "port")?,
+            "--workers" => {
+                options.workers = parse_number(option_value(arguments, &mut index)?, "workers")?
+            }
+            "--request-memory" => {
+                options.request_memory =
+                    parse_number(option_value(arguments, &mut index)?, "request memory")?
+            }
+            "--runtime" => {
+                let runtime = option_value(arguments, &mut index)?;
+                if runtime != "bootstrap" {
+                    return Err(
+                        "the first vertical slice supports only `--runtime bootstrap`".to_owned(),
+                    );
+                }
+            }
+            "--worker-stack" => {
+                return Err(
+                    "--worker-stack is not available in the single-worker bootstrap runtime"
+                        .to_owned(),
+                );
+            }
+            option if option.starts_with('-') => {
+                return Err(format!("unknown build option `{option}`"));
+            }
+            value if options.entry.is_empty() => options.entry = value.to_owned(),
+            value => return Err(format!("unexpected argument `{value}`")),
+        }
+        index += 1;
+    }
+
+    if options.entry.is_empty() {
+        return Err(format!("build requires an entry module\n\n{USAGE}"));
+    }
+    if options.port == 0 {
+        return Err("port must be greater than zero".to_owned());
+    }
+    if options.workers != 1 {
+        return Err("the first bootstrap runtime supports exactly one worker".to_owned());
+    }
+    if options.request_memory == 0 {
+        return Err("request memory must be greater than zero".to_owned());
+    }
+    Ok(options)
+}
+
+fn option_value<'a>(arguments: &'a [String], index: &mut usize) -> Result<&'a str, String> {
+    *index += 1;
+    arguments
+        .get(*index)
+        .map(String::as_str)
+        .ok_or_else(|| format!("{} requires a value", arguments[*index - 1]))
+}
+
+fn parse_number<T>(value: &str, name: &str) -> Result<T, String>
+where
+    T: std::str::FromStr,
+{
+    value
+        .parse()
+        .map_err(|_| format!("invalid {name} `{value}`"))
 }
 
 fn check(arguments: &[String]) -> Result<(), String> {
@@ -60,7 +164,10 @@ fn check(arguments: &[String]) -> Result<(), String> {
     if emit_hir {
         println!("{}", compilation.json);
     } else if emit_asm {
-        print!("{}", codegen::emit_macos_arm64(&compilation.program)?);
+        print!(
+            "{}",
+            codegen::emit_macos_arm64(&compilation.program, codegen::Options::default())?
+        );
     } else {
         println!(
             "checked {}: {} module(s), {} component(s), {} static HTML byte(s)",
