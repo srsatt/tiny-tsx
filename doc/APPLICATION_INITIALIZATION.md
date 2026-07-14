@@ -17,7 +17,7 @@ arguments, ordered top-level calls, and whether each argument is a closed string
 function value, or another expression. It does not assign Hono-specific meaning
 to method names.
 
-For the pinned basic tracer the exact plan is:
+For the pinned first-route tracer the exact plan is:
 
 ```text
 binding: app
@@ -74,15 +74,26 @@ evaluator follows Hono's actual `Context.text` fast-path condition into the
 standard `new Response(text)` constructor and derives status 200,
 `text/plain;charset=UTF-8`, and the closed body.
 
-The single closed route now enters HIR v2. Generated native code compares the
-borrowed request path with `/`, returns `NOT_FOUND` for a mismatch, and emits
-the evaluated response for a match. Both the `hono/tiny` tracer and the
-full-package first-route tracer compile; the latter is also covered by a real
-Mach-O HTTP E2E.
+Multiple closed routes now enter HIR v2 in registration order. Generated native
+code compares the borrowed request path with each exact path, emits the matched
+response, and returns `NOT_FOUND` only after all routes miss. A two-route tracer
+proves `/` and `/hello` preserve Hono's merged paths and dispatch independently.
+Both the `hono/tiny` tracer and the full-package first-route tracer compile; the
+latter is also covered by real Mach-O HTTP E2E tests.
 
-This is deliberately a narrow AOT fast path. Additional routes, patterns,
-request-dependent handler bodies, non-200 responses, headers, middleware, and
-the general Context/Response runtime remain pending.
+Closed middleware registrations are retained as `ALL` routes during symbolic
+initialization. For a matching static route, the evaluator invokes preceding
+middleware around the handler and applies post-handler effects in reverse
+order. The current executable case resolves and invokes the actual upstream
+`poweredBy()` factory and async middleware closure. Its
+`res.headers.set('X-Powered-By', 'Hono')` effect becomes a static response header
+and is verified on the native root route.
+
+This is deliberately a narrow AOT fast path. Dynamic route patterns,
+request-dependent handler bodies, non-200 response construction, dynamic
+headers, pre-handler control flow, and the general Context/Request/Response
+runtime remain pending. Middleware path matching currently covers exact paths,
+`*`, and suffix-wildcard prefixes; it is not a general native Hono router.
 
 Partial evaluation must execute the upstream source semantics. The trace is not
 permission to replace Hono routing with a separately implemented interface. If

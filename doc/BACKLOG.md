@@ -50,7 +50,7 @@ commit message.
       source as the runtime compilation graph.
 - [x] Add a first-route tracer for the full `hono` entry used by the upstream
       basic example, alongside the smaller `hono/tiny` tracer.
-- [ ] Pin the upstream `honojs/examples` revision and intake its complete basic
+- [x] Pin the upstream `honojs/examples` revision and intake its complete basic
       source and behavior test rather than only the first route.
 - [ ] Add native Test262 execution; syntax intake alone is not conformance.
 - [ ] Compile function values, closures, records, arrays, and ordinary loops.
@@ -97,15 +97,25 @@ commit message.
 - [x] Invoke the installed `get` closure and execute its `#addRoute` effects.
 - [x] Lower one evaluated static GET route and its upstream `Context.text`
       response into HIR and path-checked native request dispatch.
-- [ ] Generalize native dispatch to multiple routes, patterns, middleware, and
-      request-dependent handler bodies.
+- [x] Generalize native dispatch to multiple ordered static GET routes.
+- [ ] Add route patterns and request-dependent handler bodies.
+- [x] Apply closed post-handler middleware and compile upstream `poweredBy()`
+      through native response-header emission.
+- [ ] Compile the remaining basic-example middleware, including `basicAuth`,
+      `etag`, custom async middleware, and nested applications.
 - [ ] Compile the required rest/spread operations.
 - [ ] Add a native RegExp backend and allowlisted Test262 cases.
-- [ ] Add Request, Response, Headers, URL, and encoding native APIs.
-- [ ] Intake selected Web Platform Tests alongside each executable native Web
-      API implementation; declaration-level type checking is not conformance.
+- [ ] Add the general Request, Response, Headers, URL, and encoding native APIs.
+- [x] Add bounded static response headers with HTTP validation,
+      case-insensitive replacement, and wire emission.
+- [x] Intake a pinned Web Platform Test for `Headers.set()` casing and connect
+      it to focused native-derived ABI evidence.
+- [ ] Execute selected Web Platform Tests through the native compiler/runtime;
+      declaration-level and derived testing are not conformance.
 - [ ] Add exceptions, Promise, async/await, and a bounded native task executor.
-- [ ] Run selected upstream Hono behavior tests as features become available.
+- [x] Reproduce the pinned basic example's selected root-route status and
+      `X-Powered-By: Hono` assertions through a native HTTP E2E.
+- [ ] Run broader upstream Hono behavior tests as features become available.
 - [x] Run the pinned first-route source under Bun and TinyTSX, require equivalent
       responses, and persist a repeated exploratory comparison.
 - [ ] Repeat the exact-source comparison once request-dependent handlers and

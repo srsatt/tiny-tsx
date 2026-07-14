@@ -51,6 +51,9 @@ produces and serves a native Mach-O executable from the example TSX source.
   six-byte response with connection-close HTTP, not a general Hono benchmark.
 - Hono and Test262 are shallow Git submodules pinned respectively to Hono
   `v4.12.30` (`b2ae3a22`) and Test262 `f2d14356`.
+- The complete upstream Hono basic example is pinned as a third shallow
+  submodule at `3b0b6287`. Intake checks its 110-line source, 16 route
+  registrations, and selected root-route status/powered-by behavior test.
 - The frontend can traverse runtime-only ESM graphs, skip type-only edges, report
   unresolved imports together, and audit the complete reachable Hono source.
 - The pinned `hono/tiny` smoke graph currently contains 17 runtime modules and
@@ -139,6 +142,17 @@ produces and serves a native Mach-O executable from the example TSX source.
   Its E2E verifies `GET /` returns `Hono!!` with the pinned Hono content type and
   `GET /missing` returns 404. Compiler `--alias` and `--api` options preserve the
   runtime/declaration split through native builds.
+- Ordered static Hono routes now compile together. A native two-route E2E
+  verifies `/` and `/hello`, including the upstream `mergePath` behavior that
+  prevents doubled separators.
+- Static `Response` headers lower into a bounded eight-entry native writer with
+  HTTP token/value validation, case-insensitive replacement, and wire emission.
+  A pinned WPT `Headers.set()` casing source is tracked as native-derived
+  evidence; the upstream JavaScript is not yet executed.
+- Closed matching middleware can run around a static handler. The evaluator
+  invokes upstream Hono's actual `poweredBy()` factory and async closure, applies
+  its post-handler header effect, and a native E2E reproduces the selected
+  upstream root-route status and `X-Powered-By: Hono` assertions.
 - Closed object literals are records with compile-time fields; explicit `Map`
   construction remains unstaged dynamic work. The two models and declaration-
   overlay boundary are persisted in `doc/OBJECT_MODEL.md`.
@@ -163,6 +177,8 @@ rtk npm run audit:hono-basic
 rtk npm run try:compile:hono-basic  # emits full-package single-route HIR
 rtk cargo run -q -p tinytsx -- build tests/compat/hono/basic-smoke.ts --alias hono=vendor/hono/src/index.ts --api hono=tests/compat/hono/api.d.ts --output dist/hono-basic
 rtk npm run test:test262-intake
+rtk npm run test:hono-intake
+rtk npm run test:wpt-intake
 rtk npm run test:native-api
 rtk python3 benchmarks/scripts/run_static.py --duration 2 --runs 3 --startup-runs 5 --concurrency 1,8,32 --output-prefix benchmarks/results/2026-07-14-m5-max-static-preview
 rtk python3 benchmarks/scripts/run_static.py --workload hono-basic --duration 1 --runs 3 --startup-runs 5 --concurrency 1,8 --output-prefix benchmarks/results/2026-07-15-m5-max-hono-preview
@@ -170,10 +186,11 @@ rtk python3 benchmarks/scripts/run_static.py --workload hono-basic --duration 1 
 
 ## Active slice
 
-Compatibility substrate: generalize the first native Hono route to multiple
-routes and request-dependent handlers while extending the executable function
-slice with locals, record property access, branches, and closures. Type-layout specialization
-should handle closed request-time records without pretending their values are
+Compatibility substrate: compile the next complete-basic-example frontier:
+route patterns and request-dependent handlers, nested applications, and the
+remaining middleware. Extend the executable function slice with locals, record
+property access, branches, and closures. Type-layout specialization should
+handle closed request-time records without pretending their values are
 compile-time constants.
 Test262 cases move from syntax intake to native execution only when their
 complete semantics are implemented.
@@ -181,7 +198,8 @@ complete semantics are implemented.
 ## Resume point
 
 Read `README.md`, `doc/COMPATIBILITY.md`, and `doc/BACKLOG.md`. Run
-`npm run audit:hono-basic` to see the full-package requirement frontier. Extend
-the installed `get` closure from the traced default application and execute its
-upstream `#addRoute` effects; do not special-case Hono routing. Run
-the verification commands recorded here before moving an item to verified.
+`npm run audit:hono-basic` for graph-level requirements, then evaluate
+`vendor/hono-examples/basic/src/index.ts` to find the next reachable source
+frontier. Preserve upstream registration and middleware semantics rather than
+special-casing Hono routes. Run the verification commands recorded here before
+moving an item to verified.

@@ -10,7 +10,9 @@ general JavaScript compatibility.
 | Input | Pin | Purpose |
 | --- | --- | --- |
 | Hono | `vendor/hono`, tag `v4.12.30`, commit `b2ae3a2204a48ce15a26448fd746d39745eb1837` | Upstream TypeScript source and Hono behavior |
+| Hono examples | `vendor/hono-examples`, commit `3b0b62875a0e1265763fea1c6388866d5697ef81` | Complete upstream basic application and selected behavior test |
 | Test262 | `vendor/test262`, commit `f2d1435644797268dca1f7988cad5a4e89ccd8d2` | Allowlisted ECMAScript semantics |
+| WPT | selected source at revision `08e168922e0c0d42250335a40e679fa5123489df` | Web API behavior provenance; not a full submodule |
 
 Both inputs are shallow Git submodules whose gitlinks record the exact revision.
 Test262 cases admitted to execution must preserve their upstream path and
@@ -61,11 +63,19 @@ route and one router insertion. The retained handler then follows upstream
 path-checked native HIR.
 
 The upstream basic example imports the full `hono` entry rather than
-`hono/tiny`. `tests/compat/hono/basic-smoke.ts` preserves its first `GET /`
-route as a second tracer. That graph reaches 27 runtime modules, 4,177 lines,
-and 117,684 source bytes. It selects the same constructed-application root. The
-complete 110-line basic example and its middleware imports remain future intake
-work; this first-route tracer is not presented as full example compatibility.
+`hono/tiny`. The complete 110-line application and its selected behavior test
+are pinned in `vendor/hono-examples` and checked by the Hono intake suite. The
+manifest records all 16 `app`/`book` GET and POST registrations. The intake is
+source provenance, not a compilation claim: `tests/compat/hono/basic-smoke.ts`
+still preserves only its first `GET /` route as a compiling tracer.
+
+A two-route tracer compiles the basic example's `/` and `/hello` registrations
+into ordered exact-path native dispatch. A separate tracer evaluates the actual
+upstream `poweredBy()` factory and middleware closure, lowers its post-handler
+header mutation, and reproduces the selected upstream test's root status and
+`X-Powered-By: Hono` behavior over native HTTP. The complete basic application
+still contains unsupported dynamic patterns, request-dependent handlers,
+nested applications, POST routes, and additional middleware.
 
 ### Type-only API overlay
 
@@ -159,9 +169,9 @@ This is specialization evidence feeding a deliberately narrow native route.
 The default-exported app is now the compile root, so unused methods such as
 `route()` do not set the frontier. Hono's constructor chain completes
 symbolically with 21 fields, then the installed `get` closure executes through
-private `#addRoute`. The evaluator retains one closed route and observes one
-router insertion. The single static GET artifact now enters HIR and native
-path dispatch; multiple and dynamic routes remain pending. The trace and
+private `#addRoute`. The evaluator retains closed routes and observes their
+router insertions. Multiple ordered static GET artifacts now enter HIR and
+native exact-path dispatch; dynamic patterns remain pending. The trace and
 evaluator contract are recorded in
 `doc/APPLICATION_INITIALIZATION.md`.
 
@@ -227,7 +237,13 @@ body is compiled through the general string-function path and checked through a
 real HTTP request. The exact-source Hono E2E reaches the same HIR response
 operation by evaluating upstream `Context.text()` and the standard
 `new Response(text)` fast path; it does not depend on the temporary source
-intrinsic. General Response construction remains pending.
+intrinsic. Closed static response headers now lower through a bounded native
+writer. The writer validates names and values, replaces names
+case-insensitively, and emits custom headers on the wire. The upstream
+`poweredBy()` middleware uses this path to produce `X-Powered-By: Hono`. The
+pinned WPT casing source is connected to native-derived ABI coverage, but is
+not yet executed as JavaScript. General Response and Headers construction
+remains pending.
 
 Closed records and dynamic maps are separate compiler concepts. A record has a
 known layout and may use direct field offsets; a map has runtime membership and
