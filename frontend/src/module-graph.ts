@@ -136,6 +136,15 @@ function resolveReference(
 }
 
 function resolveFile(candidate: string): string | undefined {
+  const sourceSubstitution = sourceExtensionSubstitution(candidate);
+  if (sourceSubstitution !== undefined) {
+    for (const extension of [".ts", ".tsx", path.extname(candidate)]) {
+      const file = `${sourceSubstitution}${extension}`;
+      if (isFile(file)) {
+        return path.resolve(file);
+      }
+    }
+  }
   for (const extension of extensions) {
     const file = `${candidate}${extension}`;
     if (isFile(file)) {
@@ -149,6 +158,13 @@ function resolveFile(candidate: string): string | undefined {
     }
   }
   return undefined;
+}
+
+function sourceExtensionSubstitution(candidate: string): string | undefined {
+  const extension = path.extname(candidate);
+  return [".js", ".mjs", ".cjs"].includes(extension)
+    ? candidate.slice(0, -extension.length)
+    : undefined;
 }
 
 function isFile(file: string): boolean {

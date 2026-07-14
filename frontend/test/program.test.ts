@@ -51,6 +51,33 @@ test("lowers nested component calls without a JSX object tree", () => {
   ]);
 });
 
+test("compiles an imported component through the runtime module graph", () => {
+  const moduleName = crypto.randomUUID();
+  writeFileSync(path.join(directory, `${moduleName}.tsx`), `
+    export function Heading(): JSX.Element { return <h1>Hello from a module</h1>; }
+  `);
+  const entry = path.join(directory, `${crypto.randomUUID()}.tsx`);
+  writeFileSync(entry, `
+    import {Heading} from "./${moduleName}.js";
+    function Page(): JSX.Element { return <main><Heading /></main>; }
+    export function GET(request: Request): Response { return Response.html(<Page />); }
+  `);
+
+  const hir = compileEntry(entry, {sdkPath});
+
+  assert.equal(hir.modules.length, 2);
+  assert.equal(hir.statistics.modules, 2);
+  assert.deepEqual(hir.components.map(component => component.name), ["Page", "Heading"]);
+  assert.deepEqual(hir.components[0]?.html.map(op => op.kind), [
+    "writeStatic",
+    "callComponent",
+    "writeStatic",
+  ]);
+  assert.equal(hir.components[0]?.html[1]?.kind === "callComponent"
+    ? hir.components[0].html[1].component
+    : -1, 1);
+});
+
 for (const [name, source, code] of [
   ["any", `function Bad(value: any): JSX.Element { return <p>Bad</p>; }`, "TINY1001"],
   ["classes", `class Bad {}`, "TINY1002"],

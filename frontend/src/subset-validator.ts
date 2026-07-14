@@ -49,16 +49,6 @@ export function validateForbiddenSyntax(sourceFile: ts.SourceFile): void {
       }
     }
 
-    if (ts.isImportDeclaration(node)) {
-      throw tinyError(
-        "TINY1005",
-        "imports are not supported by the first static TinyTSX slice",
-        node,
-        undefined,
-        sourceFile,
-      );
-    }
-
     if (ts.isThrowStatement(node) || ts.isTryStatement(node)) {
       throw tinyError("TINY1006", "exceptions are not supported by TinyTSX", node, undefined, sourceFile);
     }

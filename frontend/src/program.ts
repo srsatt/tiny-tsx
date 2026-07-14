@@ -4,6 +4,7 @@ import {CompileFailure, fromTypeScript, spanOf, tinyError} from "./diagnostics.j
 import type {Component, Handler, HirProgram} from "./hir.js";
 import {StringTable} from "./hir.js";
 import {lowerComponentBody} from "./jsx-lowering.js";
+import {loadModuleGraph} from "./module-graph.js";
 import {validateForbiddenSyntax} from "./subset-validator.js";
 
 export interface CompileOptions {
@@ -13,10 +14,15 @@ export interface CompileOptions {
 export function compileEntry(entryPath: string, options: CompileOptions): HirProgram {
   const entry = path.resolve(entryPath);
   const sdk = path.resolve(options.sdkPath);
+  const graph = loadModuleGraph(entry);
+  if (graph.diagnostics.length > 0) {
+    throw new CompileFailure(graph.diagnostics);
+  }
   const program = ts.createProgram({
     rootNames: [entry, sdk],
     options: {
       noEmit: true,
+      allowJs: true,
       strict: true,
       skipLibCheck: true,
       target: ts.ScriptTarget.ES2022,
@@ -35,12 +41,26 @@ export function compileEntry(entryPath: string, options: CompileOptions): HirPro
     }]);
   }
 
-  validateForbiddenSyntax(sourceFile);
+  const sourceFiles = graph.modules.map(module => {
+    const loaded = program.getSourceFile(module.path);
+    if (loaded === undefined) {
+      throw new CompileFailure([{
+        code: "TINY0001",
+        message: `TypeScript did not load runtime module: ${module.path}`,
+      }]);
+    }
+    return loaded;
+  });
+  for (const module of sourceFiles) {
+    validateForbiddenSyntax(module);
+  }
   const typeScriptDiagnostics = ts.getPreEmitDiagnostics(program);
   if (typeScriptDiagnostics.length > 0) {
     throw new CompileFailure(typeScriptDiagnostics.map(fromTypeScript));
   }
-  const componentDeclarations = sourceFile.statements.filter(isComponentDeclaration);
+  const componentDeclarations = sourceFiles.flatMap(module =>
+    module.statements.filter(isComponentDeclaration)
+  );
   if (componentDeclarations.length === 0) {
     throw tinyError("TINY1100", "entry module must declare at least one JSX component", sourceFile);
   }
@@ -57,6 +77,7 @@ export function compileEntry(entryPath: string, options: CompileOptions): HirPro
   const strings = new StringTable();
   const components: Component[] = componentDeclarations.map((declaration, id) => {
     const name = declaration.name!.text;
+    const componentSource = declaration.getSourceFile();
     if (declaration.parameters.length !== 0) {
       throw tinyError(
         "TINY1102",
@@ -68,8 +89,8 @@ export function compileEntry(entryPath: string, options: CompileOptions): HirPro
     return {
       id,
       name,
-      span: spanOf(declaration, sourceFile),
-      html: lowerComponentBody(expression, sourceFile, componentIds, strings),
+      span: spanOf(declaration, componentSource),
+      html: lowerComponentBody(expression, componentSource, componentIds, strings),
     };
   });
 
@@ -91,12 +112,12 @@ export function compileEntry(entryPath: string, options: CompileOptions): HirPro
     version: 1,
     target: "aarch64-apple-darwin",
     entry,
-    modules: [{path: entry}],
+    modules: graph.modules.map(module => ({path: module.path})),
     components,
     handlers: [handler],
     staticStrings: strings.values,
     statistics: {
-      modules: 1,
+      modules: graph.modules.length,
       components: components.length,
       staticHtmlBytes,
       dynamicHtmlExpressions: 0,

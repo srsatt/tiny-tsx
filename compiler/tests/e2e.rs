@@ -21,6 +21,21 @@ impl Drop for Server {
 
 #[test]
 fn builds_and_serves_static_tsx_as_native_macho() {
+    build_and_serve(
+        "examples/static-page/server.tsx",
+        "<html><body><h1>Hello from TinyTSX</h1></body></html>",
+    );
+}
+
+#[test]
+fn builds_and_serves_an_imported_component() {
+    build_and_serve(
+        "examples/multi-module/server.tsx",
+        "<html><body><main><h1>Imported component</h1></main></body></html>",
+    );
+}
+
+fn build_and_serve(entry: &str, expected_body: &str) {
     let root = repository_root();
     build_frontend(&root);
     let directory = temporary_directory();
@@ -29,7 +44,7 @@ fn builds_and_serves_static_tsx_as_native_macho() {
 
     let build = Command::new(env!("CARGO_BIN_EXE_tinytsx"))
         .current_dir(&root)
-        .args(["build", "examples/static-page/server.tsx", "--port"])
+        .args(["build", entry, "--port"])
         .arg(port.to_string())
         .arg("--output")
         .arg(&binary)
@@ -59,8 +74,11 @@ fn builds_and_serves_static_tsx_as_native_macho() {
 
     assert!(response.starts_with("HTTP/1.1 200 OK\r\n"), "{response}");
     assert!(response.contains("Content-Type: text/html; charset=utf-8\r\n"));
-    assert!(response.contains("Content-Length: 53\r\n"));
-    assert!(response.ends_with("<html><body><h1>Hello from TinyTSX</h1></body></html>"));
+    assert!(
+        response.contains(&format!("Content-Length: {}\r\n", expected_body.len())),
+        "{response}"
+    );
+    assert!(response.ends_with(expected_body));
 
     fs::remove_dir_all(directory).expect("remove test artifacts");
 }
