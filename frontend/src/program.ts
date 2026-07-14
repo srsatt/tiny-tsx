@@ -1,6 +1,7 @@
 import path from "node:path";
 import ts from "typescript";
 import {analyzeApplicationEntry} from "./application-entry.js";
+import {evaluateApplicationConstructor} from "./constructor-evaluator.js";
 import {lowerStagedConstants} from "./constant-lowering.js";
 import {CompileFailure, fromTypeScript, spanOf, tinyError} from "./diagnostics.js";
 import {FunctionLowerer} from "./function-lowering.js";
@@ -87,6 +88,14 @@ export function compileEntry(entryPath: string, options: CompileOptions): HirPro
       const chain = classPlan === undefined
         ? application.constructorName
         : displayRuntimeClassPlan(classPlan, process.cwd());
+      const evaluation = evaluateApplicationConstructor(graph, application);
+      if (evaluation !== undefined && evaluation.issues.length === 0) {
+        throw tinyError(
+          "TINY1401",
+          `default application \`${application.binding}\` executed constructor chain [${chain}] into ${evaluation.fields.length} closed fields; registration calls [${calls}] are not lowered yet`,
+          sourceFile.statements.find(statement => ts.isExportAssignment(statement)) ?? sourceFile,
+        );
+      }
       throw tinyError(
         "TINY1400",
         `default application \`${application.binding}\` resolves constructor chain [${chain}] and registers calls [${calls}]; native application initialization is not lowered yet`,

@@ -25,7 +25,7 @@ export interface RuntimeClassPlan {
   classes: RuntimeClassStep[];
 }
 
-interface ResolvedClass {
+export interface ResolvedRuntimeClass {
   module: SourceModule;
   declaration: ts.ClassDeclaration;
 }
@@ -39,13 +39,13 @@ export function resolveRuntimeClassPlan(
   if (entry === undefined) {
     return undefined;
   }
-  const resolved = resolveLocal(entry, application.constructorName, modules, new Set());
+  const resolved = resolveApplicationRuntimeClass(graph, application);
   if (resolved === undefined) {
     return undefined;
   }
   const classes: RuntimeClassStep[] = [];
   const active = new Set<string>();
-  let current: ResolvedClass | undefined = resolved;
+  let current: ResolvedRuntimeClass | undefined = resolved;
   while (current !== undefined) {
     const key = `${current.module.path}\0${current.declaration.name?.text ?? "<anonymous>"}`;
     if (active.has(key)) {
@@ -62,7 +62,7 @@ export function resolveRuntimeClassPlan(
         : {constructorSpan: spanOf(constructor, current.module.sourceFile)}),
       operations: constructor?.body?.statements.map(classifyConstructorOperation) ?? [],
     });
-    current = resolveBaseClass(current, modules);
+    current = resolveBaseRuntimeClass(current, modules);
   }
   return {classes};
 }
@@ -73,10 +73,21 @@ export function displayRuntimeClassPlan(plan: RuntimeClassPlan, root: string): s
     .join(" -> ");
 }
 
-function resolveBaseClass(
-  resolved: ResolvedClass,
+export function resolveApplicationRuntimeClass(
+  graph: ModuleGraph,
+  application: ApplicationEntry,
+): ResolvedRuntimeClass | undefined {
+  const modules = new Map(graph.modules.map(module => [module.path, module]));
+  const entry = modules.get(graph.entry);
+  return entry === undefined
+    ? undefined
+    : resolveLocal(entry, application.constructorName, modules, new Set());
+}
+
+export function resolveBaseRuntimeClass(
+  resolved: ResolvedRuntimeClass,
   modules: ReadonlyMap<string, SourceModule>,
-): ResolvedClass | undefined {
+): ResolvedRuntimeClass | undefined {
   const heritage = resolved.declaration.heritageClauses?.find(clause =>
     clause.token === ts.SyntaxKind.ExtendsKeyword
   );
@@ -91,7 +102,7 @@ function resolveExport(
   exportedName: string,
   modules: ReadonlyMap<string, SourceModule>,
   active: Set<string>,
-): ResolvedClass | undefined {
+): ResolvedRuntimeClass | undefined {
   const key = `${module.path}\0export:${exportedName}`;
   if (active.has(key)) {
     return undefined;
@@ -133,7 +144,7 @@ function resolveLocal(
   localName: string,
   modules: ReadonlyMap<string, SourceModule>,
   active: Set<string>,
-): ResolvedClass | undefined {
+): ResolvedRuntimeClass | undefined {
   const key = `${module.path}\0local:${localName}`;
   if (active.has(key)) {
     return undefined;
