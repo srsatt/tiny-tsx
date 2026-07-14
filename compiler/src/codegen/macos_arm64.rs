@@ -26,8 +26,7 @@ pub fn emit(program: &Program, options: Options) -> Result<String, String> {
         );
     }
 
-    let handler = &program.handlers[0];
-    emit_handler(&mut assembly, handler, program)?;
+    emit_handlers(&mut assembly, program)?;
     emit_config(&mut assembly, options);
     emit_static_data(&mut assembly, program)?;
     Ok(assembly)
@@ -113,28 +112,53 @@ fn emit_value_function(
     Ok(())
 }
 
-fn emit_handler(
-    assembly: &mut String,
-    handler: &crate::hir::Handler,
-    program: &Program,
-) -> Result<(), String> {
-    let response = &handler.response;
+fn emit_handlers(assembly: &mut String, program: &Program) -> Result<(), String> {
     writeln!(assembly, "\n.globl _tinytsx_handle_get").unwrap();
     writeln!(assembly, "_tinytsx_handle_get:").unwrap();
-    let frame_size = match response {
-        HandlerResponse::Text { value, .. } => value_frame_size(32, value)?,
-        HandlerResponse::Html { .. } => 32,
-    };
+    let frame_size = program
+        .handlers
+        .iter()
+        .map(|handler| match &handler.response {
+            HandlerResponse::Text { value, .. } => value_frame_size(32, value),
+            HandlerResponse::Html { .. } => Ok(32),
+        })
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        .max()
+        .unwrap_or(32);
     emit_prologue(assembly, frame_size);
     preserve_request_context(assembly);
     let return_label = "Ltinytsx_handle_get_return";
-    let not_found_label = "Ltinytsx_handle_get_not_found";
-    writeln!(assembly, "    ldr x0, [sp, #24]").unwrap();
-    writeln!(assembly, "    adrp x1, Ltinytsx_handler_path@PAGE").unwrap();
-    writeln!(assembly, "    add x1, x1, Ltinytsx_handler_path@PAGEOFF").unwrap();
-    emit_immediate(assembly, "x2", handler.path.len() as u64);
-    writeln!(assembly, "    bl _tinytsx_request_path_equals").unwrap();
-    writeln!(assembly, "    cbz w0, {not_found_label}").unwrap();
+    for (index, handler) in program.handlers.iter().enumerate() {
+        writeln!(assembly, "    ldr x0, [sp, #24]").unwrap();
+        writeln!(assembly, "    adrp x1, Ltinytsx_handler_path_{index}@PAGE").unwrap();
+        writeln!(
+            assembly,
+            "    add x1, x1, Ltinytsx_handler_path_{index}@PAGEOFF"
+        )
+        .unwrap();
+        emit_immediate(assembly, "x2", handler.path.len() as u64);
+        writeln!(assembly, "    bl _tinytsx_request_path_equals").unwrap();
+        writeln!(assembly, "    cbnz w0, Ltinytsx_handle_get_match_{index}").unwrap();
+    }
+    emit_immediate(assembly, "x0", 5);
+    writeln!(assembly, "    b {return_label}").unwrap();
+    for (index, handler) in program.handlers.iter().enumerate() {
+        writeln!(assembly, "Ltinytsx_handle_get_match_{index}:").unwrap();
+        emit_handler_response(assembly, &handler.response, program, return_label)?;
+        writeln!(assembly, "    b {return_label}").unwrap();
+    }
+    writeln!(assembly, "{return_label}:").unwrap();
+    emit_epilogue(assembly, frame_size);
+    Ok(())
+}
+
+fn emit_handler_response(
+    assembly: &mut String,
+    response: &HandlerResponse,
+    program: &Program,
+    return_label: &str,
+) -> Result<(), String> {
     match response {
         HandlerResponse::Html { component } => {
             emit_response_begin(assembly, 1, return_label);
@@ -158,11 +182,6 @@ fn emit_handler(
             writeln!(assembly, "    bl _tinytsx_html_write_static").unwrap();
         }
     }
-    writeln!(assembly, "    b {return_label}").unwrap();
-    writeln!(assembly, "{not_found_label}:").unwrap();
-    emit_immediate(assembly, "x0", 5);
-    writeln!(assembly, "{return_label}:").unwrap();
-    emit_epilogue(assembly, frame_size);
     Ok(())
 }
 
@@ -274,9 +293,11 @@ fn scratch_slots(expression: &ValueExpression) -> usize {
 
 fn emit_static_data(assembly: &mut String, program: &Program) -> Result<(), String> {
     writeln!(assembly, "\n.section __TEXT,__const").unwrap();
-    writeln!(assembly, ".p2align 3").unwrap();
-    writeln!(assembly, "Ltinytsx_handler_path:").unwrap();
-    emit_bytes(assembly, program.handlers[0].path.as_bytes());
+    for (index, handler) in program.handlers.iter().enumerate() {
+        writeln!(assembly, ".p2align 3").unwrap();
+        writeln!(assembly, "Ltinytsx_handler_path_{index}:").unwrap();
+        emit_bytes(assembly, handler.path.as_bytes());
+    }
     for string in &program.static_strings {
         writeln!(assembly, ".p2align 3").unwrap();
         writeln!(assembly, "Ltinytsx_string_{}:", string.id).unwrap();
@@ -421,7 +442,7 @@ mod tests {
         assert!(first.contains("bl _tinytsx_html_write_static"));
         assert!(first.contains("bl _tinytsx_response_begin"));
         assert!(first.contains("bl _tinytsx_request_path_equals"));
-        assert!(first.contains("Ltinytsx_handler_path:"));
+        assert!(first.contains("Ltinytsx_handler_path_0:"));
         assert!(first.contains("bl _tinytsx_function_0"));
         assert!(first.contains("_tinytsx_function_0:"));
         assert!(first.contains("stp x0, x1, [sp, #16]"));

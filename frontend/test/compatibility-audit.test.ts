@@ -190,6 +190,23 @@ test("preserves upstream mergePath semantics across two basic routes", () => {
     {method: "GET", path: "/hello", body: "This is /hello"},
   ]);
   assert.equal(result?.routerInsertions, 2);
+
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+    apiAliases: {hono: path.join(repository, "tests/compat/hono/api.d.ts")},
+  });
+  assert.deepEqual(hir.handlers.map(handler => ({
+    method: handler.method,
+    path: handler.path,
+    body: handler.response.kind === "text"
+      && handler.response.value.kind === "stringLiteral"
+      ? hir.staticStrings[handler.response.value.string]?.value
+      : undefined,
+  })), [
+    {method: "GET", path: "/", body: "Hono!!"},
+    {method: "GET", path: "/hello", body: "This is /hello"},
+  ]);
 });
 
 test("lowers the tiny-preset Hono route into native HIR", () => {

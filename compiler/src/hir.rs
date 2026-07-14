@@ -170,31 +170,39 @@ impl Program {
         if self.target != "aarch64-apple-darwin" {
             return Err(format!("unsupported HIR target `{}`", self.target));
         }
-        if self.handlers.len() != 1 || self.handlers[0].method != "GET" {
-            return Err("HIR must contain exactly one GET handler".to_owned());
+        if self.handlers.is_empty() || self.handlers.iter().any(|handler| handler.method != "GET") {
+            return Err(
+                "HIR must contain at least one GET handler and no other methods".to_owned(),
+            );
         }
-        if !self.handlers[0].path.starts_with('/') || self.handlers[0].path.contains('?') {
-            return Err("GET handler path must be an absolute path without a query".to_owned());
-        }
-        match &self.handlers[0].response {
-            HandlerResponse::Html { component } if *component >= self.components.len() => {
-                return Err("GET handler references a missing component".to_owned());
+        let mut handler_paths = HashSet::new();
+        for handler in &self.handlers {
+            if !handler.path.starts_with('/') || handler.path.contains('?') {
+                return Err("GET handler path must be an absolute path without a query".to_owned());
             }
-            HandlerResponse::Text {
-                value,
-                content_type,
-            } => {
-                if content_type.as_deref().is_some_and(|value| {
-                    !matches!(
-                        value,
-                        "text/plain; charset=UTF-8" | "text/plain;charset=UTF-8"
-                    )
-                }) {
-                    return Err("GET text response has an unsupported content type".to_owned());
+            if !handler_paths.insert(handler.path.as_str()) {
+                return Err(format!("duplicate GET handler path `{}`", handler.path));
+            }
+            match &handler.response {
+                HandlerResponse::Html { component } if *component >= self.components.len() => {
+                    return Err("GET handler references a missing component".to_owned());
                 }
-                self.validate_expression(value, 0)?;
+                HandlerResponse::Text {
+                    value,
+                    content_type,
+                } => {
+                    if content_type.as_deref().is_some_and(|value| {
+                        !matches!(
+                            value,
+                            "text/plain; charset=UTF-8" | "text/plain;charset=UTF-8"
+                        )
+                    }) {
+                        return Err("GET text response has an unsupported content type".to_owned());
+                    }
+                    self.validate_expression(value, 0)?;
+                }
+                _ => {}
             }
-            _ => {}
         }
         for (index, component) in self.components.iter().enumerate() {
             if component.id != index {

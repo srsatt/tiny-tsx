@@ -198,24 +198,35 @@ function lowerApplicationInitialization(
   sourceFile: ts.SourceFile,
   initialization: ApplicationInitializationEvaluation,
 ): HirProgram | undefined {
-  if (initialization.routes.length !== 1) {
+  if (initialization.routes.length === 0) {
     return undefined;
   }
-  const route = initialization.routes[0]!;
-  const response = route.response;
-  if (
+  if (initialization.routes.some(route =>
     route.method !== "GET"
-    || response === undefined
-    || response.kind !== "text"
-    || response.status !== 200
-    || response.contentType !== "text/plain;charset=UTF-8"
-  ) {
+    || route.response === undefined
+    || route.response.kind !== "text"
+    || route.response.status !== 200
+    || route.response.contentType !== "text/plain;charset=UTF-8"
+  )) {
     return undefined;
   }
   const exportNode = sourceFile.statements.find(statement => ts.isExportAssignment(statement)) ?? sourceFile;
   const span = spanOf(exportNode, sourceFile);
   const strings = new StringTable();
-  const body = strings.intern(response.body);
+  const handlers = initialization.routes.map(route => {
+    const response = route.response!;
+    const body = strings.intern(response.body);
+    return {
+      method: "GET" as const,
+      path: route.path,
+      response: {
+        kind: "text" as const,
+        value: {kind: "stringLiteral" as const, string: body, span},
+        contentType: response.contentType as "text/plain;charset=UTF-8",
+      },
+      span,
+    };
+  });
   return {
     version: 2,
     target: "aarch64-apple-darwin",
@@ -223,16 +234,7 @@ function lowerApplicationInitialization(
     modules: graph.modules.map(module => ({path: module.path})),
     functions: [],
     components: [],
-    handlers: [{
-      method: "GET",
-      path: route.path,
-      response: {
-        kind: "text",
-        value: {kind: "stringLiteral", string: body, span},
-        contentType: response.contentType,
-      },
-      span,
-    }],
+    handlers,
     staticStrings: strings.values,
     constants: [],
     statistics: {
@@ -240,7 +242,10 @@ function lowerApplicationInitialization(
       functions: 0,
       components: 0,
       constants: 0,
-      staticHtmlBytes: Buffer.byteLength(response.body, "utf8"),
+      staticHtmlBytes: strings.values.reduce(
+        (total, value) => total + Buffer.byteLength(value.value, "utf8"),
+        0,
+      ),
       dynamicHtmlExpressions: 0,
     },
   };

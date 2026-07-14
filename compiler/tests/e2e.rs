@@ -70,11 +70,28 @@ fn builds_and_serves_the_pinned_hono_basic_route() {
             "--api",
             "hono=tests/compat/hono/api.d.ts",
         ],
+        &[],
+    );
+}
+
+#[test]
+fn builds_and_dispatches_the_first_two_hono_basic_routes() {
+    build_and_serve_with_options(
+        "tests/compat/hono/multi-route-smoke.ts",
+        "Hono!!",
+        "text/plain;charset=UTF-8",
+        &[
+            "--alias",
+            "hono=vendor/hono/src/index.ts",
+            "--api",
+            "hono=tests/compat/hono/api.d.ts",
+        ],
+        &[("/hello", "This is /hello", "text/plain;charset=UTF-8")],
     );
 }
 
 fn build_and_serve(entry: &str, expected_body: &str, expected_content_type: &str) {
-    build_and_serve_with_options(entry, expected_body, expected_content_type, &[]);
+    build_and_serve_with_options(entry, expected_body, expected_content_type, &[], &[]);
 }
 
 fn build_and_serve_with_options(
@@ -82,6 +99,7 @@ fn build_and_serve_with_options(
     expected_body: &str,
     expected_content_type: &str,
     frontend_options: &[&str],
+    additional_routes: &[(&str, &str, &str)],
 ) {
     let _build_guard = NATIVE_BUILD.lock().expect("lock native E2E build");
     let root = repository_root();
@@ -131,6 +149,28 @@ fn build_and_serve_with_options(
         "{response}"
     );
     assert!(response.ends_with(expected_body));
+
+    for (path, body, content_type) in additional_routes {
+        let mut route = TcpStream::connect(("127.0.0.1", port)).expect("connect for route");
+        write!(
+            route,
+            "GET {path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+        )
+        .expect("send route request");
+        let mut route_response = String::new();
+        route
+            .read_to_string(&mut route_response)
+            .expect("read route response");
+        assert!(
+            route_response.starts_with("HTTP/1.1 200 OK\r\n"),
+            "{route_response}"
+        );
+        assert!(
+            route_response.contains(&format!("Content-Type: {content_type}\r\n")),
+            "{route_response}"
+        );
+        assert!(route_response.ends_with(body), "{route_response}");
+    }
 
     let mut missing = TcpStream::connect(("127.0.0.1", port)).expect("connect for missing route");
     missing
