@@ -129,6 +129,26 @@ pub unsafe extern "C" fn tinytsx_response_begin(
     OK
 }
 
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tinytsx_request_path_equals(
+    request: *const TinyRequest,
+    expected: *const u8,
+    expected_len: usize,
+) -> u32 {
+    if request.is_null() || (expected.is_null() && expected_len != 0) {
+        return 0;
+    }
+    // SAFETY: Generated code passes the request supplied by this runtime.
+    let path = unsafe { &(*request).path };
+    if path.len != expected_len || (path.ptr.is_null() && path.len != 0) {
+        return 0;
+    }
+    // SAFETY: Both views are valid for their declared lengths during this call.
+    let actual = unsafe { slice::from_raw_parts(path.ptr, path.len) };
+    let expected = unsafe { slice::from_raw_parts(expected, expected_len) };
+    u32::from(actual == expected)
+}
+
 pub struct RenderedResponse {
     pub application_status: u32,
     pub http_status: u16,

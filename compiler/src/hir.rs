@@ -41,6 +41,8 @@ pub enum HtmlOp {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Handler {
     pub method: String,
+    #[serde(default = "root_path")]
+    pub path: String,
     pub response: HandlerResponse,
     pub span: SourceSpan,
 }
@@ -163,6 +165,9 @@ impl Program {
         }
         if self.handlers.len() != 1 || self.handlers[0].method != "GET" {
             return Err("HIR must contain exactly one GET handler".to_owned());
+        }
+        if !self.handlers[0].path.starts_with('/') || self.handlers[0].path.contains('?') {
+            return Err("GET handler path must be an absolute path without a query".to_owned());
         }
         match &self.handlers[0].response {
             HandlerResponse::Html { component } if *component >= self.components.len() => {
@@ -333,6 +338,10 @@ impl Program {
         }
         Ok(())
     }
+}
+
+fn root_path() -> String {
+    "/".to_owned()
 }
 
 fn validate_constant_value(value: &ConstantValue, depth: usize) -> Result<(), String> {

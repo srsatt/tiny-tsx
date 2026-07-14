@@ -287,6 +287,7 @@ function lowerGetHandler(
   if (responseKind === "text") {
     return {
       method: "GET",
+      path: "/",
       response: {kind: "text", value: functions.lower(call.arguments[0]!)},
       span: spanOf(declaration, sourceFile),
     };
@@ -301,6 +302,7 @@ function lowerGetHandler(
   }
   return {
     method: "GET",
+    path: "/",
     response: {kind: "html", component},
     span: spanOf(declaration, sourceFile),
   };

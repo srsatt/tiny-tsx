@@ -1,6 +1,7 @@
 use super::{
     CONTENT_TYPE_HTML, CONTENT_TYPE_TEXT, INTERNAL_ERROR, OK, REQUEST_OOM, TinyResponseWriter,
-    TinyStringView, request, tinytsx_html_write_static, tinytsx_response_begin,
+    TinyStringView, request, tinytsx_html_write_static, tinytsx_request_path_equals,
+    tinytsx_response_begin,
 };
 
 #[test]
@@ -19,6 +20,18 @@ fn request_without_query_exposes_an_empty_query_view() {
     assert_eq!(view(&request.method), b"POST");
     assert_eq!(view(&request.path), b"/users");
     assert_eq!(view(&request.query), b"");
+}
+
+#[test]
+fn request_path_matching_uses_the_path_without_the_query() {
+    let request = request(b"GET", b"/users?expand=true");
+
+    assert_eq!(unsafe {
+        tinytsx_request_path_equals(&request, b"/users".as_ptr(), b"/users".len())
+    }, 1);
+    assert_eq!(unsafe {
+        tinytsx_request_path_equals(&request, b"/other".as_ptr(), b"/other".len())
+    }, 0);
 }
 
 #[test]

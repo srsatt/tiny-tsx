@@ -23,6 +23,7 @@ test("lowers a static component to one coalesced HTML fragment", () => {
   `);
 
   assert.equal(hir.version, 2);
+  assert.equal(hir.handlers[0]?.path, "/");
   assert.equal(hir.components.length, 1);
   assert.deepEqual(hir.components[0]?.html.map(op => op.kind), ["writeStatic"]);
   const stringId = hir.components[0]?.html[0]?.kind === "writeStatic"

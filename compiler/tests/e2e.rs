@@ -107,6 +107,20 @@ fn build_and_serve(entry: &str, expected_body: &str, expected_content_type: &str
     );
     assert!(response.ends_with(expected_body));
 
+    let mut missing = TcpStream::connect(("127.0.0.1", port)).expect("connect for missing route");
+    missing
+        .write_all(b"GET /missing HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
+        .expect("send missing-route request");
+    let mut missing_response = String::new();
+    missing
+        .read_to_string(&mut missing_response)
+        .expect("read missing-route response");
+    assert!(
+        missing_response.starts_with("HTTP/1.1 404 Not Found\r\n"),
+        "{missing_response}"
+    );
+    assert!(missing_response.ends_with("not found"), "{missing_response}");
+
     fs::remove_dir_all(directory).expect("remove test artifacts");
 }
 

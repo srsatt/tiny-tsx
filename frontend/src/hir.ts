@@ -98,6 +98,7 @@ export type HandlerResponse =
 
 export interface Handler {
   method: "GET";
+  path: string;
   response: HandlerResponse;
   span: SourceSpan;
 }
