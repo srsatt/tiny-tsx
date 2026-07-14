@@ -8,6 +8,7 @@ import type {Component, Handler, HirProgram} from "./hir.js";
 import {StringTable} from "./hir.js";
 import {lowerComponentBody} from "./jsx-lowering.js";
 import {loadModuleGraph} from "./module-graph.js";
+import {displayRuntimeClassPlan, resolveRuntimeClassPlan} from "./runtime-class-plan.js";
 import {analyzeStaging} from "./staging.js";
 import {validateForbiddenSyntax} from "./subset-validator.js";
 
@@ -82,9 +83,13 @@ export function compileEntry(entryPath: string, options: CompileOptions): HirPro
     const application = analyzeApplicationEntry(sourceFile);
     if (application !== undefined) {
       const calls = application.calls.map(call => call.method).join(", ") || "none";
+      const classPlan = resolveRuntimeClassPlan(graph, application);
+      const chain = classPlan === undefined
+        ? application.constructorName
+        : displayRuntimeClassPlan(classPlan, process.cwd());
       throw tinyError(
         "TINY1400",
-        `default application \`${application.binding}\` constructs ${application.constructorName} and registers calls [${calls}]; native application initialization is not lowered yet`,
+        `default application \`${application.binding}\` resolves constructor chain [${chain}] and registers calls [${calls}]; native application initialization is not lowered yet`,
         sourceFile.statements.find(statement => ts.isExportAssignment(statement)) ?? sourceFile,
       );
     }

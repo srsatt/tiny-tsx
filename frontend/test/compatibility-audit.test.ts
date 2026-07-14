@@ -10,6 +10,7 @@ import {auditCompatibility} from "../src/compatibility-audit.js";
 import {CompileFailure} from "../src/diagnostics.js";
 import {loadModuleGraph} from "../src/module-graph.js";
 import {compileEntry} from "../src/program.js";
+import {resolveRuntimeClassPlan} from "../src/runtime-class-plan.js";
 
 const directory = mkdtempSync(path.join(tmpdir(), "tinytsx-compat-"));
 const repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -78,6 +79,36 @@ test("traces the pinned Hono basic application initialization root", () => {
       argument.kind === "string" ? [argument.kind, argument.value] : [argument.kind]
     ),
   })), [{method: "get", arguments: [["string", "/"], ["function"]]}]);
+});
+
+test("resolves the pinned Hono constructor and base-class runtime sources", () => {
+  const entry = path.join(repository, "tests/compat/hono/basic-smoke.ts");
+  const graph = loadModuleGraph(entry, {
+    aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+  });
+  const application = analyzeApplicationEntry(graph.modules[0]!.sourceFile);
+  assert.ok(application);
+
+  const plan = resolveRuntimeClassPlan(graph, application);
+
+  assert.deepEqual(plan?.classes.map(step => ({
+    file: path.relative(repository, step.module),
+    name: step.name,
+    operations: step.operations,
+  })), [
+    {
+      file: "vendor/hono/src/hono.ts",
+      name: "Hono",
+      operations: ["superCall", "assignment"],
+    },
+    {
+      file: "vendor/hono/src/hono-base.ts",
+      name: "Hono",
+      operations: [
+        "variable", "forEach", "assignment", "assignment", "variable", "call", "assignment",
+      ],
+    },
+  ]);
 });
 
 test("the compiling frontend selects default Hono application initialization", () => {
