@@ -2,6 +2,7 @@
   "name": "tinytsx-workspace",
   "private": true,
   "scripts": {
+    "audit:hono": "npm run build:frontend && node frontend/dist/src/cli.js --audit-compat tests/compat/hono/smoke.ts --alias hono/tiny=vendor/hono/src/preset/tiny.ts",
     "build:frontend": "npm --prefix frontend run build",
     "benchmark:static": "python3 benchmarks/scripts/run_static.py",
     "test:benchmarks": "python3 -m unittest discover -s benchmarks/tests -p 'test_*.py'",

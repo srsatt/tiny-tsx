@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "upstream": {
+    "path": "vendor/hono",
+    "tag": "v4.12.30",
+    "commit": "b2ae3a2204a48ce15a26448fd746d39745eb1837"
+  },
+  "packageAliases": {
+    "hono/tiny": "vendor/hono/src/preset/tiny.ts"
+  },
+  "smokeEntry": "tests/compat/hono/smoke.ts"
+}
