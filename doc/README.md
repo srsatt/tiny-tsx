@@ -1,0 +1,14 @@
+# Project records
+
+This directory is the persistent working record for implementation sessions.
+The root specification files describe stable contracts; files here may change
+as work progresses.
+
+- `STATUS.md` records verified current state and exact resume instructions.
+- `BACKLOG.md` is the ordered, checkable work queue.
+- `DECISIONS.md` records implementation decisions that are too operational for
+  the stable specification but important for future changes.
+
+Update status and backlog in the same commit as the work they describe. Do not
+mark a capability complete until its listed verification has run successfully.
+
