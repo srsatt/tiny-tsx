@@ -69,12 +69,20 @@ routes:
 router insertions: 1
 ```
 
-Compilation currently emits `TINY1402`: upstream constructor and registration
-execution are complete, but this route artifact does not yet enter HIR or native
-request dispatch.
+The retained handler then runs against an initialized upstream `Context`. The
+evaluator follows Hono's actual `Context.text` fast-path condition into the
+standard `new Response(text)` constructor and derives status 200,
+`text/plain; charset=UTF-8`, and the closed body.
 
-The next compiler slice must lower the immutable route artifact into HIR,
-preserve its handler closure, and make native request dispatch consume it.
+The single closed route now enters HIR v2. Generated native code compares the
+borrowed request path with `/`, returns `NOT_FOUND` for a mismatch, and emits
+the evaluated response for a match. Both the `hono/tiny` tracer and the
+full-package first-route tracer compile; the latter is also covered by a real
+Mach-O HTTP E2E.
+
+This is deliberately a narrow AOT fast path. Additional routes, patterns,
+request-dependent handler bodies, non-200 responses, headers, middleware, and
+the general Context/Response runtime remain pending.
 
 Partial evaluation must execute the upstream source semantics. The trace is not
 permission to replace Hono routing with a separately implemented interface. If

@@ -95,8 +95,10 @@ commit message.
       `super`, the closed method loop, assignments, destructuring,
       `Object.assign`, conditionals, closures, and router construction.
 - [x] Invoke the installed `get` closure and execute its `#addRoute` effects.
-- [ ] Lower the evaluated route artifact and retained handler closure into HIR
-      and native request dispatch.
+- [x] Lower one evaluated static GET route and its upstream `Context.text`
+      response into HIR and path-checked native request dispatch.
+- [ ] Generalize native dispatch to multiple routes, patterns, middleware, and
+      request-dependent handler bodies.
 - [ ] Compile the required rest/spread operations.
 - [ ] Add a native RegExp backend and allowlisted Test262 cases.
 - [ ] Add Request, Response, Headers, URL, and encoding native APIs.

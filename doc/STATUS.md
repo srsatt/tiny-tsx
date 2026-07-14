@@ -57,7 +57,8 @@ produces and serves a native Mach-O executable from the example TSX source.
   call, and the default export before scanning unused imported method bodies.
   Both constructors and the installed `get` closure execute symbolically. The
   upstream `#addRoute` path produces one closed `GET /` route and one router
-  insertion, and compilation now reports `TINY1402` pending native dispatch.
+  insertion. Its retained handler evaluates through upstream `Context.text`
+  and `new Response(text)`, then lowers into path-checked native HIR.
 - A second tracer imports the full `hono` entry and preserves the upstream basic
   example's first route. Its graph contains 27 modules, 4,177 lines, and 117,684
   bytes and selects the same constructed application root. This is not yet the
@@ -129,6 +130,10 @@ produces and serves a native Mach-O executable from the example TSX source.
 - Application initialization invokes the retained upstream `get` closure,
   resolves imported `mergePath` and private `#addRoute`, and records one closed
   route plus one symbolic router insertion with zero issues.
+- The full-package `basic-smoke.ts` tracer now builds as a native Mach-O server.
+  Its E2E verifies `GET /` returns `Hono!!` with the pinned Hono content type and
+  `GET /missing` returns 404. Compiler `--alias` and `--api` options preserve the
+  runtime/declaration split through native builds.
 - Closed object literals are records with compile-time fields; explicit `Map`
   construction remains unstaged dynamic work. The two models and declaration-
   overlay boundary are persisted in `doc/OBJECT_MODEL.md`.
@@ -148,9 +153,10 @@ rtk cargo run -q -p tinytsx -- build examples/static-page/server.tsx --port 3017
 rtk curl -i --max-time 5 http://127.0.0.1:3017/
 rtk npm run test:benchmarks
 rtk npm run audit:hono
-rtk npm run try:compile:hono  # expected TINY1402 at the default export
+rtk npm run try:compile:hono  # emits single-route HIR
 rtk npm run audit:hono-basic
-rtk npm run try:compile:hono-basic  # expected TINY1402 at the default export
+rtk npm run try:compile:hono-basic  # emits full-package single-route HIR
+rtk cargo run -q -p tinytsx -- build tests/compat/hono/basic-smoke.ts --alias hono=vendor/hono/src/index.ts --api hono=tests/compat/hono/api.d.ts --output dist/hono-basic
 rtk npm run test:test262-intake
 rtk npm run test:native-api
 rtk python3 benchmarks/scripts/run_static.py --duration 2 --runs 3 --startup-runs 5 --concurrency 1,8,32 --output-prefix benchmarks/results/2026-07-14-m5-max-static-preview
@@ -158,9 +164,9 @@ rtk python3 benchmarks/scripts/run_static.py --duration 2 --runs 3 --startup-run
 
 ## Active slice
 
-Compatibility substrate: lower the evaluated Hono route artifact into HIR and
-native dispatch while extending the executable function slice with locals,
-record property access, branches, and closures. Type-layout specialization
+Compatibility substrate: generalize the first native Hono route to multiple
+routes and request-dependent handlers while extending the executable function
+slice with locals, record property access, branches, and closures. Type-layout specialization
 should handle closed request-time records without pretending their values are
 compile-time constants.
 Test262 cases move from syntax intake to native execution only when their

@@ -55,9 +55,10 @@ methods. Runtime resolution follows the full package's `index.ts` re-export to
 `hono.ts:Hono` and then its `HonoBase` import. It reports `TINY1400` at the
 application export if constructor evaluation encounters an unsupported effect.
 The pinned basic source completes both constructors and the actual installed
-`get` closure without issues. It advances to `TINY1402` after upstream
-`#addRoute` produces one closed `GET /` route and one router insertion; native
-dispatch has not yet consumed that artifact.
+`get` closure without issues. Upstream `#addRoute` produces one closed `GET /`
+route and one router insertion. The retained handler then follows upstream
+`Context.text` into `new Response(text)`; that route and response now lower to
+path-checked native HIR.
 
 The upstream basic example imports the full `hono` entry rather than
 `hono/tiny`. `tests/compat/hono/basic-smoke.ts` preserves its first `GET /`
@@ -154,13 +155,14 @@ computed write with seven exact keys: `get`, `post`, `put`, `delete`, `options`,
 computed accesses in the `hono/tiny` graph stay classified as runtime and retain
 their unsupported boundary.
 
-This is specialization evidence, not native route-table code generation yet.
+This is specialization evidence feeding a deliberately narrow native route.
 The default-exported app is now the compile root, so unused methods such as
 `route()` do not set the frontier. Hono's constructor chain completes
 symbolically with 21 fields, then the installed `get` closure executes through
 private `#addRoute`. The evaluator retains one closed route and observes one
-router insertion. Feeding that artifact into HIR and native dispatch is next.
-The trace and evaluator contract are recorded in
+router insertion. The single static GET artifact now enters HIR and native
+path dispatch; multiple and dynamic routes remain pending. The trace and
+evaluator contract are recorded in
 `doc/APPLICATION_INITIALIZATION.md`.
 
 The allowlisted Test262 array-spread source is parsed by the intake suite and
@@ -179,9 +181,8 @@ Mach-O read-only data section. The encoding is recorded in
 
 The pinned Hono staging test now proves that `allMethods` reaches this final HIR
 shape as an array of seven typed strings. This happens below the whole-program
-compile boundary: the exact-source Hono probe executes its traced registration
-call but stops before the resulting route enters HIR, so no claim is made that
-a Hono executable is produced yet.
+compile boundary. The exact-source Hono probe now continues through route HIR,
+native assembly/linking, and a real HTTP E2E for its first static route.
 A separate compilable staged-constants example passes frontend lowering, Rust
 HIR parsing, native assembly/linking, and a real HTTP test.
 
@@ -223,11 +224,10 @@ content type from generated code to the runtime.
 The native response uses status 200 and `text/plain; charset=UTF-8`, matching the
 pinned Hono `Context.text()` contract. The first Hono basic route's `"Hono!!"`
 body is compiled through the general string-function path and checked through a
-real HTTP request. This is response-semantics evidence, not a claim that upstream
-Hono compiles: the exact-source probes stop after producing a compile-time route
-artifact. Once route dispatch and `Context.text()` lower, they
-should reach the same HIR response operation rather than depend on the temporary
-source intrinsic.
+real HTTP request. The exact-source Hono E2E reaches the same HIR response
+operation by evaluating upstream `Context.text()` and the standard
+`new Response(text)` fast path; it does not depend on the temporary source
+intrinsic. General Response construction remains pending.
 
 Closed records and dynamic maps are separate compiler concepts. A record has a
 known layout and may use direct field offsets; a map has runtime membership and

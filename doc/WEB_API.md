@@ -13,7 +13,7 @@ The current boundary is:
 | API | Type contract | Native behavior |
 | --- | --- | --- |
 | `Request` | standard DOM declaration | borrowed method, path, and query ABI views |
-| `Response` | standard DOM declaration | bounded body writer, status, HTML/text/JSON content-type IDs |
+| `Response` | standard DOM declaration | bounded body writer, status, HTML/text/JSON content-type IDs; closed `new Response(string)` AOT fast path |
 | `Headers` | standard DOM declaration | pending |
 | `URL` / `URLSearchParams` | standard DOM declaration | pending |
 | body and stream types | standard DOM declaration | pending |
@@ -29,6 +29,13 @@ TypeScript errors.
 Hono's application-facing types remain in `tests/compat/hono/api.d.ts`. That
 overlay narrows the imported package surface for application type checking but
 does not replace upstream runtime source or Web-standard declarations.
+
+The first executable Hono route evaluates the upstream `Context.text()`
+condition and reaches `new Response(text)` with a closed string at compile time.
+This preserves the pinned body, status, and content type in native HIR. It is
+not a general runtime `Response` implementation: dynamic bodies, init objects,
+headers, cloning, body consumption, and streams still require native behavior
+tests and selected Web Platform Tests.
 
 Native API behavior belongs in the dedicated runtime tests. Selected Web
 Platform Tests should be added as each implementation becomes executable; a
