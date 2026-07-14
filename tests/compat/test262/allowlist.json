@@ -24,6 +24,11 @@
       "path": "test/language/expressions/async-function/expression-returns-promise.js",
       "feature": "async-await",
       "mode": "syntax"
+    },
+    {
+      "path": "test/language/expressions/array/spread-sngl-literal.js",
+      "feature": "constant-array-spread",
+      "mode": "syntax"
     }
   ]
 }

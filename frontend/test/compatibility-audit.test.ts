@@ -53,6 +53,9 @@ test("audits the pinned hono/tiny runtime graph", () => {
   assert.ok(requirement(report, "loops") > 0);
   assert.ok(requirement(report, "regular-expressions") > 0);
   assert.ok(report.builtins.some(builtin => builtin.name === "Response"));
+  assert.ok(report.staging.constantBindings > 0);
+  assert.ok(report.staging.constantSpreads > 0);
+  assert.ok(report.staging.runtimeSpreads > 0);
 });
 
 test("the compiling frontend reaches the first unsupported Hono class", () => {

@@ -4,6 +4,8 @@ import type {Diagnostic} from "./diagnostics.js";
 import {spanOf} from "./diagnostics.js";
 import type {ModuleGraphOptions} from "./module-graph.js";
 import {loadModuleGraph} from "./module-graph.js";
+import type {SpreadDecision} from "./staging.js";
+import {analyzeStaging} from "./staging.js";
 
 export interface CompatibilityAuditOptions extends ModuleGraphOptions {
   root?: string;
@@ -23,6 +25,12 @@ export interface CompatibilityReport {
   diagnostics: Diagnostic[];
   requirements: FeatureRequirement[];
   builtins: Array<{name: string; occurrences: number}>;
+  staging: {
+    constantBindings: number;
+    constantSpreads: number;
+    runtimeSpreads: number;
+    spreads: SpreadDecision[];
+  };
   statistics: {modules: number; sourceBytes: number; sourceLines: number};
 }
 
@@ -57,6 +65,7 @@ export function auditCompatibility(
 ): CompatibilityReport {
   const root = path.resolve(options.root ?? process.cwd());
   const graph = loadModuleGraph(entryPath, options);
+  const staging = analyzeStaging(graph);
   const requirements = new Map<string, {occurrences: number; modules: Set<string>; samples: ReturnType<typeof spanOf>[]}>(
     [...featurePredicates.keys()].map(feature => [feature, {occurrences: 0, modules: new Set(), samples: []}]),
   );
@@ -101,6 +110,15 @@ export function auditCompatibility(
     builtins: [...builtins.entries()]
       .map(([name, occurrences]) => ({name, occurrences}))
       .sort((left, right) => right.occurrences - left.occurrences || left.name.localeCompare(right.name)),
+    staging: {
+      constantBindings: staging.bindings.length,
+      constantSpreads: staging.spreads.filter(spread => spread.disposition === "constant").length,
+      runtimeSpreads: staging.spreads.filter(spread => spread.disposition === "runtime").length,
+      spreads: staging.spreads.map(spread => ({
+        ...spread,
+        span: relativeSpan(spread.span, root),
+      })),
+    },
     statistics: {
       modules: graph.modules.length,
       sourceBytes: graph.modules.reduce((total, module) => total + Buffer.byteLength(module.sourceFile.text), 0),
@@ -122,7 +140,8 @@ function isLoop(node: ts.Node): boolean {
 
 function isRestOrSpread(node: ts.Node): boolean {
   return ts.isSpreadAssignment(node) || ts.isSpreadElement(node) || ts.isRestTypeNode(node)
-    || (ts.isParameter(node) && node.dotDotDotToken !== undefined);
+    || (ts.isParameter(node) && node.dotDotDotToken !== undefined)
+    || (ts.isBindingElement(node) && node.dotDotDotToken !== undefined);
 }
 
 function isGenerator(node: ts.Node): boolean {

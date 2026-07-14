@@ -12,6 +12,12 @@ export interface SourceModule {
   path: string;
   sourceFile: ts.SourceFile;
   dependencies: string[];
+  runtimeImports: RuntimeImport[];
+}
+
+export interface RuntimeImport {
+  specifier: string;
+  path: string;
 }
 
 export interface ModuleGraph {
@@ -48,7 +54,12 @@ export function loadModuleGraph(entryPath: string, options: ModuleGraphOptions =
       true,
       scriptKind(resolvedFile),
     );
-    const sourceModule: SourceModule = {path: resolvedFile, sourceFile, dependencies: []};
+    const sourceModule: SourceModule = {
+      path: resolvedFile,
+      sourceFile,
+      dependencies: [],
+      runtimeImports: [],
+    };
     modules.set(resolvedFile, sourceModule);
 
     for (const moduleReference of runtimeModuleReferences(sourceFile)) {
@@ -71,6 +82,7 @@ export function loadModuleGraph(entryPath: string, options: ModuleGraphOptions =
         continue;
       }
       sourceModule.dependencies.push(dependency);
+      sourceModule.runtimeImports.push({specifier: moduleReference.specifier, path: dependency});
       visit(dependency);
     }
   }
