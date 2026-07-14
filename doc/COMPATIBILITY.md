@@ -49,18 +49,17 @@ but it must not replace Hono's router or context implementation.
 
 The initial compiling probe resolves the bare import to the pinned submodule,
 passes its first class declaration and the closed computed method-table write at
-`src/hono-base.ts:130`. The whole-module validator currently reports `TINY1003`
-at `src/hono-base.ts:224` for an async closure in the unused `route()` method.
-This is a tested syntax frontier, not evidence that the basic application's
-reachable path needs `route()` or async execution.
+`src/hono-base.ts:130`. The compiler now recognizes `new Hono()`, the ordered
+`app.get(...)` call, and the default export before validating unused imported
+methods. It reports `TINY1400` at the application export because compile-time
+constructor execution has not landed.
 
 The upstream basic example imports the full `hono` entry rather than
 `hono/tiny`. `tests/compat/hono/basic-smoke.ts` preserves its first `GET /`
 route as a second tracer. That graph reaches 27 runtime modules, 4,177 lines,
-and 117,684 source bytes. It also passes the exported Hono class and reaches the
-same async closure in `HonoBase.route()`. The complete 110-line basic example
-and its middleware imports remain future intake work; this first-route tracer is
-not presented as full example compatibility.
+and 117,684 source bytes. It selects the same constructed-application root. The
+complete 110-line basic example and its middleware imports remain future intake
+work; this first-route tracer is not presented as full example compatibility.
 
 ### Type-only API overlay
 
@@ -150,11 +149,11 @@ computed write with seven exact keys: `get`, `post`, `put`, `delete`, `options`,
 computed accesses in the `hono/tiny` graph stay classified as runtime and retain
 their unsupported boundary.
 
-This is specialization evidence, not route-table code generation yet. The next
-frontend architecture step is reachability from the default-exported app:
-execute supported module/class initialization at compile time, retain the route
-closures it installs, and avoid rejecting unused methods such as `route()` just
-because their bodies contain async syntax.
+This is specialization evidence, not route-table code generation yet. The
+default-exported app is now the compile root, so unused methods such as `route()`
+do not set the frontier. The next step is to execute supported module/class
+initialization at compile time and retain the route closures it installs. The
+trace and evaluator contract are recorded in `doc/APPLICATION_INITIALIZATION.md`.
 
 The allowlisted Test262 array-spread source is parsed by the intake suite and
 its closed literal `[...[3, 4, 5]]` is folded by a frontend test. The complete
@@ -172,8 +171,9 @@ Mach-O read-only data section. The encoding is recorded in
 
 The pinned Hono staging test now proves that `allMethods` reaches this final HIR
 shape as an array of seven typed strings. This happens below the whole-program
-compile boundary: the exact-source Hono probe still stops during whole-module
-syntax validation, so no claim is made that a Hono executable is produced yet.
+compile boundary: the exact-source Hono probe stops before executing its traced
+application initialization, so no claim is made that a Hono executable is
+produced yet.
 A separate compilable staged-constants example passes frontend lowering, Rust
 HIR parsing, native assembly/linking, and a real HTTP test.
 
@@ -216,9 +216,8 @@ The native response uses status 200 and `text/plain; charset=UTF-8`, matching th
 pinned Hono `Context.text()` contract. The first Hono basic route's `"Hono!!"`
 body is compiled through the general string-function path and checked through a
 real HTTP request. This is response-semantics evidence, not a claim that upstream
-Hono compiles: the exact-source probes stop in an unused async method because
-reachability is not yet driving validation. Once app initialization and
-`Context.text()` lower, they
+Hono compiles: the exact-source probes stop at the recognized application
+initialization plan. Once constructor execution and `Context.text()` lower, they
 should reach the same HIR response operation rather than depend on the temporary
 source intrinsic.
 

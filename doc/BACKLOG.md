@@ -84,6 +84,10 @@ commit message.
       that site while retaining diagnostics for dynamic computed keys.
 - [ ] Replace whole-module forbidden-syntax rejection with reachability from
       default-exported application initialization and request dispatch.
+- [x] Recognize a constructed default application, preserve its ordered
+      top-level calls, and select it before validating unused imported methods.
+- [ ] Execute the traced constructor and registration calls against upstream
+      class/function source to produce an immutable native route artifact.
 - [ ] Compile the required rest/spread operations.
 - [ ] Add a native RegExp backend and allowlisted Test262 cases.
 - [ ] Add Request, Response, Headers, URL, and encoding native APIs.

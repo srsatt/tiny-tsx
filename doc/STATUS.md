@@ -53,14 +53,13 @@ produces and serves a native Mach-O executable from the example TSX source.
   closures, loops, rest/spread, RegExp, exceptions, async/await, and required
   built-ins without pretending they compile yet.
 - The same smoke entry now enters the normal compiling frontend through a pinned
-  bare-import alias. Compilation passes the exported preset class and its closed
-  method-table assignment, then stops at `vendor/hono/src/hono-base.ts:224` with
-  `TINY1003` for an async closure in the unused `route()` method. A regression
-  test preserves this whole-module syntax frontier.
+  bare-import alias. Compilation selects `new Hono()`, its ordered `app.get(...)`
+  call, and the default export before scanning unused imported method bodies. It
+  now reports `TINY1400` at the application export pending constructor execution.
 - A second tracer imports the full `hono` entry and preserves the upstream basic
   example's first route. Its graph contains 27 modules, 4,177 lines, and 117,684
-  bytes; compilation passes `vendor/hono/src/hono.ts` and reaches the same async
-  closure in `HonoBase.route()`. This is not yet the complete basic example.
+  bytes and selects the same constructed application root. This is not yet the
+  complete basic example.
 - Application imports can use a narrow `api.d.ts` declaration alias while the
   compiler independently loads real upstream Hono runtime source. An invalid
   route-path test proves the overlay participates in TypeScript checking.
@@ -114,6 +113,9 @@ produces and serves a native Mach-O executable from the example TSX source.
   `Response.text` intrinsic property accesses. A regression test proves unknown
   Response statics remain `TS2339`. `doc/WEB_API.md` separates declaration
   availability from executable native conformance.
+- The application-entry analyzer records a default binding, named constructor,
+  constructor arguments, and ordered top-level method calls. The pinned basic
+  trace is `app = new Hono(); app.get("/", function); export default app`.
 - Closed object literals are records with compile-time fields; explicit `Map`
   construction remains unstaged dynamic work. The two models and declaration-
   overlay boundary are persisted in `doc/OBJECT_MODEL.md`.
@@ -133,9 +135,9 @@ rtk cargo run -q -p tinytsx -- build examples/static-page/server.tsx --port 3017
 rtk curl -i --max-time 5 http://127.0.0.1:3017/
 rtk npm run test:benchmarks
 rtk npm run audit:hono
-rtk npm run try:compile:hono  # expected TINY1003 at hono-base.ts:224
+rtk npm run try:compile:hono  # expected TINY1400 at the default export
 rtk npm run audit:hono-basic
-rtk npm run try:compile:hono-basic  # expected TINY1003 at hono-base.ts:224
+rtk npm run try:compile:hono-basic  # expected TINY1400 at the default export
 rtk npm run test:test262-intake
 rtk npm run test:native-api
 rtk python3 benchmarks/scripts/run_static.py --duration 2 --runs 3 --startup-runs 5 --concurrency 1,8,32 --output-prefix benchmarks/results/2026-07-14-m5-max-static-preview
@@ -154,6 +156,6 @@ complete semantics are implemented.
 
 Read `README.md`, `doc/COMPATIBILITY.md`, and `doc/BACKLOG.md`. Run
 `npm run audit:hono-basic` to see the full-package requirement frontier. Extend
-default-exported app initialization and use its reachable functions to drive
-validation; do not reject unused Hono methods or special-case its routing. Run
+the traced default application by resolving and executing upstream constructors,
+then retain its installed route closures; do not special-case Hono routing. Run
 the verification commands recorded here before moving an item to verified.
