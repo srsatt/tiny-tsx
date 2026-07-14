@@ -11,12 +11,31 @@ pub const CONTENT_TYPE_HTML: u16 = 1;
 pub const CONTENT_TYPE_TEXT: u16 = 2;
 pub const CONTENT_TYPE_JSON: u16 = 3;
 pub const CONTENT_TYPE_RESPONSE_TEXT: u16 = 4;
+pub const MAX_RESPONSE_HEADERS: usize = 8;
 
 #[repr(C)]
+#[derive(Clone, Copy)]
 pub struct TinyStringView {
     pub ptr: *const u8,
     pub len: usize,
 }
+
+const EMPTY_VIEW: TinyStringView = TinyStringView {
+    ptr: ptr::null(),
+    len: 0,
+};
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct TinyHeader {
+    pub name: TinyStringView,
+    pub value: TinyStringView,
+}
+
+const EMPTY_HEADER: TinyHeader = TinyHeader {
+    name: EMPTY_VIEW,
+    value: EMPTY_VIEW,
+};
 
 impl TinyStringView {
     pub fn from_bytes(bytes: &[u8]) -> Self {
@@ -48,6 +67,8 @@ pub struct TinyResponseWriter {
     pub status: u32,
     pub http_status: u16,
     pub content_type: u16,
+    pub header_count: usize,
+    pub headers: [TinyHeader; MAX_RESPONSE_HEADERS],
 }
 
 #[cfg(feature = "generated")]
@@ -150,11 +171,89 @@ pub unsafe extern "C" fn tinytsx_request_path_equals(
     u32::from(actual == expected)
 }
 
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tinytsx_response_header_static(
+    writer: *mut TinyResponseWriter,
+    name: *const u8,
+    name_len: usize,
+    value: *const u8,
+    value_len: usize,
+) -> u32 {
+    if writer.is_null() || name.is_null() || (value.is_null() && value_len != 0) || name_len == 0 {
+        return BAD_REQUEST;
+    }
+    // SAFETY: Generated code passes static byte ranges valid for the duration of the process.
+    let name_bytes = unsafe { slice::from_raw_parts(name, name_len) };
+    let value_bytes = unsafe { slice::from_raw_parts(value, value_len) };
+    if !valid_header_name(name_bytes) || !valid_header_value(value_bytes) {
+        return BAD_REQUEST;
+    }
+    // SAFETY: Generated code passes the writer supplied by this runtime.
+    let writer = unsafe { &mut *writer };
+    for header in &mut writer.headers[..writer.header_count] {
+        // SAFETY: Existing header views were accepted from generated static data.
+        let existing = unsafe { slice::from_raw_parts(header.name.ptr, header.name.len) };
+        if existing.eq_ignore_ascii_case(name_bytes) {
+            header.value = TinyStringView {
+                ptr: value,
+                len: value_len,
+            };
+            return OK;
+        }
+    }
+    if writer.header_count == MAX_RESPONSE_HEADERS {
+        writer.status = REQUEST_OOM;
+        return REQUEST_OOM;
+    }
+    writer.headers[writer.header_count] = TinyHeader {
+        name: TinyStringView {
+            ptr: name,
+            len: name_len,
+        },
+        value: TinyStringView {
+            ptr: value,
+            len: value_len,
+        },
+    };
+    writer.header_count += 1;
+    OK
+}
+
+fn valid_header_name(name: &[u8]) -> bool {
+    name.iter().all(|byte| {
+        byte.is_ascii_alphanumeric()
+            || matches!(
+                byte,
+                b'!' | b'#'
+                    | b'$'
+                    | b'%'
+                    | b'&'
+                    | b'\''
+                    | b'*'
+                    | b'+'
+                    | b'-'
+                    | b'.'
+                    | b'^'
+                    | b'_'
+                    | b'`'
+                    | b'|'
+                    | b'~'
+            )
+    })
+}
+
+fn valid_header_value(value: &[u8]) -> bool {
+    !value
+        .iter()
+        .any(|byte| matches!(byte, b'\0' | b'\r' | b'\n'))
+}
+
 pub struct RenderedResponse {
     pub application_status: u32,
     pub http_status: u16,
     pub content_type: u16,
     pub body: Vec<u8>,
+    pub headers: Vec<(Vec<u8>, Vec<u8>)>,
 }
 
 pub fn render(request: &TinyRequest, capacity: usize) -> RenderedResponse {
@@ -169,6 +268,8 @@ pub fn render(request: &TinyRequest, capacity: usize) -> RenderedResponse {
         status: OK,
         http_status: 200,
         content_type: CONTENT_TYPE_HTML,
+        header_count: 0,
+        headers: [EMPTY_HEADER; MAX_RESPONSE_HEADERS],
     };
 
     // SAFETY: The generated handler follows ABI.md and only uses these values
@@ -176,11 +277,23 @@ pub fn render(request: &TinyRequest, capacity: usize) -> RenderedResponse {
     let status = unsafe { tinytsx_handle_get(request, &mut writer) };
     let written = writer.cursor as usize - writer.start as usize;
     output.truncate(written);
+    let headers = writer.headers[..writer.header_count]
+        .iter()
+        .map(|header| {
+            // SAFETY: Generated response headers point at immutable static data.
+            let name = unsafe { slice::from_raw_parts(header.name.ptr, header.name.len) }.to_vec();
+            // SAFETY: Generated response headers point at immutable static data.
+            let value =
+                unsafe { slice::from_raw_parts(header.value.ptr, header.value.len) }.to_vec();
+            (name, value)
+        })
+        .collect();
     RenderedResponse {
         application_status: status,
         http_status: writer.http_status,
         content_type: writer.content_type,
         body: output,
+        headers,
     }
 }
 

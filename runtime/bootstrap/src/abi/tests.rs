@@ -1,7 +1,8 @@
 use super::{
-    CONTENT_TYPE_HTML, CONTENT_TYPE_TEXT, INTERNAL_ERROR, OK, REQUEST_OOM, TinyResponseWriter,
-    TinyStringView, request, tinytsx_html_write_static, tinytsx_request_path_equals,
-    tinytsx_response_begin,
+    BAD_REQUEST, CONTENT_TYPE_HTML, CONTENT_TYPE_TEXT, INTERNAL_ERROR, MAX_RESPONSE_HEADERS, OK,
+    REQUEST_OOM, TinyHeader, TinyResponseWriter, TinyStringView, request,
+    tinytsx_html_write_static, tinytsx_request_path_equals, tinytsx_response_begin,
+    tinytsx_response_header_static,
 };
 
 #[test]
@@ -95,6 +96,67 @@ fn response_begin_rejects_invalid_content_types() {
     assert_eq!(writer.status, INTERNAL_ERROR);
 }
 
+#[test]
+fn response_headers_set_case_insensitively() {
+    let mut output = [];
+    let mut writer = writer(&mut output);
+
+    assert_eq!(
+        unsafe {
+            tinytsx_response_header_static(
+                &mut writer,
+                b"X-Powered-By".as_ptr(),
+                12,
+                b"Hono".as_ptr(),
+                4,
+            )
+        },
+        OK
+    );
+    assert_eq!(
+        unsafe {
+            tinytsx_response_header_static(
+                &mut writer,
+                b"x-powered-by".as_ptr(),
+                12,
+                b"TinyTSX".as_ptr(),
+                7,
+            )
+        },
+        OK
+    );
+
+    assert_eq!(writer.header_count, 1);
+    assert_eq!(view(&writer.headers[0].name), b"X-Powered-By");
+    assert_eq!(view(&writer.headers[0].value), b"TinyTSX");
+}
+
+#[test]
+fn response_headers_reject_invalid_names_and_values() {
+    let mut output = [];
+    let mut writer = writer(&mut output);
+
+    assert_eq!(
+        unsafe {
+            tinytsx_response_header_static(&mut writer, b"bad name".as_ptr(), 8, b"x".as_ptr(), 1)
+        },
+        BAD_REQUEST
+    );
+    assert_eq!(
+        unsafe {
+            tinytsx_response_header_static(
+                &mut writer,
+                b"x-test".as_ptr(),
+                6,
+                b"a\r\nb".as_ptr(),
+                4,
+            )
+        },
+        BAD_REQUEST
+    );
+    assert_eq!(writer.header_count, 0);
+}
+
 fn writer(output: &mut [u8]) -> TinyResponseWriter {
     let start = output.as_mut_ptr();
     TinyResponseWriter {
@@ -105,6 +167,21 @@ fn writer(output: &mut [u8]) -> TinyResponseWriter {
         status: OK,
         http_status: 200,
         content_type: CONTENT_TYPE_HTML,
+        header_count: 0,
+        headers: [empty_header(); MAX_RESPONSE_HEADERS],
+    }
+}
+
+const fn empty_header() -> TinyHeader {
+    TinyHeader {
+        name: TinyStringView {
+            ptr: std::ptr::null(),
+            len: 0,
+        },
+        value: TinyStringView {
+            ptr: std::ptr::null(),
+            len: 0,
+        },
     }
 }
 

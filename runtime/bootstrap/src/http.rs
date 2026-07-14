@@ -33,13 +33,13 @@ pub fn serve() -> std::io::Result<()> {
 fn handle_connection(stream: &mut TcpStream, request_memory: usize) -> std::io::Result<()> {
     let head = match read_request_head(stream) {
         Ok(head) => head,
-        Err(_) => return write_response(stream, 400, CONTENT_TYPE_TEXT, b"bad request"),
+        Err(_) => return write_response(stream, 400, CONTENT_TYPE_TEXT, b"bad request", &[]),
     };
     let Some((method, target)) = parse_request_line(&head) else {
-        return write_response(stream, 400, CONTENT_TYPE_TEXT, b"bad request");
+        return write_response(stream, 400, CONTENT_TYPE_TEXT, b"bad request", &[]);
     };
     if method != b"GET" {
-        return write_response(stream, 405, CONTENT_TYPE_TEXT, b"method not allowed");
+        return write_response(stream, 405, CONTENT_TYPE_TEXT, b"method not allowed", &[]);
     }
 
     let request = request(method, target);
@@ -50,18 +50,30 @@ fn handle_connection(stream: &mut TcpStream, request_memory: usize) -> std::io::
             response.http_status,
             response.content_type,
             &response.body,
+            &response.headers,
         ),
-        REQUEST_OOM => write_response(stream, 503, CONTENT_TYPE_TEXT, b"request memory exhausted"),
-        BAD_REQUEST => write_response(stream, 400, CONTENT_TYPE_TEXT, b"bad request"),
-        NOT_FOUND => write_response(stream, 404, CONTENT_TYPE_TEXT, b"not found"),
-        RENDER_ERROR | INTERNAL_ERROR => {
-            write_response(stream, 500, CONTENT_TYPE_TEXT, b"internal server error")
-        }
+        REQUEST_OOM => write_response(
+            stream,
+            503,
+            CONTENT_TYPE_TEXT,
+            b"request memory exhausted",
+            &[],
+        ),
+        BAD_REQUEST => write_response(stream, 400, CONTENT_TYPE_TEXT, b"bad request", &[]),
+        NOT_FOUND => write_response(stream, 404, CONTENT_TYPE_TEXT, b"not found", &[]),
+        RENDER_ERROR | INTERNAL_ERROR => write_response(
+            stream,
+            500,
+            CONTENT_TYPE_TEXT,
+            b"internal server error",
+            &[],
+        ),
         _ => write_response(
             stream,
             500,
             CONTENT_TYPE_TEXT,
             b"unknown application status",
+            &[],
         ),
     }
 }
@@ -108,6 +120,7 @@ fn write_response(
     status: u16,
     content_type: u16,
     body: &[u8],
+    headers: &[(Vec<u8>, Vec<u8>)],
 ) -> std::io::Result<()> {
     let reason = match status {
         200 => "OK",
@@ -127,8 +140,18 @@ fn write_response(
     };
     write!(
         stream,
-        "HTTP/1.1 {status} {reason}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-        body.len(),
+        "HTTP/1.1 {status} {reason}\r\nContent-Type: {content_type}\r\n",
+    )?;
+    for (name, value) in headers {
+        stream.write_all(name)?;
+        stream.write_all(b": ")?;
+        stream.write_all(value)?;
+        stream.write_all(b"\r\n")?;
+    }
+    write!(
+        stream,
+        "Content-Length: {}\r\nConnection: close\r\n\r\n",
+        body.len()
     )?;
     stream.write_all(body)
 }
