@@ -76,6 +76,14 @@ Hono methods or Web APIs with different behavior. The initial overlay exposes
 only the route/context surface used by the current tracers and grows with tested
 native semantics.
 
+The runtime graph itself is type-checked against the pinned TypeScript
+`lib.dom.d.ts` and `lib.dom.iterable.d.ts`. TinyTSX no longer declares competing
+global Request/Response classes. The temporary `Response.html` and
+`Response.text` compiler intrinsics are handled as two exact diagnostic/lowering
+exceptions; unknown Response properties still fail TypeScript checking. The
+type/runtime boundary and current native coverage are recorded in
+`doc/WEB_API.md`.
+
 ## Staging and static specialization
 
 Whole-program AOT compilation should partially evaluate the actual upstream

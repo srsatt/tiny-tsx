@@ -11,6 +11,9 @@ produces and serves a native Mach-O executable from the example TSX source.
 
 - Compact Cargo workspace with compiler and bootstrap runtime binaries.
 - Pinned TypeScript frontend package and TinyTSX SDK declarations.
+- Standard DOM and DOM iterable declarations type-check the pinned Hono runtime
+  graph with zero TypeScript diagnostics; the SDK now contains only TinyTSX
+  scalar/JSX additions rather than replacement Web API classes.
 - Static TSX example matching the first deliverable.
 - Versioned JSON HIR with source spans, native string functions, tagged GET
   responses, components, HTML operations, interned strings, typed staged
@@ -107,6 +110,10 @@ produces and serves a native Mach-O executable from the example TSX source.
 - Static `Response.text(string)` is currently a compiler intrinsic, not a Web-
   standard method. It is the temporary source bridge to the response operation
   that compiled Hono `Context.text()` will use after class lowering.
+- Diagnostic filtering is limited to the exact `Response.html` and
+  `Response.text` intrinsic property accesses. A regression test proves unknown
+  Response statics remain `TS2339`. `doc/WEB_API.md` separates declaration
+  availability from executable native conformance.
 - Closed object literals are records with compile-time fields; explicit `Map`
   construction remains unstaged dynamic work. The two models and declaration-
   overlay boundary are persisted in `doc/OBJECT_MODEL.md`.

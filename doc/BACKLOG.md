@@ -37,6 +37,9 @@ commit message.
 - [x] Add the Test262 pin, allowlist, provenance validation, and syntax-intake
       runner contract.
 - [x] Add focused native host API conformance tests and a dedicated test command.
+- [x] Type-check the entire pinned Hono runtime graph against TypeScript's
+      standard DOM and DOM iterable declarations without handwritten global
+      Request/Response replacements.
 - [x] Compile a relative ESM component through HIR, assembly, native linking,
       and a real HTTP test.
 - [x] Route the pinned bare `hono/tiny` import through the compiling frontend and
@@ -84,6 +87,8 @@ commit message.
 - [ ] Compile the required rest/spread operations.
 - [ ] Add a native RegExp backend and allowlisted Test262 cases.
 - [ ] Add Request, Response, Headers, URL, and encoding native APIs.
+- [ ] Intake selected Web Platform Tests alongside each executable native Web
+      API implementation; declaration-level type checking is not conformance.
 - [ ] Add exceptions, Promise, async/await, and a bounded native task executor.
 - [ ] Run selected upstream Hono behavior tests as features become available.
 - [ ] Run the exact source under Bun and TinyTSX and compare responses.
