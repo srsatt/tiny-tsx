@@ -54,13 +54,14 @@ def summarize(raw: dict[str, Any]) -> dict[str, Any]:
 def render_markdown(result: dict[str, Any]) -> str:
     tiny = result["targets"]["tinytsx"]
     bun = result["targets"]["bun"]
+    title = result["workload"].replace("-", " ")
     lines = [
-        "# TinyTSX static benchmark",
+        f"# TinyTSX {title} benchmark",
         "",
         f"Generated: {result['timestamp']}",
         "",
-        "> Scope: static 53-byte response, HTTP/1.1, a new TCP connection per request, "
-        "one server process, localhost. This is not a dynamic-language benchmark.",
+        f"> Scope: {result['scope']}. A new TCP connection per request; one server process. "
+        "This is not a general dynamic-language benchmark.",
         "",
         "## Environment",
         "",
@@ -108,7 +109,7 @@ def render_markdown(result: dict[str, Any]) -> str:
             "",
             "- TinyTSX currently has one worker and always closes the connection.",
             "- The benchmark client and server share the same machine.",
-            "- This workload does not exercise dynamic props, escaping, or application logic.",
+            "- This workload covers one closed response and does not exercise dynamic application logic.",
             "- Power mode and unrelated background activity are not controlled by the harness.",
             "",
         ]

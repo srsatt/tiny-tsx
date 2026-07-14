@@ -20,29 +20,56 @@ from reporting import render_markdown, summarize
 
 
 ROOT = Path(__file__).resolve().parents[2]
-BODY = b"<html><body><h1>Hello from TinyTSX</h1></body></html>"
+WORKLOADS = {
+    "static-page": {
+        "body": b"<html><body><h1>Hello from TinyTSX</h1></body></html>",
+        "content_type": "text/html; charset=utf-8",
+        "scope": "53-byte static HTML; HTTP/1.1; connection close; localhost",
+        "tiny_entry": "examples/static-page/server.tsx",
+        "tiny_args": [],
+        "bun_script": "benchmarks/bun/static-server.ts",
+        "bun_args": [],
+    },
+    "hono-basic": {
+        "body": b"Hono!!",
+        "content_type": "text/plain; charset=UTF-8",
+        "scope": "same pinned Hono GET / source; HTTP/1.1; connection close; localhost",
+        "tiny_entry": "tests/compat/hono/basic-smoke.ts",
+        "tiny_args": [
+            "--alias", "hono=vendor/hono/src/index.ts",
+            "--api", "hono=tests/compat/hono/api.d.ts",
+        ],
+        "bun_script": "benchmarks/bun/hono-server.ts",
+        "bun_args": [
+            "--tsconfig-override", "benchmarks/bun/hono-tsconfig.json",
+        ],
+    },
+}
 
 
 def main() -> int:
     arguments = parse_arguments()
+    workload = WORKLOADS[arguments.workload]
     require_tools("bun", "oha", "cargo", "npm", "ps")
     if platform.system() != "Darwin" or platform.machine() != "arm64":
         raise RuntimeError("the current TinyTSX benchmark requires Apple Silicon macOS")
 
     port = free_port()
-    tiny_binary = ROOT / "benchmarks/dist/tinytsx-static"
-    build_tinytsx(tiny_binary, port)
+    tiny_binary = ROOT / f"benchmarks/dist/tinytsx-{arguments.workload}"
+    build_tinytsx(tiny_binary, port, workload)
     bun_binary = Path(shutil.which("bun") or "bun").resolve()
-    bun_script = ROOT / "benchmarks/bun/static-server.ts"
+    bun_script = ROOT / workload["bun_script"]
     specs = {
         "tinytsx": {
+            "workload": arguments.workload,
             "command": [str(tiny_binary)],
             "environment": {},
             "artifact": tiny_binary,
             "runtime": tiny_binary,
         },
         "bun": {
-            "command": [str(bun_binary), "run", str(bun_script)],
+            "workload": arguments.workload,
+            "command": [str(bun_binary), "run", *workload["bun_args"], str(bun_script)],
             "environment": {"TINYTSX_BENCH_PORT": str(port)},
             "artifact": bun_script,
             "runtime": bun_binary,
@@ -66,7 +93,7 @@ def main() -> int:
             process = start_server(specs[name])
             try:
                 correctness = wait_for_response(process, port)
-                assert_correct(correctness)
+                assert_correct(correctness, workload)
                 run_oha(f"http://127.0.0.1:{port}/", max(arguments.concurrency), 1)
                 targets[name]["idleRssSamplesBytes"].append(resident_bytes(process.pid))
                 for concurrency in arguments.concurrency:
@@ -83,8 +110,8 @@ def main() -> int:
     raw = {
         "schemaVersion": 1,
         "timestamp": timestamp,
-        "workload": "static-page",
-        "scope": "53-byte static HTML; HTTP/1.1; connection close; localhost",
+        "workload": arguments.workload,
+        "scope": workload["scope"],
         "environment": environment_metadata(),
         "configuration": {
             "runs": arguments.runs,
@@ -97,14 +124,14 @@ def main() -> int:
         },
         "correctness": {
             "status": 200,
-            "contentType": "text/html; charset=utf-8",
-            "contentLength": len(BODY),
-            "bodyUtf8": BODY.decode(),
+            "contentType": workload["content_type"],
+            "contentLength": len(workload["body"]),
+            "bodyUtf8": workload["body"].decode(),
         },
         "targets": targets,
     }
     result = summarize(raw)
-    prefix = output_prefix(arguments.output_prefix)
+    prefix = output_prefix(arguments.output_prefix, arguments.workload)
     prefix.parent.mkdir(parents=True, exist_ok=True)
     prefix.with_suffix(".json").write_text(json.dumps(result, indent=2) + "\n")
     markdown = render_markdown(result)
@@ -116,7 +143,8 @@ def main() -> int:
 
 
 def parse_arguments() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Benchmark static TinyTSX against Bun")
+    parser = argparse.ArgumentParser(description="Benchmark TinyTSX workloads against Bun")
+    parser.add_argument("--workload", choices=WORKLOADS, default="static-page")
     parser.add_argument("--duration", type=int, default=5, help="seconds per sample")
     parser.add_argument("--runs", type=int, default=3, help="samples per target/concurrency")
     parser.add_argument("--startup-runs", type=int, default=5)
@@ -137,14 +165,14 @@ def require_tools(*names: str) -> None:
         raise RuntimeError(f"missing benchmark tools: {', '.join(missing)}")
 
 
-def build_tinytsx(output: Path, port: int) -> None:
+def build_tinytsx(output: Path, port: int, workload: dict[str, Any]) -> None:
     subprocess.run(["npm", "run", "build", "--prefix", "frontend"], cwd=ROOT, check=True)
     subprocess.run(
         [
             "cargo", "run", "-q", "-p", "tinytsx", "--", "build",
-            "examples/static-page/server.tsx", "--port", str(port), "--workers", "1",
+            workload["tiny_entry"], "--port", str(port), "--workers", "1",
             "--request-memory", "262144", "--runtime", "bootstrap", "--release",
-            "--output", str(output),
+            "--output", str(output), *workload["tiny_args"],
         ],
         cwd=ROOT,
         check=True,
@@ -168,7 +196,7 @@ def measure_startup(spec: dict[str, Any], port: int) -> float:
     process = start_server(spec)
     try:
         response = wait_for_response(process, port)
-        assert_correct(response)
+        assert_correct(response, WORKLOADS[spec["workload"]])
         return (time.perf_counter_ns() - started) / 1_000_000
     finally:
         stop_server(process)
@@ -195,19 +223,19 @@ def wait_for_response(process: subprocess.Popen[bytes], port: int) -> dict[str, 
     raise RuntimeError(f"server did not become ready: {last_error}")
 
 
-def assert_correct(response: dict[str, Any]) -> None:
+def assert_correct(response: dict[str, Any], workload: dict[str, Any]) -> None:
     headers = response["headers"]
     expected = {
         "status": 200,
-        "content-type": "text/html; charset=utf-8",
-        "content-length": str(len(BODY)),
+        "content-type": workload["content_type"],
+        "content-length": str(len(workload["body"])),
     }
     actual = {
         "status": response["status"],
         "content-type": headers.get("content-type"),
         "content-length": headers.get("content-length"),
     }
-    if actual != expected or response["body"] != BODY:
+    if actual != expected or response["body"] != workload["body"]:
         raise RuntimeError(f"response mismatch: expected={expected}, actual={actual}")
 
 
@@ -262,12 +290,12 @@ def command_output(*command: str) -> str:
     return subprocess.run(command, check=True, capture_output=True, text=True).stdout.strip()
 
 
-def output_prefix(value: str | None) -> Path:
+def output_prefix(value: str | None, workload: str = "static-page") -> Path:
     if value:
         path = Path(value)
         return path if path.is_absolute() else ROOT / path
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    return ROOT / f"benchmarks/results/{stamp}-static"
+    return ROOT / f"benchmarks/results/{stamp}-{workload}"
 
 
 if __name__ == "__main__":
@@ -276,4 +304,3 @@ if __name__ == "__main__":
     except (RuntimeError, subprocess.CalledProcessError) as error:
         print(f"benchmark failed: {error}", file=sys.stderr)
         raise SystemExit(1)
-

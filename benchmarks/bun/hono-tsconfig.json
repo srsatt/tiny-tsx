@@ -1,0 +1,8 @@
+{
+  "compilerOptions": {
+    "baseUrl": "../..",
+    "paths": {
+      "hono": ["vendor/hono/src/index.ts"]
+    }
+  }
+}
