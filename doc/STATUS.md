@@ -12,12 +12,20 @@ this persistent project record are being established as Milestone 0.
 - Compact Cargo workspace with compiler and bootstrap runtime binaries.
 - Pinned TypeScript frontend package and TinyTSX SDK declarations.
 - Static TSX example matching the first deliverable.
+- Versioned JSON HIR with source spans, components, GET handler, HTML operations,
+  interned static strings, and build statistics.
+- Official TypeScript frontend validates the initial static subset and coalesces
+  the example page into one 53-byte HTML fragment.
+- Frontend coverage includes static and nested components plus rejection of
+  `any`, classes, async functions, computed properties, and event attributes.
 
 Verification:
 
 ```bash
 rtk cargo check --workspace
 rtk npm install --prefix frontend
+rtk npm test --prefix frontend
+rtk node frontend/dist/src/cli.js examples/static-page/server.tsx
 ```
 
 ## Active slice
