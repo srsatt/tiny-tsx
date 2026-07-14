@@ -1,6 +1,6 @@
 # Implementation status
 
-Last updated: 2026-07-14
+Last updated: 2026-07-15
 
 ## Current state
 
@@ -51,11 +51,19 @@ produces and serves a native Mach-O executable from the example TSX source.
   bare-import alias. Compilation traverses into upstream Hono and currently stops
   at `vendor/hono/src/preset/tiny.ts:11` with `TINY1002` for its class declaration;
   a regression test preserves that frontier.
+- A second tracer imports the full `hono` entry and preserves the upstream basic
+  example's first route. Its graph contains 27 modules, 4,177 lines, and 117,684
+  bytes; compilation currently reaches `vendor/hono/src/hono.ts:16` before the
+  same class diagnostic. This is not yet the complete basic example.
+- Application imports can use a narrow `api.d.ts` declaration alias while the
+  compiler independently loads real upstream Hono runtime source. An invalid
+  route-path test proves the overlay participates in TypeScript checking.
 - Relative ESM components now compile through multi-module HIR into the native
   server; a second real HTTP E2E test verifies the imported component output.
-- Test262 intake validates the pin, provenance metadata, and parsing of five
-  allowlisted class, loop, RegExp, async, and array-spread cases. These are
-  explicitly syntax-only and are not semantic conformance results.
+- Test262 intake validates the pin, provenance metadata, and parsing of seven
+  allowlisted class, loop, RegExp, async, array-spread, undefined, and bigint
+  cases. These are explicitly syntax-only and are not semantic conformance
+  results.
 - The dedicated native API suite currently covers Request method/path/query
   views and exact-fit, OOM, and invalid response-writer behavior.
 - A conservative AOT staging pass now evaluates imported closed arrays and
@@ -66,17 +74,20 @@ produces and serves a native Mach-O executable from the example TSX source.
   at `hono-base.ts:128` to the six HTTP methods plus `all`. The remaining 17
   spread/rest sites are explicitly retained as runtime or later type-layout
   specialization work.
-- The fifth Test262 intake case covers array spread. Its closed literal is also
-  consumed by the staging test, without claiming execution of the full case.
+- The Test262 array-spread case has its closed literal consumed by the staging
+  test, without claiming execution of the full case.
 - Closed staged values now lower into a canonical HIR constant pool with tagged
-  null, boolean, number, string, array, and record values. HIR validation checks
-  their IDs, modules, shapes, depth, and statistics.
+  undefined, null, boolean, number, bigint, string, array, and record values.
+  HIR validation checks their IDs, modules, shapes, depth, and statistics.
 - The arm64 backend serializes those constants into deterministic read-only
   blobs. `examples/staged-constants/server.tsx` passes the complete native build
   and HTTP E2E path, while the Hono test proves its seven-method array reaches
   the same typed HIR representation.
 - Generated expressions do not load constant blobs yet; their current purpose
   is to pin the frontend/backend data boundary before function lowering.
+- Closed object literals are records with compile-time fields; explicit `Map`
+  construction remains unstaged dynamic work. The two models and declaration-
+  overlay boundary are persisted in `doc/OBJECT_MODEL.md`.
 
 Verification:
 
@@ -94,6 +105,8 @@ rtk curl -i --max-time 5 http://127.0.0.1:3017/
 rtk npm run test:benchmarks
 rtk npm run audit:hono
 rtk npm run try:compile:hono  # expected TINY1002 until class lowering lands
+rtk npm run audit:hono-basic
+rtk npm run try:compile:hono-basic  # expected TINY1002 at src/hono.ts:16
 rtk npm run test:test262-intake
 rtk npm run test:native-api
 rtk python3 benchmarks/scripts/run_static.py --duration 2 --runs 3 --startup-runs 5 --concurrency 1,8,32 --output-prefix benchmarks/results/2026-07-14-m5-max-static-preview
@@ -111,6 +124,7 @@ their complete semantics are implemented.
 ## Resume point
 
 Read `README.md`, `doc/COMPATIBILITY.md`, and `doc/BACKLOG.md`. Run
-`npm run audit:hono` to see the pinned requirement frontier. Begin with bare
-package resolution and function/expression HIR; do not special-case Hono routing.
-Run the verification commands recorded here before moving an item to verified.
+`npm run audit:hono-basic` to see the full-package requirement frontier. Begin
+with bare package resolution and function/expression HIR; do not special-case
+Hono routing. Run the verification commands recorded here before moving an item
+to verified.

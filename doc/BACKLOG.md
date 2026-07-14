@@ -43,8 +43,17 @@ commit message.
       assert that the first unsupported boundary is the upstream Hono class.
 - [ ] Resolve bare package imports and combine runtime source with package
       declarations in the compiling frontend.
+- [x] Allow a type-only `api.d.ts` alias while retaining the upstream package
+      source as the runtime compilation graph.
+- [x] Add a first-route tracer for the full `hono` entry used by the upstream
+      basic example, alongside the smaller `hono/tiny` tracer.
+- [ ] Pin the upstream `honojs/examples` revision and intake its complete basic
+      source and behavior test rather than only the first route.
 - [ ] Add native Test262 execution; syntax intake alone is not conformance.
 - [ ] Compile function values, closures, records, arrays, and ordinary loops.
+- [x] Keep compile-time closed records distinct from dynamic `Map` values in
+      staging, HIR terminology, tests, and the documented object model.
+- [ ] Implement bounded native `Map` storage for genuinely dynamic keys.
 - [x] Add a conservative AOT staging pass for imported closed constants,
       constant array/object spread, and closed-value destructuring rest.
 - [x] Classify every reachable Hono spread/rest site as constant or runtime and
@@ -53,6 +62,8 @@ commit message.
       object rest such as Hono's `optionsWithoutStrict`.
 - [x] Feed staged values into a typed HIR constant pool and deterministic native
       read-only data blobs.
+- [x] Preserve `undefined` and arbitrary-precision bigint staged constants and
+      add their allowlisted Test262 syntax cases.
 - [ ] Lower ordinary functions, expressions, and statements into the general
       typed HIR and reference staged constant IDs from generated code.
 - [ ] Compile the restricted class semantics required by `hono/tiny`.

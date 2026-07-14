@@ -1,8 +1,9 @@
 # Compatibility program
 
-TinyTSX is working toward ahead-of-time compilation of the published
-`hono/tiny` package. Compatibility is evidence-driven and deliberately narrower
-than general JavaScript compatibility.
+TinyTSX is working toward ahead-of-time compilation of the published Hono
+package, beginning with `hono/tiny` and the first route from the upstream basic
+example. Compatibility is evidence-driven and deliberately narrower than
+general JavaScript compatibility.
 
 ## Pinned inputs
 
@@ -51,6 +52,27 @@ currently reaches `src/preset/tiny.ts:11`, where it reports `TINY1002` because
 class lowering has not landed. This expected failure is a tested compatibility
 frontier, not a passing Hono result.
 
+The upstream basic example imports the full `hono` entry rather than
+`hono/tiny`. `tests/compat/hono/basic-smoke.ts` preserves its first `GET /`
+route as a second tracer. That graph reaches 27 runtime modules, 4,177 lines,
+and 117,684 source bytes, and currently stops at the upstream class in
+`src/hono.ts:16`. The complete 110-line basic example and its middleware imports
+remain future intake work; this first-route tracer is not presented as full
+example compatibility.
+
+### Type-only API overlay
+
+The compiling frontend accepts `--api <specifier>=<api.d.ts>` independently of
+the runtime `--alias`. The application is type-checked against the narrow API,
+while every runtime source module still comes from pinned upstream Hono. A
+negative test proves an invalid route path is rejected by the overlay, and the
+valid smoke tests then continue into upstream source until class lowering.
+
+This separation is a compile-time contract only. It does not authorize replacing
+Hono methods or Web APIs with different behavior. The initial overlay exposes
+only the route/context surface used by the current tracers and grows with tested
+native semantics.
+
 ## Staging and static specialization
 
 Whole-program AOT compilation should partially evaluate the actual upstream
@@ -91,10 +113,11 @@ the program rather than silently treating it as static.
 ### Implemented staging boundary
 
 The frontend now has a conservative closed-value evaluator for strings,
-numbers, booleans, null, arrays, and records. It resolves imported top-level
-constants, folds constant array/object spread, and materializes object/array rest
-when the source is a compile-time closed value. Each spread or rest site is
-classified as `constant` or `runtime` in the Hono compatibility report.
+numbers, bigint, booleans, undefined, null, arrays, and records. It resolves
+imported top-level constants, folds constant array/object spread, and
+materializes object/array rest when the source is a compile-time closed value.
+Each spread or rest site is classified as `constant` or `runtime` in the Hono
+compatibility report.
 
 For pinned Hono `v4.12.30`, the current audit finds 19 constant bindings. It
 folds the array spread at `src/hono-base.ts:128` into:
@@ -117,10 +140,11 @@ an ECMAScript conformance claim.
 ### Typed constant materialization
 
 Closed staged bindings now enter HIR v1 as source-located, tagged constants.
-Null, boolean, finite number, string, array, and record values retain their type
-and recursive structure. The Rust compiler validates the pool and emits each
-constant as a deterministic, eight-byte-aligned blob in the Mach-O read-only
-data section. The encoding is recorded in `doc/CONSTANT_DATA.md`.
+Undefined, null, boolean, finite number, bigint, string, array, and record values
+retain their type and recursive structure. The Rust compiler validates the pool
+and emits each constant as a deterministic, eight-byte-aligned blob in the
+Mach-O read-only data section. The encoding is recorded in
+`doc/CONSTANT_DATA.md`.
 
 The pinned Hono staging test now proves that `allMethods` reaches this final HIR
 shape as an array of seven typed strings. This happens below the whole-program
@@ -132,6 +156,11 @@ native assembly/linking, and a real HTTP test.
 The blobs are not yet referenced by generated expression code. They establish
 the data boundary for the next function/record/array lowering slice without
 introducing runtime JavaScript object semantics.
+
+Closed records and dynamic maps are separate compiler concepts. A record has a
+known layout and may use direct field offsets; a map has runtime membership and
+requires bounded dynamic lookup. `new Map(...)` is deliberately not staged as a
+record. The detailed rules are recorded in `doc/OBJECT_MODEL.md`.
 
 ## Compatibility order
 
