@@ -94,7 +94,11 @@ export interface HirFunction {
 
 export type HandlerResponse =
   | {kind: "html"; component: number}
-  | {kind: "text"; value: ValueExpression};
+  | {
+      kind: "text";
+      value: ValueExpression;
+      contentType?: "text/plain; charset=UTF-8" | "text/plain;charset=UTF-8";
+    };
 
 export interface Handler {
   method: "GET";

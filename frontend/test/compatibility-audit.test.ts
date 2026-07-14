@@ -164,7 +164,7 @@ test("executes the pinned Hono get registration through addRoute", () => {
       kind: "text",
       body: "Hono!!",
       status: 200,
-      contentType: "text/plain; charset=UTF-8",
+      contentType: "text/plain;charset=UTF-8",
     },
   }]);
   assert.equal(result?.routerInsertions, 1);
@@ -184,6 +184,7 @@ test("lowers the tiny-preset Hono route into native HIR", () => {
     response: {
       kind: "text",
       value: {kind: "stringLiteral", string: 0, span: hir.handlers[0]?.span},
+      contentType: "text/plain;charset=UTF-8",
     },
     span: hir.handlers[0]?.span,
   }]);
@@ -212,7 +213,7 @@ test("pins the native text response to the upstream Hono contract", () => {
   const contextSource = readFileSync(path.join(repository, contract.source), "utf8");
   const basicSource = readFileSync(path.join(repository, manifest.basicSmokeEntry), "utf8");
 
-  assert.match(contextSource, new RegExp(`export const TEXT_PLAIN = ['"]${contract.contentType}['"]`));
+  assert.match(contextSource, new RegExp(`export const TEXT_PLAIN = ['"]${contract.fallbackContentType}['"]`));
   assert.match(basicSource, new RegExp(`context\\.text\\(['"]${contract.body}['"]\\)`));
 });
 

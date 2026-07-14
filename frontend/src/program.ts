@@ -208,7 +208,7 @@ function lowerApplicationInitialization(
     || response === undefined
     || response.kind !== "text"
     || response.status !== 200
-    || response.contentType !== "text/plain; charset=UTF-8"
+    || response.contentType !== "text/plain;charset=UTF-8"
   ) {
     return undefined;
   }
@@ -226,7 +226,11 @@ function lowerApplicationInitialization(
     handlers: [{
       method: "GET",
       path: route.path,
-      response: {kind: "text", value: {kind: "stringLiteral", string: body, span}},
+      response: {
+        kind: "text",
+        value: {kind: "stringLiteral", string: body, span},
+        contentType: response.contentType,
+      },
       span,
     }],
     staticStrings: strings.values,

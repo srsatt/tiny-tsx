@@ -63,7 +63,7 @@ fn builds_and_serves_the_pinned_hono_basic_route() {
     build_and_serve_with_options(
         "tests/compat/hono/basic-smoke.ts",
         "Hono!!",
-        "text/plain; charset=UTF-8",
+        "text/plain;charset=UTF-8",
         &[
             "--alias",
             "hono=vendor/hono/src/index.ts",

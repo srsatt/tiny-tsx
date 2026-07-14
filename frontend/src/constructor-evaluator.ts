@@ -812,7 +812,7 @@ function evaluate(
         kind: "response",
         body: body.kind === "string" ? body.value : "",
         status: 200,
-        contentType: body.kind === "string" ? "text/plain; charset=UTF-8" : "",
+        contentType: body.kind === "string" ? "text/plain;charset=UTF-8" : "",
       };
     }
     return {kind: "constructed", name: expression.expression.text, module: module.path};

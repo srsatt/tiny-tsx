@@ -4,9 +4,9 @@ use std::{
 };
 
 use crate::abi::{
-    BAD_REQUEST, CONTENT_TYPE_HTML, CONTENT_TYPE_JSON, CONTENT_TYPE_TEXT, INTERNAL_ERROR,
-    NOT_FOUND, OK, RENDER_ERROR, REQUEST_OOM, configured_port, configured_request_memory, render,
-    request,
+    BAD_REQUEST, CONTENT_TYPE_HTML, CONTENT_TYPE_JSON, CONTENT_TYPE_RESPONSE_TEXT,
+    CONTENT_TYPE_TEXT, INTERNAL_ERROR, NOT_FOUND, OK, RENDER_ERROR, REQUEST_OOM, configured_port,
+    configured_request_memory, render, request,
 };
 
 const MAX_REQUEST_HEAD: usize = 16 * 1024;
@@ -122,6 +122,7 @@ fn write_response(
         CONTENT_TYPE_HTML => "text/html; charset=utf-8",
         CONTENT_TYPE_TEXT => "text/plain; charset=UTF-8",
         CONTENT_TYPE_JSON => "application/json; charset=UTF-8",
+        CONTENT_TYPE_RESPONSE_TEXT => "text/plain;charset=UTF-8",
         _ => "application/octet-stream",
     };
     write!(

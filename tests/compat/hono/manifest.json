@@ -19,7 +19,8 @@
   "behaviorContracts": {
     "textResponse": {
       "source": "vendor/hono/src/context.ts",
-      "contentType": "text/plain; charset=UTF-8",
+      "contentType": "text/plain;charset=UTF-8",
+      "fallbackContentType": "text/plain; charset=UTF-8",
       "body": "Hono!!"
     }
   }

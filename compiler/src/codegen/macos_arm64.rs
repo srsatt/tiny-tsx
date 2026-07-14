@@ -122,7 +122,7 @@ fn emit_handler(
     writeln!(assembly, "\n.globl _tinytsx_handle_get").unwrap();
     writeln!(assembly, "_tinytsx_handle_get:").unwrap();
     let frame_size = match response {
-        HandlerResponse::Text { value } => value_frame_size(32, value)?,
+        HandlerResponse::Text { value, .. } => value_frame_size(32, value)?,
         HandlerResponse::Html { .. } => 32,
     };
     emit_prologue(assembly, frame_size);
@@ -142,8 +142,15 @@ fn emit_handler(
             writeln!(assembly, "    ldr x1, [sp, #16]").unwrap();
             writeln!(assembly, "    bl _tinytsx_component_{component}").unwrap();
         }
-        HandlerResponse::Text { value } => {
-            emit_response_begin(assembly, 2, return_label);
+        HandlerResponse::Text {
+            value,
+            content_type,
+        } => {
+            let content_type_id = match content_type.as_deref() {
+                Some("text/plain;charset=UTF-8") => 4,
+                _ => 2,
+            };
+            emit_response_begin(assembly, content_type_id, return_label);
             emit_value_expression(assembly, value, program, 32)?;
             writeln!(assembly, "    mov x2, x1").unwrap();
             writeln!(assembly, "    mov x1, x0").unwrap();

@@ -50,8 +50,15 @@ pub struct Handler {
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum HandlerResponse {
-    Html { component: usize },
-    Text { value: ValueExpression },
+    Html {
+        component: usize,
+    },
+    Text {
+        value: ValueExpression,
+        #[serde(default)]
+        #[serde(rename = "contentType")]
+        content_type: Option<String>,
+    },
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -173,7 +180,20 @@ impl Program {
             HandlerResponse::Html { component } if *component >= self.components.len() => {
                 return Err("GET handler references a missing component".to_owned());
             }
-            HandlerResponse::Text { value } => self.validate_expression(value, 0)?,
+            HandlerResponse::Text {
+                value,
+                content_type,
+            } => {
+                if content_type.as_deref().is_some_and(|value| {
+                    !matches!(
+                        value,
+                        "text/plain; charset=UTF-8" | "text/plain;charset=UTF-8"
+                    )
+                }) {
+                    return Err("GET text response has an unsupported content type".to_owned());
+                }
+                self.validate_expression(value, 0)?;
+            }
             _ => {}
         }
         for (index, component) in self.components.iter().enumerate() {
