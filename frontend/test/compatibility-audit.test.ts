@@ -58,7 +58,7 @@ test("audits the pinned hono/tiny runtime graph", () => {
   assert.ok(report.staging.runtimeSpreads > 0);
 });
 
-test("the compiling frontend reaches the first unsupported Hono class", () => {
+test("the compiling frontend reaches Hono's first runtime computed access", () => {
   assert.throws(
     () => compileEntry(path.join(repository, "tests/compat/hono/smoke.ts"), {
       sdkPath: path.join(repository, "sdk/index.d.ts"),
@@ -66,8 +66,8 @@ test("the compiling frontend reaches the first unsupported Hono class", () => {
       apiAliases: {"hono/tiny": path.join(repository, "tests/compat/hono/api.d.ts")},
     }),
     (error: unknown) => error instanceof CompileFailure
-      && error.diagnostics[0]?.code === "TINY1002"
-      && error.diagnostics[0]?.span?.file.endsWith("vendor/hono/src/preset/tiny.ts") === true,
+      && error.diagnostics[0]?.code === "TINY1004"
+      && error.diagnostics[0]?.span?.file.endsWith("vendor/hono/src/hono-base.ts") === true,
   );
 });
 
@@ -79,8 +79,8 @@ test("the upstream basic route enters the full Hono package runtime graph", () =
       apiAliases: {"hono": path.join(repository, "tests/compat/hono/api.d.ts")},
     }),
     (error: unknown) => error instanceof CompileFailure
-      && error.diagnostics[0]?.code === "TINY1002"
-      && error.diagnostics[0]?.span?.file.includes("vendor/hono/src/") === true,
+      && error.diagnostics[0]?.code === "TINY1004"
+      && error.diagnostics[0]?.span?.file.endsWith("vendor/hono/src/hono-base.ts") === true,
   );
 });
 

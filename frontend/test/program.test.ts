@@ -204,9 +204,52 @@ test("lowers string parameters and direct-call arguments", () => {
   );
 });
 
+test("lowers a closed class field and immediate method call", () => {
+  const hir = compileSource(`
+    const MESSAGE = "Hono!!";
+    class TextContext {
+      constructor(readonly body: string) {}
+      render(): string { return this.body; }
+    }
+    export function GET(request: Request): Response {
+      return Response.text(new TextContext(MESSAGE).render());
+    }
+  `);
+
+  assert.equal(hir.functions[0]?.name, "TextContext.render");
+  assert.deepEqual(
+    hir.functions[0]?.parameters.map(parameter => [parameter.name, parameter.type]),
+    [["this.body", "string"]],
+  );
+  assert.equal(hir.functions[0]?.body.kind, "parameter");
+  assert.deepEqual(
+    hir.handlers[0]?.response.kind === "text"
+      && hir.handlers[0].response.value.kind === "directCall"
+      ? hir.handlers[0].response.value.arguments.map(argument => argument.kind)
+      : [],
+    ["constant"],
+  );
+});
+
+test("rejects inheritance outside the closed class slice", () => {
+  assert.throws(
+    () => compileSource(`
+      class Base {
+        constructor(readonly value: string) {}
+        text(): string { return this.value; }
+      }
+      class Derived extends Base {}
+      export function GET(request: Request): Response {
+        return Response.text(new Derived("bad").text());
+      }
+    `),
+    (error: unknown) => error instanceof CompileFailure
+      && error.diagnostics[0]?.code === "TINY1314",
+  );
+});
+
 for (const [name, source, code] of [
-  ["any", `function Bad(value: any): JSX.Element { return <p>Bad</p>; }`, "TINY1001"],
-  ["classes", `class Bad {}`, "TINY1002"],
+  ["any component props", `function Bad(value: any): JSX.Element { return <p>Bad</p>; }`, "TINY1102"],
   ["async", `async function Bad(): Promise<void> {}`, "TINY1003"],
   ["computed properties", `const key = "x"; const value = ({x: 1})[key];`, "TINY1004"],
   ["event attributes", `function Bad(): JSX.Element { return <button onClick="x">Bad</button>; }`, "TINY1204"],

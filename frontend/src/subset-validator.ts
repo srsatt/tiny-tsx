@@ -9,20 +9,6 @@ const supportedAttributes = new Set([
 
 export function validateForbiddenSyntax(sourceFile: ts.SourceFile): void {
   function visit(node: ts.Node): void {
-    if (node.kind === ts.SyntaxKind.AnyKeyword) {
-      throw tinyError(
-        "TINY1001",
-        "`any` is not supported by TinyTSX",
-        node,
-        "replace `any` with a closed static type",
-        sourceFile,
-      );
-    }
-
-    if (ts.isClassDeclaration(node) || ts.isClassExpression(node)) {
-      throw tinyError("TINY1002", "classes are not supported by TinyTSX", node, undefined, sourceFile);
-    }
-
     if (
       (ts.isFunctionLike(node)
         && ts.canHaveModifiers(node)
