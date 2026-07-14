@@ -170,6 +170,28 @@ test("executes the pinned Hono get registration through addRoute", () => {
   assert.equal(result?.routerInsertions, 1);
 });
 
+test("preserves upstream mergePath semantics across two basic routes", () => {
+  const entry = path.join(repository, "tests/compat/hono/multi-route-smoke.ts");
+  const graph = loadModuleGraph(entry, {
+    aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+  });
+  const application = analyzeApplicationEntry(graph.modules[0]!.sourceFile);
+  assert.ok(application);
+
+  const result = evaluateApplicationInitialization(graph, application);
+
+  assert.deepEqual(result?.issues, []);
+  assert.deepEqual(result?.routes.map(route => ({
+    method: route.method,
+    path: route.path,
+    body: route.response?.body,
+  })), [
+    {method: "GET", path: "/", body: "Hono!!"},
+    {method: "GET", path: "/hello", body: "This is /hello"},
+  ]);
+  assert.equal(result?.routerInsertions, 2);
+});
+
 test("lowers the tiny-preset Hono route into native HIR", () => {
   const hir = compileEntry(path.join(repository, "tests/compat/hono/smoke.ts"), {
     sdkPath: path.join(repository, "sdk/index.d.ts"),

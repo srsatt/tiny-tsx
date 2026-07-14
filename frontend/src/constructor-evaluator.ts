@@ -817,6 +817,18 @@ function evaluate(
     }
     return {kind: "constructed", name: expression.expression.text, module: module.path};
   }
+  if (
+    ts.isPrefixUnaryExpression(expression)
+    && (expression.operator === ts.SyntaxKind.PlusToken || expression.operator === ts.SyntaxKind.MinusToken)
+  ) {
+    const operand = evaluate(evaluator, expression.operand, module, environment, instance);
+    return operand.kind === "number"
+      ? {
+        kind: "number",
+        value: expression.operator === ts.SyntaxKind.MinusToken ? -operand.value : operand.value,
+      }
+      : unknown("numeric unary operand is not a closed number");
+  }
   if (ts.isPrefixUnaryExpression(expression) && expression.operator === ts.SyntaxKind.ExclamationToken) {
     const operand = evaluate(evaluator, expression.operand, module, environment, instance);
     const decision = truthiness(operand);
