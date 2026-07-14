@@ -12,6 +12,7 @@ import {validateForbiddenSyntax} from "./subset-validator.js";
 export interface CompileOptions {
   sdkPath: string;
   aliases?: Readonly<Record<string, string>>;
+  apiAliases?: Readonly<Record<string, string>>;
 }
 
 export function compileEntry(entryPath: string, options: CompileOptions): HirProgram {
@@ -32,14 +33,15 @@ export function compileEntry(entryPath: string, options: CompileOptions): HirPro
     jsx: ts.JsxEmit.Preserve,
     lib: ["lib.es2022.d.ts"],
   };
-  if (options.aliases !== undefined) {
-    compilerOptions.paths = Object.fromEntries(Object.entries(options.aliases).map(([specifier, target]) => [
+  const typeAliases = {...options.aliases, ...options.apiAliases};
+  if (Object.keys(typeAliases).length > 0) {
+    compilerOptions.paths = Object.fromEntries(Object.entries(typeAliases).map(([specifier, target]) => [
       specifier,
       [path.resolve(target)],
     ]));
   }
   const program = ts.createProgram({
-    rootNames: [entry, sdk],
+    rootNames: [entry, sdk, ...graph.modules.map(module => module.path)],
     options: compilerOptions,
   });
 
@@ -61,8 +63,15 @@ export function compileEntry(entryPath: string, options: CompileOptions): HirPro
     }
     return loaded;
   });
+  validateForbiddenSyntax(sourceFile);
+  const entryDiagnostics = ts.getPreEmitDiagnostics(program, sourceFile);
+  if (entryDiagnostics.length > 0) {
+    throw new CompileFailure(entryDiagnostics.map(fromTypeScript));
+  }
   for (const module of sourceFiles) {
-    validateForbiddenSyntax(module);
+    if (module !== sourceFile) {
+      validateForbiddenSyntax(module);
+    }
   }
   const typeScriptDiagnostics = ts.getPreEmitDiagnostics(program);
   if (typeScriptDiagnostics.length > 0) {

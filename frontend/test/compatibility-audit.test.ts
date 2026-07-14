@@ -63,10 +63,44 @@ test("the compiling frontend reaches the first unsupported Hono class", () => {
     () => compileEntry(path.join(repository, "tests/compat/hono/smoke.ts"), {
       sdkPath: path.join(repository, "sdk/index.d.ts"),
       aliases: {"hono/tiny": path.join(repository, "vendor/hono/src/preset/tiny.ts")},
+      apiAliases: {"hono/tiny": path.join(repository, "tests/compat/hono/api.d.ts")},
     }),
     (error: unknown) => error instanceof CompileFailure
       && error.diagnostics[0]?.code === "TINY1002"
       && error.diagnostics[0]?.span?.file.endsWith("vendor/hono/src/preset/tiny.ts") === true,
+  );
+});
+
+test("the upstream basic route enters the full Hono package runtime graph", () => {
+  assert.throws(
+    () => compileEntry(path.join(repository, "tests/compat/hono/basic-smoke.ts"), {
+      sdkPath: path.join(repository, "sdk/index.d.ts"),
+      aliases: {"hono": path.join(repository, "vendor/hono/src/index.ts")},
+      apiAliases: {"hono": path.join(repository, "tests/compat/hono/api.d.ts")},
+    }),
+    (error: unknown) => error instanceof CompileFailure
+      && error.diagnostics[0]?.code === "TINY1002"
+      && error.diagnostics[0]?.span?.file.includes("vendor/hono/src/") === true,
+  );
+});
+
+test("type-checks the entry against the Hono API overlay before runtime lowering", () => {
+  const entry = write("invalid-hono.ts", `
+    import {Hono} from "hono/tiny";
+    const app = new Hono();
+    app.get(42, context => context.text("bad path"));
+    export default app;
+  `);
+
+  assert.throws(
+    () => compileEntry(entry, {
+      sdkPath: path.join(repository, "sdk/index.d.ts"),
+      aliases: {"hono/tiny": path.join(repository, "vendor/hono/src/preset/tiny.ts")},
+      apiAliases: {"hono/tiny": path.join(repository, "tests/compat/hono/api.d.ts")},
+    }),
+    (error: unknown) => error instanceof CompileFailure
+      && error.diagnostics[0]?.code === "TS2345"
+      && error.diagnostics[0]?.span?.file === entry,
   );
 });
 
