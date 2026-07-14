@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "upstream": {
+    "repository": "https://github.com/web-platform-tests/wpt.git",
+    "commit": "08e168922e0c0d42250335a40e679fa5123489df"
+  },
+  "selected": [
+    {
+      "upstreamPath": "fetch/api/headers/headers-casing.any.js",
+      "localPath": "tests/compat/wpt/upstream/headers-casing.any.js",
+      "sha256": "f9034ff6ddc3c23e2aa16419738005d229e19a0b40eb5791af465b16df3ab877",
+      "status": "native-derived",
+      "nativeEvidence": "runtime/bootstrap/src/abi/tests.rs"
+    }
+  ]
+}
