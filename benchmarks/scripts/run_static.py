@@ -32,7 +32,7 @@ WORKLOADS = {
     },
     "hono-basic": {
         "body": b"Hono!!",
-        "content_type": "text/plain; charset=UTF-8",
+        "content_type": "text/plain;charset=UTF-8",
         "scope": "same pinned Hono GET / source; HTTP/1.1; connection close; localhost",
         "tiny_entry": "tests/compat/hono/basic-smoke.ts",
         "tiny_args": [
