@@ -58,6 +58,16 @@ produces and serves a native Mach-O executable from the example TSX source.
   syntax-only and are not semantic conformance results.
 - The dedicated native API suite currently covers Request method/path/query
   views and exact-fit, OOM, and invalid response-writer behavior.
+- A conservative AOT staging pass now evaluates imported closed arrays and
+  records, folds constant spread, and materializes rest values when their source
+  is compile-time closed. The compatibility audit exposes constant versus
+  runtime decisions for every reachable Hono spread/rest site.
+- On pinned Hono, staging finds 19 constant bindings and folds the method array
+  at `hono-base.ts:128` to the six HTTP methods plus `all`. The remaining 17
+  spread/rest sites are explicitly retained as runtime or later type-layout
+  specialization work.
+- The fifth Test262 intake case covers array spread. Its closed literal is also
+  consumed by the staging test, without claiming execution of the full case.
 
 Verification:
 
@@ -81,10 +91,12 @@ rtk python3 benchmarks/scripts/run_static.py --duration 2 --runs 3 --startup-run
 
 ## Active slice
 
-Compatibility substrate: resolve bare package imports with declarations, then
-lower ordinary function values, closures, records, arrays, and loops into a
-general typed HIR. Test262 cases move from syntax intake to native execution only
-when their complete semantics are implemented.
+Compatibility substrate: feed staged closed values into the general typed HIR,
+then lower ordinary function values, closures, records, arrays, and loops.
+Type-layout specialization should handle closed request-time records without
+pretending their values are compile-time constants. Test262 cases move from
+syntax intake to native execution only when their complete semantics are
+implemented.
 
 ## Resume point
 

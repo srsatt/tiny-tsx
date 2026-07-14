@@ -88,6 +88,32 @@ registration depends on runtime input, environment-dependent branching, or
 other unknown effects, the compiler must retain runtime initialization or reject
 the program rather than silently treating it as static.
 
+### Implemented staging boundary
+
+The frontend now has a conservative closed-value evaluator for strings,
+numbers, booleans, null, arrays, and records. It resolves imported top-level
+constants, folds constant array/object spread, and materializes object/array rest
+when the source is a compile-time closed value. Each spread or rest site is
+classified as `constant` or `runtime` in the Hono compatibility report.
+
+For pinned Hono `v4.12.30`, the current audit finds 19 constant bindings. It
+folds the array spread at `src/hono-base.ts:128` into:
+
+```text
+["get", "post", "put", "delete", "options", "patch", "all"]
+```
+
+The other 17 spread/rest sites remain runtime work. This includes the object
+rest over constructor `options` at line 170: its type may permit a later
+closed-shape field projection, but its value is not a compile-time constant.
+The compiler records that distinction instead of treating all spread syntax as
+equivalent.
+
+The allowlisted Test262 array-spread source is parsed by the intake suite and
+its closed literal `[...[3, 4, 5]]` is folded by a frontend test. The complete
+Test262 program is still not executed natively, so this is staging evidence, not
+an ECMAScript conformance claim.
+
 ## Compatibility order
 
 1. ESM runtime graph loading and aggregate diagnostics.

@@ -45,6 +45,13 @@ commit message.
       declarations in the compiling frontend.
 - [ ] Add native Test262 execution; syntax intake alone is not conformance.
 - [ ] Compile function values, closures, records, arrays, and ordinary loops.
+- [x] Add a conservative AOT staging pass for imported closed constants,
+      constant array/object spread, and closed-value destructuring rest.
+- [x] Classify every reachable Hono spread/rest site as constant or runtime and
+      prove the method-table spread folds to seven static method names.
+- [ ] Use TypeScript record layouts to specialize request-time closed-shape
+      object rest such as Hono's `optionsWithoutStrict`.
+- [ ] Feed staged values into the general typed HIR and native data sections.
 - [ ] Compile the restricted class semantics required by `hono/tiny`.
 - [ ] Compile the required rest/spread operations.
 - [ ] Add a native RegExp backend and allowlisted Test262 cases.
