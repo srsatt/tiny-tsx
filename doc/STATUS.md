@@ -47,6 +47,10 @@ produces and serves a native Mach-O executable from the example TSX source.
   3,117 source lines. The audit records classes, private fields, accessors,
   closures, loops, rest/spread, RegExp, exceptions, async/await, and required
   built-ins without pretending they compile yet.
+- The same smoke entry now enters the normal compiling frontend through a pinned
+  bare-import alias. Compilation traverses into upstream Hono and currently stops
+  at `vendor/hono/src/preset/tiny.ts:11` with `TINY1002` for its class declaration;
+  a regression test preserves that frontier.
 - Relative ESM components now compile through multi-module HIR into the native
   server; a second real HTTP E2E test verifies the imported component output.
 - Test262 intake validates the pin, provenance metadata, and parsing of four
@@ -69,6 +73,7 @@ rtk cargo run -q -p tinytsx -- build examples/static-page/server.tsx --port 3017
 rtk curl -i --max-time 5 http://127.0.0.1:3017/
 rtk npm run test:benchmarks
 rtk npm run audit:hono
+rtk npm run try:compile:hono  # expected TINY1002 until class lowering lands
 rtk npm run test:test262-intake
 rtk npm run test:native-api
 rtk python3 benchmarks/scripts/run_static.py --duration 2 --runs 3 --startup-runs 5 --concurrency 1,8,32 --output-prefix benchmarks/results/2026-07-14-m5-max-static-preview

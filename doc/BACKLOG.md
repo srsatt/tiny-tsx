@@ -39,6 +39,8 @@ commit message.
 - [x] Add focused native host API conformance tests and a dedicated test command.
 - [x] Compile a relative ESM component through HIR, assembly, native linking,
       and a real HTTP test.
+- [x] Route the pinned bare `hono/tiny` import through the compiling frontend and
+      assert that the first unsupported boundary is the upstream Hono class.
 - [ ] Resolve bare package imports and combine runtime source with package
       declarations in the compiling frontend.
 - [ ] Add native Test262 execution; syntax intake alone is not conformance.

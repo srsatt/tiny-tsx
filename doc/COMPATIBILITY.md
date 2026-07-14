@@ -46,6 +46,48 @@ The compiler must consume upstream Hono code. It may recognize the host contract
 that the default export exposes `fetch(Request): Response | Promise<Response>`,
 but it must not replace Hono's router or context implementation.
 
+The initial compiling probe resolves the bare import to the pinned submodule and
+currently reaches `src/preset/tiny.ts:11`, where it reports `TINY1002` because
+class lowering has not landed. This expected failure is a tested compatibility
+frontier, not a passing Hono result.
+
+## Staging and static specialization
+
+Whole-program AOT compilation should partially evaluate the actual upstream
+Hono initialization path. Calls such as `app.get('/', handler)` normally happen
+at module initialization with a literal route and a statically known handler.
+The resulting application graph can therefore become immutable native data:
+ordered route patterns, precompiled matchers, and native function pointers. This
+is an optimization of compiled Hono behavior, not a replacement Hono router.
+
+Closed-shape spread and rest operations should also be specialized. Constant
+array spread can be folded, and object rest over a known record can become direct
+field initialization without a runtime copy. This does not imply support for
+general dynamic spread; cases whose source shape or values are unknown still
+need runtime semantics or an explicit unsupported diagnostic. Test262 cases only
+count as conformant when their observable behavior executes correctly, even if
+a Hono program succeeds because specialization removed the dynamic operation.
+
+Route registration through `app.get()` is process initialization and is usually
+static. Request context lookup through `c.get()` is different: it is request-
+local state. When all context keys are known, the compiler may assign fixed
+slots instead of using a hash map. Computed keys require a real dynamic map or
+remain unsupported until that implementation exists.
+
+The intended lifetime stages are:
+
+1. compile time: module initialization and route graph partial evaluation;
+2. process lifetime: immutable route tables and application constants;
+3. request lifetime: Request, Context, headers, and fixed-key slots in the
+   bounded request arena;
+4. async lifetime: only values that survive suspension enter async frames or
+   longer-lived storage.
+
+Partial evaluation must preserve behavior for the accepted program. If route
+registration depends on runtime input, environment-dependent branching, or
+other unknown effects, the compiler must retain runtime initialization or reject
+the program rather than silently treating it as static.
+
 ## Compatibility order
 
 1. ESM runtime graph loading and aggregate diagnostics.
