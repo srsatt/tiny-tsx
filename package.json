@@ -3,8 +3,9 @@
   "private": true,
   "scripts": {
     "build:frontend": "npm --prefix frontend run build",
+    "benchmark:static": "python3 benchmarks/scripts/run_static.py",
+    "test:benchmarks": "python3 -m unittest discover -s benchmarks/tests -p 'test_*.py'",
     "test:frontend": "npm --prefix frontend test",
-    "test": "npm run test:frontend && cargo test --workspace"
+    "test": "npm run test:frontend && npm run test:benchmarks && cargo test --workspace"
   }
 }
-
