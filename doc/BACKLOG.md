@@ -29,6 +29,22 @@ commit message.
 
 ## Next slice
 
+- [ ] Load published ESM runtime graphs, including JavaScript modules plus
+      TypeScript declarations.
+- [ ] Emit aggregate compatibility diagnostics instead of stopping at the first
+      unsupported construct.
+- [ ] Pin an exact-source `hono/tiny` smoke application and continuously audit
+      its reachable modules.
+- [ ] Add the Test262 pin, allowlist, provenance validation, and runner contract.
+- [ ] Add focused native API conformance fixtures and a dedicated test command.
+- [ ] Compile function values, closures, records, arrays, and ordinary loops.
+- [ ] Compile the restricted class semantics required by `hono/tiny`.
+- [ ] Compile the required rest/spread operations.
+- [ ] Add a native RegExp backend and allowlisted Test262 cases.
+- [ ] Add Request, Response, Headers, URL, and encoding native APIs.
+- [ ] Add exceptions, Promise, async/await, and a bounded native task executor.
+- [ ] Run selected upstream Hono behavior tests as features become available.
+- [ ] Run the exact source under Bun and TinyTSX and compare responses.
 - [ ] Dynamic component props and request query lookup.
 - [ ] HTML text and quoted-attribute escaping.
 - [ ] Fixed request arena and recoverable request OOM.

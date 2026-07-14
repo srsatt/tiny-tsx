@@ -21,3 +21,28 @@ writer ABI. It does not return a Rust string or embed the page in runtime source
 Dynamic escaping and arenas can therefore extend the implementation without
 changing generated application semantics.
 
+## D-004: Native language runtime, never a JavaScript engine
+
+TinyTSX may link focused native support for strings, collections, regular
+expressions, exceptions, promises, and Web APIs. It must not embed a JavaScript
+parser, bytecode interpreter, JIT, `eval`, dynamic code loading, or a fallback
+JavaScript execution path. Supported ECMAScript behavior is compiled ahead of
+time and unsupported behavior remains a compile-time diagnostic.
+
+## D-005: Compile upstream Hono instead of cloning its interface
+
+The compatibility target is the upstream `hono/tiny` implementation, initially
+pinned as a Git submodule at tag `v4.12.30` and commit `b2ae3a22`. Hono routing,
+context, and middleware logic must come from that upstream source. TinyTSX-
+specific intrinsics are limited to the host boundary and native implementations
+of standardized built-ins and Web APIs. The pin is a reproducible compiler
+target, not permission to replace Hono with a separate implementation.
+
+## D-006: Allowlisted, provenance-preserving conformance
+
+ECMAScript coverage grows through an explicit allowlist of Test262 cases pinned
+to one upstream revision. Syntax intake, native execution, and expected
+rejection are reported separately; a parsed case is never called conformant.
+Web API behavior and Hono behavior use their own suites. An exact-source Hono
+fixture must run under both Bun and TinyTSX before response equivalence is
+claimed.

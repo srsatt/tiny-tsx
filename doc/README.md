@@ -8,7 +8,8 @@ as work progresses.
 - `BACKLOG.md` is the ordered, checkable work queue.
 - `DECISIONS.md` records implementation decisions that are too operational for
   the stable specification but important for future changes.
+- `COMPATIBILITY.md` defines the pinned Hono, Test262, and native API
+  conformance program.
 
 Update status and backlog in the same commit as the work they describe. Do not
 mark a capability complete until its listed verification has run successfully.
-
