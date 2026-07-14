@@ -59,6 +59,7 @@ export interface EvaluatedResponse {
   body: string;
   status: number;
   contentType: string;
+  headers?: Array<{name: string; value: string}>;
 }
 
 export interface ApplicationInitializationEvaluation extends ConstructorEvaluation {
@@ -230,6 +231,7 @@ function evaluateRouteHandler(
       body: response.body,
       status: response.status,
       contentType: response.contentType,
+      ...(response.headers.size === 0 ? {} : {headers: [...response.headers.values()]}),
     }
     : undefined;
 }
@@ -811,8 +813,9 @@ function evaluate(
       return {
         kind: "response",
         body: body.kind === "string" ? body.value : "",
-        status: 200,
+        status: responseStatus(evaluator, expression, module, environment, instance),
         contentType: body.kind === "string" ? "text/plain;charset=UTF-8" : "",
+        headers: responseHeaders(evaluator, expression, module, environment, instance),
       };
     }
     return {kind: "constructed", name: expression.expression.text, module: module.path};
@@ -852,6 +855,43 @@ function evaluate(
     return {kind: "string", value};
   }
   return unknown(`expression ${ts.SyntaxKind[expression.kind]} is not supported`);
+}
+
+function responseStatus(
+  evaluator: Evaluator,
+  expression: ts.NewExpression,
+  module: SourceModule,
+  environment: Map<string, Value>,
+  instance: Value & {kind: "instance"},
+): number {
+  const init = expression.arguments?.[1] === undefined
+    ? UNDEFINED
+    : evaluate(evaluator, expression.arguments[1], module, environment, instance);
+  const status = init.kind === "record" ? init.fields.get("status") : undefined;
+  return status?.kind === "number" ? status.value : 200;
+}
+
+function responseHeaders(
+  evaluator: Evaluator,
+  expression: ts.NewExpression,
+  module: SourceModule,
+  environment: Map<string, Value>,
+  instance: Value & {kind: "instance"},
+): Map<string, {name: string; value: string}> {
+  const init = expression.arguments?.[1] === undefined
+    ? UNDEFINED
+    : evaluate(evaluator, expression.arguments[1], module, environment, instance);
+  const headers = init.kind === "record" ? init.fields.get("headers") : undefined;
+  if (headers?.kind !== "record") {
+    return new Map();
+  }
+  const result = new Map<string, {name: string; value: string}>();
+  for (const [name, value] of headers.fields) {
+    if (value.kind === "string") {
+      result.set(name.toLowerCase(), {name, value: value.value});
+    }
+  }
+  return result;
 }
 
 function assign(

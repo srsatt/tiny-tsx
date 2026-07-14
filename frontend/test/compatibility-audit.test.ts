@@ -209,6 +209,19 @@ test("preserves upstream mergePath semantics across two basic routes", () => {
   ]);
 });
 
+test("lowers closed Response init headers from a Hono route", () => {
+  const entry = path.join(repository, "tests/compat/hono/response-headers-smoke.ts");
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+    apiAliases: {hono: path.join(repository, "tests/compat/hono/api.d.ts")},
+  });
+
+  assert.equal(hir.handlers[0]?.path, "/headers");
+  assert.deepEqual(hir.handlers[0]?.headers, [{name: "X-Test", value: "yes"}]);
+  assert.deepEqual(hir.staticStrings, [{id: 0, value: "Headers"}]);
+});
+
 test("lowers the tiny-preset Hono route into native HIR", () => {
   const hir = compileEntry(path.join(repository, "tests/compat/hono/smoke.ts"), {
     sdkPath: path.join(repository, "sdk/index.d.ts"),

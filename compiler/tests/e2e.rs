@@ -64,6 +64,8 @@ fn builds_and_serves_the_pinned_hono_basic_route() {
         "tests/compat/hono/basic-smoke.ts",
         "Hono!!",
         "text/plain;charset=UTF-8",
+        "/",
+        &[],
         &[
             "--alias",
             "hono=vendor/hono/src/index.ts",
@@ -80,6 +82,8 @@ fn builds_and_dispatches_the_first_two_hono_basic_routes() {
         "tests/compat/hono/multi-route-smoke.ts",
         "Hono!!",
         "text/plain;charset=UTF-8",
+        "/",
+        &[],
         &[
             "--alias",
             "hono=vendor/hono/src/index.ts",
@@ -90,14 +94,42 @@ fn builds_and_dispatches_the_first_two_hono_basic_routes() {
     );
 }
 
+#[test]
+fn builds_and_serves_static_response_headers() {
+    build_and_serve_with_options(
+        "tests/compat/hono/response-headers-smoke.ts",
+        "Headers",
+        "text/plain;charset=UTF-8",
+        "/headers",
+        &[("X-Test", "yes")],
+        &[
+            "--alias",
+            "hono=vendor/hono/src/index.ts",
+            "--api",
+            "hono=tests/compat/hono/api.d.ts",
+        ],
+        &[],
+    );
+}
+
 fn build_and_serve(entry: &str, expected_body: &str, expected_content_type: &str) {
-    build_and_serve_with_options(entry, expected_body, expected_content_type, &[], &[]);
+    build_and_serve_with_options(
+        entry,
+        expected_body,
+        expected_content_type,
+        "/",
+        &[],
+        &[],
+        &[],
+    );
 }
 
 fn build_and_serve_with_options(
     entry: &str,
     expected_body: &str,
     expected_content_type: &str,
+    expected_path: &str,
+    expected_headers: &[(&str, &str)],
     frontend_options: &[&str],
     additional_routes: &[(&str, &str, &str)],
 ) {
@@ -133,9 +165,11 @@ fn build_and_serve_with_options(
         .expect("start generated server");
     let _server = Server(child);
     let mut stream = connect_with_retry(port);
-    stream
-        .write_all(b"GET / HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
-        .expect("send request");
+    write!(
+        stream,
+        "GET {expected_path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+    )
+    .expect("send request");
     let mut response = String::new();
     stream.read_to_string(&mut response).expect("read response");
 
@@ -149,6 +183,12 @@ fn build_and_serve_with_options(
         "{response}"
     );
     assert!(response.ends_with(expected_body));
+    for (name, value) in expected_headers {
+        assert!(
+            response.contains(&format!("{name}: {value}\r\n")),
+            "{response}"
+        );
+    }
 
     for (path, body, content_type) in additional_routes {
         let mut route = TcpStream::connect(("127.0.0.1", port)).expect("connect for route");

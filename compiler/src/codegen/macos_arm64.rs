@@ -145,6 +145,33 @@ fn emit_handlers(assembly: &mut String, program: &Program) -> Result<(), String>
     writeln!(assembly, "    b {return_label}").unwrap();
     for (index, handler) in program.handlers.iter().enumerate() {
         writeln!(assembly, "Ltinytsx_handle_get_match_{index}:").unwrap();
+        for (header_index, header) in handler.headers.iter().enumerate() {
+            writeln!(assembly, "    ldr x0, [sp, #16]").unwrap();
+            writeln!(
+                assembly,
+                "    adrp x1, Ltinytsx_handler_{index}_header_{header_index}_name@PAGE"
+            )
+            .unwrap();
+            writeln!(
+                assembly,
+                "    add x1, x1, Ltinytsx_handler_{index}_header_{header_index}_name@PAGEOFF"
+            )
+            .unwrap();
+            emit_immediate(assembly, "x2", header.name.len() as u64);
+            writeln!(
+                assembly,
+                "    adrp x3, Ltinytsx_handler_{index}_header_{header_index}_value@PAGE"
+            )
+            .unwrap();
+            writeln!(
+                assembly,
+                "    add x3, x3, Ltinytsx_handler_{index}_header_{header_index}_value@PAGEOFF"
+            )
+            .unwrap();
+            emit_immediate(assembly, "x4", header.value.len() as u64);
+            writeln!(assembly, "    bl _tinytsx_response_header_static").unwrap();
+            writeln!(assembly, "    cbnz w0, {return_label}").unwrap();
+        }
         emit_handler_response(assembly, &handler.response, program, return_label)?;
         writeln!(assembly, "    b {return_label}").unwrap();
     }
@@ -297,6 +324,22 @@ fn emit_static_data(assembly: &mut String, program: &Program) -> Result<(), Stri
         writeln!(assembly, ".p2align 3").unwrap();
         writeln!(assembly, "Ltinytsx_handler_path_{index}:").unwrap();
         emit_bytes(assembly, handler.path.as_bytes());
+        for (header_index, header) in handler.headers.iter().enumerate() {
+            writeln!(assembly, ".p2align 3").unwrap();
+            writeln!(
+                assembly,
+                "Ltinytsx_handler_{index}_header_{header_index}_name:"
+            )
+            .unwrap();
+            emit_bytes(assembly, header.name.as_bytes());
+            writeln!(assembly, ".p2align 3").unwrap();
+            writeln!(
+                assembly,
+                "Ltinytsx_handler_{index}_header_{header_index}_value:"
+            )
+            .unwrap();
+            emit_bytes(assembly, header.value.as_bytes());
+        }
     }
     for string in &program.static_strings {
         writeln!(assembly, ".p2align 3").unwrap();
@@ -406,6 +449,7 @@ mod tests {
               }],
               "handlers": [{
                 "method": "GET",
+                "headers": [{"name":"X-Test","value":"yes"}],
                 "response": {
                   "kind": "text",
                   "value": {
@@ -442,6 +486,8 @@ mod tests {
         assert!(first.contains("bl _tinytsx_html_write_static"));
         assert!(first.contains("bl _tinytsx_response_begin"));
         assert!(first.contains("bl _tinytsx_request_path_equals"));
+        assert!(first.contains("bl _tinytsx_response_header_static"));
+        assert!(first.contains("Ltinytsx_handler_0_header_0_name:"));
         assert!(first.contains("Ltinytsx_handler_path_0:"));
         assert!(first.contains("bl _tinytsx_function_0"));
         assert!(first.contains("_tinytsx_function_0:"));

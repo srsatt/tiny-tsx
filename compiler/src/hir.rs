@@ -43,8 +43,16 @@ pub struct Handler {
     pub method: String,
     #[serde(default = "root_path")]
     pub path: String,
+    #[serde(default)]
+    pub headers: Vec<StaticHeader>,
     pub response: HandlerResponse,
     pub span: SourceSpan,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct StaticHeader {
+    pub name: String,
+    pub value: String,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -182,6 +190,19 @@ impl Program {
             }
             if !handler_paths.insert(handler.path.as_str()) {
                 return Err(format!("duplicate GET handler path `{}`", handler.path));
+            }
+            let mut header_names = HashSet::new();
+            for header in &handler.headers {
+                let normalized = header.name.to_ascii_lowercase();
+                if !valid_header_name(header.name.as_bytes())
+                    || header
+                        .value
+                        .bytes()
+                        .any(|byte| matches!(byte, b'\0' | b'\r' | b'\n'))
+                    || !header_names.insert(normalized)
+                {
+                    return Err("GET handler contains invalid or duplicate headers".to_owned());
+                }
             }
             match &handler.response {
                 HandlerResponse::Html { component } if *component >= self.components.len() => {
@@ -370,6 +391,30 @@ impl Program {
 
 fn root_path() -> String {
     "/".to_owned()
+}
+
+fn valid_header_name(name: &[u8]) -> bool {
+    !name.is_empty()
+        && name.iter().all(|byte| {
+            byte.is_ascii_alphanumeric()
+                || matches!(
+                    byte,
+                    b'!' | b'#'
+                        | b'$'
+                        | b'%'
+                        | b'&'
+                        | b'\''
+                        | b'*'
+                        | b'+'
+                        | b'-'
+                        | b'.'
+                        | b'^'
+                        | b'_'
+                        | b'`'
+                        | b'|'
+                        | b'~'
+                )
+        })
 }
 
 fn validate_constant_value(value: &ConstantValue, depth: usize) -> Result<(), String> {

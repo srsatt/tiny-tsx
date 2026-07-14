@@ -219,6 +219,7 @@ function lowerApplicationInitialization(
     return {
       method: "GET" as const,
       path: route.path,
+      ...(response.headers === undefined ? {} : {headers: response.headers}),
       response: {
         kind: "text" as const,
         value: {kind: "stringLiteral" as const, string: body, span},

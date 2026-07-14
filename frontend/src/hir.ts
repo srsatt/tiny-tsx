@@ -103,8 +103,14 @@ export type HandlerResponse =
 export interface Handler {
   method: "GET";
   path: string;
+  headers?: StaticHeader[];
   response: HandlerResponse;
   span: SourceSpan;
+}
+
+export interface StaticHeader {
+  name: string;
+  value: string;
 }
 
 export interface HirProgram {

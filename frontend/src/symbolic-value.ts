@@ -22,7 +22,13 @@ export type Value =
     }
   | {kind: "reference"; name: string; module: string; callable?: ResolvedCallable}
   | {kind: "constructed"; name: string; module: string}
-  | {kind: "response"; body: string; status: number; contentType: string}
+  | {
+      kind: "response";
+      body: string;
+      status: number;
+      contentType: string;
+      headers: Map<string, {name: string; value: string}>;
+    }
   | {kind: "instance"; fields: Map<string, Value>}
   | {kind: "unknown"; reason: string};
 
