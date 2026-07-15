@@ -5,6 +5,7 @@
     "jsxImportSource": "hono/jsx",
     "paths": {
       "hono": ["vendor/hono/src/index.ts"],
+      "hono/streaming": ["vendor/hono/src/helper/streaming/index.ts"],
       "hono/html": ["vendor/hono/src/helper/html/index.ts"],
       "hono/jsx": ["vendor/hono/src/jsx/index.ts"],
       "hono/jsx/jsx-runtime": ["vendor/hono/src/jsx/jsx-runtime.ts"]

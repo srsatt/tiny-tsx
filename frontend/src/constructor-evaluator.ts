@@ -33,6 +33,7 @@ import {
   type ResponseHeaderValue,
   type Value,
   type RuntimeStringPart,
+  type StreamState,
   valuesEqual,
 } from "./symbolic-value.js";
 
@@ -878,6 +879,34 @@ function executeStatement(
       },
     };
   }
+  if (ts.isTryStatement(statement)) {
+    let result = executeStatement(evaluator, statement.tryBlock, module, environment, instance);
+    if (result.returned && result.value.kind === "thrown" && statement.catchClause !== undefined) {
+      const catchEnvironment = new Map(environment);
+      const binding = statement.catchClause.variableDeclaration?.name;
+      if (binding !== undefined) {
+        bind(evaluator, binding, result.value.value, module, catchEnvironment);
+      }
+      result = executeStatement(
+        evaluator,
+        statement.catchClause.block,
+        module,
+        catchEnvironment,
+        instance,
+      );
+    }
+    if (statement.finallyBlock !== undefined) {
+      const finallyResult = executeStatement(
+        evaluator,
+        statement.finallyBlock,
+        module,
+        environment,
+        instance,
+      );
+      if (finallyResult.returned) return finallyResult;
+    }
+    return result;
+  }
   if (ts.isIfStatement(statement)) {
     const condition = evaluate(evaluator, statement.expression, module, environment, instance);
     const decision = truthiness(condition);
@@ -981,6 +1010,11 @@ function executeStatement(
       return continued();
     }
     if (executeEffectCall(evaluator, expression, module, environment, instance)) {
+      return continued();
+    }
+    const callee = unwrap(expression.expression);
+    if (ts.isArrowFunction(callee) || ts.isFunctionExpression(callee)) {
+      evaluate(evaluator, expression, module, environment, instance);
       return continued();
     }
   }
@@ -1336,6 +1370,12 @@ function executeEffectCall(
     evaluator.routerInsertions++;
     return true;
   }
+  if (receiver.kind === "constructed" && receiver.name === "WeakMap" && name === "set") {
+    return true;
+  }
+  if (receiver.kind === "reference" && receiver.name === "contextStash" && name === "set") {
+    return true;
+  }
   if (receiver.kind === "headers" && name === "set") {
     const headerName = arguments_[0];
     const headerValue = arguments_[1];
@@ -1391,6 +1431,22 @@ function responseHeaderValue(value: Value): ResponseHeaderValue | undefined {
   return runtimeStringParts(value);
 }
 
+function streamChunk(value: Value): string | RuntimeStringPart[] | undefined {
+  if (value.kind === "string") return value.value;
+  return runtimeStringParts(value);
+}
+
+function streamStateFromInitializer(value: Value): StreamState | undefined {
+  if (value.kind !== "record") return undefined;
+  for (const field of value.fields.values()) {
+    if (field.kind !== "closure") continue;
+    for (const captured of field.environment.values()) {
+      if (captured.kind === "streamReader") return captured.state;
+    }
+  }
+  return undefined;
+}
+
 function findInstanceMethod(
   evaluator: Evaluator,
   name: string,
@@ -1419,6 +1475,13 @@ function evaluateCall(
   instance: Value & {kind: "instance"},
 ): Value {
   const arguments_ = evaluateCallArguments(evaluator, call, module, environment, instance);
+  const directCallee = unwrap(call.expression);
+  if (ts.isArrowFunction(directCallee) || ts.isFunctionExpression(directCallee)) {
+    const callable = evaluate(evaluator, directCallee, module, environment, instance);
+    return callable.kind === "closure"
+      ? invokeClosure(evaluator, callable, arguments_, instance)
+      : unknown("immediate function is not a closed closure");
+  }
   if (ts.isIdentifier(call.expression)) {
     const callable = evaluate(evaluator, call.expression, module, environment, instance);
     if (callable.kind === "closure") {
@@ -1460,6 +1523,33 @@ function evaluateCall(
       return arguments_.length === 0
         ? {kind: "clockNow"}
         : unknown("Date.now arguments are not supported");
+    }
+    if (receiver.kind === "writableStream" && name === "getWriter") {
+      return {kind: "streamWriter", state: receiver.state};
+    }
+    if (receiver.kind === "readableStream" && name === "getReader") {
+      return {kind: "streamReader", state: receiver.state};
+    }
+    if (receiver.kind === "constructed" && receiver.name === "TextEncoder" && name === "encode") {
+      const input = arguments_[0];
+      return input?.kind === "string"
+        ? input
+        : unknown("TextEncoder input is not a closed string");
+    }
+    if (receiver.kind === "streamWriter" && name === "write") {
+      const input = arguments_[0];
+      const chunk = input === undefined ? undefined : streamChunk(input);
+      if (chunk === undefined) return unknown("stream chunk is not a lowerable string");
+      receiver.state.chunks.push(chunk);
+      return UNDEFINED;
+    }
+    if (receiver.kind === "streamWriter" && (name === "close" || name === "releaseLock")) {
+      if (name === "close") receiver.state.closed = true;
+      return UNDEFINED;
+    }
+    if (receiver.kind === "streamReader" && name === "cancel") {
+      receiver.state.closed = true;
+      return UNDEFINED;
     }
     if (receiver.kind === "request" && name === "param") {
       const key = arguments_[0];
@@ -1974,6 +2064,7 @@ function evaluate(
         && body.kind !== "html"
         && body.kind !== "runtimeString"
         && body.kind !== "runtimeHtml"
+        && body.kind !== "readableStream"
         && body.kind !== "routeParameter"
         && body.kind !== "responseBody"
         && body.kind !== "undefined"
@@ -1989,7 +2080,9 @@ function evaluate(
             ? body.parts
           : body.kind === "responseBody"
             ? body.body
-          : undefined;
+            : body.kind === "readableStream"
+              ? {kind: "stream" as const, chunks: body.state.chunks}
+              : undefined;
       const headers = responseHeaders(evaluator, expression, module, environment, instance);
       const contentTypeHeader = headers.get("content-type")?.value;
       const explicitContentType = typeof contentTypeHeader === "string"
@@ -2027,8 +2120,34 @@ function evaluate(
       }
       return unknown("Headers initializer is not closed");
     }
+    if (expression.expression.text === "TransformStream") {
+      const state = {chunks: [], closed: false};
+      return {
+        kind: "record",
+        fields: new Map([
+          ["readable", {kind: "readableStream", state}],
+          ["writable", {kind: "writableStream", state}],
+        ]),
+      };
+    }
+    if (expression.expression.text === "ReadableStream") {
+      const initializer = expression.arguments?.[0] === undefined
+        ? UNDEFINED
+        : evaluate(evaluator, expression.arguments[0], module, environment, instance);
+      const writer = instance.fields.get("writer");
+      return {
+        kind: "readableStream",
+        state: streamStateFromInitializer(initializer)
+          ?? (writer?.kind === "streamWriter"
+            ? writer.state
+            : {chunks: [], closed: false}),
+      };
+    }
     const resolved = resolveRuntimeClass(module, expression.expression.text, evaluator.modules);
-    if (resolved !== undefined && isApplicationRuntimeClass(evaluator, resolved)) {
+    if (resolved !== undefined && (
+      isApplicationRuntimeClass(evaluator, resolved)
+      || isStreamingRuntimeClass(resolved)
+    )) {
       const value: Value & {kind: "instance"} = {kind: "instance", fields: new Map()};
       evaluator.instanceClasses.set(value, resolved);
       executeClass(
@@ -2468,6 +2587,11 @@ function isApplicationRuntimeClass(evaluator: Evaluator, candidate: ResolvedRunt
     current = resolveBaseRuntimeClass(current, evaluator.modules);
   }
   return false;
+}
+
+function isStreamingRuntimeClass(candidate: ResolvedRuntimeClass): boolean {
+  return candidate.declaration.name?.text === "StreamingApi"
+    && candidate.module.path.endsWith("/utils/stream.ts");
 }
 
 function responseStatus(

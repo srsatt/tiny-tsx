@@ -1061,6 +1061,37 @@ test("lowers request-time Hono JSX through nested components with HTML escaping"
   });
 });
 
+test("lowers pinned upstream Hono streamText writes into ordered response chunks", () => {
+  const entry = path.join(repository, "tests/compat/hono/stream-text-smoke.ts");
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    aliases: {
+      hono: path.join(repository, "vendor/hono/src/index.ts"),
+      "hono/streaming": path.join(repository, "vendor/hono/src/helper/streaming/index.ts"),
+    },
+    apiAliases: {
+      hono: path.join(repository, "tests/compat/hono/api.d.ts"),
+      "hono/streaming": path.join(repository, "tests/compat/hono/streaming-api.d.ts"),
+    },
+  });
+
+  assert.equal(hir.modules.length, 33);
+  assert.deepEqual(hir.staticStrings.map(value => value.value), ["first\n", "second\n", "third\n"]);
+  const handler = hir.handlers[0];
+  assert.equal(handler?.path, "/stream");
+  assert.deepEqual(handler?.headers, [
+    {name: "X-Content-Type-Options", value: "nosniff"},
+    {name: "Transfer-Encoding", value: "chunked"},
+  ]);
+  assert.equal(handler?.response.kind, "stream");
+  assert.deepEqual(
+    handler?.response.kind === "stream"
+      ? handler.response.chunks.map(chunk => chunk.kind === "stringLiteral" ? chunk.string : -1)
+      : [],
+    [0, 1, 2],
+  );
+});
+
 test("compiles the exact pinned Hono JSX SSR source graph", () => {
   const entry = path.join(repository, "vendor/hono-examples/jsx-ssr/src/index.tsx");
   const aliases = {

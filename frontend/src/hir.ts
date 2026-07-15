@@ -139,6 +139,17 @@ export type HandlerResponse =
         | "text/plain;charset=UTF-8"
         | "text/html; charset=UTF-8"
         | "application/json";
+    }
+  | {
+      kind: "stream";
+      chunks: ValueExpression[];
+      status?: number;
+      contentType?:
+        | ""
+        | "text/plain; charset=UTF-8"
+        | "text/plain;charset=UTF-8"
+        | "text/html; charset=UTF-8"
+        | "application/json";
     };
 
 export interface Handler {

@@ -127,6 +127,11 @@ fn emit_handlers(assembly: &mut String, program: &Program) -> Result<(), String>
         .iter()
         .map(|handler| match &handler.response {
             HandlerResponse::Text { value, .. } => value_frame_size(HANDLER_SCRATCH_BASE, value),
+            HandlerResponse::Stream { chunks, .. } => chunks
+                .iter()
+                .map(|chunk| value_frame_size(HANDLER_SCRATCH_BASE, chunk))
+                .collect::<Result<Vec<_>, _>>()
+                .map(|sizes| sizes.into_iter().max().unwrap_or(HANDLER_SCRATCH_BASE)),
             HandlerResponse::Html { .. } => Ok(HANDLER_SCRATCH_BASE),
         })
         .collect::<Result<Vec<_>, _>>()?
@@ -395,6 +400,54 @@ fn emit_handler_response(
                 handler_index,
                 &mut conditional_index,
             )?;
+        }
+        HandlerResponse::Stream {
+            chunks,
+            status,
+            content_type,
+        } => {
+            let content_type_id = match content_type.as_deref() {
+                Some("") => 0,
+                Some("text/html; charset=UTF-8") => 1,
+                Some("text/plain;charset=UTF-8") => 4,
+                Some("application/json") => 3,
+                _ => 2,
+            };
+            emit_response_begin(assembly, *status, content_type_id, return_label);
+            writeln!(assembly, "    ldr x0, [sp, #16]").unwrap();
+            writeln!(assembly, "    bl _tinytsx_response_stream_begin").unwrap();
+            writeln!(assembly, "    cbnz w0, {return_label}").unwrap();
+            let mut conditional_index = 0;
+            for chunk in chunks {
+                if let ValueExpression::StringLiteral { string, .. } = chunk {
+                    writeln!(assembly, "    ldr x0, [sp, #16]").unwrap();
+                    writeln!(assembly, "    adrp x1, Ltinytsx_string_{string}@PAGE").unwrap();
+                    writeln!(assembly, "    add x1, x1, Ltinytsx_string_{string}@PAGEOFF").unwrap();
+                    emit_immediate(
+                        assembly,
+                        "x2",
+                        program.static_strings[*string].value.len() as u64,
+                    );
+                    writeln!(assembly, "    bl _tinytsx_response_stream_chunk_static").unwrap();
+                    writeln!(assembly, "    cbnz w0, {return_label}").unwrap();
+                    continue;
+                }
+                writeln!(assembly, "    ldr x0, [sp, #16]").unwrap();
+                writeln!(assembly, "    bl _tinytsx_response_stream_chunk_begin").unwrap();
+                writeln!(assembly, "    cbnz w0, {return_label}").unwrap();
+                emit_handler_text_expression(
+                    assembly,
+                    chunk,
+                    program,
+                    return_label,
+                    handler_index,
+                    &mut conditional_index,
+                )?;
+                writeln!(assembly, "    cbnz w0, {return_label}").unwrap();
+                writeln!(assembly, "    ldr x0, [sp, #16]").unwrap();
+                writeln!(assembly, "    bl _tinytsx_response_stream_chunk_end").unwrap();
+                writeln!(assembly, "    cbnz w0, {return_label}").unwrap();
+            }
         }
     }
     Ok(())

@@ -252,7 +252,36 @@ function lowerApplicationInitialization(
   const strings = new StringTable();
   const handlers = emittedRoutes.map((route, index) => {
     const response = route.response!;
-    const value = lowerResponseBody(response.body, route.path, strings, span);
+    const streamBody = typeof response.body !== "string"
+      && !Array.isArray(response.body)
+      && response.body.kind === "stream"
+      ? response.body
+      : undefined;
+    const loweredResponse = streamBody !== undefined
+      ? {
+        kind: "stream" as const,
+        chunks: streamBody.chunks.map(chunk => typeof chunk === "string"
+          ? {kind: "stringLiteral" as const, string: strings.intern(chunk), span}
+          : lowerRuntimeString(chunk, route.path, strings, span)),
+        ...(response.status === 200 ? {} : {status: response.status}),
+        contentType: response.contentType as
+          | ""
+          | "text/plain; charset=UTF-8"
+          | "text/plain;charset=UTF-8"
+          | "text/html; charset=UTF-8"
+          | "application/json",
+      }
+      : {
+        kind: "text" as const,
+        value: lowerResponseBody(response.body, route.path, strings, span),
+        ...(response.status === 200 ? {} : {status: response.status}),
+        contentType: response.contentType as
+          | ""
+          | "text/plain; charset=UTF-8"
+          | "text/plain;charset=UTF-8"
+          | "text/html; charset=UTF-8"
+          | "application/json",
+      };
     const responseHeaders = loweredHeaders[index]!;
     const basicAuthorization = response.basicAuthorization === undefined
       ? undefined
@@ -269,17 +298,7 @@ function lowerApplicationInitialization(
       ...(response.stderr === undefined
         ? {}
         : {stderr: response.stderr.map(line => strings.intern(line))}),
-      response: {
-        kind: "text" as const,
-        value,
-        ...(response.status === 200 ? {} : {status: response.status}),
-        contentType: response.contentType as
-          | ""
-          | "text/plain; charset=UTF-8"
-          | "text/plain;charset=UTF-8"
-          | "text/html; charset=UTF-8"
-          | "application/json",
-      },
+      response: loweredResponse,
       span,
     };
   });
@@ -426,6 +445,10 @@ function isLowerableResponseBody(body: ResponseBody): boolean {
   if (Array.isArray(body)) {
     return body.every(part => part.kind !== "elapsedMilliseconds");
   }
+  if (body.kind === "stream") {
+    return body.chunks.every(chunk => typeof chunk === "string"
+      || chunk.every(part => part.kind !== "elapsedMilliseconds"));
+  }
   return isLowerableResponseBody(body.whenPresent) && isLowerableResponseBody(body.whenAbsent);
 }
 
@@ -440,6 +463,9 @@ function lowerResponseBody(
   }
   if (Array.isArray(body)) {
     return lowerRuntimeString(body, routePath, strings, span);
+  }
+  if (body.kind === "stream") {
+    throw new Error("stream body must lower through a stream response");
   }
   return {
     kind: "queryConditional",
@@ -504,6 +530,10 @@ function dynamicResponseExpressions(body: ResponseBody): number {
       || part.kind === "fetchStatus"
       || part.kind === "queryParameter"
     ).length;
+  }
+  if (body.kind === "stream") {
+    return body.chunks.reduce((total, chunk) =>
+      total + (typeof chunk === "string" ? 0 : dynamicResponseExpressions(chunk)), 0);
   }
   return 1
     + dynamicResponseExpressions(body.whenPresent)

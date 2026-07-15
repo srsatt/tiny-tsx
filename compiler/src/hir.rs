@@ -111,6 +111,14 @@ pub enum HandlerResponse {
         #[serde(rename = "contentType")]
         content_type: Option<String>,
     },
+    Stream {
+        chunks: Vec<ValueExpression>,
+        #[serde(default = "ok_status")]
+        status: u16,
+        #[serde(default)]
+        #[serde(rename = "contentType")]
+        content_type: Option<String>,
+    },
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -470,6 +478,33 @@ impl Program {
                     return Err("GET text response has an unsupported content type".to_owned());
                 }
                 self.validate_handler_expression(value, route_pattern)
+            }
+            HandlerResponse::Stream {
+                chunks,
+                status,
+                content_type,
+            } => {
+                if !(100..=599).contains(status) {
+                    return Err("stream response has an invalid HTTP status".to_owned());
+                }
+                if chunks.is_empty() || chunks.len() > 16 {
+                    return Err("stream response must contain between 1 and 16 chunks".to_owned());
+                }
+                if content_type.as_deref().is_some_and(|value| {
+                    !matches!(
+                        value,
+                        "" | "text/plain; charset=UTF-8"
+                            | "text/plain;charset=UTF-8"
+                            | "text/html; charset=UTF-8"
+                            | "application/json"
+                    )
+                }) {
+                    return Err("stream response has an unsupported content type".to_owned());
+                }
+                for chunk in chunks {
+                    self.validate_handler_expression(chunk, route_pattern)?;
+                }
+                Ok(())
             }
             _ => Ok(()),
         }

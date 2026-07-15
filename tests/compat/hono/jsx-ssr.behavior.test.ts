@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 import app from "../../../vendor/hono-examples/jsx-ssr/src/index.tsx";
 import dynamicApp from "./dynamic-jsx-smoke.tsx";
+import streamApp from "./stream-text-smoke.ts";
 
 const rootFixture = readFileSync(
   new URL("./fixtures/jsx-ssr-root.html", import.meta.url),
@@ -72,6 +73,15 @@ const tests: Array<[string, () => Promise<void>]> = [
       await response.text(),
       '<main data-name="&lt;&gt;&amp;&quot;&#39; Ada">Hello, <strong>&lt;&gt;&amp;&quot;&#39; Ada</strong>!</main>',
     );
+  }],
+
+  ["streams the selected upstream Hono text helper contract", async () => {
+    const response = await streamApp.request("http://localhost/stream");
+
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("content-type"), "text/plain; charset=UTF-8");
+    assert.equal(response.headers.get("x-content-type-options"), "nosniff");
+    assert.equal(await response.text(), "first\nsecond\nthird\n");
   }],
 ];
 

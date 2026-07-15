@@ -30,6 +30,10 @@ export type Value =
   | {kind: "queryPredicate"; name: string; test: "truthy" | "empty" | "present"}
   | {kind: "runtimeString"; parts: RuntimeStringPart[]}
   | {kind: "runtimeHtml"; parts: RuntimeStringPart[]}
+  | {kind: "readableStream"; state: StreamState}
+  | {kind: "writableStream"; state: StreamState}
+  | {kind: "streamWriter"; state: StreamState}
+  | {kind: "streamReader"; state: StreamState}
   | {
       kind: "closure";
       span: SourceSpan;
@@ -60,9 +64,20 @@ export type RuntimeStringPart =
 
 export type ResponseHeaderValue = string | RuntimeStringPart[];
 
+export interface StreamState {
+  chunks: Array<string | RuntimeStringPart[]>;
+  closed: boolean;
+}
+
+export interface StreamResponseBody {
+  kind: "stream";
+  chunks: Array<string | RuntimeStringPart[]>;
+}
+
 export type ResponseBody =
   | string
   | RuntimeStringPart[]
+  | StreamResponseBody
   | {
       kind: "queryConditional";
       query: string;
@@ -206,7 +221,11 @@ export function truthiness(value: Value): boolean | undefined {
     case "constructed":
     case "responseBody":
     case "response":
-    case "instance": return true;
+    case "instance":
+    case "readableStream":
+    case "writableStream":
+    case "streamWriter":
+    case "streamReader": return true;
     case "routeParameter": return true;
     case "routeChoice": return undefined;
     case "requestHeader": return undefined;
@@ -237,6 +256,10 @@ export function typeOf(value: Value): string {
     case "fetchStatus": return "number";
     case "queryParameter": return "string";
     case "queryPredicate": return "boolean";
+    case "readableStream":
+    case "writableStream":
+    case "streamWriter":
+    case "streamReader": return "object";
     case "closure":
     case "reference": return "function";
     default: return "object";
