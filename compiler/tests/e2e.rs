@@ -2,10 +2,10 @@
 
 use std::{
     fs,
-    io::{Read, Write},
+    io::{BufRead, BufReader, Read, Write},
     net::{TcpListener, TcpStream},
     path::{Path, PathBuf},
-    process::{Child, Command},
+    process::{Child, Command, Stdio},
     sync::Mutex,
     thread,
     time::{Duration, SystemTime, UNIX_EPOCH},
@@ -23,6 +23,7 @@ struct ExpectedResponse<'a> {
     content_type: Option<&'a str>,
     headers: &'a [(&'a str, &'a str)],
     request_headers: &'a [(&'a str, &'a str)],
+    stderr: Option<&'a str>,
 }
 
 impl Drop for Server {
@@ -324,6 +325,7 @@ fn builds_and_serves_upstream_hono_redirect() {
             content_type: None,
             headers: &[("Location", "/")],
             request_headers: &[],
+            stderr: None,
         },
         &[
             "--alias",
@@ -347,6 +349,7 @@ fn builds_and_serves_an_upstream_hono_request_header() {
             content_type: Some("text/plain;charset=UTF-8"),
             headers: &[],
             request_headers: &[("User-Agent", "tiny-client/1.0")],
+            stderr: None,
         },
         &[
             "--alias",
@@ -402,6 +405,30 @@ fn builds_and_serves_upstream_custom_not_found() {
     );
 }
 
+#[test]
+fn builds_and_serves_upstream_custom_error_handler() {
+    build_and_serve_with_options(
+        "tests/compat/hono/error-handler-smoke.ts",
+        ExpectedResponse {
+            method: "GET",
+            status: 500,
+            path: "/error",
+            body: "Custom Error Message",
+            content_type: Some("text/plain; charset=UTF-8"),
+            headers: &[],
+            request_headers: &[],
+            stderr: Some("Error: Error has occurred"),
+        },
+        &[
+            "--alias",
+            "hono=vendor/hono/src/index.ts",
+            "--api",
+            "hono=tests/compat/hono/api.d.ts",
+        ],
+        &[],
+    );
+}
+
 fn build_and_serve(entry: &str, expected_body: &str, expected_content_type: &str) {
     build_and_serve_with_options(
         entry,
@@ -427,6 +454,7 @@ fn expected<'a>(
         content_type: Some(content_type),
         headers,
         request_headers: &[],
+        stderr: None,
     }
 }
 
@@ -463,10 +491,12 @@ fn build_and_serve_with_options(
     assert_eq!(&bytes[..4], &[0xcf, 0xfa, 0xed, 0xfe], "Mach-O 64 magic");
     assert!(with_suffix(&binary, ".build.json").is_file());
 
-    let child = Command::new(&binary)
-        .spawn()
-        .expect("start generated server");
-    let _server = Server(child);
+    let mut server_command = Command::new(&binary);
+    if expected.stderr.is_some() {
+        server_command.stderr(Stdio::piped());
+    }
+    let child = server_command.spawn().expect("start generated server");
+    let mut server = Server(child);
     let mut stream = connect_with_retry(port);
     write!(
         stream,
@@ -503,6 +533,14 @@ fn build_and_serve_with_options(
             response.contains(&format!("{name}: {value}\r\n")),
             "{response}"
         );
+    }
+    if let Some(expected_stderr) = expected.stderr {
+        let stderr = server.0.stderr.take().expect("captured server stderr");
+        let mut line = String::new();
+        BufReader::new(stderr)
+            .read_line(&mut line)
+            .expect("read server stderr");
+        assert_eq!(line.trim_end(), expected_stderr);
     }
 
     for (path, body, content_type) in additional_routes {
