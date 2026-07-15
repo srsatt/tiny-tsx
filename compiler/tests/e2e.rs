@@ -113,6 +113,28 @@ fn builds_and_serves_a_hono_named_route_parameter() {
 }
 
 #[test]
+fn builds_and_serves_nested_hono_routes() {
+    build_and_serve_with_options(
+        "tests/compat/hono/nested-route-smoke.ts",
+        "List Books",
+        "text/plain;charset=UTF-8",
+        "/book",
+        &[],
+        &[
+            "--alias",
+            "hono=vendor/hono/src/index.ts",
+            "--api",
+            "hono=tests/compat/hono/api.d.ts",
+        ],
+        &[(
+            "/book/hello%20world",
+            "Get Book: hello world",
+            "text/plain;charset=UTF-8",
+        )],
+    );
+}
+
+#[test]
 fn builds_and_serves_static_response_headers() {
     build_and_serve_with_options(
         "tests/compat/hono/response-headers-smoke.ts",
