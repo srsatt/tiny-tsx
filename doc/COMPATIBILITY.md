@@ -332,13 +332,23 @@ BigInt object representation; it is the complete observable behavior required
 by this exact test.
 
 The complete `language/statements/for/S12.6.3_A1.js` case is the third native
-Test262 program. Test262 HIR v2 retains the numeric binding, empty-header
+Test262 program. Test262 HIR v3 retains the numeric binding, empty-header
 `for (;;)` loop, pre-increment threshold, thrown numeric completion, catch-value
 guard, and post-catch counter guard. Generated Apple-arm64 code performs all 101
 iterations, transfers the thrown value into the catch check, and returns failure
 if either upstream guard would construct `Test262Error`. This is executable
 evidence for the complete closed loop/throw/catch program, not yet general
 exception objects, stack unwinding, arbitrary loop bodies, or `try/finally`.
+
+The complete `Array/prototype/unshift/S15.4.4.13_A1_T1.js` case is the fourth
+native Test262 program. Its source lowers to ordered Test262 HIR v3 operations:
+three `unshift` calls and eight result, element, or length guards. Generated
+Apple-arm64 code owns a 16-element dense numeric array in a bounded stack frame,
+shifts existing elements at runtime, preserves signed values, returns the new
+length, and treats indices at or beyond length as `undefined`. The executable
+runs every upstream guard without JavaScript. This is evidence for that complete
+no-argument/one-argument `unshift` program, not generic application arrays,
+sparse elements, arbitrary values, other mutators, or runtime spread.
 
 ### Typed constant materialization
 

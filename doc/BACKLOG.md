@@ -58,6 +58,9 @@ commit message.
       closed `BigInt(...)` conversion and `Object(...)` boxing categories.
 - [x] Execute the complete Test262 infinite `for (;;)` case through 101 native
       pre-increments, numeric throw/catch completion, and final counter checks.
+- [x] Execute the complete pinned `Array.prototype.unshift` Test262 case with a
+      bounded dense numeric array, source-ordered mutation, length results, and
+      out-of-range `undefined` checks.
 - [ ] Promote the remaining syntax-only Test262 cases only as their complete
       assertion programs become executable.
 - [ ] Compile function values, closures, records, arrays, and ordinary loops.

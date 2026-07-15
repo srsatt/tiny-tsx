@@ -86,8 +86,10 @@ produces and serves a native Mach-O executable from the example TSX source.
   covering BigInt conversion and Object boxing categories. The complete
   `for/S12.6.3_A1.js` case now executes 101 native pre-increments, exits its
   infinite loop through numeric throw completion, verifies the caught value,
-  and checks final state. The other eleven cases remain syntax-only and are not
-  conformance results.
+  and checks final state. The complete `Array.prototype.unshift` case executes
+  three source-ordered calls against a bounded dense numeric array and verifies
+  returned lengths, signed element movement, out-of-range `undefined`, and final
+  length. The other ten cases remain syntax-only and are not conformance results.
 - The dedicated native API suite currently covers Request method/path/query
   views, allocation-free form-decoded query-name presence, elapsed-header
   formatting, and exact-fit, OOM, and invalid response-writer behavior. Query
@@ -290,9 +292,10 @@ rtk python3 benchmarks/scripts/run_static.py --workload hono-basic --duration 1 
 The pinned complete Hono basic application milestone, three direct
 URLSearchParams WPT files, and form-decoded Hono request-query lookup are
 implemented. Native Test262 now also covers one complete closed
-loop/throw/catch program. The next Web API tracer should add invalid UTF-8
-replacement with direct upstream parser evidence, or the next Test262 promotion
-should unlock array/function iteration needed by data-driven WPT files. Keep
+loop/throw/catch program and one complete bounded numeric `unshift` program. The
+next Web API tracer should add invalid UTF-8 replacement with direct upstream
+parser evidence, or the next Test262 promotion should unlock array/function
+iteration needed by data-driven WPT files. Keep
 fixed-layout records separate from this bounded dynamic pair collection; do not
 infer generic `Map` or application
 `URLSearchParams` support from the WPT runner. Custom Hono `api.d.ts` overlays
@@ -306,7 +309,7 @@ implemented.
 Read `README.md`, `doc/COMPATIBILITY.md`, and `doc/BACKLOG.md`. Run
 `npm run audit:hono-basic` for graph-level requirements, then evaluate
 `vendor/hono-examples/basic/src/index.ts` as the complete-source regression.
-Start with invalid-UTF-8 form parsing or the complete array/function Test262
-case needed by broader WPT execution. Preserve upstream registration and
+Start with invalid-UTF-8 form parsing or the next complete array/function
+Test262 case needed by broader WPT execution. Preserve upstream registration and
 middleware semantics, and run the verification commands recorded here before
 moving an item to verified.

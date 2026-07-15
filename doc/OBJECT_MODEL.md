@@ -19,6 +19,21 @@ numbers, bigint, strings, arrays, and records. `symbol`, signed-zero identity,
 `NaN`, and infinities need explicit encodings before they can be admitted as
 constants; they must not be approximated through JSON numbers or strings.
 
+## Arrays
+
+A closed array used during application initialization can be a staged constant,
+including folded spread from other closed arrays. A runtime array is a different
+representation: it has an ordered numeric index space and mutable length, but it
+is neither a fixed-field record nor a key/value map.
+
+The native Test262 runner currently proves one deliberately bounded runtime
+form: up to 16 dense numeric elements with zero- or one-argument `unshift`,
+returned length, indexed reads, and out-of-range `undefined`. That isolated test
+representation does not yet make arrays available to compiled applications.
+Sparse elements, arbitrary values, identity, other mutators, iteration, and
+runtime spread remain separate semantics. Closed spread may still fold during
+AOT staging without implying any of those runtime capabilities.
+
 ## Maps
 
 A map has runtime keys, runtime membership, and object identity. Explicit
