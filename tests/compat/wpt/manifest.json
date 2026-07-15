@@ -40,7 +40,7 @@
       "upstreamPath": "url/urlsearchparams-stringifier.any.js",
       "localPath": "tests/compat/wpt/upstream/urlsearchparams-stringifier.any.js",
       "sha256": "14f7b8871fec6a02dbbe324a5f8943932ecb149285e5cc149fdf34ae769d52c0",
-      "status": "native-planned",
+      "status": "native",
       "coverage": "Complete upstream file: form-url serialization, plus and percent handling, UTF-8 and NUL encoding, malformed escapes, and live URL.searchParams linkage"
     }
   ]
