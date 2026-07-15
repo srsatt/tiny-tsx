@@ -505,11 +505,18 @@ fn builds_and_serves_upstream_pretty_json_by_query_presence() {
             "--api",
             "hono/pretty-json=tests/compat/hono/pretty-json-api.d.ts",
         ],
-        &[(
-            "/api/posts?pretty",
-            "[\n  {\n    \"id\": 1,\n    \"title\": \"Good Morning\"\n  }\n]",
-            "application/json",
-        )],
+        &[
+            (
+                "/api/posts?pretty",
+                "[\n  {\n    \"id\": 1,\n    \"title\": \"Good Morning\"\n  }\n]",
+                "application/json",
+            ),
+            (
+                "/api/posts?%70retty",
+                "[\n  {\n    \"id\": 1,\n    \"title\": \"Good Morning\"\n  }\n]",
+                "application/json",
+            ),
+        ],
     );
 }
 

@@ -271,12 +271,38 @@ pub unsafe extern "C" fn tinytsx_request_query_has(
     let query = unsafe { slice::from_raw_parts(query.ptr, query.len) };
     let expected = unsafe { slice::from_raw_parts(expected, expected_len) };
     u32::from(query.split(|byte| *byte == b'&').any(|part| {
+        if part.is_empty() {
+            return false;
+        }
         let name = part
             .iter()
             .position(|byte| *byte == b'=')
             .map_or(part, |index| &part[..index]);
-        name == expected
+        form_urlencoded_name_equals(name, expected)
     }))
+}
+
+fn form_urlencoded_name_equals(encoded: &[u8], expected: &[u8]) -> bool {
+    let mut encoded_index = 0;
+    let mut expected_index = 0;
+    while encoded_index < encoded.len() {
+        let decoded = if encoded[encoded_index] == b'+' {
+            encoded_index += 1;
+            b' '
+        } else if let Some(byte) = percent_byte(encoded, encoded_index) {
+            encoded_index += 3;
+            byte
+        } else {
+            let byte = encoded[encoded_index];
+            encoded_index += 1;
+            byte
+        };
+        if expected.get(expected_index) != Some(&decoded) {
+            return false;
+        }
+        expected_index += 1;
+    }
+    expected_index == expected.len()
 }
 
 #[unsafe(no_mangle)]

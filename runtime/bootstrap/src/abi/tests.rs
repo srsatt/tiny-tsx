@@ -142,6 +142,32 @@ fn request_query_presence_requires_an_exact_parameter_name() {
 }
 
 #[test]
+fn request_query_presence_decodes_form_encoded_names() {
+    for (target, expected) in [
+        (b"/posts?%70retty".as_slice(), b"pretty".as_slice()),
+        (b"/posts?pre%74ty=1".as_slice(), b"pretty".as_slice()),
+        (b"/posts?pretty+name".as_slice(), b"pretty name".as_slice()),
+        (b"/posts?m%C3%B8%C3%B8".as_slice(), "møø".as_bytes()),
+        (b"/posts?%25".as_slice(), b"%".as_slice()),
+        (b"/posts?%2".as_slice(), b"%2".as_slice()),
+    ] {
+        let request = request(b"GET", target);
+        assert_eq!(
+            unsafe { tinytsx_request_query_has(&request, expected.as_ptr(), expected.len()) },
+            1,
+            "{}",
+            String::from_utf8_lossy(target)
+        );
+    }
+
+    let request = request(b"GET", b"/posts?pretty+name");
+    assert_eq!(
+        unsafe { tinytsx_request_query_has(&request, b"pretty+name".as_ptr(), 11) },
+        0
+    );
+}
+
+#[test]
 fn request_path_patterns_match_nonempty_named_segments() {
     let matching = request(b"GET", b"/entry/abc-123?expand=true");
 
