@@ -136,6 +136,14 @@ generated code measures around the native body and formats `X-Response-Time`
 into writer-owned storage. A retained symbolic response-body value also lets
 Hono clone the `prettyJSON()` query-conditional response before setting timing.
 
+The exact closed `basicAuth({ username, password })` factory now executes its
+record membership checks, default options, and credential-array `unshift()`.
+Its returned upstream closure becomes a request guard in HIR rather than being
+executed with invented compile-time credentials. Native dispatch parses the
+borrowed Authorization header and selects either the protected response or the
+rejected response. The latter is evaluated through the installed Hono error
+handler and only receives middleware that actually surrounds the auth guard.
+
 An explicit `notFound()` application call is also retained. After route
 registration completes, the evaluator invokes Hono's installed private closure
 with matching global middleware and lowers the result as final GET/POST

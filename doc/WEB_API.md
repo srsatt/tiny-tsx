@@ -36,6 +36,11 @@ the request head, valid only during dispatch. The supported response expression
 performs case-insensitive lookup and writes the found bytes, or `undefined` when
 the header is absent.
 
+The Basic Authorization guard uses the same borrowed header table through a
+dedicated ABI predicate. It implements the exact closed credentials required by
+the pinned Hono example without claiming general runtime `Request.headers`,
+`TextDecoder`, Base64, RegExp, Promise, or Web Crypto objects.
+
 The executable Hono route evaluates the upstream `Context.text()` condition and
 reaches `new Response(text)` with a closed string at compile time. A closed
 `new Response(body, { headers: { ... } })` also carries static headers into HIR

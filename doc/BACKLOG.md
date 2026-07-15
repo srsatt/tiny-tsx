@@ -127,8 +127,9 @@ commit message.
 - [x] Compile the basic example's exact `Date.now()` response-time middleware
       into a bounded runtime-formatted header, including composition with
       `prettyJSON()` response clones.
-- [ ] Compile the remaining basic-example middleware, including `basicAuth`
-      and `etag`.
+- [x] Compile the basic example's closed `basicAuth` configuration into a native
+      request guard, including authorized, rejected, and custom-error behavior.
+- [ ] Compile the remaining basic-example `etag` middleware.
 - [ ] Compile the required rest/spread operations.
 - [ ] Add a native RegExp backend and allowlisted Test262 cases.
 - [ ] Add the general Request, Response, Headers, URL, and encoding native APIs.

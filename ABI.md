@@ -115,6 +115,14 @@ extern "C" fn tinytsx_html_write_request_header(
     name_len: usize,
 ) -> u32;
 
+extern "C" fn tinytsx_request_basic_auth_equals(
+    request: *const TinyRequest,
+    username: *const u8,
+    username_len: usize,
+    password: *const u8,
+    password_len: usize,
+) -> u32;
+
 extern "C" fn tinytsx_response_header_static(
     writer: *mut TinyResponseWriter,
     name: *const u8,
@@ -161,6 +169,12 @@ other methods before entering application code.
 valued form. `tinytsx_html_write_request_header` searches the bounded borrowed
 request-header table case-insensitively and writes either the value or the
 JavaScript template fallback `undefined`.
+
+`tinytsx_request_basic_auth_equals` finds `Authorization` case-insensitively,
+parses Hono's supported case-insensitive Basic scheme and spacing, decodes
+standard Base64 without allocation, and compares the decoded username/password
+bytes against generated static credentials. It returns a boolean in `w0`;
+malformed, missing, and mismatched credentials return zero.
 
 `tinytsx_response_header_static` validates HTTP token names and values, replaces
 existing names case-insensitively, and stores at most eight custom headers.

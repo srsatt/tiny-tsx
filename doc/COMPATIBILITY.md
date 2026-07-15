@@ -140,8 +140,17 @@ code brackets the response body and the runtime formats a numeric
 `X-Response-Time: <n>ms` value in writer-owned storage. A composition tracer
 proves the header survives Hono's `prettyJSON()` clone of a query-conditional
 body. The complete 34-module evaluation now retains 21 routes, closes 14 route
-responses with timing on all 14, and reports four remaining diagnostics, all in
-the `basicAuth` path.
+responses with timing on all 14, and reports no initialization diagnostics.
+
+The basic example's exact `basicAuth` options are also specialized from upstream
+source. Closed `in` checks and `users.unshift()` build the credential list; HIR
+retains it as a Basic Authorization request guard. The zero-dependency runtime
+parses and compares the borrowed header without constructing a JavaScript
+Request, Headers, RegExp, Uint8Array, TextDecoder, Promise, or crypto object.
+Native HTTP tests cover missing and correct credentials plus the complete
+example's custom-error ordering: rejected auth logs `Error`, returns the custom
+500 response, retains outer `X-Powered-By`, and correctly omits downstream
+`X-Response-Time`.
 
 When source explicitly calls `app.notFound(handler)`, the evaluator reads the
 installed upstream `#notFoundHandler` closure and lowers its response after all

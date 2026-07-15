@@ -76,10 +76,11 @@ produces and serves a native Mach-O executable from the example TSX source.
   route-path test proves the overlay participates in TypeScript checking.
 - Relative ESM components now compile through multi-module HIR into the native
   server; a second real HTTP E2E test verifies the imported component output.
-- Test262 intake validates the pin, provenance metadata, and parsing of twelve
+- Test262 intake validates the pin, provenance metadata, and parsing of fourteen
   allowlisted class, loop, RegExp, async, array-spread, primitive, function,
-  throw, Error, `Date.now`, and subtraction cases. These are explicitly
-  syntax-only and are not semantic conformance results.
+  throw, Error, `Date.now`, subtraction, record-membership, and array-unshift
+  cases. These are explicitly syntax-only and are not semantic conformance
+  results.
 - The dedicated native API suite currently covers Request method/path/query
   views, elapsed-header formatting, and exact-fit, OOM, and invalid
   response-writer behavior.
@@ -204,6 +205,13 @@ produces and serves a native Mach-O executable from the example TSX source.
 - The pinned Test262 syntax allowlist now also includes `Date.now()` returning a
   number and reference-based numeric subtraction. These are intake provenance,
   not native Test262 execution claims.
+- Closed `basicAuth` options now execute through upstream Hono factory code and
+  lower into a native Basic Authorization request guard. The dependency-free
+  runtime parses Base64 credentials from borrowed headers. Native E2Es cover 401
+  rejection, successful protected routing, and the complete example's custom
+  error/middleware order. The 34-module initialization trace now has zero
+  diagnostics. The external-fetch and deliberate type-error routes still block
+  full-file lowering, and the ETag route does not yet retain ETag semantics.
 - Async/await entry handlers are accepted only when application initialization
   fully stages them. Native Promise/suspension semantics remain unimplemented.
 - Static `Response` headers lower into a bounded eight-entry native writer with
@@ -248,7 +256,7 @@ rtk python3 benchmarks/scripts/run_static.py --workload hono-basic --duration 1 
 ## Active slice
 
 Compatibility substrate: compile the next complete-basic-example frontier:
-authentication, ETags, and the remaining request-dependent handlers. Extend the
+ETags and the remaining request-dependent handlers. Extend the
 executable function slice with locals,
 record property access, branches, and closures. Type-layout specialization should
 handle closed request-time records without pretending their values are
