@@ -16,7 +16,7 @@ The current boundary is:
 | `Response` | standard DOM declaration | bounded body writer, explicit status, optional HTML/text/JSON content-type IDs; closed `new Response(string or null, { status, headers })` AOT fast path |
 | `Headers` | standard DOM declaration | closed construction/cloning; bounded request-header borrowing and response-header storage with case-insensitive lookup/replacement |
 | `fetch` | standard DOM declaration | one closed URL string; request-time GET; `.status` only; Apple system libcurl transport |
-| `URL` / `URLSearchParams` | standard DOM declaration | pending |
+| `URL` / `URLSearchParams` | standard DOM declaration | native WPT-only ordered query-pair construction plus `get(name)`/`has(name)` for unescaped closed string inputs; application API pending |
 | body and stream types | standard DOM declaration | pending |
 | encoding types | standard DOM declaration | pending |
 
@@ -101,6 +101,22 @@ matching. TinyTSX does not yet construct `URLSearchParams`, percent-decode query
 names, or implement the two-argument overload, append, and delete cases in that
 source.
 
+The complete pinned `url/urlsearchparams-get.any.js` source is the first WPT
+classified as `native`. `tinytsx wpt <case> --output <binary>` parses the
+untouched upstream JavaScript, lowers both `test(...)` bodies and all eleven
+assertions into typed WPT HIR, and emits a standalone Mach-O executable. The
+native query-pair view preserves source order, empty names and values, missing
+names, and first-value lookup for duplicate names. The allowlist-driven
+`test:wpt-native` command executes the binary and treats a failed assertion as
+a non-zero process result.
+
+This runner is semantic evidence for that complete source file, not yet the
+application-facing `URLSearchParams` class. It does not currently percent-decode
+names or values, translate `+`, mutate the pair list, coerce non-string method
+arguments, implement two-argument `has`/`delete`, or expose object identity and
+iteration. Those requirements remain necessary before the broader pinned
+`urlsearchparams-has.any.js` file can move from `native-derived` to `native`.
+
 The pinned Hono `poweredBy()` middleware now executes symbolically from upstream
 source. Its post-handler `res.headers.set('X-Powered-By', 'Hono')` effect lowers
 through this same native header path and is verified over a real HTTP request.
@@ -111,7 +127,7 @@ body parsing/stringification remains a closed AOT transformation rather than a
 general native `Response.json()` implementation.
 
 Native API behavior belongs in the dedicated runtime tests. Selected Web
-Platform Tests should progress from exact-source intake, to native-derived
-coverage, to execution of the upstream JavaScript as the language surface
+Platform Tests progress from exact-source intake, to native-derived coverage,
+to execution of the complete upstream JavaScript as the language surface
 becomes available. A green TypeScript check alone never counts as Web API
 conformance.

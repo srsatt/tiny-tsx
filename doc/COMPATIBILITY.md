@@ -24,9 +24,11 @@ metadata in the allowlist; its BSD license remains available in the submodule.
    unsupported constructs with stable diagnostics.
 2. **Test262 execution** compiles and runs only cases present in the allowlist.
    Parse-only probes are tracked separately and do not count as conformance.
-3. **Native API tests** exercise Request, Response, Headers, URL, encoding, and
+3. **WPT execution** compiles and runs only complete selected upstream files.
+   Derived ABI coverage remains labeled separately from direct execution.
+4. **Native API tests** exercise Request, Response, Headers, URL, encoding, and
    later streaming behavior directly at the native ABI boundary.
-4. **Hono tests** start with exact-source applications and selected upstream
+5. **Hono tests** start with exact-source applications and selected upstream
    behavior cases. TinyTSX and Bun responses are compared byte-for-byte where
    the standards permit it.
 
@@ -404,6 +406,15 @@ record. The detailed rules are recorded in `doc/OBJECT_MODEL.md`.
 Request query state is neither model: it is a borrowed request view lowered to
 a dedicated predicate. The `prettyJSON()` trace therefore does not turn a query
 string into a compile-time record or introduce a generic dynamic map.
+
+The native WPT runner adds a second, deliberately isolated representation: an
+ordered runtime query-pair view used by the complete pinned
+`urlsearchparams-get.any.js`. It preserves duplicates and first-value lookup,
+so it has dynamic collection semantics rather than record field semantics. It
+is not a generic `Map`, and it is not yet wired into application-generated
+`URLSearchParams` objects. The distinction prevents a successful closed WPT
+input from being misreported as general compile-time record folding or a
+production Web API implementation.
 
 ## Compatibility order
 

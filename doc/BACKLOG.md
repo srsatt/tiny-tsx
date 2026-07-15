@@ -160,8 +160,13 @@ commit message.
       201 case to native-derived Hono E2E evidence.
 - [x] Intake the pinned WPT `URLSearchParams.has(name)` source and connect its
       one-argument presence case to focused native query ABI evidence.
-- [ ] Execute selected Web Platform Tests through the native compiler/runtime;
-      declaration-level and derived testing are not conformance.
+- [x] Add an allowlist-driven native WPT compiler/runner and execute every
+      assertion in the complete pinned `URLSearchParams.get()` source.
+- [ ] Promote the complete pinned `URLSearchParams.has()` source by adding
+      false assertions, ordered append/delete mutation, Web IDL string
+      coercion, and the two-argument `has`/`delete` semantics it exercises.
+- [ ] Extend URL form decoding with percent escapes and `+` translation before
+      exposing the WPT query-pair implementation as an application Web API.
 - [ ] Add exceptions, Promise, async/await, and a bounded native task executor.
 - [x] Add the pinned Test262 throw-statement and Error-message cases to the
       syntax allowlist; native Test262 execution remains pending.
