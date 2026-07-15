@@ -76,6 +76,7 @@ interface Evaluator {
   issues: ConstructorIssue[];
   root: ResolvedRuntimeClass;
   routerInsertions: number;
+  instanceClasses: WeakMap<Value & {kind: "instance"}, ResolvedRuntimeClass>;
 }
 
 export function evaluateApplicationConstructor(
@@ -120,8 +121,10 @@ function initializeConstructor(
     issues: [],
     root: resolved,
     routerInsertions: 0,
+    instanceClasses: new WeakMap(),
   };
   const instance: Value & {kind: "instance"} = {kind: "instance", fields: new Map()};
+  evaluator.instanceClasses.set(instance, resolved);
   const arguments_ = application.constructorArguments.map(applicationValue);
   executeClass(evaluator, resolved, arguments_, instance);
   return {evaluator, instance};
@@ -190,7 +193,7 @@ function executeApplicationCalls(
       invokeClosure(evaluator, callable, arguments_, receiver);
       continue;
     }
-    const method = findInstanceMethod(evaluator, call.expression.name.text);
+    const method = findInstanceMethod(evaluator, call.expression.name.text, receiver);
     if (method !== undefined) {
       invokeFunctionLike(
         evaluator,
@@ -256,6 +259,7 @@ function evaluateRouteHandler(
     return undefined;
   }
   const context: Value & {kind: "instance"} = {kind: "instance", fields: new Map()};
+  evaluator.instanceClasses.set(context, contextClass);
   executeClass(
     evaluator,
     contextClass,
@@ -267,6 +271,7 @@ function evaluateRouteHandler(
   if (response.kind === "response") {
     for (const middlewareHandler of [...middleware].reverse()) {
       const middlewareContext: Value & {kind: "instance"} = {kind: "instance", fields: new Map()};
+      evaluator.instanceClasses.set(middlewareContext, contextClass);
       executeClass(
         evaluator,
         contextClass,
@@ -287,15 +292,17 @@ function evaluateRouteHandler(
       );
     }
   }
-  return response.kind === "response"
-    ? {
-      kind: "text",
-      body: response.body,
-      status: response.status,
-      contentType: response.contentType,
-      ...(response.headers.size === 0 ? {} : {headers: [...response.headers.values()]}),
-    }
-    : undefined;
+  if (response.kind !== "response") return undefined;
+  const headers = [...response.headers.values()].filter(header =>
+    header.name.toLowerCase() !== "content-type"
+  );
+  return {
+    kind: "text",
+    body: response.body,
+    status: response.status,
+    contentType: response.contentType,
+    ...(headers.length === 0 ? {} : {headers}),
+  };
 }
 
 function matchingMiddleware(
@@ -450,6 +457,30 @@ function executeStatement(
         ? UNDEFINED
         : evaluate(evaluator, declaration.initializer, module, environment, instance);
       bind(evaluator, declaration.name, value, module, environment);
+    }
+    return continued();
+  }
+  if (ts.isForOfStatement(statement)) {
+    const values = evaluate(evaluator, statement.expression, module, environment, instance);
+    if (values.kind !== "array" || !ts.isVariableDeclarationList(statement.initializer)) {
+      issue(evaluator, statement, module, "for-of source is not a closed array");
+      return continued();
+    }
+    const declaration = statement.initializer.declarations[0];
+    if (declaration === undefined) {
+      return continued();
+    }
+    for (const value of values.items) {
+      const loopEnvironment = new Map(environment);
+      bind(evaluator, declaration.name, value, module, loopEnvironment);
+      const result = executeStatement(
+        evaluator,
+        statement.statement,
+        module,
+        loopEnvironment,
+        instance,
+      );
+      if (result.returned) return result;
     }
     return continued();
   }
@@ -655,7 +686,7 @@ function executeEffectCall(
     }
   }
   if (receiver.kind === "instance") {
-    const method = findInstanceMethod(evaluator, name);
+    const method = findInstanceMethod(evaluator, name, receiver);
     if (method !== undefined) {
       invokeFunctionLike(
         evaluator,
@@ -674,8 +705,11 @@ function executeEffectCall(
 function findInstanceMethod(
   evaluator: Evaluator,
   name: string,
+  instance?: Value & {kind: "instance"},
 ): {module: SourceModule; declaration: ts.MethodDeclaration} | undefined {
-  let current: ResolvedRuntimeClass | undefined = evaluator.root;
+  let current: ResolvedRuntimeClass | undefined = instance === undefined
+    ? evaluator.root
+    : evaluator.instanceClasses.get(instance) ?? evaluator.root;
   while (current !== undefined) {
     const method = current.declaration.members.find(member =>
       ts.isMethodDeclaration(member) && memberName(member.name) === name
@@ -723,12 +757,29 @@ function evaluateCall(
         ? {kind: "routeParameter", name: key.value}
         : UNDEFINED;
     }
+    if (receiver.kind === "reference" && receiver.name === "Object" && name === "entries") {
+      const value = arguments_[0];
+      return value?.kind === "record"
+        ? {
+          kind: "array",
+          items: [...value.fields].map(([key, field]) => ({
+            kind: "array",
+            items: [{kind: "string", value: key}, field],
+          })),
+        }
+        : unknown("Object.entries argument is not a closed record");
+    }
+    if (receiver.kind === "reference" && receiver.name === "JSON" && name === "stringify") {
+      const value = arguments_[0] ?? UNDEFINED;
+      const serialized = stringifyJson(value);
+      return serialized === undefined ? UNDEFINED : {kind: "string", value: serialized};
+    }
     if (receiver.kind === "instance") {
       const callable = receiver.fields.get(name);
       if (callable?.kind === "closure") {
         return invokeClosure(evaluator, callable, arguments_, receiver);
       }
-      const method = findInstanceMethod(evaluator, name);
+      const method = findInstanceMethod(evaluator, name, receiver);
       if (method !== undefined) {
         return invokeFunctionLike(
           evaluator,
@@ -833,6 +884,9 @@ function evaluate(
         fields.set(property.name.text, environment.get(property.name.text) ?? UNDEFINED);
       } else if (ts.isSpreadAssignment(property)) {
         const spread = evaluate(evaluator, property.expression, module, environment, instance);
+        if (spread.kind === "undefined" || spread.kind === "null") {
+          continue;
+        }
         if (spread.kind !== "record") {
           return unknown("object spread is not closed");
         }
@@ -943,19 +997,44 @@ function evaluate(
         : body.kind === "runtimeString"
           ? body.parts
           : undefined;
+      const headers = responseHeaders(evaluator, expression, module, environment, instance);
+      const explicitContentType = headers.get("content-type")?.value;
       return {
         kind: "response",
         body: runtimeBody ?? (body.kind === "string" ? body.value : ""),
         status: responseStatus(evaluator, expression, module, environment, instance),
-        contentType: body.kind === "string" || runtimeBody !== undefined
+        contentType: explicitContentType ?? (body.kind === "string" || runtimeBody !== undefined
           ? "text/plain;charset=UTF-8"
-          : "",
-        headers: responseHeaders(evaluator, expression, module, environment, instance),
+          : ""),
+        headers,
       };
+    }
+    if (expression.expression.text === "Headers") {
+      const init = expression.arguments?.[0] === undefined
+        ? UNDEFINED
+        : evaluate(evaluator, expression.arguments[0], module, environment, instance);
+      if (init.kind === "undefined" || init.kind === "null") {
+        return {kind: "headers", entries: new Map()};
+      }
+      if (init.kind === "headers") {
+        return {kind: "headers", entries: new Map(init.entries)};
+      }
+      if (init.kind === "record") {
+        const entries = new Map<string, {name: string; value: string}>();
+        for (const [name, value] of init.fields) {
+          if (value.kind !== "string") {
+            return unknown("Headers record value is not a closed string");
+          }
+          entries.set(name.toLowerCase(), {name, value: value.value});
+        }
+        return {kind: "headers", entries};
+      }
+      return unknown("Headers initializer is not closed");
     }
     const resolved = resolveRuntimeClass(module, expression.expression.text, evaluator.modules);
     if (resolved !== undefined && isApplicationRuntimeClass(evaluator, resolved)) {
       const value: Value & {kind: "instance"} = {kind: "instance", fields: new Map()};
+      evaluator.instanceClasses.set(value, resolved);
       executeClass(
         evaluator,
         resolved,
@@ -1019,6 +1098,45 @@ function routeParameterNames(pattern: string): string[] {
   );
 }
 
+const UNSUPPORTED_JSON = Symbol("unsupported JSON value");
+
+function stringifyJson(value: Value): string | undefined {
+  const converted = jsonValue(value, false);
+  return converted === UNSUPPORTED_JSON || converted === undefined
+    ? undefined
+    : JSON.stringify(converted);
+}
+
+function jsonValue(value: Value, arrayElement: boolean): unknown | typeof UNSUPPORTED_JSON {
+  switch (value.kind) {
+    case "undefined": return arrayElement ? null : undefined;
+    case "null": return null;
+    case "boolean":
+    case "string": return value.value;
+    case "number": return Number.isFinite(value.value) ? value.value : null;
+    case "bigint": return UNSUPPORTED_JSON;
+    case "array": {
+      const result: unknown[] = [];
+      for (const item of value.items) {
+        const converted = jsonValue(item, true);
+        if (converted === UNSUPPORTED_JSON) return UNSUPPORTED_JSON;
+        result.push(converted);
+      }
+      return result;
+    }
+    case "record": {
+      const result: Record<string, unknown> = {};
+      for (const [name, field] of value.fields) {
+        const converted = jsonValue(field, false);
+        if (converted === UNSUPPORTED_JSON) return UNSUPPORTED_JSON;
+        if (converted !== undefined) result[name] = converted;
+      }
+      return result;
+    }
+    default: return arrayElement ? null : undefined;
+  }
+}
+
 function isApplicationRuntimeClass(evaluator: Evaluator, candidate: ResolvedRuntimeClass): boolean {
   let current: ResolvedRuntimeClass | undefined = evaluator.root;
   while (current !== undefined) {
@@ -1055,6 +1173,9 @@ function responseHeaders(
     ? UNDEFINED
     : evaluate(evaluator, expression.arguments[1], module, environment, instance);
   const headers = init.kind === "record" ? init.fields.get("headers") : undefined;
+  if (headers?.kind === "headers") {
+    return new Map(headers.entries);
+  }
   if (headers?.kind !== "record") {
     return new Map();
   }
@@ -1106,6 +1227,23 @@ function bind(
 ): void {
   if (ts.isIdentifier(name)) {
     environment.set(name.text, value);
+    return;
+  }
+  if (ts.isArrayBindingPattern(name) && value.kind === "array") {
+    for (const [index, element] of name.elements.entries()) {
+      if (ts.isOmittedExpression(element)) continue;
+      if (element.dotDotDotToken !== undefined) {
+        bind(
+          evaluator,
+          element.name,
+          {kind: "array", items: value.items.slice(index)},
+          module,
+          environment,
+        );
+      } else {
+        bind(evaluator, element.name, value.items[index] ?? UNDEFINED, module, environment);
+      }
+    }
     return;
   }
   if (!ts.isObjectBindingPattern(name) || value.kind !== "record") {

@@ -309,6 +309,38 @@ test("lowers a closed Hono POST route into method-aware HIR", () => {
   assert.equal(hir.handlers[0]?.path, "/book");
 });
 
+test("lowers Hono JSON serialization and status through Context newResponse", () => {
+  const entry = path.join(repository, "tests/compat/hono/json-post-smoke.ts");
+  const graph = loadModuleGraph(entry, {
+    aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+  });
+  const application = analyzeApplicationEntry(graph.modules[0]!.sourceFile);
+  assert.ok(application);
+
+  const result = evaluateApplicationInitialization(graph, application);
+
+  assert.deepEqual(result?.issues, []);
+  assert.deepEqual(result?.routes[0]?.response, {
+    kind: "text",
+    body: "{\"message\":\"Created!\"}",
+    status: 201,
+    contentType: "application/json",
+  });
+
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+    apiAliases: {hono: path.join(repository, "tests/compat/hono/api.d.ts")},
+  });
+  assert.equal(hir.handlers[0]?.method, "POST");
+  assert.deepEqual(hir.handlers[0]?.response.kind === "text"
+    ? {
+      status: hir.handlers[0].response.status,
+      contentType: hir.handlers[0].response.contentType,
+    }
+    : undefined, {status: 201, contentType: "application/json"});
+});
+
 test("lowers closed Response init headers from a Hono route", () => {
   const entry = path.join(repository, "tests/compat/hono/response-headers-smoke.ts");
   const hir = compileEntry(entry, {
