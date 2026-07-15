@@ -23,9 +23,14 @@ export type HonoMiddlewareApi = (
   next: () => Promise<void>,
 ) => void | Promise<void>;
 
+export type HonoRouteHandlerApi = (
+  context: HonoContextApi,
+  next: () => Promise<void>,
+) => Response | void | Promise<Response | void>;
+
 export declare class Hono {
-  get(path: string, ...handlers: HonoHandlerApi[]): this;
-  post(path: string, ...handlers: HonoHandlerApi[]): this;
+  get(path: string, ...handlers: HonoRouteHandlerApi[]): this;
+  post(path: string, ...handlers: HonoRouteHandlerApi[]): this;
   use(path: string, ...middleware: HonoMiddlewareApi[]): this;
   on(method: string | string[], path: string | string[], ...handlers: HonoHandlerApi[]): this;
   route(path: string, application: Hono): this;

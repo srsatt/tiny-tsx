@@ -373,6 +373,39 @@ test("lowers Hono's terminal wildcard API fallback with status 404", () => {
     : undefined, {status: 404, contentType: "text/plain; charset=UTF-8"});
 });
 
+test("composes same-method Hono handlers into one native route", () => {
+  const entry = path.join(repository, "tests/compat/hono/handler-chain-smoke.ts");
+  const graph = loadModuleGraph(entry, {
+    aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+  });
+  const application = analyzeApplicationEntry(graph.modules[0]!.sourceFile);
+  assert.ok(application);
+
+  const result = evaluateApplicationInitialization(graph, application);
+
+  assert.deepEqual(result?.issues, []);
+  assert.equal(result?.routerInsertions, 2);
+  assert.deepEqual(result?.routes.map(route => ({
+    method: route.method,
+    path: route.path,
+    body: route.response?.body,
+    headers: route.response?.headers,
+  })), [{
+    method: "GET",
+    path: "/chain",
+    body: "chained",
+    headers: [{name: "X-Chain", value: "yes"}],
+  }]);
+
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+    apiAliases: {hono: path.join(repository, "tests/compat/hono/api.d.ts")},
+  });
+  assert.equal(hir.handlers.length, 1);
+  assert.deepEqual(hir.handlers[0]?.headers, [{name: "X-Chain", value: "yes"}]);
+});
+
 test("lowers closed Response init headers from a Hono route", () => {
   const entry = path.join(repository, "tests/compat/hono/response-headers-smoke.ts");
   const hir = compileEntry(entry, {

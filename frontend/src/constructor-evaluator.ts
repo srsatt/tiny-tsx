@@ -228,8 +228,14 @@ function summarizeRoutes(
     if (method?.kind !== "string" || path?.kind !== "string" || basePath?.kind !== "string") {
       return [];
     }
+    const hasLaterHandler = routes.items.slice(routeIndex + 1).some(candidate =>
+      sameRoute(candidate, method.value, path.value)
+    );
+    if (["GET", "POST"].includes(method.value) && hasLaterHandler) {
+      return [];
+    }
     const middleware = routes.items.slice(0, routeIndex).flatMap(candidate =>
-      matchingMiddleware(candidate, path.value)
+      matchingMiddleware(candidate, method.value, path.value)
     );
     const response = ["GET", "POST"].includes(method.value) && handler?.kind === "closure"
       ? evaluateRouteHandler(evaluator, handler, middleware, path.value)
@@ -307,6 +313,7 @@ function evaluateRouteHandler(
 
 function matchingMiddleware(
   route: Value,
+  requestMethod: string,
   requestPath: string,
 ): Array<Value & {kind: "closure"}> {
   if (route.kind !== "record") return [];
@@ -315,16 +322,29 @@ function matchingMiddleware(
   const handler = route.fields.get("handler");
   if (
     method?.kind !== "string"
-    || method.value !== "ALL"
     || path?.kind !== "string"
     || handler?.kind !== "closure"
   ) {
     return [];
   }
+  if (method.value === requestMethod && path.value === requestPath) {
+    return [handler];
+  }
+  if (method.value !== "ALL") return [];
   const matches = path.value === "/*"
     || path.value === requestPath
     || (path.value.endsWith("*") && requestPath.startsWith(path.value.slice(0, -1)));
   return matches ? [handler] : [];
+}
+
+function sameRoute(route: Value, method: string, path: string): boolean {
+  if (route.kind !== "record") return false;
+  const candidateMethod = route.fields.get("method");
+  const candidatePath = route.fields.get("path");
+  return candidateMethod?.kind === "string"
+    && candidateMethod.value === method
+    && candidatePath?.kind === "string"
+    && candidatePath.value === path;
 }
 
 function findRuntimeClass(evaluator: Evaluator, name: string): ResolvedRuntimeClass | undefined {
