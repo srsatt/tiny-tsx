@@ -94,6 +94,8 @@ def render_markdown(result: dict[str, Any]) -> str:
         f"- Body: `{result['correctness']['bodyUtf8']}` ({result['correctness']['contentLength']} bytes)",
         f"- TinyTSX Content-Type: `{result['correctness']['contentTypes']['tinytsx']}`",
         f"- Bun Content-Type: `{result['correctness']['contentTypes']['bun']}`",
+        f"- TinyTSX framing: `{result['correctness']['framings']['tinytsx']}`",
+        f"- Bun framing: `{result['correctness']['framings']['bun']}`",
         *[f"- Difference: {difference}" for difference in result.get("responseDifferences", [])],
         "",
         "## Throughput and latency",

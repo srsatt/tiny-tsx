@@ -115,6 +115,10 @@ WORKLOADS = {
         "headers": {"x-content-type-options": "nosniff"},
         "numeric_headers": [],
         "framing": "chunked",
+        "target_framings": {"tinytsx": "chunked", "bun": "content-length"},
+        "response_differences": [
+            "TinyTSX preserves the three HTTP/1.1 chunks on the wire; Bun 1.3.13 collects this immediately completed finite stream and emits Content-Length: 19."
+        ],
         "path": "/stream",
         "scope": "pinned 33-module Hono streamText path with three finite flushed chunks; HTTP/1.1; connection close; localhost",
         "limitation": "The AOT stream has three closed chunks; it does not exercise request-dependent chunks, delays, cancellation, or provider backpressure.",
@@ -247,7 +251,10 @@ def main() -> int:
                 for name in specs
             },
             "contentLength": len(workload["body"]),
-            "framing": workload.get("framing", "content-length"),
+            "framings": {
+                name: expected_framing(workload, name)
+                for name in specs
+            },
             "bodyUtf8": workload["body"].decode(),
             "headers": workload["headers"],
             "numericHeaders": workload["numeric_headers"],
@@ -409,7 +416,7 @@ def assert_correct(
     expected = {
         "status": 200,
         "content-type": normalize_content_type(expected_content_type(workload, target)),
-        "framing": expected_framing(workload),
+        "framing": expected_framing(workload, target),
     }
     actual = {
         "status": response["status"],
@@ -453,8 +460,9 @@ def expected_content_type(workload: dict[str, Any], target: str | None) -> str:
     return str(workload["content_type"])
 
 
-def expected_framing(workload: dict[str, Any]) -> str:
-    framing = workload.get("framing", "content-length")
+def expected_framing(workload: dict[str, Any], target: str | None = None) -> str:
+    target_framings = workload.get("target_framings", {})
+    framing = target_framings.get(target, workload.get("framing", "content-length"))
     return "chunked" if framing == "chunked" else str(len(workload["body"]))
 
 

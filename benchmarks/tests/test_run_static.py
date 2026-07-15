@@ -80,12 +80,13 @@ class StaticHarnessTest(unittest.TestCase):
             },
             "body": b"first\nsecond\nthird\n",
         }
-        assert_correct(response, workload)
+        assert_correct(response, workload, "tinytsx")
 
         response["headers"].pop("transfer-encoding")
         response["headers"]["content-length"] = "19"
         with self.assertRaises(RuntimeError):
-            assert_correct(response, workload)
+            assert_correct(response, workload, "tinytsx")
+        assert_correct(response, workload, "bun")
 
     def test_keep_alive_scope_records_the_bounded_reconnect_policy(self) -> None:
         workload = WORKLOADS["hono-jsx-ssr"]
