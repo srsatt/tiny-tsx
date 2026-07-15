@@ -1001,6 +1001,37 @@ test("lowers the upstream basic route through the full Hono runtime graph", () =
   assert.deepEqual(hir.staticStrings, [{id: 0, value: "Hono!!"}]);
 });
 
+test("lowers closed JSX component props through the pinned Hono runtime", () => {
+  const entry = write("hono-jsx-props.tsx", `
+    import {Hono} from "hono";
+
+    const Item = (props: {label: string}) => <li data-id="item">{props.label}</li>;
+    const List = (props: {labels: string[]}) => (
+      <main><h1>{"Posts & Notes"}</h1><ul>{props.labels.map(label => <Item label={label} />)}</ul></main>
+    );
+
+    const app = new Hono();
+    app.get("/", context => context.html(<List labels={["One", "Two < Three"]} />));
+    export default app;
+  `);
+  const aliases = {hono: path.join(repository, "vendor/hono/src/index.ts")};
+  const graph = loadModuleGraph(entry, {aliases});
+  const application = analyzeApplicationEntry(graph.modules[0]!.sourceFile);
+  assert.ok(application);
+  const initialization = evaluateApplicationInitialization(graph, application);
+  assert.deepEqual(initialization?.issues, []);
+
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    aliases,
+    apiAliases: {hono: path.join(repository, "tests/compat/hono/api.d.ts")},
+  });
+
+  assert.deepEqual(hir.staticStrings.map(string => string.value), [
+    '<main><h1>Posts &amp; Notes</h1><ul><li data-id="item">One</li><li data-id="item">Two &lt; Three</li></ul></main>',
+  ]);
+});
+
 test("lowers a closed fetch response status as a native runtime expression", () => {
   const hir = compileEntry(path.join(repository, "tests/compat/hono/fetch-status-smoke.ts"), {
     sdkPath: path.join(repository, "sdk/index.d.ts"),

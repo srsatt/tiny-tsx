@@ -426,7 +426,17 @@ function evaluateRouteHandler(
       }
     }
   }
-  if (response.kind !== "response") return undefined;
+  if (response.kind !== "response") {
+    issue(
+      evaluator,
+      handler.expression,
+      handler.module,
+      `route handler response is not closed (${response.kind}${
+        response.kind === "unknown" ? `: ${response.reason}` : ""
+      })`,
+    );
+    return undefined;
+  }
   if (basicAuthorization !== undefined) {
     for (const [name, header] of response.headers) {
       if (!basicAuthorization.protectedHeaders.has(name)) {
@@ -1230,6 +1240,9 @@ function evaluateCall(
   const arguments_ = evaluateCallArguments(evaluator, call, module, environment, instance);
   if (ts.isIdentifier(call.expression)) {
     const callable = evaluate(evaluator, call.expression, module, environment, instance);
+    if (callable.kind === "closure") {
+      return invokeClosure(evaluator, callable, arguments_, instance);
+    }
     if (callable.kind === "reference" && callable.name === "String") {
       const argument = arguments_[0] ?? UNDEFINED;
       return argument.kind === "unknown"
@@ -1331,6 +1344,21 @@ function evaluateCall(
       return input?.kind === "string"
         ? {kind: "boolean", value: new RegExp(receiver.source, receiver.flags).test(input.value)}
         : unknown("RegExp.test input is not a closed string");
+    }
+    if (receiver.kind === "array" && name === "map") {
+      const callback = arguments_[0];
+      if (callback?.kind !== "closure") {
+        return unknown("Array.map callback is not a compile-time closure");
+      }
+      return {
+        kind: "array",
+        items: receiver.items.map((value, index) => invokeClosure(
+          evaluator,
+          callback,
+          [value, {kind: "number", value: index}, receiver],
+          instance,
+        )),
+      };
     }
     if (receiver.kind === "instance") {
       const callable = receiver.fields.get(name);
@@ -1511,6 +1539,9 @@ function evaluate(
     }
     return {kind: "record", fields};
   }
+  if (ts.isJsxElement(expression) || ts.isJsxSelfClosingElement(expression) || ts.isJsxFragment(expression)) {
+    return evaluateJsx(evaluator, expression, module, environment, instance);
+  }
   if (ts.isArrowFunction(expression) || ts.isFunctionExpression(expression)) {
     return {
       kind: "closure",
@@ -1651,6 +1682,7 @@ function evaluate(
         : evaluate(evaluator, expression.arguments[0], module, environment, instance);
       if (
         body.kind !== "string"
+        && body.kind !== "html"
         && body.kind !== "runtimeString"
         && body.kind !== "routeParameter"
         && body.kind !== "responseBody"
@@ -1673,9 +1705,9 @@ function evaluate(
         : undefined;
       return {
         kind: "response",
-        body: runtimeBody ?? (body.kind === "string" ? body.value : ""),
+        body: runtimeBody ?? (body.kind === "string" || body.kind === "html" ? body.value : ""),
         status: responseStatus(evaluator, expression, module, environment, instance),
-        contentType: explicitContentType ?? (body.kind === "string" || runtimeBody !== undefined
+        contentType: explicitContentType ?? (body.kind === "string" || body.kind === "html" || runtimeBody !== undefined
           ? "text/plain;charset=UTF-8"
           : ""),
         headers,
@@ -1745,6 +1777,9 @@ function evaluate(
   if (ts.isCallExpression(expression)) {
     return evaluateCall(evaluator, expression, module, environment, instance);
   }
+  if (ts.isTaggedTemplateExpression(expression)) {
+    return evaluateTaggedTemplate(evaluator, expression, module, environment, instance);
+  }
   if (ts.isAwaitExpression(expression)) {
     return evaluate(evaluator, expression.expression, module, environment, instance);
   }
@@ -1774,6 +1809,224 @@ function evaluate(
     return joinRuntimeStrings(values) ?? unknown("template value is not string-compatible");
   }
   return unknown(`expression ${ts.SyntaxKind[expression.kind]} is not supported`);
+}
+
+const jsxVoidTags = new Set([
+  "area", "base", "br", "col", "embed", "hr", "img", "input", "keygen",
+  "link", "meta", "param", "source", "track", "wbr",
+]);
+
+const jsxBooleanAttributes = new Set([
+  "allowfullscreen", "async", "autofocus", "autoplay", "checked", "controls",
+  "default", "defer", "disabled", "download", "hidden", "inert", "ismap",
+  "itemscope", "loop", "multiple", "muted", "nomodule", "novalidate", "open",
+  "playsinline", "readonly", "required", "reversed", "selected",
+]);
+
+function evaluateJsx(
+  evaluator: Evaluator,
+  expression: ts.JsxElement | ts.JsxSelfClosingElement | ts.JsxFragment,
+  module: SourceModule,
+  environment: Map<string, Value>,
+  instance: Value & {kind: "instance"},
+): Value {
+  if (ts.isJsxFragment(expression)) {
+    return renderJsxChildren(evaluator, expression.children, module, environment, instance);
+  }
+  const opening = ts.isJsxElement(expression) ? expression.openingElement : expression;
+  const children = ts.isJsxElement(expression) ? expression.children : [];
+  if (!ts.isIdentifier(opening.tagName)) {
+    return unknown("JSX tag name is not a closed identifier");
+  }
+  const attributes = evaluateJsxAttributes(
+    evaluator,
+    opening.attributes,
+    module,
+    environment,
+    instance,
+  );
+  if (attributes.kind !== "record") return attributes;
+  const renderedChildren = renderJsxChildValues(
+    evaluator,
+    children,
+    module,
+    environment,
+    instance,
+  );
+  if (renderedChildren.kind === "unknown") return renderedChildren;
+  if (/^[A-Z]/.test(opening.tagName.text)) {
+    if (renderedChildren.items.length === 1) {
+      attributes.fields.set("children", renderedChildren.items[0]!);
+    } else if (renderedChildren.items.length > 1) {
+      attributes.fields.set("children", renderedChildren);
+    }
+    const component = evaluate(evaluator, opening.tagName, module, environment, instance);
+    if (component.kind === "closure") {
+      return invokeClosure(evaluator, component, [attributes], instance);
+    }
+    return component.kind === "reference" && component.callable !== undefined
+      ? invokeFunctionLike(
+        evaluator,
+        component.callable.declaration,
+        component.callable.module,
+        new Map(),
+        [attributes],
+        instance,
+      )
+      : unknown(`JSX component ${opening.tagName.text} is not a compile-time callable`);
+  }
+
+  let html = `<${opening.tagName.text}`;
+  for (const [sourceName, value] of attributes.fields) {
+    const name = sourceName === "className" ? "class" : sourceName;
+    if (value.kind === "undefined" || value.kind === "null" || value.kind === "boolean" && !value.value) {
+      continue;
+    }
+    if (value.kind === "boolean") {
+      if (jsxBooleanAttributes.has(name.toLowerCase())) html += ` ${name}=""`;
+      continue;
+    }
+    if (value.kind !== "string" && value.kind !== "number" && value.kind !== "bigint") {
+      return unknown(`JSX attribute ${sourceName} is not a closed primitive`);
+    }
+    html += ` ${name}="${escapeHtmlAttribute(stringValue(value))}"`;
+  }
+  if (jsxVoidTags.has(opening.tagName.text) && renderedChildren.items.length === 0) {
+    return {kind: "html", value: `${html}/>`};
+  }
+  const rendered = renderHtmlValues(renderedChildren.items, true);
+  return rendered === undefined
+    ? unknown("JSX children are not closed HTML values")
+    : {kind: "html", value: `${html}>${rendered}</${opening.tagName.text}>`};
+}
+
+function evaluateJsxAttributes(
+  evaluator: Evaluator,
+  attributes: ts.JsxAttributes,
+  module: SourceModule,
+  environment: Map<string, Value>,
+  instance: Value & {kind: "instance"},
+): Value {
+  const fields = new Map<string, Value>();
+  for (const property of attributes.properties) {
+    if (ts.isJsxSpreadAttribute(property)) {
+      const spread = evaluate(evaluator, property.expression, module, environment, instance);
+      if (spread.kind !== "record") return unknown("JSX spread is not a closed record");
+      for (const [name, value] of spread.fields) fields.set(name, value);
+      continue;
+    }
+    if (!ts.isIdentifier(property.name)) return unknown("JSX attribute name is not closed");
+    let value: Value;
+    if (property.initializer === undefined) {
+      value = {kind: "boolean", value: true};
+    } else if (ts.isStringLiteral(property.initializer)) {
+      value = {kind: "string", value: property.initializer.text};
+    } else if (ts.isJsxExpression(property.initializer)) {
+      value = property.initializer.expression === undefined
+        ? UNDEFINED
+        : evaluate(evaluator, property.initializer.expression, module, environment, instance);
+    } else {
+      return unknown("JSX attribute initializer is not supported");
+    }
+    fields.set(property.name.text, value);
+  }
+  return {kind: "record", fields};
+}
+
+function renderJsxChildren(
+  evaluator: Evaluator,
+  children: readonly ts.JsxChild[],
+  module: SourceModule,
+  environment: Map<string, Value>,
+  instance: Value & {kind: "instance"},
+): Value {
+  const values = renderJsxChildValues(evaluator, children, module, environment, instance);
+  if (values.kind === "unknown") return values;
+  const rendered = renderHtmlValues(values.items, true);
+  return rendered === undefined
+    ? unknown("JSX children are not closed HTML values")
+    : {kind: "html", value: rendered};
+}
+
+function renderJsxChildValues(
+  evaluator: Evaluator,
+  children: readonly ts.JsxChild[],
+  module: SourceModule,
+  environment: Map<string, Value>,
+  instance: Value & {kind: "instance"},
+): Value & ({kind: "array"} | {kind: "unknown"}) {
+  const values: Value[] = [];
+  for (const child of children) {
+    if (ts.isJsxText(child)) {
+      values.push({kind: "string", value: child.text});
+    } else if (ts.isJsxExpression(child)) {
+      if (child.expression !== undefined) {
+        values.push(evaluate(evaluator, child.expression, module, environment, instance));
+      }
+    } else if (ts.isJsxElement(child) || ts.isJsxSelfClosingElement(child) || ts.isJsxFragment(child)) {
+      values.push(evaluateJsx(evaluator, child, module, environment, instance));
+    }
+  }
+  const invalid = values.find(value => value.kind === "unknown");
+  return invalid?.kind === "unknown" ? invalid : {kind: "array", items: values};
+}
+
+function evaluateTaggedTemplate(
+  evaluator: Evaluator,
+  expression: ts.TaggedTemplateExpression,
+  module: SourceModule,
+  environment: Map<string, Value>,
+  instance: Value & {kind: "instance"},
+): Value {
+  const tag = evaluate(evaluator, expression.tag, module, environment, instance);
+  if (tag.kind !== "reference" || tag.name !== "html") {
+    return unknown("tagged template is not the Hono html helper");
+  }
+  if (ts.isNoSubstitutionTemplateLiteral(expression.template)) {
+    return {kind: "html", value: expression.template.text};
+  }
+  let output = expression.template.head.text;
+  for (const span of expression.template.templateSpans) {
+    const value = evaluate(evaluator, span.expression, module, environment, instance);
+    const rendered = renderHtmlValues([value], true);
+    if (rendered === undefined) return unknown("html template value is not closed");
+    output += rendered + span.literal.text;
+  }
+  return {kind: "html", value: output};
+}
+
+function renderHtmlValues(values: readonly Value[], escapeStrings: boolean): string | undefined {
+  let output = "";
+  for (const value of values) {
+    if (value.kind === "html") {
+      output += value.value;
+    } else if (value.kind === "string") {
+      output += escapeStrings ? escapeHtmlText(value.value) : value.value;
+    } else if (value.kind === "number" || value.kind === "bigint") {
+      output += stringValue(value);
+    } else if (value.kind === "array") {
+      const nested = renderHtmlValues(value.items, escapeStrings);
+      if (nested === undefined) return undefined;
+      output += nested;
+    } else if (value.kind !== "undefined" && value.kind !== "null" && value.kind !== "boolean") {
+      return undefined;
+    }
+  }
+  return output;
+}
+
+function escapeHtmlText(value: string): string {
+  return value.replace(/[&<>"']/g, character => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  })[character]!);
+}
+
+function escapeHtmlAttribute(value: string): string {
+  return escapeHtmlText(value);
 }
 
 function routeParameterNames(pattern: string): string[] {

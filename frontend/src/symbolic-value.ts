@@ -11,6 +11,7 @@ export type Value =
   | {kind: "number"; value: number}
   | {kind: "bigint"; value: bigint}
   | {kind: "string"; value: string}
+  | {kind: "html"; value: string}
   | {kind: "regexp"; source: string; flags: string}
   | {kind: "error"; name: string; message: string}
   | {kind: "thrown"; value: Value}
@@ -142,6 +143,7 @@ export function unknown(reason: string): Value {
 export function detail(value: Value): {detail?: string} {
   switch (value.kind) {
     case "string": return {detail: value.value};
+    case "html": return {detail: value.value};
     case "reference": return {detail: value.name};
     case "constructed": return {detail: value.name};
     case "response": return {detail: `${value.status} ${value.contentType}`};
@@ -179,6 +181,7 @@ export function truthiness(value: Value): boolean | undefined {
     case "number": return value.value !== 0 && !Number.isNaN(value.value);
     case "bigint": return value.value !== 0n;
     case "string": return value.value.length > 0;
+    case "html": return value.value.length > 0;
     case "array":
     case "record":
     case "regexp":
@@ -212,6 +215,7 @@ export function typeOf(value: Value): string {
     case "elapsedMilliseconds": return "number";
     case "bigint": return "bigint";
     case "string": return "string";
+    case "html": return "string";
     case "routeParameter":
     case "runtimeString": return "string";
     case "requestHeader": return "string";
@@ -232,6 +236,7 @@ export function stringValue(value: Value): string {
     case "number": return String(value.value);
     case "bigint": return String(value.value);
     case "string": return value.value;
+    case "html": return value.value;
     case "error": return value.message.length === 0
       ? value.name
       : `${value.name}: ${value.message}`;
@@ -242,6 +247,7 @@ export function stringValue(value: Value): string {
 export function runtimeStringParts(value: Value): RuntimeStringPart[] | undefined {
   switch (value.kind) {
     case "string": return value.value === "" ? [] : [{kind: "literal", value: value.value}];
+    case "html": return value.value === "" ? [] : [{kind: "literal", value: value.value}];
     case "routeParameter": return [{kind: "routeParameter", name: value.name}];
     case "requestHeader": return [{kind: "requestHeader", name: value.name}];
     case "fetchStatus": return [{kind: "fetchStatus", url: value.url}];
