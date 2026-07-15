@@ -582,6 +582,26 @@ test("rolls back an unsupported middleware effect without corrupting the respons
   });
 });
 
+test("applies upstream custom middleware to its wildcard base path", () => {
+  const entry = path.join(repository, "tests/compat/hono/custom-middleware-smoke.ts");
+  const graph = loadModuleGraph(entry, {
+    aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+  });
+  const application = analyzeApplicationEntry(graph.modules[0]!.sourceFile);
+  assert.ok(application);
+
+  const result = evaluateApplicationInitialization(graph, application);
+
+  assert.deepEqual(result?.issues, []);
+  assert.deepEqual(result?.routes.find(route => route.method === "GET")?.response, {
+    kind: "text",
+    body: "This is /hello",
+    status: 200,
+    contentType: "text/plain;charset=UTF-8",
+    headers: [{name: "X-message", value: "This is addHeader middleware!"}],
+  });
+});
+
 test("lowers the tiny-preset Hono route into native HIR", () => {
   const hir = compileEntry(path.join(repository, "tests/compat/hono/smoke.ts"), {
     sdkPath: path.join(repository, "sdk/index.d.ts"),
