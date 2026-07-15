@@ -9,3 +9,7 @@
 [submodule "vendor/hono-examples"]
 	path = vendor/hono-examples
 	url = https://github.com/honojs/examples.git
+[submodule "vendor/ai"]
+	path = vendor/ai
+	url = https://github.com/vercel/ai.git
+	shallow = true
