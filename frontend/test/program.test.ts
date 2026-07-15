@@ -279,6 +279,7 @@ test("rejects inheritance outside the closed class slice", () => {
 for (const [name, source, code] of [
   ["any component props", `function Bad(value: any): JSX.Element { return <p>Bad</p>; }`, "TINY1102"],
   ["async", `async function Bad(): Promise<void> {}`, "TINY1003"],
+  ["unstaged exceptions", `function Bad(): never { throw Error("bad"); }`, "TINY1006"],
   ["computed properties", `const key = "x"; const value = ({x: 1})[key];`, "TINY1004"],
   ["event attributes", `function Bad(): JSX.Element { return <button onClick="x">Bad</button>; }`, "TINY1204"],
 ] as const) {

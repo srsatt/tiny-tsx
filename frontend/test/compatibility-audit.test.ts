@@ -641,6 +641,47 @@ test("lowers the installed upstream not-found handler after explicit routes", ()
   ]);
 });
 
+test("routes a closed throw through the installed upstream error handler", () => {
+  const entry = path.join(repository, "tests/compat/hono/error-handler-smoke.ts");
+  const options = {
+    aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+    apiAliases: {hono: path.join(repository, "tests/compat/hono/api.d.ts")},
+  };
+  const graph = loadModuleGraph(entry, options);
+  const application = analyzeApplicationEntry(graph.modules[0]!.sourceFile);
+  assert.ok(application);
+
+  const result = evaluateApplicationInitialization(graph, application);
+
+  assert.deepEqual(result?.issues, []);
+  assert.deepEqual(result?.routes[0]?.response, {
+    kind: "text",
+    body: "Custom Error Message",
+    status: 500,
+    contentType: "text/plain; charset=UTF-8",
+    stderr: ["Error: Error has occurred"],
+  });
+
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    ...options,
+  });
+  assert.deepEqual(hir.handlers[0]?.stderr, [1]);
+  assert.deepEqual(hir.staticStrings.map(string => string.value), [
+    "Custom Error Message",
+    "Error: Error has occurred",
+  ]);
+  assert.deepEqual(
+    hir.handlers[0]?.response.kind === "text"
+      ? {
+        status: hir.handlers[0].response.status,
+        contentType: hir.handlers[0].response.contentType,
+      }
+      : undefined,
+    {status: 500, contentType: "text/plain; charset=UTF-8"},
+  );
+});
+
 test("lowers the tiny-preset Hono route into native HIR", () => {
   const hir = compileEntry(path.join(repository, "tests/compat/hono/smoke.ts"), {
     sdkPath: path.join(repository, "sdk/index.d.ts"),

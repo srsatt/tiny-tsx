@@ -34,6 +34,11 @@ export type HonoNotFoundHandlerApi = (
   context: HonoContextApi,
 ) => Response | Promise<Response>;
 
+export type HonoErrorHandlerApi = (
+  error: Error,
+  context: HonoContextApi,
+) => Response | Promise<Response>;
+
 export declare class Hono {
   get(path: string, ...handlers: HonoRouteHandlerApi[]): this;
   post(path: string, ...handlers: HonoRouteHandlerApi[]): this;
@@ -41,5 +46,6 @@ export declare class Hono {
   on(method: string | string[], path: string | string[], ...handlers: HonoHandlerApi[]): this;
   route(path: string, application: Hono): this;
   notFound(handler: HonoNotFoundHandlerApi): this;
+  onError(handler: HonoErrorHandlerApi): this;
   fetch(request: Request): Response | Promise<Response>;
 }
