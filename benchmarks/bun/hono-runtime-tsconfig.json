@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "baseUrl": "../..",
+    "jsx": "react-jsx",
+    "jsxImportSource": "hono/jsx",
+    "paths": {
+      "hono": ["vendor/hono/src/index.ts"],
+      "hono/streaming": ["vendor/hono/src/helper/streaming/index.ts"],
+      "hono/jsx": ["vendor/hono/src/jsx/index.ts"],
+      "hono/jsx/jsx-runtime": ["vendor/hono/src/jsx/jsx-runtime.ts"]
+    }
+  }
+}

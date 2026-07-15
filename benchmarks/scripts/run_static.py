@@ -89,6 +89,47 @@ WORKLOADS = {
             "--tsconfig-override", "benchmarks/bun/hono-jsx-ssr-tsconfig.json",
         ],
     },
+    "hono-dynamic-jsx": {
+        "body": b"",
+        "content_type": "text/html; charset=UTF-8",
+        "headers": {},
+        "numeric_headers": [],
+        "path": "/dynamic?name=TinyTSX+%26+Bun",
+        "scope": "pinned Hono request-time JSX with one decoded query value rendered through nested component text and attribute escaping; HTTP/1.1; connection close; localhost",
+        "limitation": "The route performs bounded query decoding and escaping but has a small fixed JSX shape and no dynamic collection traversal.",
+        "reference_target": "bun",
+        "tiny_entry": "tests/compat/hono/dynamic-jsx-smoke.tsx",
+        "tiny_args": [
+            "--alias", "hono=vendor/hono/src/index.ts",
+            "--api", "hono=tests/compat/hono/api.d.ts",
+        ],
+        "bun_script": "benchmarks/bun/hono-dynamic-jsx-server.ts",
+        "bun_args": [
+            "--jsx-import-source", "hono/jsx",
+            "--tsconfig-override", "benchmarks/bun/hono-runtime-tsconfig.json",
+        ],
+    },
+    "hono-stream-text": {
+        "body": b"first\nsecond\nthird\n",
+        "content_type": "text/plain; charset=UTF-8",
+        "headers": {"x-content-type-options": "nosniff"},
+        "numeric_headers": [],
+        "framing": "chunked",
+        "path": "/stream",
+        "scope": "pinned 33-module Hono streamText path with three finite flushed chunks; HTTP/1.1; connection close; localhost",
+        "limitation": "The AOT stream has three closed chunks; it does not exercise request-dependent chunks, delays, cancellation, or provider backpressure.",
+        "tiny_entry": "tests/compat/hono/stream-text-smoke.ts",
+        "tiny_args": [
+            "--alias", "hono=vendor/hono/src/index.ts",
+            "--alias", "hono/streaming=vendor/hono/src/helper/streaming/index.ts",
+            "--api", "hono=tests/compat/hono/api.d.ts",
+            "--api", "hono/streaming=tests/compat/hono/streaming-api.d.ts",
+        ],
+        "bun_script": "benchmarks/bun/hono-stream-text-server.ts",
+        "bun_args": [
+            "--tsconfig-override", "benchmarks/bun/hono-runtime-tsconfig.json",
+        ],
+    },
 }
 
 
@@ -206,6 +247,7 @@ def main() -> int:
                 for name in specs
             },
             "contentLength": len(workload["body"]),
+            "framing": workload.get("framing", "content-length"),
             "bodyUtf8": workload["body"].decode(),
             "headers": workload["headers"],
             "numericHeaders": workload["numeric_headers"],
@@ -367,12 +409,12 @@ def assert_correct(
     expected = {
         "status": 200,
         "content-type": normalize_content_type(expected_content_type(workload, target)),
-        "content-length": str(len(workload["body"])),
+        "framing": expected_framing(workload),
     }
     actual = {
         "status": response["status"],
         "content-type": normalize_content_type(headers.get("content-type")),
-        "content-length": headers.get("content-length"),
+        "framing": actual_framing(headers),
     }
     if actual != expected or response["body"] != workload["body"]:
         raise RuntimeError(f"response mismatch: expected={expected}, actual={actual}")
@@ -409,6 +451,17 @@ def expected_content_type(workload: dict[str, Any], target: str | None) -> str:
         if target in target_types:
             return str(target_types[target])
     return str(workload["content_type"])
+
+
+def expected_framing(workload: dict[str, Any]) -> str:
+    framing = workload.get("framing", "content-length")
+    return "chunked" if framing == "chunked" else str(len(workload["body"]))
+
+
+def actual_framing(headers: dict[str, str]) -> str | None:
+    if headers.get("transfer-encoding", "").lower() == "chunked":
+        return "chunked"
+    return headers.get("content-length")
 
 
 def benchmark_scope(workload: dict[str, Any], keep_alive: bool) -> str:

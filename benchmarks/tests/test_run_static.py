@@ -63,6 +63,30 @@ class StaticHarnessTest(unittest.TestCase):
         worker_option = command.index("--workers")
         self.assertEqual(command[worker_option + 1], "4")
 
+    def test_dynamic_jsx_workload_measures_request_time_escaping(self) -> None:
+        workload = WORKLOADS["hono-dynamic-jsx"]
+        self.assertIn("name=", workload["path"])
+        self.assertEqual(workload["reference_target"], "bun")
+        self.assertEqual(workload["tiny_entry"], "tests/compat/hono/dynamic-jsx-smoke.tsx")
+
+    def test_stream_workload_requires_chunked_framing(self) -> None:
+        workload = WORKLOADS["hono-stream-text"]
+        response = {
+            "status": 200,
+            "headers": {
+                "content-type": "text/plain; charset=UTF-8",
+                "transfer-encoding": "chunked",
+                "x-content-type-options": "nosniff",
+            },
+            "body": b"first\nsecond\nthird\n",
+        }
+        assert_correct(response, workload)
+
+        response["headers"].pop("transfer-encoding")
+        response["headers"]["content-length"] = "19"
+        with self.assertRaises(RuntimeError):
+            assert_correct(response, workload)
+
     def test_keep_alive_scope_records_the_bounded_reconnect_policy(self) -> None:
         workload = WORKLOADS["hono-jsx-ssr"]
 
