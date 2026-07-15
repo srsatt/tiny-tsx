@@ -179,6 +179,10 @@ produces and serves a native Mach-O executable from the example TSX source.
   value; missing headers format as JavaScript `undefined`. Unsupported dynamic
   middleware effects are transactional, so they cannot corrupt an otherwise
   lowerable response. The complete trace has 21 routes and 20 diagnostics.
+- The exact `/hello/*` custom async middleware now matches `/hello`, clones the
+  finalized response through upstream Context code, and emits
+  `X-message: This is addHeader middleware!` over native HTTP. Unsupported
+  response-time middleware still rolls back independently.
 - Async/await entry handlers are accepted only when application initialization
   fully stages them. Native Promise/suspension semantics remain unimplemented.
 - Static `Response` headers lower into a bounded eight-entry native writer with

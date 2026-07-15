@@ -127,6 +127,12 @@ views, matching names case-insensitively, and generated code streams the value
 directly into the response writer. Missing headers preserve template-literal
 `undefined`; general mutable Request/Headers objects are not claimed.
 
+The exact `/hello/*` custom middleware also compiles. Its wildcard matches the
+base `/hello` route, its async post-`next()` call follows Hono's finalized
+response clone, and the static `X-message` mutation reaches native HTTP. A
+failed surrounding middleware effect is rolled back independently rather than
+partially mutating the supported response.
+
 ### Type-only API overlay
 
 The compiling frontend accepts `--api <specifier>=<api.d.ts>` independently of

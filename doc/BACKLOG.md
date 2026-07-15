@@ -118,8 +118,10 @@ commit message.
       through native response-header emission.
 - [x] Evaluate multiple constructed Hono bindings and mount nested applications
       through upstream `route()`, `basePath()`, `#clone()`, and `#addRoute`.
+- [x] Compile the basic example's closed `/hello/*` async middleware and static
+      post-`next()` response header.
 - [ ] Compile the remaining basic-example middleware, including `basicAuth`,
-      `etag`, and custom async middleware.
+      `etag`, and the runtime response-time header.
 - [ ] Compile the required rest/spread operations.
 - [ ] Add a native RegExp backend and allowlisted Test262 cases.
 - [ ] Add the general Request, Response, Headers, URL, and encoding native APIs.

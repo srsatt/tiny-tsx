@@ -129,6 +129,10 @@ head and streams the value. Middleware evaluation uses a cloned response and
 commits it only when the effect is fully supported, preventing an unresolved
 runtime response-time header from erasing this otherwise valid body.
 
+The same transaction boundary lets the supported `/hello/*` middleware commit
+its finalized-response clone and static `X-message` header while the later
+runtime response-time middleware remains unresolved and rolls back alone.
+
 Async/await syntax is admitted only inside constructed-application handlers
 that the initialization evaluator consumes completely. This does not introduce
 native Promise objects, suspension, or a task executor.
