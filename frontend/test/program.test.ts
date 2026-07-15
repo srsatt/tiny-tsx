@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import {mkdtempSync, rmSync, writeFileSync} from "node:fs";
+import {mkdirSync, mkdtempSync, rmSync, writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import path from "node:path";
 import {after, test} from "node:test";
@@ -185,6 +185,34 @@ test("lowers imported string functions and direct calls for Response.text", () =
         : undefined,
     },
   });
+});
+
+test("type-checks an API-backed dependency at its declaration boundary", () => {
+  const suffix = crypto.randomUUID();
+  const packageDirectory = path.join(directory, `api-backed-${suffix}`);
+  const runtime = path.join(packageDirectory, "index.ts");
+  const api = path.join(packageDirectory, "index.d.ts");
+  const entry = path.join(directory, `api-backed-entry-${suffix}.ts`);
+  mkdirSync(packageDirectory);
+  writeFileSync(path.join(packageDirectory, "package.json"), '{"name":"api-backed"}');
+  writeFileSync(runtime, `
+    const dependencyInternalTypeError: string = 1;
+    export const PUBLIC = "typed at the public boundary";
+  `);
+  writeFileSync(api, "export declare const PUBLIC: string;");
+  writeFileSync(entry, `
+    import {PUBLIC} from "api-backed";
+    const typedAtPublicBoundary: string = PUBLIC;
+    export function GET(request: Request): Response { return Response.text(typedAtPublicBoundary); }
+  `);
+
+  const hir = compileEntry(entry, {
+    sdkPath,
+    aliases: {"api-backed": runtime},
+    apiAliases: {"api-backed": api},
+  });
+
+  assert.equal(hir.constants.some(constant => constant.name === "typedAtPublicBoundary"), true);
 });
 
 test("rejects recursive functions before native code generation", () => {

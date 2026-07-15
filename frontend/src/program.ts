@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import path from "node:path";
 import ts from "typescript";
 import {analyzeApplicationEntry} from "./application-entry.js";
@@ -62,6 +63,11 @@ export function compileEntry(entryPath: string, options: CompileOptions): HirPro
     jsx: ts.JsxEmit.Preserve,
     lib: ["lib.es2022.d.ts", "lib.dom.d.ts", "lib.dom.iterable.d.ts"],
   };
+  const apiRuntimeRoots = apiBackedRuntimeRoots(options);
+  const apiTypeRoots = apiDependencyTypeRoots(options.apiAliases);
+  if (apiTypeRoots.length > 0) {
+    compilerOptions.typeRoots = apiTypeRoots;
+  }
   const typeAliases = {...options.aliases, ...options.apiAliases};
   if (Object.keys(typeAliases).length > 0) {
     compilerOptions.paths = Object.fromEntries(Object.entries(typeAliases).map(([specifier, target]) => [
@@ -100,7 +106,9 @@ export function compileEntry(entryPath: string, options: CompileOptions): HirPro
     throw new CompileFailure(entryDiagnostics.map(fromTypeScript));
   }
   const typeScriptDiagnostics = ts.getPreEmitDiagnostics(program)
-    .filter(diagnostic => !isResponseIntrinsicDiagnostic(diagnostic));
+    .filter(diagnostic => !isResponseIntrinsicDiagnostic(diagnostic))
+    .filter(diagnostic => diagnostic.file === undefined
+      || !apiRuntimeRoots.some(root => isWithin(root, diagnostic.file!.fileName)));
   if (typeScriptDiagnostics.length > 0) {
     throw new CompileFailure(typeScriptDiagnostics.map(fromTypeScript));
   }
@@ -212,6 +220,50 @@ export function compileEntry(entryPath: string, options: CompileOptions): HirPro
       dynamicHtmlExpressions: 0,
     },
   };
+}
+
+function apiBackedRuntimeRoots(options: CompileOptions): string[] {
+  return Object.keys(options.apiAliases ?? {}).flatMap(specifier => {
+    const runtime = options.aliases?.[specifier];
+    if (runtime === undefined) return [];
+    const packageRoot = nearestPackageRoot(path.resolve(runtime));
+    return packageRoot === undefined ? [] : [packageRoot];
+  });
+}
+
+function apiDependencyTypeRoots(
+  apiAliases: Readonly<Record<string, string>> | undefined,
+): string[] {
+  const roots = new Set<string>();
+  for (const target of Object.values(apiAliases ?? {})) {
+    let current = path.dirname(path.resolve(target));
+    while (true) {
+      if (path.basename(current) === "node_modules") {
+        const types = path.join(current, "@types");
+        if (fs.existsSync(types)) roots.add(types);
+        break;
+      }
+      const parent = path.dirname(current);
+      if (parent === current) break;
+      current = parent;
+    }
+  }
+  return [...roots];
+}
+
+function nearestPackageRoot(file: string): string | undefined {
+  let current = path.dirname(file);
+  while (true) {
+    if (fs.existsSync(path.join(current, "package.json"))) return current;
+    const parent = path.dirname(current);
+    if (parent === current) return undefined;
+    current = parent;
+  }
+}
+
+function isWithin(root: string, file: string): boolean {
+  const relative = path.relative(root, path.resolve(file));
+  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
 }
 
 function lowerApplicationInitialization(
