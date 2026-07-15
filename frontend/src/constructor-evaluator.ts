@@ -228,7 +228,7 @@ function summarizeRoutes(
     const middleware = routes.items.slice(0, routeIndex).flatMap(candidate =>
       matchingMiddleware(candidate, path.value)
     );
-    const response = method.value === "GET" && handler?.kind === "closure"
+    const response = ["GET", "POST"].includes(method.value) && handler?.kind === "closure"
       ? evaluateRouteHandler(evaluator, handler, middleware, path.value)
       : undefined;
     return [{

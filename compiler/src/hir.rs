@@ -63,6 +63,8 @@ pub enum HandlerResponse {
     },
     Text {
         value: ValueExpression,
+        #[serde(default = "ok_status")]
+        status: u16,
         #[serde(default)]
         #[serde(rename = "contentType")]
         content_type: Option<String>,
@@ -187,9 +189,14 @@ impl Program {
         if self.target != "aarch64-apple-darwin" {
             return Err(format!("unsupported HIR target `{}`", self.target));
         }
-        if self.handlers.is_empty() || self.handlers.iter().any(|handler| handler.method != "GET") {
+        if self.handlers.is_empty()
+            || self
+                .handlers
+                .iter()
+                .any(|handler| !matches!(handler.method.as_str(), "GET" | "POST"))
+        {
             return Err(
-                "HIR must contain at least one GET handler and no other methods".to_owned(),
+                "HIR must contain at least one GET/POST handler and no other methods".to_owned(),
             );
         }
         let mut handler_paths = HashSet::new();
@@ -198,8 +205,11 @@ impl Program {
                 return Err("GET handler path must be an absolute path without a query".to_owned());
             }
             validate_route_pattern(&handler.path)?;
-            if !handler_paths.insert(handler.path.as_str()) {
-                return Err(format!("duplicate GET handler path `{}`", handler.path));
+            if !handler_paths.insert((handler.method.as_str(), handler.path.as_str())) {
+                return Err(format!(
+                    "duplicate {} handler path `{}`",
+                    handler.method, handler.path
+                ));
             }
             let mut header_names = HashSet::new();
             for header in &handler.headers {
@@ -220,12 +230,18 @@ impl Program {
                 }
                 HandlerResponse::Text {
                     value,
+                    status,
                     content_type,
                 } => {
+                    if !(100..=599).contains(status) {
+                        return Err("handler response has an invalid HTTP status".to_owned());
+                    }
                     if content_type.as_deref().is_some_and(|value| {
                         !matches!(
                             value,
-                            "text/plain; charset=UTF-8" | "text/plain;charset=UTF-8"
+                            "text/plain; charset=UTF-8"
+                                | "text/plain;charset=UTF-8"
+                                | "application/json"
                         )
                     }) {
                         return Err("GET text response has an unsupported content type".to_owned());
@@ -461,6 +477,10 @@ fn validate_route_pattern(pattern: &str) -> Result<(), String> {
 
 fn root_path() -> String {
     "/".to_owned()
+}
+
+fn ok_status() -> u16 {
+    200
 }
 
 fn valid_header_name(name: &[u8]) -> bool {

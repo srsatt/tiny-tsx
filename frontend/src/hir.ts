@@ -108,11 +108,15 @@ export type HandlerResponse =
   | {
       kind: "text";
       value: ValueExpression;
-      contentType?: "text/plain; charset=UTF-8" | "text/plain;charset=UTF-8";
+      status?: number;
+      contentType?:
+        | "text/plain; charset=UTF-8"
+        | "text/plain;charset=UTF-8"
+        | "application/json";
     };
 
 export interface Handler {
-  method: "GET";
+  method: "GET" | "POST";
   path: string;
   headers?: StaticHeader[];
   response: HandlerResponse;

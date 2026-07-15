@@ -198,18 +198,17 @@ function lowerApplicationInitialization(
   sourceFile: ts.SourceFile,
   initialization: ApplicationInitializationEvaluation,
 ): HirProgram | undefined {
-  const routes = initialization.routes.filter(route => route.method === "GET");
+  const routes = initialization.routes.filter(route => ["GET", "POST"].includes(route.method));
   if (
     routes.length === 0
-    || initialization.routes.some(route => route.method !== "GET" && route.method !== "ALL")
+    || initialization.routes.some(route => !["GET", "POST", "ALL"].includes(route.method))
   ) {
     return undefined;
   }
   if (routes.some(route =>
     route.response === undefined
     || route.response.kind !== "text"
-    || route.response.status !== 200
-    || route.response.contentType !== "text/plain;charset=UTF-8"
+    || !["text/plain;charset=UTF-8", "application/json"].includes(route.response.contentType)
   )) {
     return undefined;
   }
@@ -233,13 +232,16 @@ function lowerApplicationInitialization(
         span,
       };
     return {
-      method: "GET" as const,
+      method: route.method as "GET" | "POST",
       path: route.path,
       ...(response.headers === undefined ? {} : {headers: response.headers}),
       response: {
         kind: "text" as const,
         value,
-        contentType: response.contentType as "text/plain;charset=UTF-8",
+        ...(response.status === 200 ? {} : {status: response.status}),
+        contentType: response.contentType as
+          | "text/plain;charset=UTF-8"
+          | "application/json",
       },
       span,
     };

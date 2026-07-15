@@ -131,6 +131,20 @@ fn emit_handlers(assembly: &mut String, program: &Program) -> Result<(), String>
     let return_label = "Ltinytsx_handle_get_return";
     for (index, handler) in program.handlers.iter().enumerate() {
         writeln!(assembly, "    ldr x0, [sp, #24]").unwrap();
+        writeln!(
+            assembly,
+            "    adrp x1, Ltinytsx_handler_method_{index}@PAGE"
+        )
+        .unwrap();
+        writeln!(
+            assembly,
+            "    add x1, x1, Ltinytsx_handler_method_{index}@PAGEOFF"
+        )
+        .unwrap();
+        emit_immediate(assembly, "x2", handler.method.len() as u64);
+        writeln!(assembly, "    bl _tinytsx_request_method_equals").unwrap();
+        writeln!(assembly, "    cbz w0, Ltinytsx_handle_get_next_{index}").unwrap();
+        writeln!(assembly, "    ldr x0, [sp, #24]").unwrap();
         writeln!(assembly, "    adrp x1, Ltinytsx_handler_path_{index}@PAGE").unwrap();
         writeln!(
             assembly,
@@ -140,6 +154,7 @@ fn emit_handlers(assembly: &mut String, program: &Program) -> Result<(), String>
         emit_immediate(assembly, "x2", handler.path.len() as u64);
         writeln!(assembly, "    bl _tinytsx_request_path_matches").unwrap();
         writeln!(assembly, "    cbnz w0, Ltinytsx_handle_get_match_{index}").unwrap();
+        writeln!(assembly, "Ltinytsx_handle_get_next_{index}:").unwrap();
     }
     emit_immediate(assembly, "x0", 5);
     writeln!(assembly, "    b {return_label}").unwrap();
@@ -188,20 +203,22 @@ fn emit_handler_response(
 ) -> Result<(), String> {
     match response {
         HandlerResponse::Html { component } => {
-            emit_response_begin(assembly, 1, return_label);
+            emit_response_begin(assembly, 200, 1, return_label);
             writeln!(assembly, "    ldr x0, [sp, #24]").unwrap();
             writeln!(assembly, "    ldr x1, [sp, #16]").unwrap();
             writeln!(assembly, "    bl _tinytsx_component_{component}").unwrap();
         }
         HandlerResponse::Text {
             value,
+            status,
             content_type,
         } => {
             let content_type_id = match content_type.as_deref() {
                 Some("text/plain;charset=UTF-8") => 4,
+                Some("application/json") => 3,
                 _ => 2,
             };
-            emit_response_begin(assembly, content_type_id, return_label);
+            emit_response_begin(assembly, *status, content_type_id, return_label);
             emit_handler_text_expression(assembly, value, program, return_label)?;
         }
     }
@@ -238,9 +255,9 @@ fn emit_handler_text_expression(
     Ok(())
 }
 
-fn emit_response_begin(assembly: &mut String, content_type: u16, return_label: &str) {
+fn emit_response_begin(assembly: &mut String, status: u16, content_type: u16, return_label: &str) {
     writeln!(assembly, "    ldr x0, [sp, #16]").unwrap();
-    emit_immediate(assembly, "x1", 200);
+    emit_immediate(assembly, "x1", u64::from(status));
     emit_immediate(assembly, "x2", u64::from(content_type));
     writeln!(assembly, "    bl _tinytsx_response_begin").unwrap();
     writeln!(assembly, "    cbnz w0, {return_label}").unwrap();
@@ -353,6 +370,9 @@ fn scratch_slots(expression: &ValueExpression) -> usize {
 fn emit_static_data(assembly: &mut String, program: &Program) -> Result<(), String> {
     writeln!(assembly, "\n.section __TEXT,__const").unwrap();
     for (index, handler) in program.handlers.iter().enumerate() {
+        writeln!(assembly, ".p2align 3").unwrap();
+        writeln!(assembly, "Ltinytsx_handler_method_{index}:").unwrap();
+        emit_bytes(assembly, handler.method.as_bytes());
         writeln!(assembly, ".p2align 3").unwrap();
         writeln!(assembly, "Ltinytsx_handler_path_{index}:").unwrap();
         emit_bytes(assembly, handler.path.as_bytes());
@@ -547,10 +567,11 @@ mod tests {
               "functions": [],
               "components": [],
               "handlers": [{
-                "method": "GET",
+                "method": "POST",
                 "path": "/entry/:id",
                 "response": {
                   "kind": "text",
+                  "status": 201,
                   "value": {
                     "kind": "concat",
                     "values": [{
@@ -578,6 +599,9 @@ mod tests {
         let assembly = emit(&program, Options::default()).unwrap();
 
         assert!(assembly.contains("bl _tinytsx_request_path_matches"));
+        assert!(assembly.contains("bl _tinytsx_request_method_equals"));
+        assert!(assembly.contains("movz x1, #201"));
+        assert!(assembly.contains("Ltinytsx_handler_method_0:\n    .byte 80, 79, 83, 84"));
         assert!(assembly.contains("movz x2, #1\n    bl _tinytsx_html_write_path_segment"));
     }
 }
