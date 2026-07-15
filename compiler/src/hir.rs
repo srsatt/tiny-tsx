@@ -108,6 +108,15 @@ pub enum ValueExpression {
         arguments: Vec<ValueExpression>,
         span: SourceSpan,
     },
+    Concat {
+        values: Vec<ValueExpression>,
+        span: SourceSpan,
+    },
+    RouteParameter {
+        name: String,
+        segment: usize,
+        span: SourceSpan,
+    },
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -188,6 +197,7 @@ impl Program {
             if !handler.path.starts_with('/') || handler.path.contains('?') {
                 return Err("GET handler path must be an absolute path without a query".to_owned());
             }
+            validate_route_pattern(&handler.path)?;
             if !handler_paths.insert(handler.path.as_str()) {
                 return Err(format!("duplicate GET handler path `{}`", handler.path));
             }
@@ -220,7 +230,7 @@ impl Program {
                     }) {
                         return Err("GET text response has an unsupported content type".to_owned());
                     }
-                    self.validate_expression(value, 0)?;
+                    self.validate_handler_expression(value, &handler.path)?;
                 }
                 _ => {}
             }
@@ -346,8 +356,44 @@ impl Program {
                     self.validate_expression(argument, parameter_count)?;
                 }
             }
+            ValueExpression::Concat { .. } | ValueExpression::RouteParameter { .. } => {
+                return Err(
+                    "request-time expressions are only valid in handler responses".to_owned(),
+                );
+            }
         }
         Ok(())
+    }
+
+    fn validate_handler_expression(
+        &self,
+        expression: &ValueExpression,
+        route_pattern: &str,
+    ) -> Result<(), String> {
+        match expression {
+            ValueExpression::Concat { values, .. } => {
+                if values.is_empty() {
+                    return Err("handler concatenation must not be empty".to_owned());
+                }
+                for value in values {
+                    self.validate_handler_expression(value, route_pattern)?;
+                }
+                Ok(())
+            }
+            ValueExpression::RouteParameter { name, segment, .. } => {
+                let segments: Vec<&str> = route_pattern
+                    .split('/')
+                    .filter(|part| !part.is_empty())
+                    .collect();
+                if segments.get(*segment).copied() != Some(&format!(":{name}")) {
+                    return Err(format!(
+                        "route parameter `{name}` does not match segment {segment} of `{route_pattern}`"
+                    ));
+                }
+                Ok(())
+            }
+            _ => self.validate_expression(expression, 0),
+        }
     }
 
     fn validate_function_cycles(&self) -> Result<(), String> {
@@ -374,19 +420,43 @@ impl Program {
         expression: &ValueExpression,
         state: &mut [u8],
     ) -> Result<(), String> {
-        if let ValueExpression::DirectCall {
-            function,
-            arguments,
-            ..
-        } = expression
-        {
-            self.visit_function(*function, state)?;
-            for argument in arguments {
-                self.visit_expression_functions(argument, state)?;
+        match expression {
+            ValueExpression::DirectCall {
+                function,
+                arguments,
+                ..
+            } => {
+                self.visit_function(*function, state)?;
+                for argument in arguments {
+                    self.visit_expression_functions(argument, state)?;
+                }
             }
+            ValueExpression::Concat { values, .. } => {
+                for value in values {
+                    self.visit_expression_functions(value, state)?;
+                }
+            }
+            _ => {}
         }
         Ok(())
     }
+}
+
+fn validate_route_pattern(pattern: &str) -> Result<(), String> {
+    for segment in pattern.split('/').filter(|part| !part.is_empty()) {
+        if let Some(name) = segment.strip_prefix(':') {
+            if name.is_empty()
+                || !name
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+            {
+                return Err(format!("unsupported route parameter segment `{segment}`"));
+            }
+        } else if segment.contains([':', '*', '{', '}']) {
+            return Err(format!("unsupported dynamic route segment `{segment}`"));
+        }
+    }
+    Ok(())
 }
 
 fn root_path() -> String {

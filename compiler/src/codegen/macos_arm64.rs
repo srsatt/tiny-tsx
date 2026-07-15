@@ -138,7 +138,7 @@ fn emit_handlers(assembly: &mut String, program: &Program) -> Result<(), String>
         )
         .unwrap();
         emit_immediate(assembly, "x2", handler.path.len() as u64);
-        writeln!(assembly, "    bl _tinytsx_request_path_equals").unwrap();
+        writeln!(assembly, "    bl _tinytsx_request_path_matches").unwrap();
         writeln!(assembly, "    cbnz w0, Ltinytsx_handle_get_match_{index}").unwrap();
     }
     emit_immediate(assembly, "x0", 5);
@@ -202,7 +202,33 @@ fn emit_handler_response(
                 _ => 2,
             };
             emit_response_begin(assembly, content_type_id, return_label);
-            emit_value_expression(assembly, value, program, 32)?;
+            emit_handler_text_expression(assembly, value, program, return_label)?;
+        }
+    }
+    Ok(())
+}
+
+fn emit_handler_text_expression(
+    assembly: &mut String,
+    expression: &ValueExpression,
+    program: &Program,
+    return_label: &str,
+) -> Result<(), String> {
+    match expression {
+        ValueExpression::Concat { values, .. } => {
+            for value in values {
+                emit_handler_text_expression(assembly, value, program, return_label)?;
+                writeln!(assembly, "    cbnz w0, {return_label}").unwrap();
+            }
+        }
+        ValueExpression::RouteParameter { segment, .. } => {
+            writeln!(assembly, "    ldr x0, [sp, #16]").unwrap();
+            writeln!(assembly, "    ldr x1, [sp, #24]").unwrap();
+            emit_immediate(assembly, "x2", *segment as u64);
+            writeln!(assembly, "    bl _tinytsx_html_write_path_segment").unwrap();
+        }
+        _ => {
+            emit_value_expression(assembly, expression, program, 32)?;
             writeln!(assembly, "    mov x2, x1").unwrap();
             writeln!(assembly, "    mov x1, x0").unwrap();
             writeln!(assembly, "    ldr x0, [sp, #16]").unwrap();
@@ -281,6 +307,9 @@ fn emit_value_expression(
             }
             writeln!(assembly, "    bl _tinytsx_function_{function}").unwrap();
         }
+        ValueExpression::Concat { .. } | ValueExpression::RouteParameter { .. } => {
+            return Err("request-time expression used outside a handler response".to_owned());
+        }
     }
     Ok(())
 }
@@ -313,6 +342,9 @@ fn scratch_slots(expression: &ValueExpression) -> usize {
     match expression {
         ValueExpression::DirectCall { arguments, .. } => {
             arguments.len() + arguments.iter().map(scratch_slots).max().unwrap_or(0)
+        }
+        ValueExpression::Concat { values, .. } => {
+            values.iter().map(scratch_slots).max().unwrap_or(0)
         }
         _ => 0,
     }
@@ -485,7 +517,7 @@ mod tests {
         assert!(first.contains(".globl _tinytsx_handle_get"));
         assert!(first.contains("bl _tinytsx_html_write_static"));
         assert!(first.contains("bl _tinytsx_response_begin"));
-        assert!(first.contains("bl _tinytsx_request_path_equals"));
+        assert!(first.contains("bl _tinytsx_request_path_matches"));
         assert!(first.contains("bl _tinytsx_response_header_static"));
         assert!(first.contains("Ltinytsx_handler_0_header_0_name:"));
         assert!(first.contains("Ltinytsx_handler_path_0:"));
@@ -502,5 +534,50 @@ mod tests {
         assert!(first.contains(".byte 60, 104, 49"));
         assert!(first.contains(".byte 4, 5, 0, 0, 0, 72, 101, 108, 108, 111"));
         assert!(first.contains("_tinytsx_config_port:\n    movz x0, #3000"));
+    }
+
+    #[test]
+    fn emits_named_route_matching_and_parameter_writes() {
+        let program: Program = serde_json::from_str(
+            r#"{
+              "version": 2,
+              "target": "aarch64-apple-darwin",
+              "entry": "server.ts",
+              "modules": [{"path": "server.ts"}],
+              "functions": [],
+              "components": [],
+              "handlers": [{
+                "method": "GET",
+                "path": "/entry/:id",
+                "response": {
+                  "kind": "text",
+                  "value": {
+                    "kind": "concat",
+                    "values": [{
+                      "kind": "stringLiteral",
+                      "string": 0,
+                      "span": {"file":"server.ts","line":1,"column":1,"endLine":1,"endColumn":2}
+                    }, {
+                      "kind": "routeParameter",
+                      "name": "id",
+                      "segment": 1,
+                      "span": {"file":"server.ts","line":1,"column":1,"endLine":1,"endColumn":2}
+                    }],
+                    "span": {"file":"server.ts","line":1,"column":1,"endLine":1,"endColumn":2}
+                  }
+                },
+                "span": {"file":"server.ts","line":1,"column":1,"endLine":1,"endColumn":2}
+              }],
+              "staticStrings": [{"id":0,"value":"Your ID is "}],
+              "constants": [],
+              "statistics": {"modules":1,"functions":0,"components":0,"constants":0,"staticHtmlBytes":11,"dynamicHtmlExpressions":1}
+            }"#,
+        )
+        .unwrap();
+
+        let assembly = emit(&program, Options::default()).unwrap();
+
+        assert!(assembly.contains("bl _tinytsx_request_path_matches"));
+        assert!(assembly.contains("movz x2, #1\n    bl _tinytsx_html_write_path_segment"));
     }
 }
