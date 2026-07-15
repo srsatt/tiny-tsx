@@ -21,6 +21,15 @@
       "coverage": "ResponseInit.status propagation for the closed 201 case only",
       "nativeEvidence": "compiler/tests/e2e.rs",
       "evidenceMarker": "builds_and_serves_a_hono_json_post_response"
+    },
+    {
+      "upstreamPath": "url/urlsearchparams-has.any.js",
+      "localPath": "tests/compat/wpt/upstream/urlsearchparams-has.any.js",
+      "sha256": "6c6d0464e9a2cd80ab4999e63812d39cf03506c0bdfd99a5a5c147f3ee4e7941",
+      "status": "native-derived",
+      "coverage": "One-argument query-name presence for absent, bare, empty, and valued parameters only; no URLSearchParams object or percent-decoding conformance",
+      "nativeEvidence": "runtime/bootstrap/src/abi/tests.rs",
+      "evidenceMarker": "request_query_presence_matches_bare_empty_and_valued_parameters"
     }
   ]
 }
