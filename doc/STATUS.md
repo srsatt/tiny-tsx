@@ -149,6 +149,10 @@ produces and serves a native Mach-O executable from the example TSX source.
   `c.req.param(name)` lowers to request-time text, and template/string
   concatenation streams percent-decoded parameter bytes into the bounded writer.
   A native E2E verifies `/entry/:id` with encoded space and slash data.
+- Multiple top-level Hono instances now participate in initialization. Upstream
+  `route()`, `basePath()`, `#clone()`, the closed child-route `map`, and
+  `#addRoute` mount `/book` and `/book/:id`; both are verified over native HTTP.
+  The complete-source evaluator now retains 22 routes across 34 modules.
 - Static `Response` headers lower into a bounded eight-entry native writer with
   HTTP token/value validation, case-insensitive replacement, and wire emission.
   A pinned WPT `Headers.set()` casing source is tracked as native-derived
@@ -191,9 +195,9 @@ rtk python3 benchmarks/scripts/run_static.py --workload hono-basic --duration 1 
 ## Active slice
 
 Compatibility substrate: compile the next complete-basic-example frontier:
-nested applications, wildcard routes, and the remaining middleware and
-request-dependent handlers. Extend the executable function slice with locals, record
-property access, branches, and closures. Type-layout specialization should
+POST/status responses, wildcard routes, and the remaining middleware and
+request-dependent handlers. Extend the executable function slice with locals,
+record property access, branches, and closures. Type-layout specialization should
 handle closed request-time records without pretending their values are
 compile-time constants.
 Test262 cases move from syntax intake to native execution only when their

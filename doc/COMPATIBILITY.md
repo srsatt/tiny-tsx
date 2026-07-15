@@ -75,7 +75,7 @@ upstream `poweredBy()` factory and middleware closure, lowers its post-handler
 header mutation, and reproduces the selected upstream test's root status and
 `X-Powered-By: Hono` behavior over native HTTP. The complete basic application
 still contains unsupported broader patterns and request-dependent handlers,
-nested applications, POST routes, and additional middleware.
+POST routes, and additional middleware.
 
 The basic example's `/entry/:id` shape is the first request-dependent route.
 One closed `:name` segment becomes a native matcher and `c.req.param('name')`
@@ -83,6 +83,13 @@ becomes a request-time text value. Literal and parameter chunks write directly
 to the bounded response buffer, including Hono-compatible decoding of valid
 percent-encoded UTF-8 groups. Optional, wildcard, constrained, and catch-all
 patterns remain outside this slice.
+
+Nested application initialization now follows the actual upstream `route()`
+implementation. The compiler constructs the second `book` binding, retains its
+routes, executes Hono's clone/base-path logic and closed `routes.map(...)`, and
+adds `/book` plus `/book/:id` to the parent route storage. Both GET routes are
+served by a native E2E; the nested POST registration is retained but native POST
+dispatch remains pending.
 
 ### Type-only API overlay
 

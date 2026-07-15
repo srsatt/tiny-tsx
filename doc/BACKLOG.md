@@ -104,8 +104,10 @@ commit message.
       broader request-dependent handler bodies.
 - [x] Apply closed post-handler middleware and compile upstream `poweredBy()`
       through native response-header emission.
+- [x] Evaluate multiple constructed Hono bindings and mount nested applications
+      through upstream `route()`, `basePath()`, `#clone()`, and `#addRoute`.
 - [ ] Compile the remaining basic-example middleware, including `basicAuth`,
-      `etag`, custom async middleware, and nested applications.
+      `etag`, and custom async middleware.
 - [ ] Compile the required rest/spread operations.
 - [ ] Add a native RegExp backend and allowlisted Test262 cases.
 - [ ] Add the general Request, Response, Headers, URL, and encoding native APIs.

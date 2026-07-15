@@ -88,6 +88,14 @@ into the bounded writer. The runtime percent-decodes valid UTF-8 groups and
 preserves malformed groups. A native E2E covers the basic example's
 `/entry/:id` handler, including an encoded space and slash in the parameter.
 
+Initialization also tracks additional top-level instances of the application
+class. For the basic example's nested book application, it constructs `book`,
+executes its registrations, then invokes upstream `app.route('/book', book)`.
+The evaluator follows `basePath()`, `#clone()`, the closed `routes.map(...)`,
+and `#addRoute` against shared route storage. Native E2E coverage verifies
+`/book` and the request-dependent `/book/:id`; no separate nesting interface is
+substituted for Hono's implementation.
+
 Closed middleware registrations are retained as `ALL` routes during symbolic
 initialization. For a matching static route, the evaluator invokes preceding
 middleware around the handler and applies post-handler effects in reverse
@@ -98,8 +106,8 @@ and is verified on the native root route.
 
 This is deliberately a narrow AOT fast path. Optional, wildcard, constrained,
 and multi-segment route patterns, broader request-dependent bodies, non-200
-response construction, dynamic
-headers, pre-handler control flow, and the general Context/Request/Response
+response construction, dynamic headers, pre-handler control flow, and the
+general Context/Request/Response
 runtime remain pending. Middleware path matching currently covers exact paths,
 `*`, and suffix-wildcard prefixes; it is not a general native Hono router.
 
