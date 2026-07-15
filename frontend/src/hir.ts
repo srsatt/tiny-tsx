@@ -92,6 +92,11 @@ export type ValueExpression =
       span: SourceSpan;
     }
   | {
+      kind: "fetchStatus";
+      url: number;
+      span: SourceSpan;
+    }
+  | {
       kind: "queryConditional";
       query: number;
       whenPresent: ValueExpression;

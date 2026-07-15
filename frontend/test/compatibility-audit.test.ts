@@ -954,6 +954,31 @@ test("lowers the upstream basic route through the full Hono runtime graph", () =
   assert.deepEqual(hir.staticStrings, [{id: 0, value: "Hono!!"}]);
 });
 
+test("lowers a closed fetch response status as a native runtime expression", () => {
+  const hir = compileEntry(path.join(repository, "tests/compat/hono/fetch-status-smoke.ts"), {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+    apiAliases: {hono: path.join(repository, "tests/compat/hono/api.d.ts")},
+  });
+
+  assert.equal(hir.handlers[0]?.path, "/fetch-url");
+  assert.deepEqual(
+    hir.handlers[0]?.response.kind === "text" ? hir.handlers[0].response.value : undefined,
+    {
+      kind: "concat",
+      values: [
+        {kind: "stringLiteral", string: 0, span: hir.handlers[0]?.span},
+        {kind: "fetchStatus", url: 1, span: hir.handlers[0]?.span},
+      ],
+      span: hir.handlers[0]?.span,
+    },
+  );
+  assert.deepEqual(hir.staticStrings.map(string => string.value), [
+    "https://example.com/ is ",
+    "https://example.com/",
+  ]);
+});
+
 test("pins the native text response to the upstream Hono contract", () => {
   const manifest = JSON.parse(readFileSync(
     path.join(repository, "tests/compat/hono/manifest.json"),

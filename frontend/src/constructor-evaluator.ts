@@ -937,6 +937,9 @@ function sameResponseHeaderValue(left: ResponseHeaderValue, right: ResponseHeade
     if (part.kind === "elapsedMilliseconds") {
       return candidate?.kind === "elapsedMilliseconds";
     }
+    if (part.kind === "fetchStatus") {
+      return candidate?.kind === "fetchStatus" && candidate.url === part.url;
+    }
     return candidate?.kind === part.kind && candidate.name === part.name;
   });
 }
@@ -1195,6 +1198,12 @@ function evaluateCall(
       return message.kind === "unknown"
         ? unknown("Error message is not closed")
         : {kind: "error", name: "Error", message: message.kind === "undefined" ? "" : stringValue(message)};
+    }
+    if (callable.kind === "reference" && callable.name === "fetch") {
+      const url = arguments_[0];
+      return arguments_.length === 1 && url?.kind === "string"
+        ? {kind: "fetchResponse", url: url.value}
+        : unknown("fetch requires one closed URL string");
     }
     if (callable.kind === "reference" && callable.callable !== undefined) {
       return invokeFunctionLike(
@@ -1711,6 +1720,7 @@ function evaluate(
       values.push(
         part.kind === "routeParameter"
           || part.kind === "requestHeader"
+          || part.kind === "fetchStatus"
           || part.kind === "elapsedMilliseconds"
           || part.kind === "runtimeString"
           ? part

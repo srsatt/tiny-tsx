@@ -18,6 +18,8 @@ export type Value =
   | {kind: "record"; fields: Map<string, Value>}
   | {kind: "headers"; entries: Map<string, {name: string; value: ResponseHeaderValue}>}
   | {kind: "request"; routePattern: string; method: string}
+  | {kind: "fetchResponse"; url: string}
+  | {kind: "fetchStatus"; url: string}
   | {kind: "clockNow"}
   | {kind: "elapsedMilliseconds"}
   | {kind: "routeParameter"; name: string}
@@ -49,6 +51,7 @@ export type RuntimeStringPart =
   | {kind: "literal"; value: string}
   | {kind: "routeParameter"; name: string}
   | {kind: "requestHeader"; name: string}
+  | {kind: "fetchStatus"; url: string}
   | {kind: "elapsedMilliseconds"};
 
 export type ResponseHeaderValue = string | RuntimeStringPart[];
@@ -85,6 +88,9 @@ export function readProperty(value: Value, name: string): Value {
     return value.routePattern.includes(":") || value.routePattern.includes("*")
       ? unknown("request path is not closed for a patterned route")
       : {kind: "string", value: value.routePattern};
+  }
+  if (value.kind === "fetchResponse" && name === "status") {
+    return {kind: "fetchStatus", url: value.url};
   }
   if (value.kind === "instance" && name === "res") {
     return value.fields.get("#res") ?? UNDEFINED;
@@ -209,6 +215,7 @@ export function typeOf(value: Value): string {
     case "routeParameter":
     case "runtimeString": return "string";
     case "requestHeader": return "string";
+    case "fetchStatus": return "number";
     case "queryParameter": return "string";
     case "queryPredicate": return "boolean";
     case "closure":
@@ -237,6 +244,7 @@ export function runtimeStringParts(value: Value): RuntimeStringPart[] | undefine
     case "string": return value.value === "" ? [] : [{kind: "literal", value: value.value}];
     case "routeParameter": return [{kind: "routeParameter", name: value.name}];
     case "requestHeader": return [{kind: "requestHeader", name: value.name}];
+    case "fetchStatus": return [{kind: "fetchStatus", url: value.url}];
     case "elapsedMilliseconds": return [{kind: "elapsedMilliseconds"}];
     case "runtimeString": return value.parts;
     default: return undefined;
