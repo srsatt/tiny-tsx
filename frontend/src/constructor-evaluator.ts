@@ -345,9 +345,14 @@ function matchingMiddleware(
     return [handler];
   }
   if (method.value !== "ALL") return [];
+  const wildcardPrefix = path.value.endsWith("*") ? path.value.slice(0, -1) : undefined;
+  const wildcardBase = wildcardPrefix?.endsWith("/")
+    ? wildcardPrefix.slice(0, -1)
+    : wildcardPrefix;
   const matches = path.value === "/*"
     || path.value === requestPath
-    || (path.value.endsWith("*") && requestPath.startsWith(path.value.slice(0, -1)));
+    || (wildcardPrefix !== undefined
+      && (requestPath === wildcardBase || requestPath.startsWith(wildcardPrefix)));
   return matches ? [handler] : [];
 }
 

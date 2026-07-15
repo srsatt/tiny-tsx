@@ -69,6 +69,14 @@ export function readProperty(value: Value, name: string): Value {
   if (value.kind === "response" && name === "headers") {
     return {kind: "headers", entries: value.headers};
   }
+  if (value.kind === "response" && name === "body") {
+    if (typeof value.body === "string") return {kind: "string", value: value.body};
+    if (Array.isArray(value.body)) return {kind: "runtimeString", parts: value.body};
+    return unknown("query-conditional Response.body is not directly reusable");
+  }
+  if (value.kind === "response" && name === "status") {
+    return {kind: "number", value: value.status};
+  }
   if (value.kind === "record" || value.kind === "instance") {
     return value.fields.get(name) ?? UNDEFINED;
   }
