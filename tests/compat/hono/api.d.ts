@@ -12,6 +12,7 @@ export interface HonoContextApi {
   text(body: string, status?: number): Response;
   html(body: string, status?: number): Response;
   json(value: unknown, status?: number): Response;
+  redirect(location: string | URL, status?: 301 | 302 | 303 | 307 | 308): Response;
 }
 
 export type HonoHandlerApi = (

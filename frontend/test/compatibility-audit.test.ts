@@ -484,6 +484,43 @@ test("lowers upstream prettyJSON into a query-conditional native response", () =
   );
 });
 
+test("lowers upstream Context.redirect with an empty body and Location header", () => {
+  const entry = path.join(repository, "tests/compat/hono/redirect-smoke.ts");
+  const options = {
+    aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+    apiAliases: {hono: path.join(repository, "tests/compat/hono/api.d.ts")},
+  };
+  const graph = loadModuleGraph(entry, options);
+  const application = analyzeApplicationEntry(graph.modules[0]!.sourceFile);
+  assert.ok(application);
+
+  const result = evaluateApplicationInitialization(graph, application);
+
+  assert.deepEqual(result?.issues, []);
+  assert.deepEqual(result?.routes[0]?.response, {
+    kind: "text",
+    body: "",
+    status: 302,
+    contentType: "",
+    headers: [{name: "Location", value: "/"}],
+  });
+
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    ...options,
+  });
+  assert.deepEqual(
+    hir.handlers[0]?.response.kind === "text"
+      ? {
+        status: hir.handlers[0].response.status,
+        contentType: hir.handlers[0].response.contentType,
+      }
+      : undefined,
+    {status: 302, contentType: ""},
+  );
+  assert.deepEqual(hir.handlers[0]?.headers, [{name: "Location", value: "/"}]);
+});
+
 test("lowers the tiny-preset Hono route into native HIR", () => {
   const hir = compileEntry(path.join(repository, "tests/compat/hono/smoke.ts"), {
     sdkPath: path.join(repository, "sdk/index.d.ts"),
