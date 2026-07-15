@@ -13,7 +13,7 @@
     {
       "path": "test/language/statements/for/S12.6.3_A1.js",
       "feature": "loops-and-exceptions",
-      "mode": "syntax"
+      "mode": "native"
     },
     {
       "path": "test/built-ins/RegExp/prototype/test/S15.10.6.3_A1_T1.js",
