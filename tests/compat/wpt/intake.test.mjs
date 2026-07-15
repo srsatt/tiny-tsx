@@ -13,9 +13,11 @@ test("pins selected Web Platform Test sources by revision and digest", () => {
   for (const selected of manifest.selected) {
     const source = readFileSync(path.join(repository, selected.localPath));
     assert.equal(createHash("sha256").update(source).digest("hex"), selected.sha256);
-    assert.equal(selected.status, "native-derived");
-    assert.ok(readFileSync(path.join(repository, selected.nativeEvidence), "utf8").includes(
-      selected.evidenceMarker,
-    ));
+    assert.ok(["native-derived", "native-planned", "native"].includes(selected.status));
+    if (selected.status === "native-derived") {
+      assert.ok(readFileSync(path.join(repository, selected.nativeEvidence), "utf8").includes(
+        selected.evidenceMarker,
+      ));
+    }
   }
 });

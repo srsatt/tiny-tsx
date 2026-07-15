@@ -30,6 +30,13 @@
       "coverage": "One-argument query-name presence for absent, bare, empty, and valued parameters only; no URLSearchParams object or percent-decoding conformance",
       "nativeEvidence": "runtime/bootstrap/src/abi/tests.rs",
       "evidenceMarker": "request_query_presence_matches_bare_empty_and_valued_parameters"
+    },
+    {
+      "upstreamPath": "url/urlsearchparams-get.any.js",
+      "localPath": "tests/compat/wpt/upstream/urlsearchparams-get.any.js",
+      "sha256": "0bfd999026f963ffc3f021cf509d1e8f3300cddd52c21ebffcd392d8d43bca34",
+      "status": "native-planned",
+      "coverage": "Complete upstream file: URLSearchParams construction, first-value lookup, empty names and values, missing names, duplicate names, and one-argument has()"
     }
   ]
 }
