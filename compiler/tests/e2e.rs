@@ -20,7 +20,7 @@ struct ExpectedResponse<'a> {
     status: u16,
     path: &'a str,
     body: &'a str,
-    content_type: &'a str,
+    content_type: Option<&'a str>,
     headers: &'a [(&'a str, &'a str)],
 }
 
@@ -311,6 +311,28 @@ fn builds_and_serves_upstream_pretty_json_by_query_presence() {
     );
 }
 
+#[test]
+fn builds_and_serves_upstream_hono_redirect() {
+    build_and_serve_with_options(
+        "tests/compat/hono/redirect-smoke.ts",
+        ExpectedResponse {
+            method: "GET",
+            status: 302,
+            path: "/redirect",
+            body: "",
+            content_type: None,
+            headers: &[("Location", "/")],
+        },
+        &[
+            "--alias",
+            "hono=vendor/hono/src/index.ts",
+            "--api",
+            "hono=tests/compat/hono/api.d.ts",
+        ],
+        &[],
+    );
+}
+
 fn build_and_serve(entry: &str, expected_body: &str, expected_content_type: &str) {
     build_and_serve_with_options(
         entry,
@@ -333,7 +355,7 @@ fn expected<'a>(
         status,
         path,
         body,
-        content_type,
+        content_type: Some(content_type),
         headers,
     }
 }
@@ -389,10 +411,14 @@ fn build_and_serve_with_options(
         response.starts_with(&format!("HTTP/1.1 {} ", expected.status)),
         "{response}"
     );
-    assert!(
-        response.contains(&format!("Content-Type: {}\r\n", expected.content_type)),
-        "{response}"
-    );
+    if let Some(content_type) = expected.content_type {
+        assert!(
+            response.contains(&format!("Content-Type: {content_type}\r\n")),
+            "{response}"
+        );
+    } else {
+        assert!(!response.contains("\r\nContent-Type:"), "{response}");
+    }
     assert!(
         response.contains(&format!("Content-Length: {}\r\n", expected.body.len())),
         "{response}"
