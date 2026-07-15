@@ -63,7 +63,7 @@ def render_markdown(result: dict[str, Any]) -> str:
         "",
         f"Generated: {result['timestamp']}",
         "",
-        f"> Scope: {result['scope']}. A new TCP connection per request; one server process. "
+        f"> Scope: {result['scope']}. {_transport_scope(result)}; one server process. "
         "This is not a general dynamic-language benchmark.",
         "",
         "## Environment",
@@ -120,7 +120,7 @@ def render_markdown(result: dict[str, Any]) -> str:
             "",
             "## Limitations",
             "",
-            f"- TinyTSX uses {result['configuration']['workers']} fixed native worker(s) and always closes the connection.",
+            f"- TinyTSX uses {result['configuration']['workers']} fixed native worker(s); keep-alive is {str(result['configuration']['keepAlive']).lower()}.",
             "- The benchmark client and server share the same machine.",
             *[f"- {limitation}" for limitation in result.get("limitations", [])],
             "- Power mode and unrelated background activity are not controlled by the harness.",
@@ -138,6 +138,12 @@ def _footprint_row(label: str, target: dict[str, Any]) -> str:
         f"{_size(target['artifactBytes'])} | "
         f"{_size(target['runtimeExecutableBytes'])} |"
     )
+
+
+def _transport_scope(result: dict[str, Any]) -> str:
+    if result["configuration"]["keepAlive"]:
+        return "HTTP/1.1 connections are reused"
+    return "a new TCP connection is opened per request"
 
 
 def _mib(value: int) -> float:

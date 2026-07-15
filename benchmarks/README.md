@@ -19,10 +19,10 @@ middleware clones the body, TinyTSX preserves `text/plain;charset=UTF-8` while
 Bun 1.3.13 serves the stream as `application/octet-stream`.
 
 This is deliberately not presented as a general TypeScript performance result.
-TinyTSX uses the worker count selected with `--workers` and connection-close
-HTTP. The JSX root is closed and rendered at AOT time; request-selected post
-behavior is tested but is not the throughput target. The client disables
-keep-alive for both targets.
+TinyTSX uses the worker count selected with `--workers`; the harness uses
+connection-close by default and enables persistent connections with
+`--keep-alive` for both targets. The JSX root is closed and rendered at AOT
+time; request-selected post behavior is tested but is not the throughput target.
 
 ## Prerequisites
 
@@ -45,6 +45,7 @@ Run the exact-source Hono comparison with:
 ```bash
 npm run benchmark:hono
 npm run benchmark:hono-jsx-ssr
+npm run benchmark:hono-jsx-ssr-keepalive
 ```
 
 Run the worker-scaling baseline as four independent, equivalence-checked
@@ -60,6 +61,10 @@ python3 benchmarks/scripts/run_static.py --workload hono-jsx-ssr --workers 8
 These runs still create a new connection per request. Use them as the initial
 worker/RSS baseline, not as evidence of scheduler scaling; rerun after
 keep-alive removes most accept/connect/close work from the measured path.
+
+Append `--keep-alive` to run the persistent-connection matrix. TinyTSX closes
+each connection after 100 requests or five idle seconds, so the harness records
+that bounded reconnect policy as a limitation beside Bun's host behavior.
 
 A shorter exploratory run is useful during development:
 

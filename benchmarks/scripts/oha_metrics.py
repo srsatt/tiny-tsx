@@ -21,20 +21,13 @@ class OhaSample:
         return asdict(self)
 
 
-def run_oha(url: str, concurrency: int, duration_seconds: int) -> OhaSample:
-    command = [
-        "oha",
-        "-z",
-        f"{duration_seconds}s",
-        "-c",
-        str(concurrency),
-        "--wait-ongoing-requests-after-deadline",
-        "--disable-keepalive",
-        "--no-tui",
-        "--output-format",
-        "json",
-        url,
-    ]
+def run_oha(
+    url: str,
+    concurrency: int,
+    duration_seconds: int,
+    keep_alive: bool = False,
+) -> OhaSample:
+    command = oha_command(url, concurrency, duration_seconds, keep_alive)
     environment = os.environ.copy()
     environment["NO_COLOR"] = "1"
     completed = subprocess.run(
@@ -49,6 +42,29 @@ def run_oha(url: str, concurrency: int, duration_seconds: int) -> OhaSample:
             f"oha failed ({completed.returncode}):\n{completed.stderr.strip()}"
         )
     return parse_oha_json(completed.stdout)
+
+
+def oha_command(
+    url: str,
+    concurrency: int,
+    duration_seconds: int,
+    keep_alive: bool,
+) -> list[str]:
+    command = [
+        "oha",
+        "-z",
+        f"{duration_seconds}s",
+        "-c",
+        str(concurrency),
+        "--wait-ongoing-requests-after-deadline",
+        "--no-tui",
+        "--output-format",
+        "json",
+        url,
+    ]
+    if not keep_alive:
+        command.insert(-1, "--disable-keepalive")
+    return command
 
 
 def parse_oha_json(raw: str) -> OhaSample:
@@ -75,4 +91,3 @@ def parse_oha_json(raw: str) -> OhaSample:
             f"statuses={status_codes}"
         )
     return sample
-

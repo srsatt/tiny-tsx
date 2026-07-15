@@ -9,6 +9,8 @@ sys.path.insert(0, str(SCRIPTS))
 from run_static import (  # noqa: E402
     WORKLOADS,
     assert_correct,
+    benchmark_limitations,
+    benchmark_scope,
     expected_content_type,
     is_millisecond_header,
     normalize_content_type,
@@ -60,6 +62,14 @@ class StaticHarnessTest(unittest.TestCase):
         )
         worker_option = command.index("--workers")
         self.assertEqual(command[worker_option + 1], "4")
+
+    def test_keep_alive_scope_records_the_bounded_reconnect_policy(self) -> None:
+        workload = WORKLOADS["hono-jsx-ssr"]
+
+        self.assertIn("keep-alive", benchmark_scope(workload, True))
+        self.assertTrue(
+            any("100 requests" in value for value in benchmark_limitations(workload, True))
+        )
 
     def test_response_equivalence_includes_required_headers(self) -> None:
         workload = {

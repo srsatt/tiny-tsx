@@ -160,7 +160,7 @@ def main() -> int:
                 assert_correct(correctness, workload, name)
                 targets[name]["idleRssSamplesBytes"].append(resident_bytes(process.pid))
                 url = f"http://127.0.0.1:{port}{specs[name]['path']}"
-                run_oha(url, max(arguments.concurrency), 1)
+                run_oha(url, max(arguments.concurrency), 1, arguments.keep_alive)
                 targets[name]["postWarmupRssSamplesBytes"].append(
                     resident_bytes(process.pid)
                 )
@@ -174,6 +174,7 @@ def main() -> int:
                         url,
                         concurrency,
                         arguments.duration,
+                        arguments.keep_alive,
                     )
                     targets[name]["throughput"][str(concurrency)].append(sample.as_json())
             finally:
@@ -184,8 +185,8 @@ def main() -> int:
         "schemaVersion": 2,
         "timestamp": timestamp,
         "workload": arguments.workload,
-        "scope": workload["scope"],
-        "limitations": [workload["limitation"]],
+        "scope": benchmark_scope(workload, arguments.keep_alive),
+        "limitations": benchmark_limitations(workload, arguments.keep_alive),
         "responseDifferences": workload.get("response_differences", []),
         "environment": environment_metadata(),
         "configuration": {
@@ -195,7 +196,7 @@ def main() -> int:
             "concurrency": arguments.concurrency,
             "workers": arguments.workers,
             "requestMemoryBytes": 262_144,
-            "keepAlive": False,
+            "keepAlive": arguments.keep_alive,
         },
         "correctness": {
             "path": workload["path"],
@@ -231,6 +232,11 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--startup-runs", type=int, default=5)
     parser.add_argument("--concurrency", default="1,8,32,64")
     parser.add_argument("--workers", type=int, default=1, help="TinyTSX native workers")
+    parser.add_argument(
+        "--keep-alive",
+        action="store_true",
+        help="reuse HTTP/1.1 connections for both targets",
+    )
     parser.add_argument("--output-prefix")
     arguments = parser.parse_args()
     arguments.concurrency = [int(value) for value in arguments.concurrency.split(",")]
@@ -403,6 +409,25 @@ def expected_content_type(workload: dict[str, Any], target: str | None) -> str:
         if target in target_types:
             return str(target_types[target])
     return str(workload["content_type"])
+
+
+def benchmark_scope(workload: dict[str, Any], keep_alive: bool) -> str:
+    scope = str(workload["scope"])
+    if keep_alive:
+        return scope.replace("connection close", "keep-alive")
+    return scope
+
+
+def benchmark_limitations(
+    workload: dict[str, Any],
+    keep_alive: bool,
+) -> list[str]:
+    limitations = [str(workload["limitation"])]
+    if keep_alive:
+        limitations.append(
+            "TinyTSX bounds each connection at 100 requests and reconnects; the Bun host may retain a connection longer."
+        )
+    return limitations
 
 
 def stop_server(process: subprocess.Popen[bytes]) -> None:

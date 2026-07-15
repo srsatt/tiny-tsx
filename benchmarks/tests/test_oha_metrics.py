@@ -7,10 +7,17 @@ from pathlib import Path
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
-from oha_metrics import parse_oha_json  # noqa: E402
+from oha_metrics import oha_command, parse_oha_json  # noqa: E402
 
 
 class OhaMetricsTest(unittest.TestCase):
+    def test_keep_alive_controls_the_oha_transport(self) -> None:
+        persistent = oha_command("http://127.0.0.1/", 8, 1, True)
+        connection_close = oha_command("http://127.0.0.1/", 8, 1, False)
+
+        self.assertNotIn("--disable-keepalive", persistent)
+        self.assertIn("--disable-keepalive", connection_close)
+
     def test_extracts_sub_millisecond_percentiles(self) -> None:
         payload = {
             "summary": {
@@ -50,4 +57,3 @@ class OhaMetricsTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
