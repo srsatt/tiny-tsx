@@ -81,6 +81,9 @@ fn worker_pool_keeps_connections_alive_and_recovers_after_saturation() {
     )
     .expect("parse build report");
     assert_eq!(report["workers"], WORKERS);
+    assert_eq!(report["memory"]["policy"], "arena");
+    assert_eq!(report["memory"]["managedHeapRequired"], false);
+    assert_eq!(report["memory"]["summary"]["managed"], 0);
     assert!(
         report["runtimeFeatures"]
             .as_array()

@@ -24,6 +24,7 @@ import type {
   StaticHeader,
   ValueExpression,
   WorkerModule,
+  MemoryReport,
 } from "./hir.js";
 import {StringTable} from "./hir.js";
 import {lowerComponentBody} from "./jsx-lowering.js";
@@ -218,6 +219,7 @@ export function compileEntry(entryPath: string, options: CompileOptions): HirPro
     handlers: [handler],
     staticStrings: strings.values,
     constants,
+    memory: emptyMemoryReport(),
     statistics: {
       modules: graph.modules.length,
       functions: functions.length,
@@ -376,6 +378,7 @@ function lowerApplicationInitialization(
     handlers,
     staticStrings: strings.values,
     constants: [],
+    memory: initialization.memory,
     statistics: {
       modules: graph.modules.length,
       functions: 0,
@@ -388,6 +391,24 @@ function lowerApplicationInitialization(
       dynamicHtmlExpressions: emittedRoutes.reduce((total, route) =>
         total + (route.response === undefined ? 0 : dynamicResponseExpressions(route.response.body)),
       0),
+    },
+  };
+}
+
+function emptyMemoryReport(): MemoryReport {
+  return {
+    policy: "arena",
+    managedHeapRequired: false,
+    sites: [],
+    summary: {
+      compileTime: 0,
+      static: 0,
+      request: 0,
+      worker: 0,
+      message: 0,
+      managed: 0,
+      aliasedSites: 0,
+      responseEscapes: 0,
     },
   };
 }

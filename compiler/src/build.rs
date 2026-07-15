@@ -10,6 +10,7 @@ use serde::Serialize;
 use crate::{
     codegen::{self, Options as CodegenOptions},
     frontend::{self, Compilation},
+    hir::MemoryReport,
 };
 
 pub struct Options {
@@ -43,6 +44,7 @@ struct BuildReport<'a> {
     constants: usize,
     static_html_bytes: usize,
     dynamic_html_expressions: usize,
+    memory: &'a MemoryReport,
     runtime_features: [&'a str; 6],
 }
 
@@ -220,6 +222,7 @@ fn write_report(output: &Path, compilation: &Compilation, options: &Options) -> 
         constants: compilation.program.statistics.constants,
         static_html_bytes: compilation.program.statistics.static_html_bytes,
         dynamic_html_expressions: compilation.program.statistics.dynamic_html_expressions,
+        memory: &compilation.program.memory,
         runtime_features: [
             "http1",
             "bounded-writer",
@@ -269,6 +272,33 @@ fn print_summary(
     println!(
         "Static HTML bytes:   {}",
         compilation.program.statistics.static_html_bytes
+    );
+    let memory = &compilation.program.memory;
+    println!(
+        "Memory policy:       {}",
+        if memory.policy.is_empty() {
+            "legacy"
+        } else {
+            &memory.policy
+        }
+    );
+    println!(
+        "Allocation sites:    {} (compile-time {}, static {}, request {}, worker {}, message {}, managed {})",
+        memory.sites.len(),
+        memory.summary.compile_time,
+        memory.summary.static_sites,
+        memory.summary.request,
+        memory.summary.worker,
+        memory.summary.message,
+        memory.summary.managed,
+    );
+    println!(
+        "Managed heap:        {}",
+        if memory.managed_heap_required {
+            "required"
+        } else {
+            "not required"
+        }
     );
     println!("GC:                  disabled");
     println!("JavaScript engine:   none\n");

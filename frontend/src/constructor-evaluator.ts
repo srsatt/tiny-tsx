@@ -53,6 +53,31 @@ export interface ConstructorIssue {
 export interface ConstructorEvaluation {
   fields: EvaluatedField[];
   issues: ConstructorIssue[];
+  memory: EvaluatedMemoryReport;
+}
+
+export type EvaluatedLifetime = "compileTime" | "static" | "request" | "worker" | "message" | "managed";
+export type EvaluatedEscapeTarget = "none" | "response" | "worker" | "message" | "process";
+
+export interface EvaluatedAllocationSite {
+  module: string;
+  line: number;
+  column: number;
+  valueKind: Value["kind"];
+  instances: number;
+  maxReferences: number;
+  lifetime: EvaluatedLifetime;
+  escape: EvaluatedEscapeTarget;
+}
+
+export interface EvaluatedMemoryReport {
+  policy: "arena";
+  managedHeapRequired: boolean;
+  sites: EvaluatedAllocationSite[];
+  summary: Record<EvaluatedLifetime, number> & {
+    aliasedSites: number;
+    responseEscapes: number;
+  };
 }
 
 export interface EvaluatedRoute {
@@ -107,6 +132,27 @@ interface Evaluator {
   instanceClasses: WeakMap<Value & {kind: "instance"}, ResolvedRuntimeClass>;
   runtimeValues: Map<string, Value>;
   activeRuntimeValues: Set<string>;
+  memory: MemoryTracker;
+}
+
+interface MemorySiteState {
+  module: string;
+  line: number;
+  column: number;
+  valueKind: Value["kind"];
+  instances: number;
+  maxReferences: number;
+  escape: EvaluatedEscapeTarget;
+}
+
+interface MemoryValueState {
+  site: MemorySiteState;
+  references: number;
+}
+
+interface MemoryTracker {
+  sites: Map<string, MemorySiteState>;
+  values: WeakMap<object, MemoryValueState>;
 }
 
 export function evaluateApplicationConstructor(
@@ -131,7 +177,6 @@ export function evaluateApplicationInitialization(
   }
   const {evaluator, instance} = initializeConstructor(graph, application, resolved);
   executeApplicationCalls(evaluator, application, instance);
-  const summary = summarize(evaluator, instance);
   const installedErrorHandler = application.calls.some(call => call.method === "onError")
     ? instance.fields.get("errorHandler")
     : undefined;
@@ -143,12 +188,14 @@ export function evaluateApplicationInitialization(
     || installedNotFoundHandler?.kind === "reference" && installedNotFoundHandler.callable !== undefined
     ? installedNotFoundHandler
     : undefined;
+  const routes = summarizeRoutes(evaluator, instance, errorHandler, notFoundHandler);
+  const installedNotFound = application.calls.some(call => call.method === "notFound")
+    ? evaluateInstalledNotFound(evaluator, instance)
+    : {};
   return {
-    ...summary,
-    routes: summarizeRoutes(evaluator, instance, errorHandler, notFoundHandler),
-    ...(application.calls.some(call => call.method === "notFound")
-      ? evaluateInstalledNotFound(evaluator, instance)
-      : {}),
+    ...summarize(evaluator, instance),
+    routes,
+    ...installedNotFound,
     routerInsertions: evaluator.routerInsertions,
   };
 }
@@ -193,6 +240,7 @@ function initializeConstructor(
     instanceClasses: new WeakMap(),
     runtimeValues: new Map(),
     activeRuntimeValues: new Set(),
+    memory: {sites: new Map(), values: new WeakMap()},
   };
   const instance: Value & {kind: "instance"} = {kind: "instance", fields: new Map()};
   evaluator.instanceClasses.set(instance, resolved);
@@ -212,6 +260,7 @@ function summarize(
       ...detail(value),
     })),
     issues: evaluator.issues,
+    memory: summarizeMemory(evaluator.memory),
   };
 }
 
@@ -1831,6 +1880,7 @@ function evaluateCall(
       if (arguments_.length !== 1 || input === undefined) {
         return unknown("Worker.request requires one string message");
       }
+      markValueEscape(evaluator.memory, input, "message");
       if (input.kind === "string") {
         return {
           kind: "workerCall",
@@ -2256,6 +2306,18 @@ function isBooleanRouteChoice(choice: Value & {kind: "routeChoice"}): boolean {
 }
 
 function evaluate(
+  evaluator: Evaluator,
+  original: ts.Expression,
+  module: SourceModule,
+  environment: Map<string, Value>,
+  instance: Value & {kind: "instance"},
+): Value {
+  const value = evaluateExpression(evaluator, original, module, environment, instance);
+  trackEvaluatedValue(evaluator.memory, original, module, value);
+  return value;
+}
+
+function evaluateExpression(
   evaluator: Evaluator,
   original: ts.Expression,
   module: SourceModule,
@@ -2692,6 +2754,7 @@ function evaluate(
       const body = expression.arguments?.[0] === undefined
         ? UNDEFINED
         : evaluate(evaluator, expression.arguments[0], module, environment, instance);
+      markValueEscape(evaluator.memory, body, "response");
       if (
         body.kind !== "string"
         && body.kind !== "html"
@@ -3482,6 +3545,140 @@ function unwrap(expression: ts.Expression): ts.Expression {
     current = current.expression;
   }
   return current;
+}
+
+function trackEvaluatedValue(
+  tracker: MemoryTracker,
+  original: ts.Expression,
+  module: SourceModule,
+  value: Value,
+): void {
+  const object = value as object;
+  const existing = tracker.values.get(object);
+  if (existing !== undefined) {
+    existing.references++;
+    existing.site.maxReferences = Math.max(existing.site.maxReferences, existing.references);
+    return;
+  }
+  if (!isTrackedAllocation(original, value)) return;
+  const expression = unwrap(original);
+  const location = module.sourceFile.getLineAndCharacterOfPosition(expression.getStart(module.sourceFile));
+  const key = `${module.path}\0${expression.getStart(module.sourceFile)}\0${value.kind}`;
+  let site = tracker.sites.get(key);
+  if (site === undefined) {
+    site = {
+      module: module.path,
+      line: location.line + 1,
+      column: location.character + 1,
+      valueKind: value.kind,
+      instances: 0,
+      maxReferences: 0,
+      escape: value.kind === "worker" ? "worker" : "none",
+    };
+    tracker.sites.set(key, site);
+  }
+  site.instances++;
+  site.maxReferences = Math.max(site.maxReferences, 1);
+  tracker.values.set(object, {site, references: 1});
+}
+
+function isTrackedAllocation(expression: ts.Expression, value: Value): boolean {
+  if (
+    value.kind === "undefined"
+    || value.kind === "null"
+    || value.kind === "boolean"
+    || value.kind === "number"
+    || value.kind === "bigint"
+    || value.kind === "reference"
+    || value.kind === "unknown"
+    || value.kind === "request"
+    || value.kind === "routeParameter"
+    || value.kind === "requestHeader"
+    || value.kind === "queryParameter"
+    || value.kind === "queryPredicate"
+    || value.kind === "fetchStatus"
+    || value.kind === "clockNow"
+    || value.kind === "elapsedMilliseconds"
+  ) return false;
+  if (value.kind !== "string" && value.kind !== "html") return true;
+  const node = unwrap(expression);
+  return !ts.isIdentifier(node)
+    && !ts.isPropertyAccessExpression(node)
+    && !ts.isElementAccessExpression(node);
+}
+
+function markValueEscape(
+  tracker: MemoryTracker,
+  value: Value,
+  target: Exclude<EvaluatedEscapeTarget, "none">,
+  visited: WeakSet<object> = new WeakSet(),
+): void {
+  const object = value as object;
+  if (visited.has(object)) return;
+  visited.add(object);
+  const state = tracker.values.get(object);
+  if (state !== undefined && escapeRank(target) > escapeRank(state.site.escape)) {
+    state.site.escape = target;
+  }
+  if (value.kind === "array") {
+    for (const item of value.items) markValueEscape(tracker, item, target, visited);
+  } else if (value.kind === "record" || value.kind === "instance") {
+    for (const field of value.fields.values()) markValueEscape(tracker, field, target, visited);
+  } else if (value.kind === "closure") {
+    for (const capture of value.environment.values()) markValueEscape(tracker, capture, target, visited);
+  } else if (value.kind === "routeChoice") {
+    for (const selected of value.cases.values()) markValueEscape(tracker, selected, target, visited);
+    markValueEscape(tracker, value.fallback, target, visited);
+  } else if (value.kind === "thrown") {
+    markValueEscape(tracker, value.value, target, visited);
+  }
+}
+
+function escapeRank(target: EvaluatedEscapeTarget): number {
+  return ["none", "response", "message", "worker", "process"].indexOf(target);
+}
+
+function summarizeMemory(tracker: MemoryTracker): EvaluatedMemoryReport {
+  const sites = [...tracker.sites.values()].map(site => ({
+    ...site,
+    lifetime: lifetimeFor(site),
+  })).sort((left, right) =>
+    left.module.localeCompare(right.module)
+    || left.line - right.line
+    || left.column - right.column
+    || left.valueKind.localeCompare(right.valueKind)
+  );
+  const summary: EvaluatedMemoryReport["summary"] = {
+    compileTime: 0,
+    static: 0,
+    request: 0,
+    worker: 0,
+    message: 0,
+    managed: 0,
+    aliasedSites: 0,
+    responseEscapes: 0,
+  };
+  for (const site of sites) {
+    summary[site.lifetime]++;
+    if (site.maxReferences > 1) summary.aliasedSites++;
+    if (site.escape === "response") summary.responseEscapes++;
+  }
+  return {
+    policy: "arena",
+    managedHeapRequired: summary.managed > 0,
+    sites,
+    summary,
+  };
+}
+
+function lifetimeFor(site: MemorySiteState): EvaluatedLifetime {
+  if (site.escape === "worker") return "worker";
+  if (site.escape === "message") return "message";
+  if (site.escape === "process") return "managed";
+  if (site.escape === "response") {
+    return site.valueKind === "string" || site.valueKind === "html" ? "static" : "request";
+  }
+  return "compileTime";
 }
 
 function issue(evaluator: Evaluator, node: ts.Node, module: SourceModule, reason: string): void {

@@ -18,6 +18,14 @@ test("compiles deterministic AI SDK text through the pinned Hono runtime", () =>
   assert.equal(route?.response.kind, "text");
   assert.equal(route?.response.kind === "text" ? route.response.value.kind : undefined, "stringLiteral");
   assert.equal(staticText(hir, route), "Hello from deterministic AI");
+  assertArenaMemoryReport(hir);
+
+  const generatedIds = hir.memory.sites.filter(site =>
+    site.module.endsWith("/provider-utils/src/generate-id.ts")
+  );
+  assert.ok(generatedIds.length > 0, "expected allocation evidence for generated AI SDK IDs");
+  assert.ok(generatedIds.every(site => site.lifetime === "compileTime"));
+  assert.ok(generatedIds.every(site => site.escape === "none"));
 });
 
 test("compiles invalid AI SDK prompt handling through the pinned Hono runtime", () => {
@@ -27,7 +35,21 @@ test("compiles invalid AI SDK prompt handling through the pinned Hono runtime", 
   assert.equal(route?.response.kind, "text");
   assert.equal(route?.response.kind === "text" ? route.response.status : undefined, 500);
   assert.match(staticText(hir, route), /prompt and messages cannot be defined at the same time/);
+  assertArenaMemoryReport(hir);
 });
+
+function assertArenaMemoryReport(hir) {
+  assert.equal(hir.memory.policy, "arena");
+  assert.equal(hir.memory.managedHeapRequired, false);
+  assert.equal(hir.memory.summary.managed, 0);
+  assert.ok(hir.memory.sites.length > 0);
+  assert.ok(hir.memory.summary.responseEscapes > 0);
+  assert.equal(
+    hir.memory.sites.length,
+    ["compileTime", "static", "request", "worker", "message", "managed"]
+      .reduce((total, lifetime) => total + hir.memory.summary[lifetime], 0),
+  );
+}
 
 function compileAiEntry(entry) {
   return compileEntry(path.join(repository, "tests/compat/ai", entry), {

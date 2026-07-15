@@ -208,6 +208,33 @@ export interface GuardedResponse {
   response: HandlerResponse;
 }
 
+export interface MemoryAllocationSite {
+  module: string;
+  line: number;
+  column: number;
+  valueKind: string;
+  instances: number;
+  maxReferences: number;
+  lifetime: "compileTime" | "static" | "request" | "worker" | "message" | "managed";
+  escape: "none" | "response" | "worker" | "message" | "process";
+}
+
+export interface MemoryReport {
+  policy: "arena";
+  managedHeapRequired: boolean;
+  sites: MemoryAllocationSite[];
+  summary: {
+    compileTime: number;
+    static: number;
+    request: number;
+    worker: number;
+    message: number;
+    managed: number;
+    aliasedSites: number;
+    responseEscapes: number;
+  };
+}
+
 export interface HirProgram {
   version: 2;
   target: "aarch64-apple-darwin";
@@ -219,6 +246,7 @@ export interface HirProgram {
   handlers: Handler[];
   staticStrings: StaticString[];
   constants: Constant[];
+  memory: MemoryReport;
   statistics: {
     modules: number;
     functions: number;

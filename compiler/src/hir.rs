@@ -17,12 +17,51 @@ pub struct Program {
     pub static_strings: Vec<StaticString>,
     #[serde(default)]
     pub constants: Vec<Constant>,
+    #[serde(default)]
+    pub memory: MemoryReport,
     pub statistics: Statistics,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Module {
     pub path: String,
+}
+
+#[derive(Debug, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MemoryReport {
+    pub policy: String,
+    pub managed_heap_required: bool,
+    #[serde(default)]
+    pub sites: Vec<MemoryAllocationSite>,
+    pub summary: MemorySummary,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MemoryAllocationSite {
+    pub module: String,
+    pub line: usize,
+    pub column: usize,
+    pub value_kind: String,
+    pub instances: usize,
+    pub max_references: usize,
+    pub lifetime: String,
+    pub escape: String,
+}
+
+#[derive(Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct MemorySummary {
+    pub compile_time: usize,
+    #[serde(rename = "static")]
+    pub static_sites: usize,
+    pub request: usize,
+    pub worker: usize,
+    pub message: usize,
+    pub managed: usize,
+    pub aliased_sites: usize,
+    pub response_escapes: usize,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -382,6 +421,7 @@ impl Program {
             .iter()
             .map(|module| module.path.as_str())
             .collect();
+        validate_memory_report(&self.memory, &modules)?;
         for (index, worker) in self.workers.iter().enumerate() {
             if worker.id != index {
                 return Err(format!("worker id {} is not canonical", worker.id));
@@ -694,6 +734,66 @@ impl Program {
     }
 }
 
+fn validate_memory_report(memory: &MemoryReport, modules: &HashSet<&str>) -> Result<(), String> {
+    if memory.policy.is_empty() {
+        if memory.managed_heap_required
+            || !memory.sites.is_empty()
+            || memory.summary != MemorySummary::default()
+        {
+            return Err("legacy HIR memory report must be empty".to_owned());
+        }
+        return Ok(());
+    }
+    if memory.policy != "arena" {
+        return Err(format!("unsupported memory policy `{}`", memory.policy));
+    }
+
+    let mut summary = MemorySummary::default();
+    for site in &memory.sites {
+        if !modules.contains(site.module.as_str()) {
+            return Err(format!(
+                "memory allocation site references missing module `{}`",
+                site.module
+            ));
+        }
+        if site.line == 0
+            || site.column == 0
+            || site.value_kind.is_empty()
+            || site.instances == 0
+            || site.max_references == 0
+        {
+            return Err("memory allocation site contains invalid evidence".to_owned());
+        }
+        match (site.lifetime.as_str(), site.escape.as_str()) {
+            ("compileTime", "none") => summary.compile_time += 1,
+            ("static", "response") => summary.static_sites += 1,
+            ("request", "response") => summary.request += 1,
+            ("worker", "worker") => summary.worker += 1,
+            ("message", "message") => summary.message += 1,
+            ("managed", "process") => summary.managed += 1,
+            _ => {
+                return Err(format!(
+                    "invalid memory lifetime/escape pair `{}/{}`",
+                    site.lifetime, site.escape
+                ));
+            }
+        }
+        if site.max_references > 1 {
+            summary.aliased_sites += 1;
+        }
+        if site.escape == "response" {
+            summary.response_escapes += 1;
+        }
+    }
+    if memory.summary != summary {
+        return Err("memory summary does not match allocation sites".to_owned());
+    }
+    if memory.managed_heap_required != (summary.managed > 0) {
+        return Err("managed heap flag does not match allocation lifetimes".to_owned());
+    }
+    Ok(())
+}
+
 fn validate_route_pattern(pattern: &str) -> Result<(), String> {
     let segments: Vec<&str> = pattern.split('/').filter(|part| !part.is_empty()).collect();
     for (index, segment) in segments.iter().enumerate() {
@@ -833,4 +933,54 @@ fn is_canonical_bigint(value: &str) -> bool {
     !digits.is_empty()
         && !digits.starts_with('0')
         && digits.bytes().all(|byte| byte.is_ascii_digit())
+}
+
+#[cfg(test)]
+mod memory_tests {
+    use super::*;
+
+    #[test]
+    fn validates_consistent_arena_evidence() {
+        let memory = MemoryReport {
+            policy: "arena".to_owned(),
+            managed_heap_required: false,
+            sites: vec![MemoryAllocationSite {
+                module: "app.ts".to_owned(),
+                line: 1,
+                column: 1,
+                value_kind: "string".to_owned(),
+                instances: 1,
+                max_references: 2,
+                lifetime: "static".to_owned(),
+                escape: "response".to_owned(),
+            }],
+            summary: MemorySummary {
+                static_sites: 1,
+                aliased_sites: 1,
+                response_escapes: 1,
+                ..MemorySummary::default()
+            },
+        };
+        let modules = HashSet::from(["app.ts"]);
+
+        assert_eq!(validate_memory_report(&memory, &modules), Ok(()));
+    }
+
+    #[test]
+    fn rejects_a_summary_not_backed_by_sites() {
+        let memory = MemoryReport {
+            policy: "arena".to_owned(),
+            summary: MemorySummary {
+                managed: 1,
+                ..MemorySummary::default()
+            },
+            ..MemoryReport::default()
+        };
+        let modules = HashSet::from(["app.ts"]);
+
+        assert_eq!(
+            validate_memory_report(&memory, &modules),
+            Err("memory summary does not match allocation sites".to_owned()),
+        );
+    }
 }
