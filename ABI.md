@@ -24,6 +24,12 @@ pub struct TinyRequest {
 }
 
 #[repr(C)]
+pub struct TinyHeader {
+    pub name: TinyStringView,
+    pub value: TinyStringView,
+}
+
+#[repr(C)]
 pub struct TinyResponseWriter {
     pub start: *mut u8,
     pub cursor: *mut u8,
@@ -31,6 +37,8 @@ pub struct TinyResponseWriter {
     pub status: u32,
     pub http_status: u16,
     pub content_type: u16,
+    pub header_count: usize,
+    pub headers: [TinyHeader; 8],
 }
 ```
 
@@ -66,11 +74,41 @@ extern "C" fn tinytsx_html_write_static(
     bytes: *const u8,
     len: usize,
 ) -> u32;
+
+extern "C" fn tinytsx_request_path_matches(
+    request: *const TinyRequest,
+    pattern: *const u8,
+    pattern_len: usize,
+) -> u32;
+
+extern "C" fn tinytsx_html_write_path_segment(
+    writer: *mut TinyResponseWriter,
+    request: *const TinyRequest,
+    segment: usize,
+) -> u32;
+
+extern "C" fn tinytsx_response_header_static(
+    writer: *mut TinyResponseWriter,
+    name: *const u8,
+    name_len: usize,
+    value: *const u8,
+    value_len: usize,
+) -> u32;
 ```
 
 `tinytsx_html_write_static` retains its v1 symbol name, but the operation is a
 content-neutral byte append. It appends all bytes or appends none. Later escaped
 writer helpers use the same status convention.
+
+`tinytsx_request_path_matches` currently accepts literal segments and non-empty
+named segments written as `:name`. Generated code validates the pattern before
+linking. `tinytsx_html_write_path_segment` writes the selected zero-based path
+segment and applies Hono-compatible percent decoding for valid UTF-8 groups;
+malformed groups remain encoded. Both operations use borrowed request views and
+the bounded response writer without allocating a dynamic route map.
+
+`tinytsx_response_header_static` validates HTTP token names and values, replaces
+existing names case-insensitively, and stores at most eight custom headers.
 
 ## Content types
 
@@ -79,6 +117,7 @@ writer helpers use the same status convention.
 | 1 | `text/html; charset=utf-8` |
 | 2 | `text/plain; charset=UTF-8` |
 | 3 | `application/json; charset=UTF-8` |
+| 4 | `text/plain;charset=UTF-8` |
 
 The text spelling matches Hono's pinned `Context.text()` response contract.
 Unknown content-type values are rejected by `tinytsx_response_begin`.

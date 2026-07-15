@@ -98,7 +98,10 @@ commit message.
 - [x] Lower one evaluated static GET route and its upstream `Context.text`
       response into HIR and path-checked native request dispatch.
 - [x] Generalize native dispatch to multiple ordered static GET routes.
-- [ ] Add route patterns and request-dependent handler bodies.
+- [x] Add non-empty `:name` route segments, request-time `c.req.param(name)`,
+      percent decoding, and streamed text interpolation.
+- [ ] Add optional, wildcard, constrained, and multi-segment route patterns plus
+      broader request-dependent handler bodies.
 - [x] Apply closed post-handler middleware and compile upstream `poweredBy()`
       through native response-header emission.
 - [ ] Compile the remaining basic-example middleware, including `basicAuth`,

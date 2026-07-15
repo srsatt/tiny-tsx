@@ -74,8 +74,15 @@ into ordered exact-path native dispatch. A separate tracer evaluates the actual
 upstream `poweredBy()` factory and middleware closure, lowers its post-handler
 header mutation, and reproduces the selected upstream test's root status and
 `X-Powered-By: Hono` behavior over native HTTP. The complete basic application
-still contains unsupported dynamic patterns, request-dependent handlers,
+still contains unsupported broader patterns and request-dependent handlers,
 nested applications, POST routes, and additional middleware.
+
+The basic example's `/entry/:id` shape is the first request-dependent route.
+One closed `:name` segment becomes a native matcher and `c.req.param('name')`
+becomes a request-time text value. Literal and parameter chunks write directly
+to the bounded response buffer, including Hono-compatible decoding of valid
+percent-encoded UTF-8 groups. Optional, wildcard, constrained, and catch-all
+patterns remain outside this slice.
 
 ### Type-only API overlay
 
@@ -170,8 +177,9 @@ The default-exported app is now the compile root, so unused methods such as
 `route()` do not set the frontier. Hono's constructor chain completes
 symbolically with 21 fields, then the installed `get` closure executes through
 private `#addRoute`. The evaluator retains closed routes and observes their
-router insertions. Multiple ordered static GET artifacts now enter HIR and
-native exact-path dispatch; dynamic patterns remain pending. The trace and
+router insertions. Multiple ordered static GET artifacts and non-empty named
+segments now enter HIR and native path dispatch; broader dynamic patterns remain
+pending. The trace and
 evaluator contract are recorded in
 `doc/APPLICATION_INITIALIZATION.md`.
 

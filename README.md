@@ -1115,6 +1115,12 @@ pub struct TinyRequest {
 }
 
 #[repr(C)]
+pub struct TinyHeader {
+    pub name: TinyStringView,
+    pub value: TinyStringView,
+}
+
+#[repr(C)]
 pub struct TinyResponseWriter {
     pub start: *mut u8,
     pub cursor: *mut u8,
@@ -1122,6 +1128,8 @@ pub struct TinyResponseWriter {
     pub status: u32,
     pub http_status: u16,
     pub content_type: u16,
+    pub header_count: usize,
+    pub headers: [TinyHeader; 8],
 }
 ```
 
