@@ -1,9 +1,8 @@
 [workspace]
-members = ["compiler", "runtime/bootstrap"]
+members = ["compiler", "runtime/bootstrap", "runtime/worker"]
 resolver = "2"
 
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
-

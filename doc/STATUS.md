@@ -277,6 +277,12 @@ produces and serves a native Mach-O executable from the example TSX source.
 - Closed object literals are records with compile-time fields; explicit `Map`
   construction remains unstaged dynamic work. The two models and declaration-
   overlay boundary are persisted in `doc/OBJECT_MODEL.md`.
+- `tinytsx-runtime-worker` is a zero-dependency HTTP-agnostic runtime crate. Its
+  fixed native pool provides a preallocated bounded FIFO queue, nonblocking
+  submission with job recovery, stable worker-local state, per-job panic
+  containment, and close/drain/join shutdown. Six unit tests prove invalid
+  configuration, true two-thread progress, saturation/closed behavior, local
+  state, panic recovery, and draining.
 
 Verification:
 
@@ -287,6 +293,7 @@ rtk npm test --prefix frontend
 rtk node frontend/dist/src/cli.js examples/static-page/server.tsx
 rtk cargo test --workspace
 rtk cargo clippy --workspace --all-targets -- -D warnings
+rtk cargo test -p tinytsx-runtime-worker
 rtk cargo run -q -p tinytsx -- check examples/static-page/server.tsx --emit-asm
 rtk cargo run -q -p tinytsx -- check examples/staged-constants/server.tsx --emit-hir
 rtk cargo run -q -p tinytsx -- build examples/static-page/server.tsx --port 3017 --output dist/static-server --release --emit-hir --emit-asm
@@ -314,21 +321,17 @@ rtk npm run benchmark:hono-jsx-ssr
 
 ## Active slice
 
-The complete Hono basic and JSX SSR milestones are implemented. The next Hono
-slice should preserve request-time (not finite closed) values through escaped
-JSX text and attributes, bounded response writes, and native record projection.
-That creates the first genuinely dynamic SSR benchmark. Keep fixed-layout
-records separate from dynamic `Map`; do not infer generic arrays, maps, regexps,
-or Promise semantics from the finite specialization. In parallel, performance
-work should resolve response-clone content type, add HTTP keep-alive, and then
-implement the fixed worker pool before broader claims.
+The reusable native worker pool is implemented independently of HTTP. The active
+slice is to make the bootstrap consume it, emit the configured worker count,
+return a deterministic 503 when the bounded connection queue is full, and prove
+parallel request service plus overload recovery. Keep fixed-layout records
+separate from dynamic `Map`; do not infer generic arrays, maps, regexps, or
+Promise semantics from finite Hono specialization.
 
 ## Resume point
 
-Read `README.md`, `doc/COMPATIBILITY.md`, `doc/PERFORMANCE.md`, and
-`doc/BACKLOG.md`. Run `npm run test:hono-jsx-reference`,
-`npm run try:compile:hono-jsx-ssr`, and the focused native JSX SSR E2E before
-changing the evaluator. Start with request-time escaped JSX values or HTTP
-keep-alive, depending on whether compatibility or benchmark fidelity is the
-active slice. Preserve upstream Hono source execution and keep finite route
-specialization explicit in diagnostics and documentation.
+Read `doc/WORKERS.md`, `doc/PERFORMANCE.md`, and `doc/BACKLOG.md`. Run
+`cargo test -p tinytsx-runtime-worker`, then add the generated worker-count ABI
+and submit accepted `TcpStream` jobs from the bootstrap listener. Preserve the
+current `Connection: close` contract for this slice; keep-alive follows before
+publication-grade worker scaling measurements.

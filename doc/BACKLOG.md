@@ -42,7 +42,7 @@ commit message.
 
 - [x] Define native executor versus logical worker terminology, lifecycle,
       isolation, message ownership, overload, and shutdown contracts.
-- [ ] Add a zero-dependency reusable native worker-pool crate with a bounded
+- [x] Add a zero-dependency reusable native worker-pool crate with a bounded
       FIFO queue, worker-local state, panic recovery, and draining shutdown.
 - [ ] Make the HTTP bootstrap consume the shared pool and enable `--workers N`.
 - [ ] Prove concurrent request execution, deterministic saturation 503, response
