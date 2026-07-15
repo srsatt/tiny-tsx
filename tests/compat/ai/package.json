@@ -4,6 +4,7 @@
   "type": "module",
   "dependencies": {
     "ai": "7.0.28",
+    "hono": "4.12.30",
     "zod": "3.25.76"
   },
   "devDependencies": {
