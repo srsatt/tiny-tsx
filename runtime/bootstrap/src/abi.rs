@@ -172,6 +172,187 @@ pub unsafe extern "C" fn tinytsx_request_path_equals(
 }
 
 #[unsafe(no_mangle)]
+pub unsafe extern "C" fn tinytsx_request_path_matches(
+    request: *const TinyRequest,
+    pattern: *const u8,
+    pattern_len: usize,
+) -> u32 {
+    if request.is_null() || (pattern.is_null() && pattern_len != 0) {
+        return 0;
+    }
+    // SAFETY: Generated code passes the request supplied by this runtime.
+    let path = unsafe { &(*request).path };
+    if path.ptr.is_null() && path.len != 0 {
+        return 0;
+    }
+    // SAFETY: Both views are valid for their declared lengths during this call.
+    let actual = unsafe { slice::from_raw_parts(path.ptr, path.len) };
+    let pattern = unsafe { slice::from_raw_parts(pattern, pattern_len) };
+    let mut actual_segments = route_segments(actual);
+    let mut pattern_segments = route_segments(pattern);
+    loop {
+        match (actual_segments.next(), pattern_segments.next()) {
+            (None, None) => return 1,
+            (Some(actual), Some(pattern)) => {
+                let parameter = pattern.len() > 1 && pattern[0] == b':';
+                if (parameter && actual.is_empty()) || (!parameter && actual != pattern) {
+                    return 0;
+                }
+            }
+            _ => return 0,
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tinytsx_html_write_path_segment(
+    writer: *mut TinyResponseWriter,
+    request: *const TinyRequest,
+    segment: usize,
+) -> u32 {
+    if writer.is_null() || request.is_null() {
+        return INTERNAL_ERROR;
+    }
+    // SAFETY: Generated code passes the request supplied by this runtime.
+    let path = unsafe { &(*request).path };
+    if path.ptr.is_null() && path.len != 0 {
+        return BAD_REQUEST;
+    }
+    // SAFETY: The request path is valid for the duration of request dispatch.
+    let path = unsafe { slice::from_raw_parts(path.ptr, path.len) };
+    let Some(value) = route_segments(path).nth(segment) else {
+        return BAD_REQUEST;
+    };
+    let mut cursor = 0;
+    let mut literal_start = 0;
+    while cursor < value.len() {
+        if percent_byte(value, cursor).is_some() {
+            if literal_start < cursor {
+                // SAFETY: The literal is a borrowed part of the request path and the writer is valid.
+                let status = unsafe {
+                    tinytsx_html_write_static(
+                        writer,
+                        value[literal_start..cursor].as_ptr(),
+                        cursor - literal_start,
+                    )
+                };
+                if status != OK {
+                    return status;
+                }
+            }
+            let group_start = cursor;
+            while percent_byte(value, cursor).is_some() {
+                cursor += 3;
+            }
+            let status = if valid_percent_utf8(value, group_start, cursor) {
+                let mut encoded = group_start;
+                let mut status = OK;
+                while encoded < cursor && status == OK {
+                    let decoded = [percent_byte(value, encoded).expect("validated percent byte")];
+                    // SAFETY: The one-byte local is valid for this synchronous copy.
+                    status = unsafe { tinytsx_html_write_static(writer, decoded.as_ptr(), 1) };
+                    encoded += 3;
+                }
+                status
+            } else {
+                // SAFETY: The invalid UTF-8 group remains borrowed request-path text.
+                unsafe {
+                    tinytsx_html_write_static(
+                        writer,
+                        value[group_start..cursor].as_ptr(),
+                        cursor - group_start,
+                    )
+                }
+            };
+            if status != OK {
+                return status;
+            }
+            literal_start = cursor;
+            continue;
+        }
+        cursor += 1;
+    }
+    if literal_start < value.len() {
+        // SAFETY: The literal is a borrowed part of the request path and the writer is valid.
+        return unsafe {
+            tinytsx_html_write_static(
+                writer,
+                value[literal_start..].as_ptr(),
+                value.len() - literal_start,
+            )
+        };
+    }
+    OK
+}
+
+fn route_segments(path: &[u8]) -> impl Iterator<Item = &[u8]> {
+    path.split(|byte| *byte == b'/')
+        .skip(usize::from(path.first() == Some(&b'/')))
+}
+
+fn hex(byte: u8) -> Option<u8> {
+    match byte {
+        b'0'..=b'9' => Some(byte - b'0'),
+        b'a'..=b'f' => Some(byte - b'a' + 10),
+        b'A'..=b'F' => Some(byte - b'A' + 10),
+        _ => None,
+    }
+}
+
+fn percent_byte(value: &[u8], index: usize) -> Option<u8> {
+    if value.get(index) != Some(&b'%') {
+        return None;
+    }
+    Some((hex(*value.get(index + 1)?)? << 4) | hex(*value.get(index + 2)?)?)
+}
+
+fn valid_percent_utf8(value: &[u8], start: usize, end: usize) -> bool {
+    let mut cursor = start;
+    let mut remaining = 0_u8;
+    let mut next_min = 0x80_u8;
+    let mut next_max = 0xbf_u8;
+    while cursor < end {
+        let Some(byte) = percent_byte(value, cursor) else {
+            return false;
+        };
+        cursor += 3;
+        if remaining != 0 {
+            if !(next_min..=next_max).contains(&byte) {
+                return false;
+            }
+            remaining -= 1;
+            next_min = 0x80;
+            next_max = 0xbf;
+            continue;
+        }
+        match byte {
+            0x00..=0x7f => {}
+            0xc2..=0xdf => remaining = 1,
+            0xe0 => {
+                remaining = 2;
+                next_min = 0xa0;
+            }
+            0xe1..=0xec | 0xee..=0xef => remaining = 2,
+            0xed => {
+                remaining = 2;
+                next_max = 0x9f;
+            }
+            0xf0 => {
+                remaining = 3;
+                next_min = 0x90;
+            }
+            0xf1..=0xf3 => remaining = 3,
+            0xf4 => {
+                remaining = 3;
+                next_max = 0x8f;
+            }
+            _ => return false,
+        }
+    }
+    remaining == 0
+}
+
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn tinytsx_response_header_static(
     writer: *mut TinyResponseWriter,
     name: *const u8,

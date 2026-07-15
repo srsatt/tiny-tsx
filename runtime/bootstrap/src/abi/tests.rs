@@ -1,8 +1,8 @@
 use super::{
     BAD_REQUEST, CONTENT_TYPE_HTML, CONTENT_TYPE_TEXT, INTERNAL_ERROR, MAX_RESPONSE_HEADERS, OK,
     REQUEST_OOM, TinyHeader, TinyResponseWriter, TinyStringView, request,
-    tinytsx_html_write_static, tinytsx_request_path_equals, tinytsx_response_begin,
-    tinytsx_response_header_static,
+    tinytsx_html_write_path_segment, tinytsx_html_write_static, tinytsx_request_path_equals,
+    tinytsx_request_path_matches, tinytsx_response_begin, tinytsx_response_header_static,
 };
 
 #[test]
@@ -35,6 +35,55 @@ fn request_path_matching_uses_the_path_without_the_query() {
         unsafe { tinytsx_request_path_equals(&request, b"/other".as_ptr(), b"/other".len()) },
         0
     );
+}
+
+#[test]
+fn request_path_patterns_match_nonempty_named_segments() {
+    let matching = request(b"GET", b"/entry/abc-123?expand=true");
+
+    assert_eq!(
+        unsafe {
+            tinytsx_request_path_matches(&matching, b"/entry/:id".as_ptr(), b"/entry/:id".len())
+        },
+        1
+    );
+    assert_eq!(
+        unsafe {
+            tinytsx_request_path_matches(&matching, b"/other/:id".as_ptr(), b"/other/:id".len())
+        },
+        0
+    );
+    let empty = request(b"GET", b"/entry/");
+    assert_eq!(
+        unsafe {
+            tinytsx_request_path_matches(&empty, b"/entry/:id".as_ptr(), b"/entry/:id".len())
+        },
+        0
+    );
+}
+
+#[test]
+fn response_writer_decodes_a_named_path_segment() {
+    let request = request(b"GET", b"/entry/hello%20world%2Fok");
+    let mut output = [0_u8; 14];
+    let mut writer = writer(&mut output);
+
+    let status = unsafe { tinytsx_html_write_path_segment(&mut writer, &request, 1) };
+
+    assert_eq!(status, OK);
+    assert_eq!(&output, b"hello world/ok");
+}
+
+#[test]
+fn response_writer_preserves_malformed_percent_encoded_utf8() {
+    let request = request(b"GET", b"/entry/a%FFb%2");
+    let mut output = [0_u8; 7];
+    let mut writer = writer(&mut output);
+
+    let status = unsafe { tinytsx_html_write_path_segment(&mut writer, &request, 1) };
+
+    assert_eq!(status, OK);
+    assert_eq!(&output, b"a%FFb%2");
 }
 
 #[test]
