@@ -102,6 +102,12 @@ nested `POST /book` text route is native. The basic example's closed
 JSON serialization, header construction and iteration, `#newResponse`, and
 `new Response`; native output preserves status 201 and `application/json`.
 
+A terminal `*` route is now retained as a native pattern. It matches the base
+path, its trailing slash, and deeper segments, consistent with the pinned Hono
+router for this subset. The basic example's `GET /api/*` fallback therefore
+serves its own status 404 and `API endpoint is not found` body instead of falling
+through to the bootstrap's unmatched-route response.
+
 Closed middleware registrations are retained as `ALL` routes during symbolic
 initialization. For a matching static route, the evaluator invokes preceding
 middleware around the handler and applies post-handler effects in reverse
@@ -110,8 +116,8 @@ order. The current executable case resolves and invokes the actual upstream
 `res.headers.set('X-Powered-By', 'Hono')` effect becomes a static response header
 and is verified on the native root route.
 
-This is deliberately a narrow AOT fast path. Optional, wildcard, constrained,
-and multi-segment route patterns, broader request-dependent bodies, general
+This is deliberately a narrow AOT fast path. Optional and constrained route
+patterns, broader request-dependent bodies, general
 response construction, dynamic headers, pre-handler control flow, and the
 general Context/Request/Response
 runtime remain pending. Middleware path matching currently covers exact paths,

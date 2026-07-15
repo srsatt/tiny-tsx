@@ -160,6 +160,9 @@ produces and serves a native Mach-O executable from the example TSX source.
   Closed `JSON.stringify`, Headers construction, `Object.entries`, array binding,
   and `for...of` cover the JSON response path. A pinned WPT Response-init source
   records native-derived evidence for only the closed 201 status case.
+- Terminal wildcard dispatch matches the base, trailing slash, and deeper path.
+  A native E2E compiles the basic example's `/api/*` fallback and verifies its
+  explicit status 404, Hono body, and text content type.
 - Static `Response` headers lower into a bounded eight-entry native writer with
   HTTP token/value validation, case-insensitive replacement, and wire emission.
   A pinned WPT `Headers.set()` casing source is tracked as native-derived
@@ -202,8 +205,8 @@ rtk python3 benchmarks/scripts/run_static.py --workload hono-basic --duration 1 
 ## Active slice
 
 Compatibility substrate: compile the next complete-basic-example frontier:
-wildcard routes, composed same-method handlers, and the remaining middleware and
-request-dependent handlers. Extend the executable function slice with locals,
+composed same-method handlers, request headers, redirects, and the remaining
+middleware and request-dependent handlers. Extend the executable function slice with locals,
 record property access, branches, and closures. Type-layout specialization should
 handle closed request-time records without pretending their values are
 compile-time constants.

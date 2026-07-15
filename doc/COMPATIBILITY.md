@@ -81,8 +81,8 @@ The basic example's `/entry/:id` shape is the first request-dependent route.
 One closed `:name` segment becomes a native matcher and `c.req.param('name')`
 becomes a request-time text value. Literal and parameter chunks write directly
 to the bounded response buffer, including Hono-compatible decoding of valid
-percent-encoded UTF-8 groups. Optional, wildcard, constrained, and catch-all
-patterns remain outside this slice.
+percent-encoded UTF-8 groups. Optional, constrained, and non-terminal catch-all
+patterns remain outside this named-parameter slice.
 
 Nested application initialization now follows the actual upstream `route()`
 implementation. The compiler constructs the second `book` binding, retains its
@@ -97,6 +97,12 @@ construction, `Object.entries`, array destructuring, and `for...of` produce
 `{"message":"Created!"}`, status 201, and exact `application/json` over native
 HTTP. The selected WPT Response-init source is retained as native-derived
 provenance for only this status-propagation case, not full Response conformance.
+
+Terminal wildcard matching now covers the exact `/api/*` fallback from the
+basic example. Native tests pin Hono's behavior that the pattern matches `/api`,
+`/api/`, and deeper paths. The generated handler returns Hono's explicit status
+404 and text body; unmatched non-API paths still use the bootstrap 404. Optional
+and constrained patterns remain pending.
 
 ### Type-only API overlay
 

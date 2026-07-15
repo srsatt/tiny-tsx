@@ -102,8 +102,12 @@ commit message.
       status plus Hono text/JSON content types.
 - [x] Add non-empty `:name` route segments, request-time `c.req.param(name)`,
       percent decoding, and streamed text interpolation.
-- [ ] Add optional, wildcard, constrained, and multi-segment route patterns plus
+- [x] Add terminal `*` route matching, including the base path and deeper
+      segments, and compile the basic example's `/api/*` 404 fallback.
+- [ ] Add optional, constrained, and additional multi-segment route patterns plus
       broader request-dependent handler bodies.
+- [ ] Compose same-method/path handler chains such as
+      `app.get('/api/posts', prettyJSON(), handler)`.
 - [x] Apply closed post-handler middleware and compile upstream `poweredBy()`
       through native response-header emission.
 - [x] Evaluate multiple constructed Hono bindings and mount nested applications

@@ -106,12 +106,14 @@ extern "C" fn tinytsx_response_header_static(
 content-neutral byte append. It appends all bytes or appends none. Later escaped
 writer helpers use the same status convention.
 
-`tinytsx_request_path_matches` currently accepts literal segments and non-empty
-named segments written as `:name`. Generated code validates the pattern before
-linking. `tinytsx_html_write_path_segment` writes the selected zero-based path
-segment and applies Hono-compatible percent decoding for valid UTF-8 groups;
-malformed groups remain encoded. Both operations use borrowed request views and
-the bounded response writer without allocating a dynamic route map.
+`tinytsx_request_path_matches` currently accepts literal segments, non-empty
+named segments written as `:name`, and a terminal `*`. The terminal wildcard
+matches its base path, a trailing slash, or deeper segments. Generated code
+validates the pattern before linking. `tinytsx_html_write_path_segment` writes
+the selected zero-based path segment and applies Hono-compatible percent
+decoding for valid UTF-8 groups; malformed groups remain encoded. Both
+operations use borrowed request views and the bounded response writer without
+allocating a dynamic route map.
 
 `tinytsx_request_method_equals` compares the borrowed method view. Generated
 dispatch currently emits GET and POST handlers; the bootstrap returns 405 for
