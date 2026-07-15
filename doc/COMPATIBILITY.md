@@ -192,7 +192,7 @@ instead of a `Response`. Hono stores that invalid value in the Context and its
 two enclosing post-`next()` middleware paths fail while finalizing it. The
 evaluator preserves the three observed Bun/Hono TypeError lines, invokes the
 installed upstream error closure, and emits the final 500 response without
-powered-by or timing headers. A complete-source native E2E verifies this exact
+powered-by or timing headers. A focused native E2E verifies this exact
 failure ordering; it is a pinned Hono/Bun compatibility specialization rather
 than general runtime type-error or Promise rejection support.
 
@@ -407,7 +407,16 @@ body is compiled through the general string-function path and checked through a
 real HTTP request. The exact-source Hono E2E reaches the same HIR response
 operation by evaluating upstream `Context.text()` and the standard
 `new Response(text)` fast path; it does not depend on the temporary source
-intrinsic. Closed static response headers now lower through a bounded native
+intrinsic.
+
+The complete pinned 34-module basic application now has a whole-program native
+regression for its published upstream root contract. The generated Mach-O
+server returns status 200, `Hono!!`, `text/plain;charset=UTF-8`,
+`X-Powered-By: Hono`, and a numeric `X-Response-Time`; the same executable also
+serves `/hello` and its installed custom not-found handler. This complements the
+focused route/middleware tests without replacing them.
+
+Closed static response headers now lower through a bounded native
 writer. The writer validates names and values, replaces names
 case-insensitively, and emits custom headers on the wire. The upstream
 `poweredBy()` middleware uses this path to produce `X-Powered-By: Hono`. The

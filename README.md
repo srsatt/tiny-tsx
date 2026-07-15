@@ -84,11 +84,14 @@ The central product idea is:
 > Bounded request memory.
 > No JavaScript engine.
 
-## Current implementation: static native vertical slice
+## Current implementation: native Hono basic milestone
 
-The repository currently implements Milestones 0–2 for the static-page example
-on Apple Silicon macOS. Install the pinned build-time frontend and compile the
-Rust driver:
+The repository compiles the complete pinned upstream Hono basic application to
+a native Apple-arm64 Mach-O server. Its 34-module runtime graph lowers to 16
+concrete routes plus installed GET/POST fallbacks without Node.js, Bun, or a
+JavaScript engine. The original static-page vertical slice remains available.
+
+Install the pinned build-time frontend and compile the Rust driver:
 
 ```bash
 npm install --prefix frontend
@@ -137,6 +140,19 @@ run steps for development. `--emit-hir` and `--emit-asm` on `build` preserve
 `<output>.hir.json` and `<output>.s`; every build also writes
 `<output>.build.json`.
 
+Build and run the complete pinned Hono basic example:
+
+```bash
+npm run build:hono-basic-example
+./dist/hono-basic-example
+curl -i http://127.0.0.1:3000/
+```
+
+The root response is the upstream contract: status 200, body `Hono!!`,
+`Content-Type: text/plain;charset=UTF-8`, `X-Powered-By: Hono`, and a numeric
+`X-Response-Time` header. The native E2E also checks `/hello` and the installed
+not-found handler from that same complete executable.
+
 Run all implemented checks, including the native HTTP end-to-end test:
 
 ```bash
@@ -145,21 +161,27 @@ cargo clippy --workspace --all-targets -- -D warnings
 ```
 
 The compiler also accepts relative ESM component modules. The compatibility
-program continuously audits the pinned `hono/tiny` source graph and validates
-the initial allowlisted Test262 intake plus native host API behavior:
+program continuously audits the pinned Hono source graph and validates
+allowlisted Test262, Hono, Web Platform Test, and native host API behavior:
 
 ```bash
 npm run audit:hono
+npm run audit:hono-basic
+npm run test:hono-intake
 npm run test:test262-intake
 npm run test:test262-native
+npm run test:wpt-intake
+npm run test:wpt-native
 npm run test:native-api
 ```
 
-Test262 evidence is recorded per case. The `typeof undefined` and `typeof
-bigint` cases now compile to and execute as standalone native Mach-O assertion
-programs; the remaining allowlisted cases are syntax-only and are not reported
-as semantic conformance. See `doc/COMPATIBILITY.md` for pins, test layers, and
-completion criteria.
+Test262 evidence is recorded per case. Four complete cases currently execute as
+standalone native Mach-O assertion programs: `typeof undefined`, `typeof
+bigint`, the bounded `for`/throw/catch counter, and the bounded dense-array
+`unshift` program. Ten other allowlisted cases remain syntax-only and are not
+reported as semantic conformance. Three complete selected URLSearchParams WPT
+files execute natively. See `doc/COMPATIBILITY.md` for pins, test layers, and
+the deliberately narrower boundaries of each result.
 
 An exploratory static performance comparison against an equivalent idiomatic Bun
 server is available separately:
@@ -172,9 +194,9 @@ The harness verifies equivalent status, content type, content length, and body,
 then records repeated startup-to-first-response, RSS, throughput, and latency
 samples through `oha`. See `benchmarks/README.md` for methodology and limitations.
 
-The present bootstrap accepts GET requests with `Connection: close` on one
-worker. Dynamic expressions, escaping, the reusable request arena, and the
-fixed worker pool are subsequent milestones tracked in `doc/BACKLOG.md`.
+The present bootstrap accepts GET and POST requests with `Connection: close` on
+one worker. A reusable request arena and the fixed worker pool remain subsequent
+milestones tracked in `doc/BACKLOG.md`.
 
 ---
 

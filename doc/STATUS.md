@@ -243,7 +243,12 @@ produces and serves a native Mach-O executable from the example TSX source.
   lines, returns `Custom Error Message` with status 500, and omits powered-by
   and timing headers. The complete 34-module trace has zero issues, closes all
   16 concrete route responses, and lowers them plus GET/POST installed fallbacks
-  into 18 native handlers. A complete-source Mach-O E2E is green.
+  into 18 native handlers. Its focused Mach-O E2E is green.
+- The complete pinned 34-module application now has a whole-program Mach-O E2E
+  for the upstream root contract: status 200, `Hono!!`, the exact Hono content
+  type, powered-by, and numeric response-time headers. The same executable also
+  serves `/hello` and the installed custom not-found handler. The reproducible
+  developer entrypoint is `npm run build:hono-basic-example`.
 - Async/await entry handlers are accepted only when application initialization
   fully stages them. Native Promise/suspension semantics remain unimplemented.
 - Static `Response` headers lower into a bounded eight-entry native writer with
@@ -276,6 +281,7 @@ rtk npm run audit:hono
 rtk npm run try:compile:hono  # emits single-route HIR
 rtk npm run audit:hono-basic
 rtk npm run try:compile:hono-basic  # emits full-package single-route HIR
+rtk npm run build:hono-basic-example
 rtk cargo run -q -p tinytsx -- build tests/compat/hono/basic-smoke.ts --alias hono=vendor/hono/src/index.ts --api hono=tests/compat/hono/api.d.ts --output dist/hono-basic
 rtk npm run test:test262-intake
 rtk npm run test:test262-native

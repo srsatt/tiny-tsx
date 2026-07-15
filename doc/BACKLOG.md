@@ -149,6 +149,9 @@ commit message.
 - [x] Preserve Hono's deliberately invalid truthy handler return through its
       installed error path, then compile/build the complete pinned 110-line
       basic application as one native executable.
+- [x] Verify the complete executable against the upstream basic root contract,
+      including powered-by and response-time middleware, and provide a single
+      reproducible build command.
 - [ ] Generalize Fetch to Request/init inputs, response bodies and headers,
       abort/timeout semantics, and portable non-macOS host transports.
 - [ ] Compile the required rest/spread operations.
