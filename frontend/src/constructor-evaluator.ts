@@ -286,8 +286,9 @@ function evaluateRouteHandler(
         middlewareContext,
       );
       middlewareContext.fields.set("req", {kind: "request", routePattern});
-      middlewareContext.fields.set("#res", response);
+      middlewareContext.fields.set("#res", cloneResponse(response));
       middlewareContext.fields.set("finalized", {kind: "boolean", value: true});
+      const issueCount = evaluator.issues.length;
       invokeClosure(
         evaluator,
         middlewareHandler,
@@ -299,7 +300,7 @@ function evaluateRouteHandler(
         middlewareContext,
       );
       const middlewareResponse = middlewareContext.fields.get("#res");
-      if (middlewareResponse?.kind === "response") {
+      if (evaluator.issues.length === issueCount && middlewareResponse?.kind === "response") {
         response = middlewareResponse;
       }
     }
@@ -314,6 +315,13 @@ function evaluateRouteHandler(
     status: response.status,
     contentType: response.contentType,
     ...(headers.length === 0 ? {} : {headers}),
+  };
+}
+
+function cloneResponse(response: Value & {kind: "response"}): Value & {kind: "response"} {
+  return {
+    ...response,
+    headers: new Map(response.headers),
   };
 }
 
