@@ -15,7 +15,7 @@ test("pins selected Web Platform Test sources by revision and digest", () => {
     assert.equal(createHash("sha256").update(source).digest("hex"), selected.sha256);
     assert.equal(selected.status, "native-derived");
     assert.ok(readFileSync(path.join(repository, selected.nativeEvidence), "utf8").includes(
-      "response_headers_set_case_insensitively",
+      selected.evidenceMarker,
     ));
   }
 });

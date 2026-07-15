@@ -10,7 +10,17 @@
       "localPath": "tests/compat/wpt/upstream/headers-casing.any.js",
       "sha256": "f9034ff6ddc3c23e2aa16419738005d229e19a0b40eb5791af465b16df3ab877",
       "status": "native-derived",
-      "nativeEvidence": "runtime/bootstrap/src/abi/tests.rs"
+      "nativeEvidence": "runtime/bootstrap/src/abi/tests.rs",
+      "evidenceMarker": "response_headers_set_case_insensitively"
+    },
+    {
+      "upstreamPath": "fetch/api/response/response-init-001.any.js",
+      "localPath": "tests/compat/wpt/upstream/response-init-001.any.js",
+      "sha256": "a4f53fc2c718a3a6d9f2692f6778e88dc74f7c938940ba47ffc4ac5dd9096482",
+      "status": "native-derived",
+      "coverage": "ResponseInit.status propagation for the closed 201 case only",
+      "nativeEvidence": "compiler/tests/e2e.rs",
+      "evidenceMarker": "builds_and_serves_a_hono_json_post_response"
     }
   ]
 }
