@@ -81,6 +81,12 @@ extern "C" fn tinytsx_request_path_matches(
     pattern_len: usize,
 ) -> u32;
 
+extern "C" fn tinytsx_request_method_equals(
+    request: *const TinyRequest,
+    expected: *const u8,
+    expected_len: usize,
+) -> u32;
+
 extern "C" fn tinytsx_html_write_path_segment(
     writer: *mut TinyResponseWriter,
     request: *const TinyRequest,
@@ -107,6 +113,10 @@ segment and applies Hono-compatible percent decoding for valid UTF-8 groups;
 malformed groups remain encoded. Both operations use borrowed request views and
 the bounded response writer without allocating a dynamic route map.
 
+`tinytsx_request_method_equals` compares the borrowed method view. Generated
+dispatch currently emits GET and POST handlers; the bootstrap returns 405 for
+other methods before entering application code.
+
 `tinytsx_response_header_static` validates HTTP token names and values, replaces
 existing names case-insensitively, and stores at most eight custom headers.
 
@@ -116,11 +126,12 @@ existing names case-insensitively, and stores at most eight custom headers.
 | ---: | --- |
 | 1 | `text/html; charset=utf-8` |
 | 2 | `text/plain; charset=UTF-8` |
-| 3 | `application/json; charset=UTF-8` |
+| 3 | `application/json` |
 | 4 | `text/plain;charset=UTF-8` |
 
-The text spelling matches Hono's pinned `Context.text()` response contract.
-Unknown content-type values are rejected by `tinytsx_response_begin`.
+The text and JSON spellings match the pinned Hono `Context.text()` and
+`Context.json()` response contracts. Unknown content-type values are rejected by
+`tinytsx_response_begin`.
 
 ## Application status values
 

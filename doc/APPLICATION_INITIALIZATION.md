@@ -96,6 +96,12 @@ and `#addRoute` against shared route storage. Native E2E coverage verifies
 `/book` and the request-dependent `/book/:id`; no separate nesting interface is
 substituted for Hono's implementation.
 
+GET and POST registrations now share ordered method-plus-path dispatch. The
+nested `POST /book` text route is native. The basic example's closed
+`POST /api/posts` handler also follows upstream `Context.json()` through closed
+JSON serialization, header construction and iteration, `#newResponse`, and
+`new Response`; native output preserves status 201 and `application/json`.
+
 Closed middleware registrations are retained as `ALL` routes during symbolic
 initialization. For a matching static route, the evaluator invokes preceding
 middleware around the handler and applies post-handler effects in reverse
@@ -105,7 +111,7 @@ order. The current executable case resolves and invokes the actual upstream
 and is verified on the native root route.
 
 This is deliberately a narrow AOT fast path. Optional, wildcard, constrained,
-and multi-segment route patterns, broader request-dependent bodies, non-200
+and multi-segment route patterns, broader request-dependent bodies, general
 response construction, dynamic headers, pre-handler control flow, and the
 general Context/Request/Response
 runtime remain pending. Middleware path matching currently covers exact paths,

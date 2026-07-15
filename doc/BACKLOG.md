@@ -98,6 +98,8 @@ commit message.
 - [x] Lower one evaluated static GET route and its upstream `Context.text`
       response into HIR and path-checked native request dispatch.
 - [x] Generalize native dispatch to multiple ordered static GET routes.
+- [x] Dispatch closed POST routes by request method and preserve explicit HTTP
+      status plus Hono text/JSON content types.
 - [x] Add non-empty `:name` route segments, request-time `c.req.param(name)`,
       percent decoding, and streamed text interpolation.
 - [ ] Add optional, wildcard, constrained, and multi-segment route patterns plus
@@ -113,8 +115,12 @@ commit message.
 - [ ] Add the general Request, Response, Headers, URL, and encoding native APIs.
 - [x] Add bounded static response headers with HTTP validation,
       case-insensitive replacement, and wire emission.
+- [x] Lower closed `JSON.stringify`, `Headers`, `Object.entries`, array binding,
+      and `for...of` semantics used by Hono `Context.json/#newResponse`.
 - [x] Intake a pinned Web Platform Test for `Headers.set()` casing and connect
       it to focused native-derived ABI evidence.
+- [x] Intake the pinned WPT `ResponseInit.status` source and connect its closed
+      201 case to native-derived Hono E2E evidence.
 - [ ] Execute selected Web Platform Tests through the native compiler/runtime;
       declaration-level and derived testing are not conformance.
 - [ ] Add exceptions, Promise, async/await, and a bounded native task executor.

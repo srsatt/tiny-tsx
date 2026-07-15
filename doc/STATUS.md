@@ -153,6 +153,13 @@ produces and serves a native Mach-O executable from the example TSX source.
   `route()`, `basePath()`, `#clone()`, the closed child-route `map`, and
   `#addRoute` mount `/book` and `/book/:id`; both are verified over native HTTP.
   The complete-source evaluator now retains 22 routes across 34 modules.
+- Generated dispatch now compares both request method and path. Native E2Es
+  serve the nested text `POST /book` route and Hono's closed
+  `POST /api/posts` JSON response with status 201 and exact `application/json`.
+- Receiver-class-aware method evaluation reaches upstream `Context.#newResponse`.
+  Closed `JSON.stringify`, Headers construction, `Object.entries`, array binding,
+  and `for...of` cover the JSON response path. A pinned WPT Response-init source
+  records native-derived evidence for only the closed 201 status case.
 - Static `Response` headers lower into a bounded eight-entry native writer with
   HTTP token/value validation, case-insensitive replacement, and wire emission.
   A pinned WPT `Headers.set()` casing source is tracked as native-derived
@@ -195,7 +202,7 @@ rtk python3 benchmarks/scripts/run_static.py --workload hono-basic --duration 1 
 ## Active slice
 
 Compatibility substrate: compile the next complete-basic-example frontier:
-POST/status responses, wildcard routes, and the remaining middleware and
+wildcard routes, composed same-method handlers, and the remaining middleware and
 request-dependent handlers. Extend the executable function slice with locals,
 record property access, branches, and closures. Type-layout specialization should
 handle closed request-time records without pretending their values are

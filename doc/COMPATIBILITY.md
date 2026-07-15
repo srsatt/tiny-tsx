@@ -75,7 +75,7 @@ upstream `poweredBy()` factory and middleware closure, lowers its post-handler
 header mutation, and reproduces the selected upstream test's root status and
 `X-Powered-By: Hono` behavior over native HTTP. The complete basic application
 still contains unsupported broader patterns and request-dependent handlers,
-POST routes, and additional middleware.
+GET handlers, and additional middleware.
 
 The basic example's `/entry/:id` shape is the first request-dependent route.
 One closed `:name` segment becomes a native matcher and `c.req.param('name')`
@@ -88,8 +88,15 @@ Nested application initialization now follows the actual upstream `route()`
 implementation. The compiler constructs the second `book` binding, retains its
 routes, executes Hono's clone/base-path logic and closed `routes.map(...)`, and
 adds `/book` plus `/book/:id` to the parent route storage. Both GET routes are
-served by a native E2E; the nested POST registration is retained but native POST
-dispatch remains pending.
+served by a native E2E. Native method-plus-path dispatch now also serves the
+nested `POST /book` response.
+
+The second closed POST slice follows upstream `Context.json()` and
+`#newResponse()` for `/api/posts`. Closed JSON serialization, Headers
+construction, `Object.entries`, array destructuring, and `for...of` produce
+`{"message":"Created!"}`, status 201, and exact `application/json` over native
+HTTP. The selected WPT Response-init source is retained as native-derived
+provenance for only this status-propagation case, not full Response conformance.
 
 ### Type-only API overlay
 
