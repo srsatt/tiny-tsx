@@ -22,6 +22,7 @@ struct ExpectedResponse<'a> {
     body: &'a str,
     content_type: Option<&'a str>,
     headers: &'a [(&'a str, &'a str)],
+    request_headers: &'a [(&'a str, &'a str)],
 }
 
 impl Drop for Server {
@@ -322,6 +323,30 @@ fn builds_and_serves_upstream_hono_redirect() {
             body: "",
             content_type: None,
             headers: &[("Location", "/")],
+            request_headers: &[],
+        },
+        &[
+            "--alias",
+            "hono=vendor/hono/src/index.ts",
+            "--api",
+            "hono=tests/compat/hono/api.d.ts",
+        ],
+        &[],
+    );
+}
+
+#[test]
+fn builds_and_serves_an_upstream_hono_request_header() {
+    build_and_serve_with_options(
+        "tests/compat/hono/request-header-smoke.ts",
+        ExpectedResponse {
+            method: "GET",
+            status: 200,
+            path: "/user-agent",
+            body: "Your UserAgent is tiny-client/1.0",
+            content_type: Some("text/plain;charset=UTF-8"),
+            headers: &[],
+            request_headers: &[("User-Agent", "tiny-client/1.0")],
         },
         &[
             "--alias",
@@ -357,6 +382,7 @@ fn expected<'a>(
         body,
         content_type: Some(content_type),
         headers,
+        request_headers: &[],
     }
 }
 
@@ -400,10 +426,14 @@ fn build_and_serve_with_options(
     let mut stream = connect_with_retry(port);
     write!(
         stream,
-        "{} {} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
+        "{} {} HTTP/1.1\r\nHost: localhost\r\n",
         expected.method, expected.path,
     )
     .expect("send request");
+    for (name, value) in expected.request_headers {
+        write!(stream, "{name}: {value}\r\n").expect("send request header");
+    }
+    write!(stream, "Connection: close\r\n\r\n").expect("finish request");
     let mut response = String::new();
     stream.read_to_string(&mut response).expect("read response");
 
