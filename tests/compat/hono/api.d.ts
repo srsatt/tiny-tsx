@@ -30,11 +30,16 @@ export type HonoRouteHandlerApi = (
   next: () => Promise<void>,
 ) => Response | void | Promise<Response | void>;
 
+export type HonoNotFoundHandlerApi = (
+  context: HonoContextApi,
+) => Response | Promise<Response>;
+
 export declare class Hono {
   get(path: string, ...handlers: HonoRouteHandlerApi[]): this;
   post(path: string, ...handlers: HonoRouteHandlerApi[]): this;
   use(path: string, ...middleware: HonoMiddlewareApi[]): this;
   on(method: string | string[], path: string | string[], ...handlers: HonoHandlerApi[]): this;
   route(path: string, application: Hono): this;
+  notFound(handler: HonoNotFoundHandlerApi): this;
   fetch(request: Request): Response | Promise<Response>;
 }

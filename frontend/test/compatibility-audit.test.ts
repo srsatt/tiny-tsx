@@ -602,6 +602,45 @@ test("applies upstream custom middleware to its wildcard base path", () => {
   });
 });
 
+test("lowers the installed upstream not-found handler after explicit routes", () => {
+  const entry = path.join(repository, "tests/compat/hono/not-found-smoke.ts");
+  const options = {
+    aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+    apiAliases: {hono: path.join(repository, "tests/compat/hono/api.d.ts")},
+  };
+  const graph = loadModuleGraph(entry, options);
+  const application = analyzeApplicationEntry(graph.modules[0]!.sourceFile);
+  assert.ok(application);
+
+  const result = evaluateApplicationInitialization(graph, application);
+
+  assert.deepEqual(result?.issues, []);
+  assert.deepEqual(result?.notFoundResponse, {
+    kind: "text",
+    body: "Custom 404 Not Found",
+    status: 404,
+    contentType: "text/plain; charset=UTF-8",
+  });
+
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    ...options,
+  });
+  assert.deepEqual(hir.handlers.map(handler => ({
+    method: handler.method,
+    path: handler.path,
+    status: handler.response.kind === "text" ? handler.response.status : undefined,
+  })), [
+    {method: "GET", path: "/", status: undefined},
+    {method: "GET", path: "/*", status: 404},
+    {method: "POST", path: "/*", status: 404},
+  ]);
+  assert.deepEqual(hir.staticStrings.map(string => string.value), [
+    "Home",
+    "Custom 404 Not Found",
+  ]);
+});
+
 test("lowers the tiny-preset Hono route into native HIR", () => {
   const hir = compileEntry(path.join(repository, "tests/compat/hono/smoke.ts"), {
     sdkPath: path.join(repository, "sdk/index.d.ts"),
