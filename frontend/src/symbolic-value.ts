@@ -24,6 +24,7 @@ export type Value =
   | {kind: "clockNow"}
   | {kind: "elapsedMilliseconds"}
   | {kind: "routeParameter"; name: string}
+  | {kind: "routeChoice"; name: string; cases: Map<string, Value>; fallback: Value}
   | {kind: "requestHeader"; name: string}
   | {kind: "queryParameter"; name: string}
   | {kind: "queryPredicate"; name: string; test: "truthy" | "empty" | "present"}
@@ -76,6 +77,14 @@ export const UNDEFINED: Value = {kind: "undefined"};
 
 export function readProperty(value: Value, name: string): Value {
   if (value.kind === "unknown") return value;
+  if (value.kind === "routeChoice") {
+    return {
+      kind: "routeChoice",
+      name: value.name,
+      cases: new Map([...value.cases].map(([key, candidate]) => [key, readProperty(candidate, name)])),
+      fallback: readProperty(value.fallback, name),
+    };
+  }
   if (value.kind === "error" && name === "name") {
     return {kind: "string", value: value.name};
   }
@@ -197,6 +206,7 @@ export function truthiness(value: Value): boolean | undefined {
     case "response":
     case "instance": return true;
     case "routeParameter": return true;
+    case "routeChoice": return undefined;
     case "requestHeader": return undefined;
     case "elapsedMilliseconds": return undefined;
     case "queryParameter":
@@ -218,6 +228,7 @@ export function typeOf(value: Value): string {
     case "html": return "string";
     case "routeParameter":
     case "runtimeString": return "string";
+    case "routeChoice": return "object";
     case "requestHeader": return "string";
     case "fetchStatus": return "number";
     case "queryParameter": return "string";

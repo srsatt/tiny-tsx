@@ -1032,6 +1032,38 @@ test("lowers closed JSX component props through the pinned Hono runtime", () => 
   ]);
 });
 
+test("compiles the exact pinned Hono JSX SSR source graph", () => {
+  const entry = path.join(repository, "vendor/hono-examples/jsx-ssr/src/index.tsx");
+  const aliases = {
+    hono: path.join(repository, "vendor/hono/src/index.ts"),
+    "hono/html": path.join(repository, "vendor/hono/src/helper/html/index.ts"),
+  };
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    aliases,
+    apiAliases: {
+      hono: path.join(repository, "tests/compat/hono/api.d.ts"),
+      "hono/html": path.join(repository, "tests/compat/hono/html-api.d.ts"),
+    },
+  });
+
+  assert.deepEqual(hir.handlers.map(handler => `${handler.method} ${handler.path}`), [
+    "GET /",
+    "GET /post/1",
+    "GET /post/2",
+    "GET /post/3",
+    "GET /post/4",
+    "GET /post/5",
+    "GET /post/:id{[0-9]+}",
+    "GET /*",
+  ]);
+  assert.match(hir.staticStrings[0]?.value ?? "", /<title>Top<\/title>/);
+  assert.match(hir.staticStrings[0]?.value ?? "", /こんにちは/);
+  const fallback = hir.handlers.at(-2)?.response;
+  assert.equal(fallback?.kind, "text");
+  assert.equal(fallback?.kind === "text" ? fallback.status : undefined, 404);
+});
+
 test("lowers a closed fetch response status as a native runtime expression", () => {
   const hir = compileEntry(path.join(repository, "tests/compat/hono/fetch-status-smoke.ts"), {
     sdkPath: path.join(repository, "sdk/index.d.ts"),

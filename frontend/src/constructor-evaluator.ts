@@ -71,6 +71,13 @@ export interface EvaluatedResponse {
   entityTag?: EvaluatedEntityTag;
 }
 
+interface EvaluatedRouteChoice {
+  kind: "routeChoice";
+  name: string;
+  cases: Map<string, EvaluatedResponse>;
+  fallback: EvaluatedResponse;
+}
+
 export interface EvaluatedBasicAuthorization {
   credentials: Array<{username: string; password: string}>;
   rejected: EvaluatedResponse;
@@ -126,9 +133,14 @@ export function evaluateApplicationInitialization(
   const errorHandler = installedErrorHandler?.kind === "closure"
     ? installedErrorHandler
     : undefined;
+  const installedNotFoundHandler = instance.fields.get("#notFoundHandler");
+  const notFoundHandler = installedNotFoundHandler?.kind === "closure"
+    || installedNotFoundHandler?.kind === "reference" && installedNotFoundHandler.callable !== undefined
+    ? installedNotFoundHandler
+    : undefined;
   return {
     ...summary,
-    routes: summarizeRoutes(evaluator, instance, errorHandler),
+    routes: summarizeRoutes(evaluator, instance, errorHandler, notFoundHandler),
     ...(application.calls.some(call => call.method === "notFound")
       ? evaluateInstalledNotFound(evaluator, instance)
       : {}),
@@ -153,8 +165,12 @@ function evaluateInstalledNotFound(
     middleware,
     requestPath,
     "GET",
+    undefined,
+    handler,
   );
-  return response === undefined ? {} : {notFoundResponse: response};
+  return response === undefined || response.kind === "routeChoice"
+    ? {}
+    : {notFoundResponse: response};
 }
 
 function initializeConstructor(
@@ -261,19 +277,20 @@ function summarizeRoutes(
   evaluator: Evaluator,
   instance: Value & {kind: "instance"},
   errorHandler?: Value & {kind: "closure"},
+  notFoundHandler?: Value,
 ): EvaluatedRoute[] {
   const routes = instance.fields.get("routes");
   if (routes?.kind !== "array") {
     return [];
   }
-  return routes.items.flatMap((route, routeIndex) => {
-    if (route.kind !== "record") {
+  return routes.items.flatMap((candidateRoute, routeIndex) => {
+    if (candidateRoute.kind !== "record") {
       return [];
     }
-    const method = route.fields.get("method");
-    const path = route.fields.get("path");
-    const basePath = route.fields.get("basePath");
-    const handler = route.fields.get("handler");
+    const method = candidateRoute.fields.get("method");
+    const path = candidateRoute.fields.get("path");
+    const basePath = candidateRoute.fields.get("basePath");
+    const handler = candidateRoute.fields.get("handler");
     if (method?.kind !== "string" || path?.kind !== "string" || basePath?.kind !== "string") {
       return [];
     }
@@ -294,9 +311,10 @@ function summarizeRoutes(
         path.value,
         method.value,
         errorHandler,
+        notFoundHandler,
       )
       : undefined;
-    return [{
+    const route: Omit<EvaluatedRoute, "response"> = {
       method: method.value,
       path: path.value,
       basePath: basePath.value,
@@ -305,8 +323,18 @@ function summarizeRoutes(
         : handler?.kind === "reference"
           ? "reference" as const
           : "unknown" as const,
-      ...(response === undefined ? {} : {response}),
-    }];
+    };
+    if (response?.kind === "routeChoice") {
+      return [
+        ...[...response.cases].map(([key, selected]) => ({
+          ...route,
+          path: specializeRoutePath(path.value, response.name, key),
+          response: selected,
+        })),
+        {...route, response: response.fallback},
+      ];
+    }
+    return [{...route, ...(response === undefined ? {} : {response})}];
   });
 }
 
@@ -317,7 +345,8 @@ function evaluateRouteHandler(
   routePattern: string,
   requestMethod: string,
   errorHandler?: Value & {kind: "closure"},
-): EvaluatedResponse | undefined {
+  notFoundHandler?: Value,
+): EvaluatedResponse | EvaluatedRouteChoice | undefined {
   const contextClass = findRuntimeClass(evaluator, "Context");
   if (contextClass === undefined) {
     return undefined;
@@ -327,7 +356,7 @@ function evaluateRouteHandler(
   executeClass(
     evaluator,
     contextClass,
-    [unknown("runtime Request"), UNDEFINED],
+    [unknown("runtime Request"), contextOptions(notFoundHandler)],
     context,
   );
   context.fields.set("req", {kind: "request", routePattern, method: requestMethod});
@@ -347,6 +376,17 @@ function evaluateRouteHandler(
       middlewareFailed = true;
     }
   }
+  if (response.kind === "routeChoice") {
+    if (middleware.length > 0) {
+      issue(evaluator, handler.expression, handler.module, "route-selected responses with middleware are not supported");
+      return undefined;
+    }
+    const selected = evaluateRouteChoiceResponse(response, context);
+    if (selected === undefined) {
+      issue(evaluator, handler.expression, handler.module, "route-selected handler did not close every response");
+    }
+    return selected;
+  }
   let basicAuthorization: {
     credentials: Array<{username: string; password: string}>;
     rejected: Value & {kind: "response"};
@@ -365,7 +405,7 @@ function evaluateRouteHandler(
       executeClass(
         evaluator,
         contextClass,
-        [unknown("runtime Request"), UNDEFINED],
+        [unknown("runtime Request"), contextOptions(notFoundHandler)],
         middlewareContext,
       );
       middlewareContext.fields.set("req", {
@@ -485,6 +525,12 @@ function evaluateRouteHandler(
         },
       }),
   };
+}
+
+function contextOptions(notFoundHandler?: Value): Value {
+  return notFoundHandler === undefined
+    ? UNDEFINED
+    : {kind: "record", fields: new Map([["notFoundHandler", notFoundHandler]])};
 }
 
 function evaluateInvalidHonoResponseReturn(
@@ -638,6 +684,28 @@ function evaluatedResponse(
     contentType: response.contentType,
     ...(headers.length === 0 ? {} : {headers}),
     ...(stderr.length === 0 ? {} : {stderr}),
+  };
+}
+
+function evaluateRouteChoiceResponse(
+  choice: Value & {kind: "routeChoice"},
+  context: Value & {kind: "instance"},
+): EvaluatedRouteChoice | undefined {
+  if (
+    choice.fallback.kind !== "response"
+    || [...choice.cases.values()].some(value => value.kind !== "response")
+  ) {
+    return undefined;
+  }
+  const stderr = stderrLines(context);
+  return {
+    kind: "routeChoice",
+    name: choice.name,
+    cases: new Map([...choice.cases].map(([key, response]) => [
+      key,
+      evaluatedResponse(response as Value & {kind: "response"}, stderr),
+    ])),
+    fallback: evaluatedResponse(choice.fallback, stderr),
   };
 }
 
@@ -881,14 +949,24 @@ function executeStatement(
     return continued();
   }
   const expression = statement.expression;
-  if (ts.isBinaryExpression(expression) && expression.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
-    assign(evaluator, expression.left, evaluate(
-      evaluator,
-      expression.right,
-      module,
-      environment,
-      instance,
-    ), module, environment, instance);
+  if (
+    ts.isBinaryExpression(expression)
+    && (
+      expression.operatorToken.kind === ts.SyntaxKind.EqualsToken
+      || expression.operatorToken.kind === ts.SyntaxKind.QuestionQuestionEqualsToken
+    )
+  ) {
+    if (expression.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
+      assign(evaluator, expression.left, evaluate(
+        evaluator,
+        expression.right,
+        module,
+        environment,
+        instance,
+      ), module, environment, instance);
+    } else {
+      evaluate(evaluator, expression, module, environment, instance);
+    }
     return continued();
   }
   if (ts.isAwaitExpression(expression)) {
@@ -1004,13 +1082,116 @@ function executeStatements(
   environment: Map<string, Value>,
   instance: Value & {kind: "instance"},
 ): ExecutionResult {
-  for (const statement of statements) {
+  for (const [index, statement] of statements.entries()) {
+    if (ts.isIfStatement(statement)) {
+      const condition = evaluate(evaluator, statement.expression, module, environment, instance);
+      if (condition.kind === "routeChoice" && isBooleanRouteChoice(condition)) {
+        return executeRouteConditional(
+          evaluator,
+          statement,
+          statements.slice(index + 1),
+          condition,
+          module,
+          environment,
+          instance,
+        );
+      }
+    }
     const result = executeStatement(evaluator, statement, module, environment, instance);
     if (result.returned) {
       return result;
     }
   }
   return continued();
+}
+
+function executeRouteConditional(
+  evaluator: Evaluator,
+  statement: ts.IfStatement,
+  remaining: readonly ts.Statement[],
+  condition: Value & {kind: "routeChoice"},
+  module: SourceModule,
+  environment: Map<string, Value>,
+  instance: Value & {kind: "instance"},
+): ExecutionResult {
+  const cases = new Map<string, Value>();
+  for (const [key, decision] of condition.cases) {
+    cases.set(
+      key,
+      executeSelectedRouteBranch(
+        evaluator,
+        statement,
+        remaining,
+        decision,
+        module,
+        selectRouteEnvironment(environment, condition.name, key),
+        instance,
+      ),
+    );
+  }
+  const fallback = executeSelectedRouteBranch(
+    evaluator,
+    statement,
+    remaining,
+    condition.fallback,
+    module,
+    selectRouteEnvironment(environment, condition.name),
+    instance,
+  );
+  return {
+    returned: true,
+    value: {kind: "routeChoice", name: condition.name, cases, fallback},
+  };
+}
+
+function executeSelectedRouteBranch(
+  evaluator: Evaluator,
+  statement: ts.IfStatement,
+  remaining: readonly ts.Statement[],
+  decision: Value,
+  module: SourceModule,
+  environment: Map<string, Value>,
+  instance: Value & {kind: "instance"},
+): Value {
+  const selected = truthiness(decision);
+  if (selected === undefined) return unknown("route-selected if condition is not boolean");
+  const branch = selected ? statement.thenStatement : statement.elseStatement;
+  const result = branch === undefined
+    ? continued()
+    : executeStatement(evaluator, branch, module, environment, instance);
+  return result.returned
+    ? result.value
+    : executeStatements(evaluator, remaining, module, environment, instance).value;
+}
+
+function selectRouteEnvironment(
+  environment: Map<string, Value>,
+  name: string,
+  key?: string,
+): Map<string, Value> {
+  return new Map([...environment].map(([binding, value]) => [
+    binding,
+    selectRouteValue(value, name, key),
+  ]));
+}
+
+function selectRouteValue(value: Value, name: string, key?: string): Value {
+  if (value.kind === "routeChoice" && value.name === name) {
+    return key === undefined ? value.fallback : value.cases.get(key) ?? value.fallback;
+  }
+  if (value.kind === "array") {
+    return {kind: "array", items: value.items.map(item => selectRouteValue(item, name, key))};
+  }
+  if (value.kind === "record") {
+    return {
+      kind: "record",
+      fields: new Map([...value.fields].map(([field, candidate]) => [
+        field,
+        selectRouteValue(candidate, name, key),
+      ])),
+    };
+  }
+  return value;
 }
 
 function invokeClosure(
@@ -1360,10 +1541,58 @@ function evaluateCall(
         )),
       };
     }
+    if (receiver.kind === "array" && name === "find") {
+      const callback = arguments_[0];
+      if (callback?.kind !== "closure") {
+        return unknown("Array.find callback is not a compile-time closure");
+      }
+      let choiceName: string | undefined;
+      const cases = new Map<string, Value>();
+      let fallback: Value = UNDEFINED;
+      for (const [index, value] of receiver.items.entries()) {
+        const predicate = invokeClosure(
+          evaluator,
+          callback,
+          [value, {kind: "number", value: index}, receiver],
+          instance,
+        );
+        const decision = truthiness(predicate);
+        if (decision === true) return value;
+        if (decision === false) continue;
+        if (predicate.kind !== "routeChoice" || !isBooleanRouteChoice(predicate)) {
+          return unknown("Array.find predicate is not a closed or route-selected boolean");
+        }
+        if (choiceName !== undefined && choiceName !== predicate.name) {
+          return unknown("Array.find predicates use different route parameters");
+        }
+        choiceName = predicate.name;
+        for (const [key, candidate] of predicate.cases) {
+          if (candidate.kind === "boolean" && candidate.value && !cases.has(key)) {
+            cases.set(key, value);
+          }
+        }
+        if (predicate.fallback.kind === "boolean" && predicate.fallback.value) {
+          fallback = value;
+        }
+      }
+      return choiceName === undefined
+        ? UNDEFINED
+        : {kind: "routeChoice", name: choiceName, cases, fallback};
+    }
     if (receiver.kind === "instance") {
       const callable = receiver.fields.get(name);
       if (callable?.kind === "closure") {
         return invokeClosure(evaluator, callable, arguments_, receiver);
+      }
+      if (callable?.kind === "reference" && callable.callable !== undefined) {
+        return invokeFunctionLike(
+          evaluator,
+          callable.callable.declaration,
+          callable.callable.module,
+          new Map(),
+          arguments_,
+          receiver,
+        );
       }
       const method = findInstanceMethod(evaluator, name, receiver);
       if (method !== undefined) {
@@ -1443,6 +1672,49 @@ function combineQueryOr(left: Value, right: Value): Value | undefined {
     return {kind: "queryPredicate", name: leftPredicate.name, test: "present"};
   }
   return undefined;
+}
+
+function routeParameterEquality(
+  left: Value,
+  right: Value,
+): (Value & {kind: "routeChoice"}) | undefined {
+  const parameter = left.kind === "routeParameter" && right.kind === "string"
+    ? {name: left.name, value: right.value}
+    : right.kind === "routeParameter" && left.kind === "string"
+      ? {name: right.name, value: left.value}
+      : undefined;
+  return parameter === undefined
+    ? undefined
+    : {
+      kind: "routeChoice",
+      name: parameter.name,
+      cases: new Map([[parameter.value, {kind: "boolean", value: true}]]),
+      fallback: {kind: "boolean", value: false},
+    };
+}
+
+function mapRouteChoice(
+  choice: Value & {kind: "routeChoice"},
+  mapper: (value: Value) => Value,
+): Value & {kind: "routeChoice"} {
+  return {
+    kind: "routeChoice",
+    name: choice.name,
+    cases: new Map([...choice.cases].map(([key, value]) => [key, mapper(value)])),
+    fallback: mapper(choice.fallback),
+  };
+}
+
+function negateValue(value: Value): Value {
+  const decision = truthiness(value);
+  return decision === undefined
+    ? unknown("logical NOT operand is not closed")
+    : {kind: "boolean", value: !decision};
+}
+
+function isBooleanRouteChoice(choice: Value & {kind: "routeChoice"}): boolean {
+  return choice.fallback.kind === "boolean"
+    && [...choice.cases.values()].every(value => value.kind === "boolean");
 }
 
 function evaluate(
@@ -1618,7 +1890,9 @@ function evaluate(
         : left;
     }
     if (
-      operator === ts.SyntaxKind.EqualsEqualsEqualsToken
+      operator === ts.SyntaxKind.EqualsEqualsToken
+      || operator === ts.SyntaxKind.ExclamationEqualsToken
+      || operator === ts.SyntaxKind.EqualsEqualsEqualsToken
       || operator === ts.SyntaxKind.ExclamationEqualsEqualsToken
     ) {
       const right = evaluate(evaluator, expression.right, module, environment, instance);
@@ -1630,10 +1904,19 @@ function evaluate(
       ) {
         return {kind: "queryPredicate", name: left.name, test: "empty"};
       }
+      const routeChoice = routeParameterEquality(left, right);
+      if (routeChoice !== undefined) {
+        const equal = operator === ts.SyntaxKind.EqualsEqualsToken
+          || operator === ts.SyntaxKind.EqualsEqualsEqualsToken;
+        return equal ? routeChoice : mapRouteChoice(routeChoice, negateValue);
+      }
       const equal = valuesEqual(left, right);
       return {
         kind: "boolean",
-        value: operator === ts.SyntaxKind.EqualsEqualsEqualsToken ? equal : !equal,
+        value: operator === ts.SyntaxKind.EqualsEqualsToken
+          || operator === ts.SyntaxKind.EqualsEqualsEqualsToken
+          ? equal
+          : !equal,
       };
     }
     if (operator === ts.SyntaxKind.PlusToken) {
@@ -1765,6 +2048,9 @@ function evaluate(
   }
   if (ts.isPrefixUnaryExpression(expression) && expression.operator === ts.SyntaxKind.ExclamationToken) {
     const operand = evaluate(evaluator, expression.operand, module, environment, instance);
+    if (operand.kind === "routeChoice") {
+      return mapRouteChoice(operand, negateValue);
+    }
     const decision = truthiness(operand);
     return decision === undefined
       ? unknown("logical NOT operand is not closed")
@@ -1958,7 +2244,8 @@ function renderJsxChildValues(
   const values: Value[] = [];
   for (const child of children) {
     if (ts.isJsxText(child)) {
-      values.push({kind: "string", value: child.text});
+      const text = normalizeJsxText(child.text);
+      if (text.length > 0) values.push({kind: "string", value: text});
     } else if (ts.isJsxExpression(child)) {
       if (child.expression !== undefined) {
         values.push(evaluate(evaluator, child.expression, module, environment, instance));
@@ -1969,6 +2256,20 @@ function renderJsxChildValues(
   }
   const invalid = values.find(value => value.kind === "unknown");
   return invalid?.kind === "unknown" ? invalid : {kind: "array", items: values};
+}
+
+function normalizeJsxText(value: string): string {
+  const lines = value.split(/\r\n|\n|\r/);
+  let output = "";
+  for (const [index, sourceLine] of lines.entries()) {
+    let line = sourceLine.replaceAll("\t", " ");
+    if (index > 0) line = line.replace(/^ +/, "");
+    if (index + 1 < lines.length) line = line.replace(/ +$/, "");
+    if (line.length === 0) continue;
+    output += line;
+    if (index + 1 < lines.length) output += " ";
+  }
+  return output;
 }
 
 function evaluateTaggedTemplate(
@@ -2030,9 +2331,17 @@ function escapeHtmlAttribute(value: string): string {
 }
 
 function routeParameterNames(pattern: string): string[] {
-  return pattern.split("/").flatMap(segment =>
-    segment.startsWith(":") && segment.length > 1 ? [segment.slice(1)] : []
-  );
+  return pattern.split("/").flatMap(segment => {
+    const match = /^:([A-Za-z0-9_]+)(?:\{.*\})?$/.exec(segment);
+    return match?.[1] === undefined ? [] : [match[1]];
+  });
+}
+
+function specializeRoutePath(pattern: string, name: string, value: string): string {
+  return pattern.split("/").map(segment => {
+    const match = /^:([A-Za-z0-9_]+)(?:\{.*\})?$/.exec(segment);
+    return match?.[1] === name ? value : segment;
+  }).join("/");
 }
 
 const UNSUPPORTED_JSON = Symbol("unsupported JSON value");

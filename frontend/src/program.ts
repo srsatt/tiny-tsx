@@ -224,7 +224,14 @@ function lowerApplicationInitialization(
         ? []
         : [{method, path: "/*", response: initialization.notFoundResponse!}]
     );
-  const emittedRoutes = [...routes, ...fallbackRoutes];
+  const constrainedFallbackRoutes = routes.flatMap(route =>
+    route.path.includes("{")
+    && route.response?.status === 404
+    && !routes.some(candidate => candidate.method === route.method && candidate.path === "/*")
+      ? [{method: route.method, path: "/*", response: route.response}]
+      : []
+  );
+  const emittedRoutes = [...routes, ...fallbackRoutes, ...constrainedFallbackRoutes];
   const loweredHeaders = emittedRoutes.map(route =>
     lowerResponseHeaders(route.response?.headers)
   );
@@ -495,7 +502,9 @@ function dynamicResponseExpressions(body: ResponseBody): number {
 
 function routeParameterSegment(pattern: string, name: string): number {
   const segments = pattern.split("/").filter(Boolean);
-  const index = segments.findIndex(segment => segment === `:${name}`);
+  const index = segments.findIndex(segment =>
+    segment === `:${name}` || segment.startsWith(`:${name}{`)
+  );
   if (index < 0) {
     throw new Error(`route parameter \`${name}\` is absent from pattern \`${pattern}\``);
   }
