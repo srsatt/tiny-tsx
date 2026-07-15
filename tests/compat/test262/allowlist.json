@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "upstream": {
     "path": "vendor/test262",
     "commit": "f2d1435644797268dca1f7988cad5a4e89ccd8d2"
@@ -33,7 +33,7 @@
     {
       "path": "test/language/expressions/typeof/undefined.js",
       "feature": "undefined-primitive",
-      "mode": "syntax"
+      "mode": "native"
     },
     {
       "path": "test/language/expressions/typeof/bigint.js",

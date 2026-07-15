@@ -16,15 +16,16 @@ test("uses the pinned Test262 revision", () => {
   assert.equal(revision, manifest.upstream.commit);
 });
 
-test("contains a unique, syntax-only initial allowlist", () => {
-  assert.equal(manifest.version, 1);
+test("contains a unique allowlist with explicit evidence modes", () => {
+  assert.equal(manifest.version, 2);
   assert.ok(manifest.cases.length > 0);
   assert.equal(new Set(manifest.cases.map(testCase => testCase.path)).size, manifest.cases.length);
   for (const testCase of manifest.cases) {
-    assert.equal(testCase.mode, "syntax");
+    assert.ok(["syntax", "native"].includes(testCase.mode));
     assert.match(testCase.path, /^test\//);
     assert.ok(testCase.feature);
   }
+  assert.ok(manifest.cases.some(testCase => testCase.mode === "native"));
 });
 
 for (const testCase of manifest.cases) {
