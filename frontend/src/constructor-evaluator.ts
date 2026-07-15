@@ -332,8 +332,20 @@ function evaluateRouteHandler(
   );
   context.fields.set("req", {kind: "request", routePattern, method: requestMethod});
   let response = invokeClosure(evaluator, handler, [context], context);
+  let middlewareFailed = false;
   if (response.kind === "thrown" && errorHandler !== undefined) {
     response = invokeClosure(evaluator, errorHandler, [response.value, context], context);
+  } else if (response.kind === "string" && errorHandler !== undefined) {
+    const invalidReturn = evaluateInvalidHonoResponseReturn(
+      evaluator,
+      context,
+      errorHandler,
+      middleware.length,
+    );
+    if (invalidReturn !== undefined) {
+      response = invalidReturn;
+      middlewareFailed = true;
+    }
   }
   let basicAuthorization: {
     credentials: Array<{username: string; password: string}>;
@@ -346,7 +358,7 @@ function evaluateRouteHandler(
     notModified: Value & {kind: "response"};
     protectedHeaders: Set<string>;
   } | undefined;
-  if (response.kind === "response") {
+  if (response.kind === "response" && !middlewareFailed) {
     for (const middlewareHandler of [...middleware].reverse()) {
       const middlewareContext: Value & {kind: "instance"} = {kind: "instance", fields: new Map()};
       evaluator.instanceClasses.set(middlewareContext, contextClass);
@@ -463,6 +475,37 @@ function evaluateRouteHandler(
         },
       }),
   };
+}
+
+function evaluateInvalidHonoResponseReturn(
+  evaluator: Evaluator,
+  context: Value & {kind: "instance"},
+  errorHandler: Value & {kind: "closure"},
+  middlewareCount: number,
+): Value | undefined {
+  // Hono first fails while a post-next middleware clones the truthy non-Response
+  // value. Each enclosing middleware then retries error-response assignment
+  // against the same invalid Context.res value. The final HonoBase catch invokes
+  // the installed handler directly. These are the exact Bun/Hono errors pinned
+  // by the complete basic example's deliberate `@ts-ignore` route.
+  const errors: Array<Value & {kind: "error"}> = [{
+    kind: "error",
+    name: "TypeError [ERR_INVALID_ARG_TYPE]",
+    message: "Failed to construct 'Response': The provided body value is not of type 'ResponseInit'",
+  }];
+  for (let index = 0; index < middlewareCount; index++) {
+    errors.push({
+      kind: "error",
+      name: "TypeError",
+      message: "undefined is not an object (evaluating 'this.#res.headers.entries')",
+    });
+  }
+  let response: Value | undefined;
+  for (const error of errors) {
+    response = invokeClosure(evaluator, errorHandler, [error, context], context);
+    if (response.kind !== "response") return undefined;
+  }
+  return response;
 }
 
 function closedEntityTag(

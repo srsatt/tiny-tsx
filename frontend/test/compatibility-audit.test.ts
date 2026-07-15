@@ -920,6 +920,53 @@ test("routes a closed throw through the installed upstream error handler", () =>
   );
 });
 
+test("routes an invalid truthy handler return through Hono response finalization", () => {
+  const entry = path.join(repository, "tests/compat/hono/invalid-return-smoke.ts");
+  const options = {
+    aliases: {
+      hono: path.join(repository, "vendor/hono/src/index.ts"),
+      "hono/powered-by": path.join(
+        repository,
+        "vendor/hono/src/middleware/powered-by/index.ts",
+      ),
+    },
+    apiAliases: {
+      hono: path.join(repository, "tests/compat/hono/api.d.ts"),
+      "hono/powered-by": path.join(repository, "tests/compat/hono/powered-by-api.d.ts"),
+    },
+  };
+  const graph = loadModuleGraph(entry, options);
+  const application = analyzeApplicationEntry(graph.modules[0]!.sourceFile);
+  assert.ok(application);
+
+  const result = evaluateApplicationInitialization(graph, application);
+
+  assert.deepEqual(result?.issues, []);
+  assert.deepEqual(result?.routes.find(route => route.method === "GET")?.response, {
+    kind: "text",
+    body: "Custom Error Message",
+    status: 500,
+    contentType: "text/plain; charset=UTF-8",
+    stderr: [
+      "TypeError [ERR_INVALID_ARG_TYPE]: Failed to construct 'Response': The provided body value is not of type 'ResponseInit'",
+      "TypeError: undefined is not an object (evaluating 'this.#res.headers.entries')",
+      "TypeError: undefined is not an object (evaluating 'this.#res.headers.entries')",
+    ],
+  });
+
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    ...options,
+  });
+  assert.equal(hir.handlers[0]?.path, "/type-error");
+  assert.equal(hir.handlers[0]?.headers, undefined);
+  assert.deepEqual(hir.handlers[0]?.stderr?.map(id => hir.staticStrings[id]?.value), [
+    "TypeError [ERR_INVALID_ARG_TYPE]: Failed to construct 'Response': The provided body value is not of type 'ResponseInit'",
+    "TypeError: undefined is not an object (evaluating 'this.#res.headers.entries')",
+    "TypeError: undefined is not an object (evaluating 'this.#res.headers.entries')",
+  ]);
+});
+
 test("lowers the tiny-preset Hono route into native HIR", () => {
   const hir = compileEntry(path.join(repository, "tests/compat/hono/smoke.ts"), {
     sdkPath: path.join(repository, "sdk/index.d.ts"),
@@ -979,7 +1026,7 @@ test("lowers a closed fetch response status as a native runtime expression", () 
   ]);
 });
 
-test("retains the exact upstream basic fetch route as a runtime fetch", () => {
+test("compiles the complete exact upstream basic source", () => {
   const entry = path.join(repository, "vendor/hono-examples/basic/src/index.ts");
   const aliases = {
     hono: path.join(repository, "vendor/hono/src/index.ts"),
@@ -1005,10 +1052,54 @@ test("retains the exact upstream basic fetch route as a runtime fetch", () => {
       {kind: "fetchStatus", url: "https://example.com/"},
     ],
   );
-  assert.equal(
+  assert.deepEqual(
     result?.routes.find(route => route.path === "/type-error")?.response,
-    undefined,
+    {
+      kind: "text",
+      body: "Custom Error Message",
+      status: 500,
+      contentType: "text/plain; charset=UTF-8",
+      stderr: [
+        "TypeError [ERR_INVALID_ARG_TYPE]: Failed to construct 'Response': The provided body value is not of type 'ResponseInit'",
+        "TypeError: undefined is not an object (evaluating 'this.#res.headers.entries')",
+        "TypeError: undefined is not an object (evaluating 'this.#res.headers.entries')",
+      ],
+    },
   );
+
+  const apiAliases = {
+    hono: path.join(repository, "tests/compat/hono/api.d.ts"),
+    "hono/basic-auth": path.join(repository, "tests/compat/hono/basic-auth-api.d.ts"),
+    "hono/etag": path.join(repository, "tests/compat/hono/etag-api.d.ts"),
+    "hono/powered-by": path.join(repository, "tests/compat/hono/powered-by-api.d.ts"),
+    "hono/pretty-json": path.join(repository, "tests/compat/hono/pretty-json-api.d.ts"),
+  };
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    aliases,
+    apiAliases,
+  });
+  assert.equal(hir.modules.length, 34);
+  assert.deepEqual(hir.handlers.map(handler => `${handler.method} ${handler.path}`), [
+    "GET /",
+    "GET /hello",
+    "GET /entry/:id",
+    "GET /book",
+    "GET /book/:id",
+    "POST /book",
+    "GET /redirect",
+    "GET /auth/*",
+    "GET /etag/cached",
+    "GET /fetch-url",
+    "GET /user-agent",
+    "GET /api/posts",
+    "POST /api/posts",
+    "GET /api/*",
+    "GET /error",
+    "GET /type-error",
+    "GET /*",
+    "POST /*",
+  ]);
 });
 
 test("pins the native text response to the upstream Hono contract", () => {

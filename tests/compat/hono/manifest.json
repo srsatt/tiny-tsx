@@ -24,6 +24,7 @@
   "redirectSmokeEntry": "tests/compat/hono/redirect-smoke.ts",
   "requestHeaderSmokeEntry": "tests/compat/hono/request-header-smoke.ts",
   "fetchStatusSmokeEntry": "tests/compat/hono/fetch-status-smoke.ts",
+  "invalidReturnSmokeEntry": "tests/compat/hono/invalid-return-smoke.ts",
   "customMiddlewareSmokeEntry": "tests/compat/hono/custom-middleware-smoke.ts",
   "notFoundSmokeEntry": "tests/compat/hono/not-found-smoke.ts",
   "errorHandlerSmokeEntry": "tests/compat/hono/error-handler-smoke.ts",
