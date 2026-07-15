@@ -49,6 +49,8 @@ pub struct Handler {
     pub elapsed_headers: Vec<ElapsedHeader>,
     #[serde(default, rename = "basicAuthorization")]
     pub basic_authorization: Option<BasicAuthorization>,
+    #[serde(default, rename = "entityTag")]
+    pub entity_tag: Option<EntityTag>,
     #[serde(default)]
     pub stderr: Vec<usize>,
     pub response: HandlerResponse,
@@ -77,6 +79,13 @@ pub struct BasicAuthorization {
 pub struct BasicCredential {
     pub username: String,
     pub password: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct EntityTag {
+    pub value: String,
+    #[serde(rename = "notModified")]
+    pub not_modified: GuardedResponse,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -266,6 +275,14 @@ impl Program {
                 validate_response_headers(&authorization.rejected.headers, &[])?;
                 self.validate_stderr(&authorization.rejected.stderr)?;
                 self.validate_handler_response(&authorization.rejected.response, &handler.path)?;
+            }
+            if let Some(entity_tag) = &handler.entity_tag {
+                if entity_tag.value.is_empty() {
+                    return Err("entity tag must not be empty".to_owned());
+                }
+                validate_response_headers(&entity_tag.not_modified.headers, &[])?;
+                self.validate_stderr(&entity_tag.not_modified.stderr)?;
+                self.validate_handler_response(&entity_tag.not_modified.response, &handler.path)?;
             }
         }
         for (index, component) in self.components.iter().enumerate() {

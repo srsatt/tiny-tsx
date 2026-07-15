@@ -401,6 +401,67 @@ fn preserves_hono_error_and_middleware_order_for_rejected_basic_auth() {
 }
 
 #[test]
+fn builds_and_serves_the_upstream_etag_middleware() {
+    build_and_serve_with_options(
+        "tests/compat/hono/etag-smoke.ts",
+        ExpectedResponse {
+            method: "GET",
+            status: 200,
+            path: "/etag/cached",
+            body: "Is this cached?",
+            content_type: Some("text/plain;charset=UTF-8"),
+            headers: &[("ETag", "\"90ea638841fff3c326fc22cbd156f1146ac0ac02\"")],
+            millisecond_headers: &[],
+            request_headers: &[],
+            stderr: None,
+        },
+        &[
+            "--alias",
+            "hono=vendor/hono/src/index.ts",
+            "--alias",
+            "hono/etag=vendor/hono/src/middleware/etag/index.ts",
+            "--api",
+            "hono=tests/compat/hono/api.d.ts",
+            "--api",
+            "hono/etag=tests/compat/hono/etag-api.d.ts",
+        ],
+        &[],
+    );
+}
+
+#[test]
+fn serves_not_modified_for_a_matching_upstream_etag() {
+    build_and_serve_with_options(
+        "tests/compat/hono/etag-smoke.ts",
+        ExpectedResponse {
+            method: "GET",
+            status: 304,
+            path: "/etag/cached",
+            body: "",
+            content_type: None,
+            headers: &[("ETag", "\"90ea638841fff3c326fc22cbd156f1146ac0ac02\"")],
+            millisecond_headers: &[],
+            request_headers: &[(
+                "If-None-Match",
+                "\"90ea638841fff3c326fc22cbd156f1146ac0ac02\"",
+            )],
+            stderr: None,
+        },
+        &[
+            "--alias",
+            "hono=vendor/hono/src/index.ts",
+            "--alias",
+            "hono/etag=vendor/hono/src/middleware/etag/index.ts",
+            "--api",
+            "hono=tests/compat/hono/api.d.ts",
+            "--api",
+            "hono/etag=tests/compat/hono/etag-api.d.ts",
+        ],
+        &[],
+    );
+}
+
+#[test]
 fn builds_and_serves_upstream_pretty_json_by_query_presence() {
     build_and_serve_with_options(
         "tests/compat/hono/pretty-json-smoke.ts",

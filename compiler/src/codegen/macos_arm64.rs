@@ -162,6 +162,39 @@ fn emit_handlers(assembly: &mut String, program: &Program) -> Result<(), String>
     writeln!(assembly, "    b {return_label}").unwrap();
     for (index, handler) in program.handlers.iter().enumerate() {
         writeln!(assembly, "Ltinytsx_handle_get_match_{index}:").unwrap();
+        if let Some(entity_tag) = &handler.entity_tag {
+            let normal_label = format!("Ltinytsx_handler_{index}_etag_normal");
+            writeln!(assembly, "    ldr x0, [sp, #24]").unwrap();
+            writeln!(assembly, "    adrp x1, Ltinytsx_handler_{index}_etag@PAGE").unwrap();
+            writeln!(
+                assembly,
+                "    add x1, x1, Ltinytsx_handler_{index}_etag@PAGEOFF"
+            )
+            .unwrap();
+            emit_immediate(assembly, "x2", entity_tag.value.len() as u64);
+            writeln!(assembly, "    bl _tinytsx_request_if_none_match").unwrap();
+            writeln!(assembly, "    cbz w0, {normal_label}").unwrap();
+            for (header_index, header) in entity_tag.not_modified.headers.iter().enumerate() {
+                writeln!(assembly, "    ldr x0, [sp, #16]").unwrap();
+                writeln!(assembly, "    adrp x1, Ltinytsx_handler_{index}_not_modified_header_{header_index}_name@PAGE").unwrap();
+                writeln!(assembly, "    add x1, x1, Ltinytsx_handler_{index}_not_modified_header_{header_index}_name@PAGEOFF").unwrap();
+                emit_immediate(assembly, "x2", header.name.len() as u64);
+                writeln!(assembly, "    adrp x3, Ltinytsx_handler_{index}_not_modified_header_{header_index}_value@PAGE").unwrap();
+                writeln!(assembly, "    add x3, x3, Ltinytsx_handler_{index}_not_modified_header_{header_index}_value@PAGEOFF").unwrap();
+                emit_immediate(assembly, "x4", header.value.len() as u64);
+                writeln!(assembly, "    bl _tinytsx_response_header_static").unwrap();
+                writeln!(assembly, "    cbnz w0, {return_label}").unwrap();
+            }
+            emit_handler_response(
+                assembly,
+                &entity_tag.not_modified.response,
+                program,
+                return_label,
+                index,
+            )?;
+            writeln!(assembly, "    b {return_label}").unwrap();
+            writeln!(assembly, "{normal_label}:").unwrap();
+        }
         if let Some(authorization) = &handler.basic_authorization {
             let authorized_label = format!("Ltinytsx_handler_{index}_basic_auth_authorized");
             for (credential_index, credential) in authorization.credentials.iter().enumerate() {
@@ -644,6 +677,27 @@ fn emit_static_data(assembly: &mut String, program: &Program) -> Result<(), Stri
                 writeln!(
                     assembly,
                     "Ltinytsx_handler_{index}_rejected_header_{header_index}_value:"
+                )
+                .unwrap();
+                emit_bytes(assembly, header.value.as_bytes());
+            }
+        }
+        if let Some(entity_tag) = &handler.entity_tag {
+            writeln!(assembly, ".p2align 3").unwrap();
+            writeln!(assembly, "Ltinytsx_handler_{index}_etag:").unwrap();
+            emit_bytes(assembly, entity_tag.value.as_bytes());
+            for (header_index, header) in entity_tag.not_modified.headers.iter().enumerate() {
+                writeln!(assembly, ".p2align 3").unwrap();
+                writeln!(
+                    assembly,
+                    "Ltinytsx_handler_{index}_not_modified_header_{header_index}_name:"
+                )
+                .unwrap();
+                emit_bytes(assembly, header.name.as_bytes());
+                writeln!(assembly, ".p2align 3").unwrap();
+                writeln!(
+                    assembly,
+                    "Ltinytsx_handler_{index}_not_modified_header_{header_index}_value:"
                 )
                 .unwrap();
                 emit_bytes(assembly, header.value.as_bytes());
