@@ -404,8 +404,11 @@ requires bounded dynamic lookup. `new Map(...)` is deliberately not staged as a
 record. The detailed rules are recorded in `doc/OBJECT_MODEL.md`.
 
 Request query state is neither model: it is a borrowed request view lowered to
-a dedicated predicate. The `prettyJSON()` trace therefore does not turn a query
-string into a compile-time record or introduce a generic dynamic map.
+an allocation-free form-decoding predicate. The `prettyJSON()` trace therefore
+does not turn a query string into a compile-time record or introduce a generic
+dynamic map. Valid percent triplets and `+` are decoded while comparing each
+name; native Hono HTTP coverage proves `%70retty` reaches the same upstream
+middleware branch as `pretty`.
 
 The native WPT runner adds a second, deliberately isolated representation: a
 bounded ordered runtime pair collection used by the complete pinned

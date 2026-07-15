@@ -12,7 +12,7 @@ The current boundary is:
 
 | API | Type contract | Native behavior |
 | --- | --- | --- |
-| `Request` | standard DOM declaration | borrowed method, path, and raw query ABI views; exact query-name presence predicate |
+| `Request` | standard DOM declaration | borrowed method, path, and raw query ABI views; allocation-free form-decoded query-name presence predicate |
 | `Response` | standard DOM declaration | bounded body writer, explicit status, optional HTML/text/JSON content-type IDs; closed `new Response(string or null, { status, headers })` AOT fast path |
 | `Headers` | standard DOM declaration | closed construction/cloning; bounded request-header borrowing and response-header storage with case-insensitive lookup/replacement |
 | `fetch` | standard DOM declaration | one closed URL string; request-time GET; `.status` only; Apple system libcurl transport |
@@ -122,8 +122,10 @@ the application-facing `URLSearchParams` class. It does not currently
 replace malformed UTF-8 with U+FFFD, accept dynamic inputs, expose object
 identity/iteration, or implement general URL parsing and normalization.
 Application-generated Request/URL objects continue to use their separate
-borrowed query view; the next production step is to share the proven form
-decoder with that request path and cover it through Hono HTTP tests.
+borrowed query view rather than constructing this collection. Its query-name
+predicate now applies the same `+` and valid-percent-triplet decoding while
+comparing directly against the generated key without allocation. Native Hono
+HTTP coverage proves `%70retty` selects upstream `prettyJSON()` behavior.
 
 The pinned Hono `poweredBy()` middleware now executes symbolically from upstream
 source. Its post-handler `res.headers.set('X-Powered-By', 'Hono')` effect lowers

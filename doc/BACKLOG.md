@@ -170,7 +170,7 @@ commit message.
       preservation, and live mutation of the selected linked URL cases.
 - [ ] Add invalid UTF-8 replacement semantics and direct upstream parser
       evidence before claiming the complete form-urlencoded parser.
-- [ ] Share the native form decoder with application Request/URL query lookup,
+- [x] Share native form-decoding semantics with application Request query lookup,
       then cover encoded query names through the Hono HTTP path.
 - [ ] Add exceptions, Promise, async/await, and a bounded native task executor.
 - [x] Add the pinned Test262 throw-statement and Error-message cases to the

@@ -35,7 +35,10 @@ whole-program analysis proves a fixed-key specialization.
 Borrowed request state is modeled separately from both. For example,
 `c.req.query('pretty')` produces a request-time query predicate, not a record
 field and not a `Map` lookup. That distinction lets AOT code branch on presence
-without claiming that the query value was known during compilation.
+without claiming that the query value was known during compilation. The
+predicate decodes `+` and valid percent triplets during its allocation-free
+comparison; this adds form semantics to the borrowed view without turning it
+into an owned `URLSearchParams` object.
 
 The WPT-only `URLSearchParams` representation is a third collection model. It
 owns a bounded ordered list of name/value views at native runtime, preserves
