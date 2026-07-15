@@ -27,6 +27,8 @@ commit message.
       the real Bun/Hono runtime with response-contract validation.
 - [x] Record repeated complete-app startup, idle/post-warm-up RSS, throughput,
       and latency samples through concurrency 128.
+- [x] Run the exact pinned JSX SSR source on TinyTSX and Bun with byte-identical
+      root HTML, then record startup, RSS, and load through concurrency 64.
 - [ ] Resolve the Hono response-clone Content-Type difference with direct
       Web-platform evidence and an explicit compatibility decision.
 - [ ] Implement HTTP/1.1 keep-alive and rerun equivalent transport tests.
@@ -125,8 +127,12 @@ commit message.
       percent decoding, and streamed text interpolation.
 - [x] Add terminal `*` route matching, including the base path and deeper
       segments, and compile the basic example's `/api/*` 404 fallback.
-- [ ] Add optional, constrained, and additional multi-segment route patterns plus
+- [ ] Add optional and additional multi-segment route patterns plus
       broader request-dependent handler bodies.
+- [x] Match Hono's `:id{[0-9]+}` route slice natively and specialize a finite
+      closed-record `Array.find` into exact response routes plus a 404 fallback.
+- [ ] Add optional parameters, general constraints, and non-terminal catch-alls;
+      the native constraint backend currently admits only `[0-9]+`.
 - [x] Compose same-method/path handlers into one ordered route and apply closed
       post-`next()` response effects.
 - [x] Lower the request-query-dependent response branch in

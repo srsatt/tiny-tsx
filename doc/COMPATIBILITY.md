@@ -10,7 +10,7 @@ general JavaScript compatibility.
 | Input | Pin | Purpose |
 | --- | --- | --- |
 | Hono | `vendor/hono`, tag `v4.12.30`, commit `b2ae3a2204a48ce15a26448fd746d39745eb1837` | Upstream TypeScript source and Hono behavior |
-| Hono examples | `vendor/hono-examples`, commit `3b0b62875a0e1265763fea1c6388866d5697ef81` | Complete upstream basic application and selected behavior test |
+| Hono examples | `vendor/hono-examples`, commit `3b0b62875a0e1265763fea1c6388866d5697ef81` | Complete upstream basic and JSX SSR applications plus selected behavior contracts |
 | Test262 | `vendor/test262`, commit `f2d1435644797268dca1f7988cad5a4e89ccd8d2` | Allowlisted ECMAScript semantics |
 | WPT | selected source at revision `08e168922e0c0d42250335a40e679fa5123489df` | Web API behavior provenance; not a full submodule |
 
@@ -81,12 +81,37 @@ now builds as one native Mach-O application. This is evidence for that pinned
 program, not a claim that broader route patterns or arbitrary Hono applications
 are supported.
 
+## Exact JSX SSR target
+
+The complete four-module `jsx-ssr` example at the pinned examples revision now
+compiles unchanged. The type-only Hono overlays describe the first-class API
+boundary while runtime evaluation continues through pinned upstream Hono
+source. The supported slice includes:
+
+- typed component props and children across ESM modules;
+- intrinsic attributes, TypeScript-compatible JSX whitespace normalization,
+  escaping, tagged `html` templates, and Unicode;
+- closed records and arrays, captured local closures, `Array.map`, and finite
+  `Array.find` selection by one route parameter;
+- Hono `Context.html()` and `Context.notFound()` responses; and
+- the numeric `:id{[0-9]+}` route constraint.
+
+The evaluator turns the five closed post records into five exact native post
+routes, retains a constrained numeric 404, and emits a Hono-compatible wildcard
+404 for paths outside the constraint. This is finite AOT specialization, not
+dynamic native array storage or a general regular-expression engine. Bun
+fixtures and the native Mach-O E2E require byte-identical root and `/post/1`
+HTML plus both 404 behaviors. Reproducible entrypoints are
+`npm run audit:hono-jsx-ssr`, `npm run try:compile:hono-jsx-ssr`, and
+`npm run build:hono-jsx-ssr-example`.
+
 The basic example's `/entry/:id` shape is the first request-dependent route.
 One closed `:name` segment becomes a native matcher and `c.req.param('name')`
 becomes a request-time text value. Literal and parameter chunks write directly
 to the bounded response buffer, including Hono-compatible decoding of valid
-percent-encoded UTF-8 groups. Optional, constrained, and non-terminal catch-all
-patterns remain outside this named-parameter slice.
+percent-encoded UTF-8 groups. Optional and non-terminal catch-all patterns
+remain outside this named-parameter slice. Constraints are limited to the exact
+`[0-9]+` form used by the pinned JSX SSR example.
 
 Nested application initialization now follows the actual upstream `route()`
 implementation. The compiler constructs the second `book` binding, retains its
@@ -106,7 +131,7 @@ Terminal wildcard matching now covers the exact `/api/*` fallback from the
 basic example. Native tests pin Hono's behavior that the pattern matches `/api`,
 `/api/`, and deeper paths. The generated handler returns Hono's explicit status
 404 and text body; unmatched non-API paths still use the bootstrap 404. Optional
-and constrained patterns remain pending.
+patterns and constraints other than `[0-9]+` remain pending.
 
 Hono registrations that share a method and path now retain handler-chain order.
 The compiler emits only the terminal route and applies earlier post-`next()`

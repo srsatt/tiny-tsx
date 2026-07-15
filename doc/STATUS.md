@@ -251,6 +251,19 @@ produces and serves a native Mach-O executable from the example TSX source.
   type, powered-by, and numeric response-time headers. The same executable also
   serves `/hello` and the installed custom not-found handler. The reproducible
   developer entrypoint is `npm run build:hono-basic-example`.
+- The exact pinned four-module Hono JSX SSR application now compiles unchanged
+  through 31 upstream runtime modules. Closed component props/children,
+  TypeScript JSX whitespace, escaping, tagged `html`, Unicode, captured local
+  closures, `Array.map`, and finite `Array.find` all evaluate at AOT time.
+- The five closed posts become five exact native response routes. The original
+  `:id{[0-9]+}` pattern remains as a numeric 404 fallback, and an emitted Hono
+  wildcard preserves `404 Not Found` for paths outside the constraint. Bun
+  fixtures and a native Mach-O E2E pin byte-identical root and `/post/1` HTML
+  plus missing numeric and nonnumeric 404 behavior.
+- The JSX SSR benchmark validates Bun's 881-byte root response before sampling.
+  On the M5 Max run TinyTSX started in 7.14 ms versus 19.32 ms, used 5.83/5.98
+  MiB idle/warm RSS versus Bun's 42.03/98.19 MiB, and delivered 0.90–1.14x
+  Bun throughput across concurrency 1–64.
 - Async/await entry handlers are accepted only when application initialization
   fully stages them. Native Promise/suspension semantics remain unimplemented.
 - Static `Response` headers lower into a bounded eight-entry native writer with
@@ -284,6 +297,9 @@ rtk npm run try:compile:hono  # emits single-route HIR
 rtk npm run audit:hono-basic
 rtk npm run try:compile:hono-basic  # emits full-package single-route HIR
 rtk npm run build:hono-basic-example
+rtk npm run audit:hono-jsx-ssr
+rtk npm run try:compile:hono-jsx-ssr
+rtk npm run build:hono-jsx-ssr-example
 rtk cargo run -q -p tinytsx -- build tests/compat/hono/basic-smoke.ts --alias hono=vendor/hono/src/index.ts --api hono=tests/compat/hono/api.d.ts --output dist/hono-basic
 rtk npm run test:test262-intake
 rtk npm run test:test262-native
@@ -293,31 +309,26 @@ rtk npm run test:wpt-native
 rtk npm run test:native-api
 rtk python3 benchmarks/scripts/run_static.py --duration 2 --runs 3 --startup-runs 5 --concurrency 1,8,32 --output-prefix benchmarks/results/2026-07-14-m5-max-static-preview
 rtk python3 benchmarks/scripts/run_static.py --workload hono-basic --duration 1 --runs 3 --startup-runs 5 --concurrency 1,8 --output-prefix benchmarks/results/2026-07-15-m5-max-hono-preview
+rtk npm run benchmark:hono-jsx-ssr
 ```
 
 ## Active slice
 
-The pinned complete Hono basic application milestone, three direct
-URLSearchParams WPT files, and form-decoded Hono request-query lookup are
-implemented. Native Test262 now also covers one complete closed
-loop/throw/catch program and one complete bounded numeric `unshift` program. The
-next Web API tracer should add invalid UTF-8 replacement with direct upstream
-parser evidence, or the next Test262 promotion should unlock array/function
-iteration needed by data-driven WPT files. Keep
-fixed-layout records separate from this bounded dynamic pair collection; do not
-infer generic `Map` or application
-`URLSearchParams` support from the WPT runner. Custom Hono `api.d.ts` overlays
-may narrow tested method surfaces but must remain type-only while the compiler
-executes pinned upstream runtime source. The next Test262 case should move from
-syntax intake to native execution only when its complete assertion program is
-implemented.
+The complete Hono basic and JSX SSR milestones are implemented. The next Hono
+slice should preserve request-time (not finite closed) values through escaped
+JSX text and attributes, bounded response writes, and native record projection.
+That creates the first genuinely dynamic SSR benchmark. Keep fixed-layout
+records separate from dynamic `Map`; do not infer generic arrays, maps, regexps,
+or Promise semantics from the finite specialization. In parallel, performance
+work should resolve response-clone content type, add HTTP keep-alive, and then
+implement the fixed worker pool before broader claims.
 
 ## Resume point
 
-Read `README.md`, `doc/COMPATIBILITY.md`, and `doc/BACKLOG.md`. Run
-`npm run audit:hono-basic` for graph-level requirements, then evaluate
-`vendor/hono-examples/basic/src/index.ts` as the complete-source regression.
-Start with invalid-UTF-8 form parsing or the next complete array/function
-Test262 case needed by broader WPT execution. Preserve upstream registration and
-middleware semantics, and run the verification commands recorded here before
-moving an item to verified.
+Read `README.md`, `doc/COMPATIBILITY.md`, `doc/PERFORMANCE.md`, and
+`doc/BACKLOG.md`. Run `npm run test:hono-jsx-reference`,
+`npm run try:compile:hono-jsx-ssr`, and the focused native JSX SSR E2E before
+changing the evaluator. Start with request-time escaped JSX values or HTTP
+keep-alive, depending on whether compatibility or benchmark fidelity is the
+active slice. Preserve upstream Hono source execution and keep finite route
+specialization explicit in diagnostics and documentation.

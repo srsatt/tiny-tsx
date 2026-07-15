@@ -84,12 +84,15 @@ The central product idea is:
 > Bounded request memory.
 > No JavaScript engine.
 
-## Current implementation: native Hono basic milestone
+## Current implementation: native Hono basic and JSX SSR
 
 The repository compiles the complete pinned upstream Hono basic application to
 a native Apple-arm64 Mach-O server. Its 34-module runtime graph lowers to 16
 concrete routes plus installed GET/POST fallbacks without Node.js, Bun, or a
-JavaScript engine. The original static-page vertical slice remains available.
+JavaScript engine. The exact pinned JSX SSR example also compiles through 31
+Hono runtime modules with typed props, closed arrays/records, escaping, Unicode,
+finite route specialization, and native 404s. The original static-page vertical
+slice remains available.
 
 Install the pinned build-time frontend and compile the Rust driver:
 
@@ -153,6 +156,18 @@ The root response is the upstream contract: status 200, body `Hono!!`,
 `X-Response-Time` header. The native E2E also checks `/hello` and the installed
 not-found handler from that same complete executable.
 
+Build and run the exact pinned Hono JSX SSR example:
+
+```bash
+npm run build:hono-jsx-ssr-example
+./dist/hono-jsx-ssr-example
+curl -i http://127.0.0.1:3000/
+curl -i http://127.0.0.1:3000/post/1
+```
+
+The Bun reference and native E2E require byte-identical root and post HTML and
+the same `404 Not Found` behavior for `/post/99` and `/post/nope`.
+
 Run all implemented checks, including the native HTTP end-to-end test:
 
 ```bash
@@ -167,7 +182,9 @@ allowlisted Test262, Hono, Web Platform Test, and native host API behavior:
 ```bash
 npm run audit:hono
 npm run audit:hono-basic
+npm run audit:hono-jsx-ssr
 npm run test:hono-intake
+npm run test:hono-jsx-reference
 npm run test:test262-intake
 npm run test:test262-native
 npm run test:wpt-intake
@@ -188,6 +205,8 @@ server is available separately:
 
 ```bash
 npm run benchmark:static
+npm run benchmark:hono
+npm run benchmark:hono-jsx-ssr
 ```
 
 The harness verifies equivalent status, content type, content length, and body,
