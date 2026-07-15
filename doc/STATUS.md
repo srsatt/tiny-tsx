@@ -260,6 +260,10 @@ produces and serves a native Mach-O executable from the example TSX source.
   wildcard preserves `404 Not Found` for paths outside the constraint. Bun
   fixtures and a native Mach-O E2E pin byte-identical root and `/post/1` HTML
   plus missing numeric and nonnumeric 404 behavior.
+- A separate request-time Hono JSX route now carries a form-decoded query value
+  and closed fallback through nested component props. Native HIR distinguishes
+  raw nested markup from escaped dynamic text, and the arena writer matches Bun
+  for missing, empty, and encoded `&<>"'` values in text and attributes.
 - The JSX SSR benchmark validates Bun's 881-byte root response before sampling.
   On the M5 Max run TinyTSX started in 7.14 ms versus 19.32 ms, used 5.83/5.98
   MiB idle/warm RSS versus Bun's 42.03/98.19 MiB, and delivered 0.90–1.14x
@@ -373,8 +377,8 @@ rtk npm run benchmark:hono-jsx-ssr
 
 The reusable native worker pool now drives bounded keep-alive HTTP with per-worker
 arenas and wire-level concurrency, isolation, overload, OOM, recovery, and
-1/2/4/8 scaling evidence. The active compatibility slice is genuinely
-request-time Hono JSX; connection fairness remains a measured optimization
+1/2/4/8 scaling evidence. The active compatibility slice is Hono response
+streaming; connection fairness remains a measured optimization
 target. Keep fixed-layout records separate from dynamic `Map`.
 
 ## Resume point
@@ -382,7 +386,7 @@ target. Keep fixed-layout records separate from dynamic `Map`.
 Read `doc/WORKERS.md`, `doc/PERFORMANCE.md`, and `doc/BACKLOG.md`. Run
 `rtk cargo test -p tinytsx-runtime-worker` and
 `rtk cargo test -p tinytsx worker_pool_serves_in_parallel_and_recovers_after_saturation`.
-Add a pinned Hono JSX route that renders unbounded request query/header data at
-request time through escaped text and quoted attributes into the reusable arena.
-Require exact Bun/native response equivalence before adding it to the benchmark
-matrix. Streaming follows that dynamic render slice, before AI SDK intake.
+Compile one pinned upstream `hono/streaming` `streamText()` route into bounded
+HTTP/1.1 chunks. Require Bun-equivalent body bytes and wire evidence that the
+native server does not first collect the complete body. Benchmark dynamic JSX
+and streaming before Worker syntax sugar and AI SDK intake.

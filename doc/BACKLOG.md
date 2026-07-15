@@ -236,8 +236,12 @@ commit message.
       responses, and persist a repeated exploratory comparison.
 - [ ] Repeat the exact-source comparison once request-dependent handlers and
       keep-alive HTTP are available.
-- [ ] Dynamic component props and request query lookup.
-- [ ] HTML text and quoted-attribute escaping.
+- [x] Lower request query values and closed fallbacks through dynamic component
+      props into request-time native JSX.
+- [x] Match Bun/Hono HTML escaping for decoded request values in JSX text and
+      quoted attributes, including nested component markup.
+- [ ] Compile pinned upstream `hono/streaming` `streamText()` and emit bounded
+      HTTP/1.1 chunks without collecting the whole body.
 - [x] Fixed request arena and recoverable request OOM.
 - [x] Fixed native worker pool and bounded dispatch queue.
 - [ ] Add request parsing and response equivalence cases beyond the static page.

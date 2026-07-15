@@ -105,6 +105,15 @@ HTML plus both 404 behaviors. Reproducible entrypoints are
 `npm run audit:hono-jsx-ssr`, `npm run try:compile:hono-jsx-ssr`, and
 `npm run build:hono-jsx-ssr-example`.
 
+Request-time JSX is now a separate executable compatibility slice rather than
+an inference from that closed SSR page. `c.req.query('name') ?? 'World'` flows
+through a nested component into both quoted-attribute and text positions. HIR
+retains the lookup, fallback, and escaping mode; the native arena writer
+form-decodes the selected value and escapes `&`, `<`, `>`, `"`, and `'`. Bun
+reference tests and native HTTP E2E require byte-identical output for missing,
+empty, and encoded hostile values. This proves bounded dynamic JSX rendering,
+but not yet incrementally streamed responses.
+
 The basic example's `/entry/:id` shape is the first request-dependent route.
 One closed `:name` segment becomes a native matcher and `c.req.param('name')`
 becomes a request-time text value. Literal and parameter chunks write directly

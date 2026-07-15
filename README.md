@@ -92,7 +92,9 @@ concrete routes plus installed GET/POST fallbacks without Node.js, Bun, or a
 JavaScript engine. The exact pinned JSX SSR example also compiles through 31
 Hono runtime modules with typed props, closed arrays/records, escaping, Unicode,
 finite route specialization, and native 404s. The original static-page vertical
-slice remains available.
+slice remains available. A separate request-time JSX route also lowers decoded
+query data through nested component props and emits Bun-equivalent escaping
+from the bounded request arena; response streaming is the next Hono slice.
 
 Install the pinned build-time frontend and compile the Rust driver:
 
