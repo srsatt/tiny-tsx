@@ -1,9 +1,10 @@
 use super::{
     BAD_REQUEST, CONTENT_TYPE_HTML, CONTENT_TYPE_NONE, CONTENT_TYPE_TEXT, INTERNAL_ERROR,
-    MAX_RESPONSE_HEADERS, OK, REQUEST_OOM, TinyHeader, TinyResponseWriter, TinyStringView, request,
-    request_with_headers, tinytsx_html_write_path_segment, tinytsx_html_write_request_header,
-    tinytsx_html_write_static, tinytsx_request_method_equals, tinytsx_request_path_equals,
-    tinytsx_request_path_matches, tinytsx_request_query_has, tinytsx_response_begin,
+    MAX_DYNAMIC_HEADER_BYTES, MAX_RESPONSE_HEADERS, OK, REQUEST_OOM, TinyHeader,
+    TinyResponseWriter, TinyStringView, request, request_with_headers,
+    tinytsx_html_write_path_segment, tinytsx_html_write_request_header, tinytsx_html_write_static,
+    tinytsx_request_method_equals, tinytsx_request_path_equals, tinytsx_request_path_matches,
+    tinytsx_request_query_has, tinytsx_response_begin, tinytsx_response_header_elapsed_millis,
     tinytsx_response_header_static, write_console_error,
 };
 
@@ -303,6 +304,30 @@ fn response_headers_set_case_insensitively() {
 }
 
 #[test]
+fn response_headers_format_elapsed_milliseconds_in_writer_storage() {
+    let mut output = [];
+    let mut writer = writer(&mut output);
+
+    let status = unsafe {
+        tinytsx_response_header_elapsed_millis(
+            &mut writer,
+            b"X-Response-Time".as_ptr(),
+            15,
+            1_000,
+            1_042,
+            b"ms".as_ptr(),
+            2,
+        )
+    };
+
+    assert_eq!(status, OK);
+    assert_eq!(writer.header_count, 1);
+    assert_eq!(view(&writer.headers[0].name), b"X-Response-Time");
+    assert_eq!(view(&writer.headers[0].value), b"42ms");
+    assert_eq!(writer.dynamic_header_cursor, 4);
+}
+
+#[test]
 fn response_headers_reject_invalid_names_and_values() {
     let mut output = [];
     let mut writer = writer(&mut output);
@@ -340,6 +365,8 @@ fn writer(output: &mut [u8]) -> TinyResponseWriter {
         content_type: CONTENT_TYPE_HTML,
         header_count: 0,
         headers: [empty_header(); MAX_RESPONSE_HEADERS],
+        dynamic_header_cursor: 0,
+        dynamic_header_bytes: [0; MAX_DYNAMIC_HEADER_BYTES],
     }
 }
 

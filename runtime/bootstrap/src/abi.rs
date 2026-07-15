@@ -1,6 +1,7 @@
 use std::{
     io::{self, Write},
     ptr, slice,
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 pub const OK: u32 = 0;
@@ -16,6 +17,7 @@ pub const CONTENT_TYPE_TEXT: u16 = 2;
 pub const CONTENT_TYPE_JSON: u16 = 3;
 pub const CONTENT_TYPE_RESPONSE_TEXT: u16 = 4;
 pub const MAX_RESPONSE_HEADERS: usize = 8;
+pub const MAX_DYNAMIC_HEADER_BYTES: usize = 256;
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -75,6 +77,8 @@ pub struct TinyResponseWriter {
     pub content_type: u16,
     pub header_count: usize,
     pub headers: [TinyHeader; MAX_RESPONSE_HEADERS],
+    pub dynamic_header_cursor: usize,
+    pub dynamic_header_bytes: [u8; MAX_DYNAMIC_HEADER_BYTES],
 }
 
 #[cfg(feature = "generated")]
@@ -489,14 +493,100 @@ pub unsafe extern "C" fn tinytsx_response_header_static(
     }
     // SAFETY: Generated code passes the writer supplied by this runtime.
     let writer = unsafe { &mut *writer };
+    set_response_header(
+        writer,
+        TinyStringView {
+            ptr: name,
+            len: name_len,
+        },
+        TinyStringView {
+            ptr: value,
+            len: value_len,
+        },
+        name_bytes,
+    )
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn tinytsx_date_now_millis() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |duration| duration.as_millis() as u64)
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tinytsx_response_header_elapsed_millis(
+    writer: *mut TinyResponseWriter,
+    name: *const u8,
+    name_len: usize,
+    started_at: u64,
+    ended_at: u64,
+    suffix: *const u8,
+    suffix_len: usize,
+) -> u32 {
+    if writer.is_null() || name.is_null() || name_len == 0 || (suffix.is_null() && suffix_len != 0)
+    {
+        return BAD_REQUEST;
+    }
+    // SAFETY: Generated code passes immutable static ranges for this call.
+    let name_bytes = unsafe { slice::from_raw_parts(name, name_len) };
+    let suffix_bytes = unsafe { slice::from_raw_parts(suffix, suffix_len) };
+    if !valid_header_name(name_bytes) || !valid_header_value(suffix_bytes) {
+        return BAD_REQUEST;
+    }
+    // SAFETY: Generated code passes the writer supplied by this runtime.
+    let writer = unsafe { &mut *writer };
+    let mut digits = [0_u8; 20];
+    let digits = decimal_bytes(ended_at.saturating_sub(started_at), &mut digits);
+    let value_len = digits.len() + suffix_bytes.len();
+    if value_len > MAX_DYNAMIC_HEADER_BYTES - writer.dynamic_header_cursor {
+        writer.status = REQUEST_OOM;
+        return REQUEST_OOM;
+    }
+    let start = writer.dynamic_header_cursor;
+    let end = start + value_len;
+    writer.dynamic_header_bytes[start..start + digits.len()].copy_from_slice(digits);
+    writer.dynamic_header_bytes[start + digits.len()..end].copy_from_slice(suffix_bytes);
+    writer.dynamic_header_cursor = end;
+    let value = TinyStringView {
+        // SAFETY: `start` is within the fixed writer-owned storage checked above.
+        ptr: unsafe { writer.dynamic_header_bytes.as_ptr().add(start) },
+        len: value_len,
+    };
+    set_response_header(
+        writer,
+        TinyStringView {
+            ptr: name,
+            len: name_len,
+        },
+        value,
+        name_bytes,
+    )
+}
+
+fn decimal_bytes(mut value: u64, storage: &mut [u8; 20]) -> &[u8] {
+    let mut cursor = storage.len();
+    loop {
+        cursor -= 1;
+        storage[cursor] = b'0' + (value % 10) as u8;
+        value /= 10;
+        if value == 0 {
+            return &storage[cursor..];
+        }
+    }
+}
+
+fn set_response_header(
+    writer: &mut TinyResponseWriter,
+    name: TinyStringView,
+    value: TinyStringView,
+    name_bytes: &[u8],
+) -> u32 {
     for header in &mut writer.headers[..writer.header_count] {
         // SAFETY: Existing header views were accepted from generated static data.
         let existing = unsafe { slice::from_raw_parts(header.name.ptr, header.name.len) };
         if existing.eq_ignore_ascii_case(name_bytes) {
-            header.value = TinyStringView {
-                ptr: value,
-                len: value_len,
-            };
+            header.value = value;
             return OK;
         }
     }
@@ -504,16 +594,7 @@ pub unsafe extern "C" fn tinytsx_response_header_static(
         writer.status = REQUEST_OOM;
         return REQUEST_OOM;
     }
-    writer.headers[writer.header_count] = TinyHeader {
-        name: TinyStringView {
-            ptr: name,
-            len: name_len,
-        },
-        value: TinyStringView {
-            ptr: value,
-            len: value_len,
-        },
-    };
+    writer.headers[writer.header_count] = TinyHeader { name, value };
     writer.header_count += 1;
     OK
 }
@@ -569,6 +650,8 @@ pub fn render(request: &TinyRequest, capacity: usize) -> RenderedResponse {
         content_type: CONTENT_TYPE_HTML,
         header_count: 0,
         headers: [EMPTY_HEADER; MAX_RESPONSE_HEADERS],
+        dynamic_header_cursor: 0,
+        dynamic_header_bytes: [0; MAX_DYNAMIC_HEADER_BYTES],
     };
 
     // SAFETY: The generated handler follows ABI.md and only uses these values
