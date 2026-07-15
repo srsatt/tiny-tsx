@@ -520,7 +520,7 @@ test("preserves response timing when prettyJSON clones a conditional body", () =
   );
 });
 
-test("executes the closed upstream basicAuth factory before request authentication", () => {
+test("retains the closed upstream basicAuth factory as a request guard", () => {
   const entry = path.join(repository, "tests/compat/hono/basic-auth-smoke.ts");
   const options = {
     aliases: {
@@ -541,8 +541,41 @@ test("executes the closed upstream basicAuth factory before request authenticati
 
   const result = evaluateApplicationInitialization(graph, application);
 
-  assert.equal(result?.issues.length, 2);
-  assert.ok(result?.issues.every(issue => issue.span.file.endsWith("/utils/basic-auth.ts")));
+  assert.deepEqual(result?.issues, []);
+  const response = result?.routes.find(route => route.method === "GET")?.response;
+  assert.deepEqual(
+    (response as unknown as {basicAuthorization?: unknown})?.basicAuthorization,
+    {
+      credentials: [{username: "hono", password: "acoolproject"}],
+      rejected: {
+        kind: "text",
+        body: "Unauthorized",
+        status: 401,
+        contentType: "",
+        headers: [{name: "WWW-Authenticate", value: 'Basic realm="Secure Area"'}],
+      },
+    },
+  );
+
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    ...options,
+  });
+  assert.deepEqual(
+    (hir.handlers[0] as unknown as {basicAuthorization?: unknown}).basicAuthorization,
+    {
+      credentials: [{username: "hono", password: "acoolproject"}],
+      rejected: {
+        headers: [{name: "WWW-Authenticate", value: 'Basic realm="Secure Area"'}],
+        response: {
+          kind: "text",
+          value: {kind: "stringLiteral", string: 1, span: hir.handlers[0]?.span},
+          status: 401,
+          contentType: "",
+        },
+      },
+    },
+  );
 });
 
 test("lowers upstream prettyJSON into a query-conditional native response", () => {

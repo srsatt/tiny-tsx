@@ -134,6 +134,7 @@ export interface Handler {
   headers?: StaticHeader[];
   elapsedHeaders?: ElapsedHeader[];
   stderr?: number[];
+  basicAuthorization?: BasicAuthorization;
   response: HandlerResponse;
   span: SourceSpan;
 }
@@ -146,6 +147,23 @@ export interface StaticHeader {
 export interface ElapsedHeader {
   name: string;
   suffix: string;
+}
+
+export interface BasicAuthorization {
+  credentials: BasicCredential[];
+  rejected: GuardedResponse;
+}
+
+export interface BasicCredential {
+  username: string;
+  password: string;
+}
+
+export interface GuardedResponse {
+  headers?: StaticHeader[];
+  elapsedHeaders?: ElapsedHeader[];
+  stderr?: number[];
+  response: HandlerResponse;
 }
 
 export interface HirProgram {

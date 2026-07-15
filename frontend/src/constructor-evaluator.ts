@@ -66,6 +66,12 @@ export interface EvaluatedResponse {
   contentType: string;
   headers?: Array<{name: string; value: ResponseHeaderValue}>;
   stderr?: string[];
+  basicAuthorization?: EvaluatedBasicAuthorization;
+}
+
+export interface EvaluatedBasicAuthorization {
+  credentials: Array<{username: string; password: string}>;
+  rejected: EvaluatedResponse;
 }
 
 export interface ApplicationInitializationEvaluation extends ConstructorEvaluation {
@@ -322,6 +328,12 @@ function evaluateRouteHandler(
   if (response.kind === "thrown" && errorHandler !== undefined) {
     response = invokeClosure(evaluator, errorHandler, [response.value, context], context);
   }
+  let basicAuthorization: {
+    credentials: Array<{username: string; password: string}>;
+    rejected: Value & {kind: "response"};
+    rejectedStderr: string[];
+    protectedHeaders: Set<string>;
+  } | undefined;
   if (response.kind === "response") {
     for (const middlewareHandler of [...middleware].reverse()) {
       const middlewareContext: Value & {kind: "instance"} = {kind: "instance", fields: new Map()};
@@ -339,6 +351,24 @@ function evaluateRouteHandler(
       });
       middlewareContext.fields.set("#res", cloneResponse(response));
       middlewareContext.fields.set("finalized", {kind: "boolean", value: true});
+      const authorization = closedBasicAuthorization(middlewareHandler);
+      if (authorization !== undefined) {
+        const rejected = evaluateBasicAuthorizationRejection(
+          evaluator,
+          middlewareContext,
+          authorization,
+          errorHandler,
+        );
+        if (rejected !== undefined && basicAuthorization === undefined) {
+          basicAuthorization = {
+            credentials: authorization.credentials,
+            rejected: rejected.response,
+            rejectedStderr: rejected.stderr,
+            protectedHeaders: new Set(response.headers.keys()),
+          };
+          continue;
+        }
+      }
       const issueCount = evaluator.issues.length;
       invokeClosure(
         evaluator,
@@ -357,6 +387,13 @@ function evaluateRouteHandler(
     }
   }
   if (response.kind !== "response") return undefined;
+  if (basicAuthorization !== undefined) {
+    for (const [name, header] of response.headers) {
+      if (!basicAuthorization.protectedHeaders.has(name)) {
+        basicAuthorization.rejected.headers.set(name, header);
+      }
+    }
+  }
   const headers = [...response.headers.values()].filter(header =>
     header.name.toLowerCase() !== "content-type"
   );
@@ -371,6 +408,116 @@ function evaluateRouteHandler(
     contentType: response.contentType,
     ...(headers.length === 0 ? {} : {headers}),
     ...(stderrLines.length === 0 ? {} : {stderr: stderrLines}),
+    ...(basicAuthorization === undefined
+      ? {}
+      : {
+        basicAuthorization: {
+          credentials: basicAuthorization.credentials,
+          rejected: evaluatedResponse(
+            basicAuthorization.rejected,
+            basicAuthorization.rejectedStderr,
+          ),
+        },
+      }),
+  };
+}
+
+interface ClosedBasicAuthorization {
+  credentials: Array<{username: string; password: string}>;
+  realm: string;
+  invalidUserMessage: string;
+}
+
+function closedBasicAuthorization(
+  middleware: Value & {kind: "closure"},
+): ClosedBasicAuthorization | undefined {
+  const module = middleware.module.path.replaceAll("\\", "/");
+  if (
+    !module.endsWith("/middleware/basic-auth/index.ts")
+    || !ts.isFunctionExpression(middleware.expression)
+    || middleware.expression.name?.text !== "basicAuth"
+  ) {
+    return undefined;
+  }
+  const users = middleware.environment.get("users");
+  const options = middleware.environment.get("options");
+  if (users?.kind !== "array" || options?.kind !== "record") return undefined;
+  const credentials = users.items.flatMap(user => {
+    if (user.kind !== "record") return [];
+    const username = user.fields.get("username");
+    const password = user.fields.get("password");
+    return username?.kind === "string" && password?.kind === "string"
+      ? [{username: username.value, password: password.value}]
+      : [];
+  });
+  const realm = options.fields.get("realm");
+  const invalidUserMessage = options.fields.get("invalidUserMessage");
+  return credentials.length === users.items.length
+    && realm?.kind === "string"
+    && invalidUserMessage?.kind === "string"
+    ? {
+      credentials,
+      realm: realm.value,
+      invalidUserMessage: invalidUserMessage.value,
+    }
+    : undefined;
+}
+
+function evaluateBasicAuthorizationRejection(
+  evaluator: Evaluator,
+  context: Value & {kind: "instance"},
+  authorization: ClosedBasicAuthorization,
+  errorHandler: Value & {kind: "closure"} | undefined,
+): {response: Value & {kind: "response"}; stderr: string[]} | undefined {
+  if (errorHandler !== undefined) {
+    const response = invokeClosure(
+      evaluator,
+      errorHandler,
+      [{kind: "error", name: "Error", message: ""}, context],
+      context,
+    );
+    if (response.kind !== "response") return undefined;
+    return {response, stderr: stderrLines(context)};
+  }
+  return {
+    response: {
+      kind: "response",
+      body: authorization.invalidUserMessage,
+      status: 401,
+      contentType: "",
+      headers: new Map([[
+        "www-authenticate",
+        {
+          name: "WWW-Authenticate",
+          value: `Basic realm="${authorization.realm.replaceAll('"', '\\"')}"`,
+        },
+      ]]),
+    },
+    stderr: [],
+  };
+}
+
+function stderrLines(context: Value & {kind: "instance"}): string[] {
+  const stderr = context.fields.get("#stderr");
+  return stderr?.kind === "array"
+    ? stderr.items.flatMap(value => value.kind === "string" ? [value.value] : [])
+    : [];
+}
+
+function evaluatedResponse(
+  response: Value & {kind: "response"},
+  stderr: string[],
+): EvaluatedResponse {
+  const headers = [...response.headers.values()].filter(header =>
+    header.name.toLowerCase() !== "content-type"
+  );
+  return {
+    kind: "text",
+    body: response.body,
+    status: response.status,
+    contentType: response.contentType,
+    ...(headers.length === 0 ? {} : {headers}),
+    ...(stderr.length === 0 ? {} : {stderr}),
   };
 }
 

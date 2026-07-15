@@ -4,6 +4,8 @@ import {analyzeApplicationEntry} from "./application-entry.js";
 import {
   evaluateApplicationConstructor,
   evaluateApplicationInitialization,
+  type EvaluatedBasicAuthorization,
+  type EvaluatedResponse,
   type ApplicationInitializationEvaluation,
 } from "./constructor-evaluator.js";
 import {lowerStagedConstants} from "./constant-lowering.js";
@@ -11,6 +13,7 @@ import {CompileFailure, fromTypeScript, spanOf, tinyError} from "./diagnostics.j
 import {FunctionLowerer} from "./function-lowering.js";
 import type {
   Component,
+  BasicAuthorization,
   ElapsedHeader,
   Handler,
   HirProgram,
@@ -231,14 +234,7 @@ function lowerApplicationInitialization(
   }
   if (emittedRoutes.some(route =>
     route.response === undefined
-    || route.response.kind !== "text"
-    || !isLowerableResponseBody(route.response.body)
-    || ![
-      "",
-      "text/plain; charset=UTF-8",
-      "text/plain;charset=UTF-8",
-      "application/json",
-    ].includes(route.response.contentType)
+    || !isLowerableEvaluatedResponse(route.response)
   ) || loweredHeaders.some(headers => headers === undefined)) {
     return undefined;
   }
@@ -249,10 +245,14 @@ function lowerApplicationInitialization(
     const response = route.response!;
     const value = lowerResponseBody(response.body, route.path, strings, span);
     const responseHeaders = loweredHeaders[index]!;
+    const basicAuthorization = response.basicAuthorization === undefined
+      ? undefined
+      : lowerBasicAuthorization(response.basicAuthorization, route.path, strings, span);
     return {
       method: route.method as "GET" | "POST",
       path: route.path,
       ...responseHeaders,
+      ...(basicAuthorization === undefined ? {} : {basicAuthorization}),
       ...(response.stderr === undefined
         ? {}
         : {stderr: response.stderr.map(line => strings.intern(line))}),
@@ -293,6 +293,60 @@ function lowerApplicationInitialization(
       0),
     },
   };
+}
+
+function lowerBasicAuthorization(
+  authorization: EvaluatedBasicAuthorization,
+  routePath: string,
+  strings: StringTable,
+  span: SourceSpan,
+): BasicAuthorization {
+  const rejected = authorization.rejected;
+  const headers = lowerResponseHeaders(rejected.headers);
+  if (headers === undefined) {
+    throw new Error("validated Basic Authorization rejection headers did not lower");
+  }
+  return {
+    credentials: authorization.credentials,
+    rejected: {
+      ...headers,
+      ...(rejected.stderr === undefined
+        ? {}
+        : {stderr: rejected.stderr.map(line => strings.intern(line))}),
+      response: {
+        kind: "text",
+        value: lowerResponseBody(rejected.body, routePath, strings, span),
+        ...(rejected.status === 200 ? {} : {status: rejected.status}),
+        contentType: rejected.contentType as
+          | ""
+          | "text/plain; charset=UTF-8"
+          | "text/plain;charset=UTF-8"
+          | "application/json",
+      },
+    },
+  };
+}
+
+function isLowerableEvaluatedResponse(response: EvaluatedResponse): boolean {
+  const contentType = [
+    "",
+    "text/plain; charset=UTF-8",
+    "text/plain;charset=UTF-8",
+    "application/json",
+  ].includes(response.contentType);
+  if (
+    response.kind !== "text"
+    || !contentType
+    || !isLowerableResponseBody(response.body)
+    || lowerResponseHeaders(response.headers) === undefined
+  ) {
+    return false;
+  }
+  const authorization = response.basicAuthorization;
+  return authorization === undefined
+    || (authorization.credentials.length > 0
+      && authorization.rejected.basicAuthorization === undefined
+      && isLowerableEvaluatedResponse(authorization.rejected));
 }
 
 function lowerResponseHeaders(
