@@ -143,6 +143,20 @@ function resolveExport(
       }
       return resolveLocal(module, importedName, modules, active);
     }
+    if (
+      ts.isExportDeclaration(statement)
+      && statement.exportClause === undefined
+      && statement.moduleSpecifier !== undefined
+      && ts.isStringLiteral(statement.moduleSpecifier)
+    ) {
+      const target = importedModule(module, statement.moduleSpecifier.text, modules);
+      const resolved = target === undefined
+        ? undefined
+        : resolveExport(target, exportedName, modules, active);
+      if (resolved !== undefined) {
+        return resolved;
+      }
+    }
   }
   return undefined;
 }

@@ -9,5 +9,9 @@
     "skipLibCheck": false,
     "types": ["node"]
   },
-  "include": ["generate-text-smoke.ts", "hono-generate-text-smoke.ts"]
+  "include": [
+    "generate-text-smoke.ts",
+    "hono-generate-text-smoke.ts",
+    "hono-invalid-prompt-smoke.ts"
+  ]
 }

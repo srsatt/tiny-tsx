@@ -12,7 +12,25 @@ const manifest = JSON.parse(readFileSync(
 ));
 
 test("compiles deterministic AI SDK text through the pinned Hono runtime", () => {
-  const hir = compileEntry(path.join(repository, "tests/compat/ai/hono-generate-text-smoke.ts"), {
+  const hir = compileAiEntry("hono-generate-text-smoke.ts");
+
+  const route = hir.handlers.find(handler => handler.path === "/ai");
+  assert.equal(route?.response.kind, "text");
+  assert.equal(route?.response.kind === "text" ? route.response.value.kind : undefined, "stringLiteral");
+  assert.equal(staticText(hir, route), "Hello from deterministic AI");
+});
+
+test("compiles invalid AI SDK prompt handling through the pinned Hono runtime", () => {
+  const hir = compileAiEntry("hono-invalid-prompt-smoke.ts");
+
+  const route = hir.handlers.find(handler => handler.path === "/ai-invalid");
+  assert.equal(route?.response.kind, "text");
+  assert.equal(route?.response.kind === "text" ? route.response.status : undefined, 500);
+  assert.match(staticText(hir, route), /prompt and messages cannot be defined at the same time/);
+});
+
+function compileAiEntry(entry) {
+  return compileEntry(path.join(repository, "tests/compat/ai", entry), {
     sdkPath: path.join(repository, "sdk/index.d.ts"),
     aliases: {
       ...absoluteAliases(manifest.runtimeAliases),
@@ -32,15 +50,13 @@ test("compiles deterministic AI SDK text through the pinned Hono runtime", () =>
       "@ai-sdk/provider-utils": "tests/compat/ai/node_modules/@ai-sdk/provider-utils/dist/index.d.ts",
     }),
   });
+}
 
-  const route = hir.handlers.find(handler => handler.path === "/ai");
-  assert.equal(route?.response.kind, "text");
-  assert.equal(route?.response.kind === "text" ? route.response.value.kind : undefined, "stringLiteral");
-  const string = route?.response.kind === "text" && route.response.value.kind === "stringLiteral"
-    ? hir.staticStrings[route.response.value.string]?.value
-    : undefined;
-  assert.equal(string, "Hello from deterministic AI");
-});
+function staticText(hir, route) {
+  return route?.response.kind === "text" && route.response.value.kind === "stringLiteral"
+    ? hir.staticStrings[route.response.value.string]?.value ?? ""
+    : "";
+}
 
 function absoluteAliases(aliases) {
   return Object.fromEntries(Object.entries(aliases).map(([name, target]) => [

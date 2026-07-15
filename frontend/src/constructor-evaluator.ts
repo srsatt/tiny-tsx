@@ -818,6 +818,26 @@ function executeClass(
       )
       : arguments_;
     executeClass(evaluator, base, superArguments, instance);
+  } else if (
+    resolved.declaration.heritageClauses?.some(clause =>
+      clause.token === ts.SyntaxKind.ExtendsKeyword
+      && clause.types.some(type => ts.isIdentifier(type.expression) && type.expression.text === "Error")
+    ) === true
+  ) {
+    const message = superStatement !== undefined
+      && ts.isExpressionStatement(superStatement)
+      && ts.isCallExpression(superStatement.expression)
+      && superStatement.expression.arguments[0] !== undefined
+      ? evaluate(
+        evaluator,
+        superStatement.expression.arguments[0],
+        resolved.module,
+        environment,
+        instance,
+      )
+      : {kind: "string", value: ""} as const;
+    instance.fields.set("name", {kind: "string", value: "Error"});
+    instance.fields.set("message", message);
   }
   initializeFields(evaluator, resolved, environment, instance);
   for (const statement of statements) {
@@ -959,6 +979,9 @@ function executeStatement(
       const value = declaration.initializer === undefined
         ? UNDEFINED
         : evaluate(evaluator, declaration.initializer, module, environment, instance);
+      if (value.kind === "thrown") {
+        return {returned: true, value};
+      }
       bind(evaluator, declaration.name, value, module, environment, instance);
     }
     return continued();
@@ -1100,20 +1123,23 @@ function executeStatement(
     )
   ) {
     if (expression.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
-      assign(evaluator, expression.left, evaluate(
+      const value = evaluate(
         evaluator,
         expression.right,
         module,
         environment,
         instance,
-      ), module, environment, instance);
+      );
+      if (value.kind === "thrown") return {returned: true, value};
+      assign(evaluator, expression.left, value, module, environment, instance);
     } else {
       evaluate(evaluator, expression, module, environment, instance);
     }
     return continued();
   }
   if (ts.isAwaitExpression(expression)) {
-    evaluate(evaluator, expression.expression, module, environment, instance);
+    const value = evaluate(evaluator, expression.expression, module, environment, instance);
+    if (value.kind === "thrown") return {returned: true, value};
     return continued();
   }
   if (ts.isCallExpression(expression)) {
@@ -1132,6 +1158,7 @@ function executeStatement(
       return continued();
     }
     const result = evaluate(evaluator, expression, module, environment, instance);
+    if (result.kind === "thrown") return {returned: true, value: result};
     if (result.kind !== "unknown") {
       return continued();
     }
