@@ -1,4 +1,4 @@
-import app from "../../tests/compat/hono/basic-smoke.ts";
+import app from "../../vendor/hono-examples/basic/src/index.ts";
 
 const port = Number.parseInt(Bun.env.TINYTSX_BENCH_PORT ?? "3000", 10);
 

@@ -34,6 +34,9 @@ def summarize(raw: dict[str, Any]) -> dict[str, Any]:
             **target,
             "startupMedianMs": statistics.median(target["startupSamplesMs"]),
             "idleRssMedianBytes": int(statistics.median(target["idleRssSamplesBytes"])),
+            "postWarmupRssMedianBytes": int(
+                statistics.median(target["postWarmupRssSamplesBytes"])
+            ),
             "throughput": throughput,
         }
 
@@ -75,13 +78,23 @@ def render_markdown(result: dict[str, Any]) -> str:
         "",
         "## Footprint and startup",
         "",
-        "| Target | Startup-to-first-response median | Idle RSS median | App artifact | Runtime executable |",
-        "| --- | ---: | ---: | ---: | ---: |",
+        "| Target | Startup-to-first-response median | Idle RSS median | Post-warm-up RSS median | App artifact | Runtime executable |",
+        "| --- | ---: | ---: | ---: | ---: | ---: |",
         _footprint_row("TinyTSX", tiny),
         _footprint_row("Bun", bun),
         "",
         "Bun's application script and runtime executable are reported separately; the "
         "runtime is required in deployment but may be shared by multiple applications.",
+        "Idle RSS is sampled after one correctness request; post-warm-up RSS is sampled "
+        "after one second at maximum concurrency.",
+        "",
+        "## Response contract",
+        "",
+        f"- Status: {result['correctness']['status']}",
+        f"- Body: `{result['correctness']['bodyUtf8']}` ({result['correctness']['contentLength']} bytes)",
+        f"- TinyTSX Content-Type: `{result['correctness']['contentTypes']['tinytsx']}`",
+        f"- Bun Content-Type: `{result['correctness']['contentTypes']['bun']}`",
+        *[f"- Difference: {difference}" for difference in result.get("responseDifferences", [])],
         "",
         "## Throughput and latency",
         "",
@@ -109,7 +122,7 @@ def render_markdown(result: dict[str, Any]) -> str:
             "",
             "- TinyTSX currently has one worker and always closes the connection.",
             "- The benchmark client and server share the same machine.",
-            "- This workload covers one closed response and does not exercise dynamic application logic.",
+            *[f"- {limitation}" for limitation in result.get("limitations", [])],
             "- Power mode and unrelated background activity are not controlled by the harness.",
             "",
         ]
@@ -121,6 +134,7 @@ def _footprint_row(label: str, target: dict[str, Any]) -> str:
     return (
         f"| {label} | {target['startupMedianMs']:.2f} ms | "
         f"{_mib(target['idleRssMedianBytes']):.2f} MiB | "
+        f"{_mib(target['postWarmupRssMedianBytes']):.2f} MiB | "
         f"{_size(target['artifactBytes'])} | "
         f"{_size(target['runtimeExecutableBytes'])} |"
     )

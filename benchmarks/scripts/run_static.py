@@ -24,7 +24,11 @@ WORKLOADS = {
     "static-page": {
         "body": b"<html><body><h1>Hello from TinyTSX</h1></body></html>",
         "content_type": "text/html; charset=utf-8",
+        "headers": {},
+        "numeric_headers": [],
+        "path": "/",
         "scope": "53-byte static HTML; HTTP/1.1; connection close; localhost",
+        "limitation": "This workload does not exercise dynamic props, escaping, or application logic.",
         "tiny_entry": "examples/static-page/server.tsx",
         "tiny_args": [],
         "bun_script": "benchmarks/bun/static-server.ts",
@@ -33,11 +37,30 @@ WORKLOADS = {
     "hono-basic": {
         "body": b"Hono!!",
         "content_type": "text/plain;charset=UTF-8",
-        "scope": "same pinned Hono GET / source; HTTP/1.1; connection close; localhost",
-        "tiny_entry": "tests/compat/hono/basic-smoke.ts",
+        "headers": {"x-powered-by": "Hono"},
+        "numeric_headers": ["x-response-time"],
+        "target_content_types": {
+            "tinytsx": "text/plain;charset=UTF-8",
+            "bun": "application/octet-stream",
+        },
+        "response_differences": [
+            "Content-Type differs after Hono's response-time middleware clones the finalized body: TinyTSX preserves text/plain;charset=UTF-8; Bun 1.3.13 serves the cloned stream as application/octet-stream."
+        ],
+        "path": "/",
+        "scope": "complete pinned 34-module Hono basic application, GET / with poweredBy and response-time middleware; HTTP/1.1; connection close; localhost",
+        "limitation": "The measured root route has a six-byte closed body; it executes Hono routing and middleware but not request-dependent JSON or fetch work.",
+        "tiny_entry": "vendor/hono-examples/basic/src/index.ts",
         "tiny_args": [
             "--alias", "hono=vendor/hono/src/index.ts",
+            "--alias", "hono/basic-auth=vendor/hono/src/middleware/basic-auth/index.ts",
+            "--alias", "hono/etag=vendor/hono/src/middleware/etag/index.ts",
+            "--alias", "hono/powered-by=vendor/hono/src/middleware/powered-by/index.ts",
+            "--alias", "hono/pretty-json=vendor/hono/src/middleware/pretty-json/index.ts",
             "--api", "hono=tests/compat/hono/api.d.ts",
+            "--api", "hono/basic-auth=tests/compat/hono/basic-auth-api.d.ts",
+            "--api", "hono/etag=tests/compat/hono/etag-api.d.ts",
+            "--api", "hono/powered-by=tests/compat/hono/powered-by-api.d.ts",
+            "--api", "hono/pretty-json=tests/compat/hono/pretty-json-api.d.ts",
         ],
         "bun_script": "benchmarks/bun/hono-server.ts",
         "bun_args": [
@@ -62,43 +85,61 @@ def main() -> int:
     specs = {
         "tinytsx": {
             "workload": arguments.workload,
+            "name": "tinytsx",
             "command": [str(tiny_binary)],
             "environment": {},
             "artifact": tiny_binary,
             "runtime": tiny_binary,
+            "path": workload["path"],
         },
         "bun": {
             "workload": arguments.workload,
+            "name": "bun",
             "command": [str(bun_binary), "run", *workload["bun_args"], str(bun_script)],
             "environment": {"TINYTSX_BENCH_PORT": str(port)},
             "artifact": bun_script,
             "runtime": bun_binary,
+            "path": workload["path"],
         },
     }
 
-    targets: dict[str, Any] = {}
-    for name, spec in specs.items():
-        startup = [measure_startup(spec, port) for _ in range(arguments.startup_runs)]
-        targets[name] = {
+    targets: dict[str, Any] = {
+        name: {
             "artifactBytes": spec["artifact"].stat().st_size,
             "runtimeExecutableBytes": spec["runtime"].stat().st_size,
-            "startupSamplesMs": startup,
+            "startupSamplesMs": [],
             "idleRssSamplesBytes": [],
+            "postWarmupRssSamplesBytes": [],
             "throughput": {str(value): [] for value in arguments.concurrency},
         }
+        for name, spec in specs.items()
+    }
+    for run in range(arguments.startup_runs):
+        order = ["tinytsx", "bun"] if run % 2 == 0 else ["bun", "tinytsx"]
+        for name in order:
+            targets[name]["startupSamplesMs"].append(measure_startup(specs[name], port))
 
     for run in range(arguments.runs):
         order = ["tinytsx", "bun"] if run % 2 == 0 else ["bun", "tinytsx"]
         for name in order:
             process = start_server(specs[name])
             try:
-                correctness = wait_for_response(process, port)
-                assert_correct(correctness, workload)
-                run_oha(f"http://127.0.0.1:{port}/", max(arguments.concurrency), 1)
+                correctness = wait_for_response(process, port, specs[name]["path"])
+                assert_correct(correctness, workload, name)
                 targets[name]["idleRssSamplesBytes"].append(resident_bytes(process.pid))
-                for concurrency in arguments.concurrency:
+                url = f"http://127.0.0.1:{port}{specs[name]['path']}"
+                run_oha(url, max(arguments.concurrency), 1)
+                targets[name]["postWarmupRssSamplesBytes"].append(
+                    resident_bytes(process.pid)
+                )
+                concurrency_order = (
+                    arguments.concurrency
+                    if run % 2 == 0
+                    else list(reversed(arguments.concurrency))
+                )
+                for concurrency in concurrency_order:
                     sample = run_oha(
-                        f"http://127.0.0.1:{port}/",
+                        url,
                         concurrency,
                         arguments.duration,
                     )
@@ -108,10 +149,12 @@ def main() -> int:
 
     timestamp = datetime.now(UTC).replace(microsecond=0).isoformat()
     raw = {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "timestamp": timestamp,
         "workload": arguments.workload,
         "scope": workload["scope"],
+        "limitations": [workload["limitation"]],
+        "responseDifferences": workload.get("response_differences", []),
         "environment": environment_metadata(),
         "configuration": {
             "runs": arguments.runs,
@@ -123,10 +166,16 @@ def main() -> int:
             "keepAlive": False,
         },
         "correctness": {
+            "path": workload["path"],
             "status": 200,
-            "contentType": workload["content_type"],
+            "contentTypes": {
+                name: expected_content_type(workload, name)
+                for name in specs
+            },
             "contentLength": len(workload["body"]),
             "bodyUtf8": workload["body"].decode(),
+            "headers": workload["headers"],
+            "numericHeaders": workload["numeric_headers"],
         },
         "targets": targets,
     }
@@ -195,14 +244,18 @@ def measure_startup(spec: dict[str, Any], port: int) -> float:
     started = time.perf_counter_ns()
     process = start_server(spec)
     try:
-        response = wait_for_response(process, port)
-        assert_correct(response, WORKLOADS[spec["workload"]])
+        response = wait_for_response(process, port, spec["path"])
+        assert_correct(response, WORKLOADS[spec["workload"]], spec["name"])
         return (time.perf_counter_ns() - started) / 1_000_000
     finally:
         stop_server(process)
 
 
-def wait_for_response(process: subprocess.Popen[bytes], port: int) -> dict[str, Any]:
+def wait_for_response(
+    process: subprocess.Popen[bytes],
+    port: int,
+    path: str = "/",
+) -> dict[str, Any]:
     deadline = time.monotonic() + 10
     last_error: Exception | None = None
     while time.monotonic() < deadline:
@@ -211,7 +264,7 @@ def wait_for_response(process: subprocess.Popen[bytes], port: int) -> dict[str, 
             raise RuntimeError(f"server exited with {process.returncode}: {stderr}")
         try:
             connection = http.client.HTTPConnection("127.0.0.1", port, timeout=0.5)
-            connection.request("GET", "/", headers={"Connection": "close"})
+            connection.request("GET", path, headers={"Connection": "close"})
             response = connection.getresponse()
             body = response.read()
             headers = {name.lower(): value for name, value in response.getheaders()}
@@ -223,11 +276,15 @@ def wait_for_response(process: subprocess.Popen[bytes], port: int) -> dict[str, 
     raise RuntimeError(f"server did not become ready: {last_error}")
 
 
-def assert_correct(response: dict[str, Any], workload: dict[str, Any]) -> None:
+def assert_correct(
+    response: dict[str, Any],
+    workload: dict[str, Any],
+    target: str | None = None,
+) -> None:
     headers = response["headers"]
     expected = {
         "status": 200,
-        "content-type": normalize_content_type(workload["content_type"]),
+        "content-type": normalize_content_type(expected_content_type(workload, target)),
         "content-length": str(len(workload["body"])),
     }
     actual = {
@@ -237,10 +294,39 @@ def assert_correct(response: dict[str, Any], workload: dict[str, Any]) -> None:
     }
     if actual != expected or response["body"] != workload["body"]:
         raise RuntimeError(f"response mismatch: expected={expected}, actual={actual}")
+    expected_headers = workload.get("headers", {})
+    mismatched_headers = {
+        name: {"expected": value, "actual": headers.get(name)}
+        for name, value in expected_headers.items()
+        if headers.get(name) != value
+    }
+    if mismatched_headers:
+        raise RuntimeError(f"response header mismatch: {mismatched_headers}")
+    invalid_numeric_headers = {
+        name: headers.get(name)
+        for name in workload.get("numeric_headers", [])
+        if not is_millisecond_header(headers.get(name))
+    }
+    if invalid_numeric_headers:
+        raise RuntimeError(
+            f"response numeric header mismatch: {invalid_numeric_headers}"
+        )
+
+
+def is_millisecond_header(value: str | None) -> bool:
+    return value is not None and value.endswith("ms") and value[:-2].isdigit()
 
 
 def normalize_content_type(value: str | None) -> str | None:
     return value.lower().replace(" ", "") if value is not None else None
+
+
+def expected_content_type(workload: dict[str, Any], target: str | None) -> str:
+    if target is not None:
+        target_types = workload.get("target_content_types", {})
+        if target in target_types:
+            return str(target_types[target])
+    return str(workload["content_type"])
 
 
 def stop_server(process: subprocess.Popen[bytes]) -> None:

@@ -6,7 +6,13 @@ from pathlib import Path
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
-from run_static import normalize_content_type  # noqa: E402
+from run_static import (  # noqa: E402
+    WORKLOADS,
+    assert_correct,
+    expected_content_type,
+    is_millisecond_header,
+    normalize_content_type,
+)
 
 
 class StaticHarnessTest(unittest.TestCase):
@@ -15,3 +21,65 @@ class StaticHarnessTest(unittest.TestCase):
             normalize_content_type("text/plain; charset=UTF-8"),
             normalize_content_type("text/plain;charset=utf-8"),
         )
+
+    def test_hono_workload_uses_the_complete_pinned_example(self) -> None:
+        workload = WORKLOADS["hono-basic"]
+        self.assertEqual(
+            workload["tiny_entry"],
+            "vendor/hono-examples/basic/src/index.ts",
+        )
+        self.assertEqual(workload["path"], "/")
+        self.assertEqual(workload["headers"], {"x-powered-by": "Hono"})
+        self.assertEqual(workload["numeric_headers"], ["x-response-time"])
+        self.assertEqual(
+            expected_content_type(workload, "bun"),
+            "application/octet-stream",
+        )
+
+    def test_response_equivalence_includes_required_headers(self) -> None:
+        workload = {
+            "body": b"Hono!!",
+            "content_type": "text/plain;charset=UTF-8",
+            "headers": {"x-powered-by": "Hono"},
+            "numeric_headers": ["x-response-time"],
+        }
+        response = {
+            "status": 200,
+            "headers": {
+                "content-type": "text/plain; charset=UTF-8",
+                "content-length": "6",
+                "x-powered-by": "Hono",
+                "x-response-time": "12ms",
+            },
+            "body": b"Hono!!",
+        }
+        assert_correct(response, workload)
+
+        response["headers"].pop("x-powered-by")
+        with self.assertRaises(RuntimeError):
+            assert_correct(response, workload)
+
+    def test_supports_visible_target_specific_content_types(self) -> None:
+        workload = {
+            "body": b"Hono!!",
+            "content_type": "text/plain;charset=UTF-8",
+            "target_content_types": {"bun": "application/octet-stream"},
+        }
+        response = {
+            "status": 200,
+            "headers": {
+                "content-type": "application/octet-stream",
+                "content-length": "6",
+            },
+            "body": b"Hono!!",
+        }
+        assert_correct(response, workload, "bun")
+        with self.assertRaises(RuntimeError):
+            assert_correct(response, workload, "tinytsx")
+
+    def test_accepts_only_numeric_millisecond_headers(self) -> None:
+        self.assertTrue(is_millisecond_header("0ms"))
+        self.assertTrue(is_millisecond_header("123ms"))
+        self.assertFalse(is_millisecond_header("ms"))
+        self.assertFalse(is_millisecond_header("1.2ms"))
+        self.assertFalse(is_millisecond_header(None))

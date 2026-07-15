@@ -2,7 +2,11 @@
   "compilerOptions": {
     "baseUrl": "../..",
     "paths": {
-      "hono": ["vendor/hono/src/index.ts"]
+      "hono": ["vendor/hono/src/index.ts"],
+      "hono/basic-auth": ["vendor/hono/src/middleware/basic-auth/index.ts"],
+      "hono/etag": ["vendor/hono/src/middleware/etag/index.ts"],
+      "hono/powered-by": ["vendor/hono/src/middleware/powered-by/index.ts"],
+      "hono/pretty-json": ["vendor/hono/src/middleware/pretty-json/index.ts"]
     }
   }
 }
