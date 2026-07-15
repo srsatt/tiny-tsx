@@ -2,8 +2,8 @@ use super::{
     BAD_REQUEST, CONTENT_TYPE_HTML, CONTENT_TYPE_TEXT, INTERNAL_ERROR, MAX_RESPONSE_HEADERS, OK,
     REQUEST_OOM, TinyHeader, TinyResponseWriter, TinyStringView, request,
     tinytsx_html_write_path_segment, tinytsx_html_write_static, tinytsx_request_method_equals,
-    tinytsx_request_path_equals, tinytsx_request_path_matches, tinytsx_response_begin,
-    tinytsx_response_header_static,
+    tinytsx_request_path_equals, tinytsx_request_path_matches, tinytsx_request_query_has,
+    tinytsx_response_begin, tinytsx_response_header_static,
 };
 
 #[test]
@@ -50,6 +50,40 @@ fn request_method_matching_distinguishes_get_and_post() {
         unsafe { tinytsx_request_method_equals(&request, b"GET".as_ptr(), 3) },
         0
     );
+}
+
+#[test]
+fn request_query_presence_matches_bare_empty_and_valued_parameters() {
+    for target in [
+        b"/posts?pretty".as_slice(),
+        b"/posts?pretty=".as_slice(),
+        b"/posts?lang=en&pretty=1".as_slice(),
+    ] {
+        let request = request(b"GET", target);
+        assert_eq!(
+            unsafe { tinytsx_request_query_has(&request, b"pretty".as_ptr(), 6) },
+            1,
+            "{}",
+            String::from_utf8_lossy(target)
+        );
+    }
+}
+
+#[test]
+fn request_query_presence_requires_an_exact_parameter_name() {
+    for target in [
+        b"/posts".as_slice(),
+        b"/posts?prettier=1".as_slice(),
+        b"/posts?notpretty".as_slice(),
+    ] {
+        let request = request(b"GET", target);
+        assert_eq!(
+            unsafe { tinytsx_request_query_has(&request, b"pretty".as_ptr(), 6) },
+            0,
+            "{}",
+            String::from_utf8_lossy(target)
+        );
+    }
 }
 
 #[test]
