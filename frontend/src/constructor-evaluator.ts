@@ -877,6 +877,10 @@ function executeEffectCall(
     receiver.items.push(...arguments_);
     return true;
   }
+  if (receiver.kind === "array" && name === "unshift") {
+    receiver.items.unshift(...arguments_);
+    return true;
+  }
   if (receiver.kind === "constructed" && name === "add") {
     evaluator.routerInsertions++;
     return true;
@@ -1274,6 +1278,12 @@ function evaluate(
   if (ts.isBinaryExpression(expression)) {
     const operator = expression.operatorToken.kind;
     const left = evaluate(evaluator, expression.left, module, environment, instance);
+    if (operator === ts.SyntaxKind.InKeyword) {
+      const right = evaluate(evaluator, expression.right, module, environment, instance);
+      return left.kind === "string" && (right.kind === "record" || right.kind === "instance")
+        ? {kind: "boolean", value: right.fields.has(left.value)}
+        : unknown("in operands are not a closed property key and record");
+    }
     if (operator === ts.SyntaxKind.QuestionQuestionEqualsToken) {
       if (left.kind !== "undefined" && left.kind !== "null") return left;
       const right = evaluate(evaluator, expression.right, module, environment, instance);

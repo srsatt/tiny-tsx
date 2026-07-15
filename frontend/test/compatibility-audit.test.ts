@@ -520,6 +520,31 @@ test("preserves response timing when prettyJSON clones a conditional body", () =
   );
 });
 
+test("executes the closed upstream basicAuth factory before request authentication", () => {
+  const entry = path.join(repository, "tests/compat/hono/basic-auth-smoke.ts");
+  const options = {
+    aliases: {
+      hono: path.join(repository, "vendor/hono/src/index.ts"),
+      "hono/basic-auth": path.join(
+        repository,
+        "vendor/hono/src/middleware/basic-auth/index.ts",
+      ),
+    },
+    apiAliases: {
+      hono: path.join(repository, "tests/compat/hono/api.d.ts"),
+      "hono/basic-auth": path.join(repository, "tests/compat/hono/basic-auth-api.d.ts"),
+    },
+  };
+  const graph = loadModuleGraph(entry, options);
+  const application = analyzeApplicationEntry(graph.modules[0]!.sourceFile);
+  assert.ok(application);
+
+  const result = evaluateApplicationInitialization(graph, application);
+
+  assert.equal(result?.issues.length, 2);
+  assert.ok(result?.issues.every(issue => issue.span.file.endsWith("/utils/basic-auth.ts")));
+});
+
 test("lowers upstream prettyJSON into a query-conditional native response", () => {
   const entry = path.join(repository, "tests/compat/hono/pretty-json-smoke.ts");
   const options = {
