@@ -100,8 +100,9 @@ def main() -> int:
         raise RuntimeError("the current TinyTSX benchmark requires Apple Silicon macOS")
 
     port = free_port()
-    tiny_binary = ROOT / f"benchmarks/dist/tinytsx-{arguments.workload}"
-    build_tinytsx(tiny_binary, port, workload)
+    tiny_suffix = "" if arguments.workers == 1 else f"-w{arguments.workers}"
+    tiny_binary = ROOT / f"benchmarks/dist/tinytsx-{arguments.workload}{tiny_suffix}"
+    build_tinytsx(tiny_binary, port, workload, arguments.workers)
     bun_binary = Path(shutil.which("bun") or "bun").resolve()
     bun_script = ROOT / workload["bun_script"]
     specs = {
@@ -192,7 +193,7 @@ def main() -> int:
             "startupRuns": arguments.startup_runs,
             "durationSeconds": arguments.duration,
             "concurrency": arguments.concurrency,
-            "workers": 1,
+            "workers": arguments.workers,
             "requestMemoryBytes": 262_144,
             "keepAlive": False,
         },
@@ -229,11 +230,17 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--runs", type=int, default=3, help="samples per target/concurrency")
     parser.add_argument("--startup-runs", type=int, default=5)
     parser.add_argument("--concurrency", default="1,8,32,64")
+    parser.add_argument("--workers", type=int, default=1, help="TinyTSX native workers")
     parser.add_argument("--output-prefix")
     arguments = parser.parse_args()
     arguments.concurrency = [int(value) for value in arguments.concurrency.split(",")]
-    if arguments.duration < 1 or arguments.runs < 1 or arguments.startup_runs < 1:
-        parser.error("duration and run counts must be positive")
+    if (
+        arguments.duration < 1
+        or arguments.runs < 1
+        or arguments.startup_runs < 1
+        or arguments.workers < 1
+    ):
+        parser.error("duration, run counts, and workers must be positive")
     if not arguments.concurrency or min(arguments.concurrency) < 1:
         parser.error("concurrency values must be positive")
     return arguments
@@ -245,18 +252,32 @@ def require_tools(*names: str) -> None:
         raise RuntimeError(f"missing benchmark tools: {', '.join(missing)}")
 
 
-def build_tinytsx(output: Path, port: int, workload: dict[str, Any]) -> None:
+def build_tinytsx(
+    output: Path,
+    port: int,
+    workload: dict[str, Any],
+    workers: int = 1,
+) -> None:
     subprocess.run(["npm", "run", "build", "--prefix", "frontend"], cwd=ROOT, check=True)
     subprocess.run(
-        [
-            "cargo", "run", "-q", "-p", "tinytsx", "--", "build",
-            workload["tiny_entry"], "--port", str(port), "--workers", "1",
-            "--request-memory", "262144", "--runtime", "bootstrap", "--release",
-            "--output", str(output), *workload["tiny_args"],
-        ],
+        tinytsx_build_command(output, port, workload, workers),
         cwd=ROOT,
         check=True,
     )
+
+
+def tinytsx_build_command(
+    output: Path,
+    port: int,
+    workload: dict[str, Any],
+    workers: int,
+) -> list[str]:
+    return [
+        "cargo", "run", "-q", "-p", "tinytsx", "--", "build",
+        workload["tiny_entry"], "--port", str(port), "--workers", str(workers),
+        "--request-memory", "262144", "--runtime", "bootstrap", "--release",
+        "--output", str(output), *workload["tiny_args"],
+    ]
 
 
 def start_server(spec: dict[str, Any]) -> subprocess.Popen[bytes]:

@@ -59,7 +59,7 @@ def render_markdown(result: dict[str, Any]) -> str:
     bun = result["targets"]["bun"]
     title = result["workload"].replace("-", " ")
     lines = [
-        f"# TinyTSX {title} benchmark",
+        f"# TinyTSX {title} benchmark ({result['configuration']['workers']} worker(s))",
         "",
         f"Generated: {result['timestamp']}",
         "",
@@ -120,7 +120,7 @@ def render_markdown(result: dict[str, Any]) -> str:
             "",
             "## Limitations",
             "",
-            "- TinyTSX currently has one worker and always closes the connection.",
+            f"- TinyTSX uses {result['configuration']['workers']} fixed native worker(s) and always closes the connection.",
             "- The benchmark client and server share the same machine.",
             *[f"- {limitation}" for limitation in result.get("limitations", [])],
             "- Power mode and unrelated background activity are not controlled by the harness.",

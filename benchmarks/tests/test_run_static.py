@@ -12,6 +12,7 @@ from run_static import (  # noqa: E402
     expected_content_type,
     is_millisecond_header,
     normalize_content_type,
+    tinytsx_build_command,
 )
 
 
@@ -49,6 +50,16 @@ class StaticHarnessTest(unittest.TestCase):
             for argument in workload["tiny_args"]
         ))
         self.assertIn("hono/jsx", workload["bun_args"])
+
+    def test_native_build_command_preserves_the_requested_worker_count(self) -> None:
+        command = tinytsx_build_command(
+            Path("dist/server"),
+            3000,
+            WORKLOADS["hono-jsx-ssr"],
+            4,
+        )
+        worker_option = command.index("--workers")
+        self.assertEqual(command[worker_option + 1], "4")
 
     def test_response_equivalence_includes_required_headers(self) -> None:
         workload = {

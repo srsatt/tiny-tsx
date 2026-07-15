@@ -295,6 +295,10 @@ produces and serves a native Mach-O executable from the example TSX source.
   occupies both executors plus all 16 queue slots, observes the next connection's
   503, releases the sockets, and receives a later 200. It also asserts the build
   report's worker count/runtime feature and passed three consecutive runs.
+- The existing equivalence-gated TinyTSX/Bun harness now accepts a positive
+  `--workers` count, emits it into a distinct release executable, records it in
+  JSON/Markdown, and labels the connection-close limitation explicitly. A unit
+  test pins forwarding of the selected count into the native build command.
 
 Verification:
 
@@ -334,8 +338,8 @@ rtk npm run benchmark:hono-jsx-ssr
 ## Active slice
 
 The reusable native worker pool now drives HTTP and has wire-level concurrency,
-isolation, overload, and recovery proof. The active performance slice is to make
-the benchmark harness build 1/2/4/8-worker variants and record an initial
+isolation, overload, and recovery proof. The benchmark harness can build an
+explicit worker count. The active slice is to record the 1/2/4/8-worker Hono JSX
 connection-close baseline, then add keep-alive before interpreting scheduler
 scaling. Keep fixed-layout records separate from dynamic `Map`.
 
@@ -344,7 +348,7 @@ scaling. Keep fixed-layout records separate from dynamic `Map`.
 Read `doc/WORKERS.md`, `doc/PERFORMANCE.md`, and `doc/BACKLOG.md`. Run
 `rtk cargo test -p tinytsx-runtime-worker` and
 `rtk cargo test -p tinytsx worker_pool_serves_in_parallel_and_recovers_after_saturation`.
-Extend the existing benchmark harness without changing its response-equivalence
-gate so TinyTSX worker counts can be compared on the pinned Hono workload.
-Preserve the current `Connection: close` result as a baseline; keep-alive follows
-before publication-grade worker scaling claims.
+Run the existing benchmark harness with `--workload hono-jsx-ssr` and worker
+counts 1, 2, 4, and 8, using unique output prefixes, then combine the results in
+`doc/PERFORMANCE.md`. Preserve `Connection: close` as an explicit baseline;
+keep-alive follows before publication-grade worker scaling claims.
