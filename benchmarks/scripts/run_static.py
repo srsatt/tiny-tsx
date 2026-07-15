@@ -134,6 +134,24 @@ WORKLOADS = {
             "--tsconfig-override", "benchmarks/bun/hono-runtime-tsconfig.json",
         ],
     },
+    "hono-worker": {
+        "body": b"TINYTSX & BUN",
+        "content_type": "text/plain; charset=UTF-8",
+        "headers": {},
+        "numeric_headers": [],
+        "path": "/worker?input=TinyTSX+%26+Bun",
+        "scope": "one persistent logical string worker behind a pinned Hono request/reply route; copied messages; HTTP/1.1; localhost",
+        "limitation": "Both targets serialize this route through one logical worker; this measures request/reply and ownership-transfer overhead, not parallelism across multiple Worker instances.",
+        "tiny_entry": "tests/compat/workers/hono-worker-smoke.ts",
+        "tiny_args": [
+            "--alias", "hono=vendor/hono/src/index.ts",
+            "--api", "hono=tests/compat/hono/api.d.ts",
+        ],
+        "bun_script": "benchmarks/bun/hono-worker-server.ts",
+        "bun_args": [
+            "--tsconfig-override", "benchmarks/bun/hono-runtime-tsconfig.json",
+        ],
+    },
 }
 
 

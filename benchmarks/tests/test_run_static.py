@@ -88,6 +88,17 @@ class StaticHarnessTest(unittest.TestCase):
             assert_correct(response, workload, "tinytsx")
         assert_correct(response, workload, "bun")
 
+    def test_worker_workload_compares_one_logical_worker_per_target(self) -> None:
+        workload = WORKLOADS["hono-worker"]
+
+        self.assertEqual(workload["path"], "/worker?input=TinyTSX+%26+Bun")
+        self.assertEqual(workload["body"], b"TINYTSX & BUN")
+        self.assertIn("one logical worker", workload["limitation"])
+        self.assertEqual(
+            workload["tiny_entry"],
+            "tests/compat/workers/hono-worker-smoke.ts",
+        )
+
     def test_keep_alive_scope_records_the_bounded_reconnect_policy(self) -> None:
         workload = WORKLOADS["hono-jsx-ssr"]
 
