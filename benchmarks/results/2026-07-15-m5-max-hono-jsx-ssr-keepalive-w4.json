@@ -1,0 +1,496 @@
+{
+  "schemaVersion": 2,
+  "timestamp": "2026-07-15T21:15:21+00:00",
+  "workload": "hono-jsx-ssr",
+  "scope": "complete pinned 31-module Hono jsx-ssr application, GET / rendering five posts through typed JSX components; HTTP/1.1; keep-alive; localhost",
+  "limitations": [
+    "The measured root route is fully closed and AOT-rendered; request-selected /post/:id behavior is correctness-tested but not part of this throughput sample.",
+    "TinyTSX bounds each connection at 100 requests and reconnects; the Bun host may retain a connection longer."
+  ],
+  "responseDifferences": [],
+  "environment": {
+    "machine": "Model Name: MacBook Pro; Model Identifier: Mac17,6; Chip: Apple M5 Max; Total Number of Cores: 18 (6 Super and 12 Performance); Memory: 128 GB",
+    "os": "macOS 26.5.2",
+    "architecture": "arm64",
+    "rustVersion": "rustc 1.96.0 (ac68faa20 2026-05-25)",
+    "bunVersion": "1.3.13",
+    "ohaVersion": "oha 1.15.0",
+    "commit": "8b0681e",
+    "dirty": false,
+    "powerAndBackgroundState": "not controlled"
+  },
+  "configuration": {
+    "runs": 3,
+    "startupRuns": 5,
+    "durationSeconds": 1,
+    "concurrency": [
+      1,
+      8,
+      32,
+      64
+    ],
+    "workers": 4,
+    "requestMemoryBytes": 262144,
+    "keepAlive": true
+  },
+  "correctness": {
+    "path": "/",
+    "status": 200,
+    "contentTypes": {
+      "tinytsx": "text/html; charset=UTF-8",
+      "bun": "text/html; charset=UTF-8"
+    },
+    "contentLength": 881,
+    "bodyUtf8": "<!DOCTYPE html>\n    <html>\n      <head>\n        <meta charset=\"UTF-8\">\n        <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n        <title>Top</title>\n        <link\n          rel=\"stylesheet\"\n          href=\"https://cdnjs.cloudflare.com/ajax/libs/mini.css/3.0.1/mini-default.min.css\"\n        />\n      </head>\n      <body style=\"padding: 1em 2em\">\n        <header>\n          <h1>\n            <a href=\"/\">Hono Example</a>\n          </h1>\n        </header>\n        <main><h2>Posts</h2><ul><li><a href=\"/post/1\">Good Morning</a></li><li><a href=\"/post/2\">Good Afternoon</a></li><li><a href=\"/post/3\">Good Evening</a></li><li><a href=\"/post/4\">Good Night</a></li><li><a href=\"/post/5\">\u3053\u3093\u306b\u3061\u306f</a></li></ul></main>\n        <footer>\n          <p>Built with <a href=\"https://github.com/honojs/hono\">Hono</a></p>\n        </footer>\n      </body>\n    </html>",
+    "headers": {},
+    "numericHeaders": []
+  },
+  "targets": {
+    "tinytsx": {
+      "artifactBytes": 450744,
+      "runtimeExecutableBytes": 450744,
+      "startupSamplesMs": [
+        392.411167,
+        7.617333,
+        7.66725,
+        7.566125,
+        7.478125
+      ],
+      "idleRssSamplesBytes": [
+        6242304,
+        6225920,
+        6225920
+      ],
+      "postWarmupRssSamplesBytes": [
+        6389760,
+        6373376,
+        6373376
+      ],
+      "throughput": {
+        "1": {
+          "samples": [
+            {
+              "requests_per_second": 24280.720797000213,
+              "success_rate": 1.0,
+              "p50_ms": 0.038541000000000006,
+              "p95_ms": 0.05075,
+              "p99_ms": 0.09466699999999999,
+              "max_ms": 1.326583,
+              "total_seconds": 1.001329417,
+              "status_codes": {
+                "200": 24313
+              }
+            },
+            {
+              "requests_per_second": 24967.079881525933,
+              "success_rate": 1.0,
+              "p50_ms": 0.037458,
+              "p95_ms": 0.049125,
+              "p99_ms": 0.094708,
+              "max_ms": 1.314667,
+              "total_seconds": 1.001318541,
+              "status_codes": {
+                "200": 25000
+              }
+            },
+            {
+              "requests_per_second": 24680.685568946377,
+              "success_rate": 1.0,
+              "p50_ms": 0.038291000000000006,
+              "p95_ms": 0.04775,
+              "p99_ms": 0.087334,
+              "max_ms": 1.7225000000000001,
+              "total_seconds": 1.001673958,
+              "status_codes": {
+                "200": 24722
+              }
+            }
+          ],
+          "median": {
+            "requests_per_second": 24680.685568946377,
+            "p50_ms": 0.038291000000000006,
+            "p95_ms": 0.049125,
+            "p99_ms": 0.09466699999999999,
+            "max_ms": 1.326583
+          }
+        },
+        "8": {
+          "samples": [
+            {
+              "requests_per_second": 67397.40166394891,
+              "success_rate": 1.0,
+              "p50_ms": 0.056083,
+              "p95_ms": 0.084208,
+              "p99_ms": 4.973375000000001,
+              "max_ms": 7.68075,
+              "total_seconds": 1.002605417,
+              "status_codes": {
+                "200": 67573
+              }
+            },
+            {
+              "requests_per_second": 68777.07251067788,
+              "success_rate": 1.0,
+              "p50_ms": 0.055333,
+              "p95_ms": 0.080041,
+              "p99_ms": 1.665334,
+              "max_ms": 7.664,
+              "total_seconds": 1.00084225,
+              "status_codes": {
+                "200": 68835
+              }
+            },
+            {
+              "requests_per_second": 69974.83580394746,
+              "success_rate": 1.0,
+              "p50_ms": 0.054792,
+              "p95_ms": 0.077292,
+              "p99_ms": 2.194209,
+              "max_ms": 7.452583,
+              "total_seconds": 1.001688667,
+              "status_codes": {
+                "200": 70093
+              }
+            }
+          ],
+          "median": {
+            "requests_per_second": 68777.07251067788,
+            "p50_ms": 0.055333,
+            "p95_ms": 0.080041,
+            "p99_ms": 2.194209,
+            "max_ms": 7.664
+          }
+        },
+        "32": {
+          "samples": [
+            {
+              "requests_per_second": 70328.77003217691,
+              "success_rate": 1.0,
+              "p50_ms": 0.054167,
+              "p95_ms": 0.083541,
+              "p99_ms": 18.469959,
+              "max_ms": 44.731458,
+              "total_seconds": 1.002491583,
+              "status_codes": {
+                "200": 70504
+              }
+            },
+            {
+              "requests_per_second": 72383.70221501321,
+              "success_rate": 1.0,
+              "p50_ms": 0.053334,
+              "p95_ms": 0.077875,
+              "p99_ms": 18.882417,
+              "max_ms": 45.225125,
+              "total_seconds": 1.001206042,
+              "status_codes": {
+                "200": 72471
+              }
+            },
+            {
+              "requests_per_second": 72163.88720574116,
+              "success_rate": 1.0,
+              "p50_ms": 0.053375000000000006,
+              "p95_ms": 0.077292,
+              "p99_ms": 18.738875,
+              "max_ms": 41.439499999999995,
+              "total_seconds": 1.001359583,
+              "status_codes": {
+                "200": 72262
+              }
+            }
+          ],
+          "median": {
+            "requests_per_second": 72163.88720574116,
+            "p50_ms": 0.053375000000000006,
+            "p95_ms": 0.077875,
+            "p99_ms": 18.738875,
+            "max_ms": 44.731458
+          }
+        },
+        "64": {
+          "samples": [
+            {
+              "requests_per_second": 71644.4972955843,
+              "success_rate": 1.0,
+              "p50_ms": 0.05325,
+              "p95_ms": 0.08237499999999999,
+              "p99_ms": 40.893083,
+              "max_ms": 86.68299999999999,
+              "total_seconds": 1.002645042,
+              "status_codes": {
+                "200": 71834
+              }
+            },
+            {
+              "requests_per_second": 70835.56373725552,
+              "success_rate": 1.0,
+              "p50_ms": 0.054125,
+              "p95_ms": 0.079375,
+              "p99_ms": 43.337667,
+              "max_ms": 87.334125,
+              "total_seconds": 1.002180208,
+              "status_codes": {
+                "200": 70990
+              }
+            },
+            {
+              "requests_per_second": 70886.10623048076,
+              "success_rate": 1.0,
+              "p50_ms": 0.054,
+              "p95_ms": 0.077792,
+              "p99_ms": 42.2725,
+              "max_ms": 88.107833,
+              "total_seconds": 1.00325725,
+              "status_codes": {
+                "200": 71117
+              }
+            }
+          ],
+          "median": {
+            "requests_per_second": 70886.10623048076,
+            "p50_ms": 0.054,
+            "p95_ms": 0.079375,
+            "p99_ms": 42.2725,
+            "max_ms": 87.334125
+          }
+        }
+      },
+      "startupMedianMs": 7.617333,
+      "idleRssMedianBytes": 6225920,
+      "postWarmupRssMedianBytes": 6373376
+    },
+    "bun": {
+      "artifactBytes": 362,
+      "runtimeExecutableBytes": 63072928,
+      "startupSamplesMs": [
+        29.987375,
+        21.86075,
+        19.890208,
+        20.240917,
+        19.654834
+      ],
+      "idleRssSamplesBytes": [
+        43761664,
+        44089344,
+        43188224
+      ],
+      "postWarmupRssSamplesBytes": [
+        129302528,
+        130367488,
+        130285568
+      ],
+      "throughput": {
+        "1": {
+          "samples": [
+            {
+              "requests_per_second": 23918.68486635764,
+              "success_rate": 1.0,
+              "p50_ms": 0.039334,
+              "p95_ms": 0.050875000000000004,
+              "p99_ms": 0.058499999999999996,
+              "max_ms": 1.49325,
+              "total_seconds": 1.001560083,
+              "status_codes": {
+                "200": 23956
+              }
+            },
+            {
+              "requests_per_second": 23536.212079531397,
+              "success_rate": 1.0,
+              "p50_ms": 0.039875,
+              "p95_ms": 0.050792,
+              "p99_ms": 0.08524999999999999,
+              "max_ms": 1.3352920000000001,
+              "total_seconds": 1.001393084,
+              "status_codes": {
+                "200": 23569
+              }
+            },
+            {
+              "requests_per_second": 24530.77668921648,
+              "success_rate": 1.0,
+              "p50_ms": 0.03875,
+              "p95_ms": 0.047709,
+              "p99_ms": 0.054833999999999994,
+              "max_ms": 3.141417,
+              "total_seconds": 1.001639708,
+              "status_codes": {
+                "200": 24571
+              }
+            }
+          ],
+          "median": {
+            "requests_per_second": 23918.68486635764,
+            "p50_ms": 0.039334,
+            "p95_ms": 0.050792,
+            "p99_ms": 0.058499999999999996,
+            "max_ms": 1.49325
+          }
+        },
+        "8": {
+          "samples": [
+            {
+              "requests_per_second": 92051.73000337173,
+              "success_rate": 1.0,
+              "p50_ms": 0.081833,
+              "p95_ms": 0.124084,
+              "p99_ms": 0.21825,
+              "max_ms": 1.581333,
+              "total_seconds": 1.001665042,
+              "status_codes": {
+                "200": 92205
+              }
+            },
+            {
+              "requests_per_second": 96425.36450381012,
+              "success_rate": 1.0,
+              "p50_ms": 0.078208,
+              "p95_ms": 0.112625,
+              "p99_ms": 0.229125,
+              "max_ms": 1.0024579999999998,
+              "total_seconds": 1.0017385,
+              "status_codes": {
+                "200": 96593
+              }
+            },
+            {
+              "requests_per_second": 97221.27996595074,
+              "success_rate": 1.0,
+              "p50_ms": 0.077667,
+              "p95_ms": 0.11075,
+              "p99_ms": 0.203834,
+              "max_ms": 2.5383340000000003,
+              "total_seconds": 1.001673708,
+              "status_codes": {
+                "200": 97384
+              }
+            }
+          ],
+          "median": {
+            "requests_per_second": 96425.36450381012,
+            "p50_ms": 0.078208,
+            "p95_ms": 0.112625,
+            "p99_ms": 0.21825,
+            "max_ms": 1.581333
+          }
+        },
+        "32": {
+          "samples": [
+            {
+              "requests_per_second": 95377.2918075865,
+              "success_rate": 1.0,
+              "p50_ms": 0.28841700000000003,
+              "p95_ms": 0.581417,
+              "p99_ms": 0.698625,
+              "max_ms": 1.5746250000000002,
+              "total_seconds": 1.001695458,
+              "status_codes": {
+                "200": 95539
+              }
+            },
+            {
+              "requests_per_second": 99716.07468739376,
+              "success_rate": 1.0,
+              "p50_ms": 0.27558299999999997,
+              "p95_ms": 0.553042,
+              "p99_ms": 0.635708,
+              "max_ms": 1.504458,
+              "total_seconds": 1.003388875,
+              "status_codes": {
+                "200": 100054
+              }
+            },
+            {
+              "requests_per_second": 100012.335167205,
+              "success_rate": 1.0,
+              "p50_ms": 0.274667,
+              "p95_ms": 0.549709,
+              "p99_ms": 0.6311669999999999,
+              "max_ms": 2.5816250000000003,
+              "total_seconds": 1.002556333,
+              "status_codes": {
+                "200": 100268
+              }
+            }
+          ],
+          "median": {
+            "requests_per_second": 99716.07468739376,
+            "p50_ms": 0.27558299999999997,
+            "p95_ms": 0.553042,
+            "p99_ms": 0.635708,
+            "max_ms": 1.5746250000000002
+          }
+        },
+        "64": {
+          "samples": [
+            {
+              "requests_per_second": 91934.65512344814,
+              "success_rate": 1.0,
+              "p50_ms": 0.63325,
+              "p95_ms": 1.1445839999999998,
+              "p99_ms": 1.4171660000000001,
+              "max_ms": 2.6459159999999997,
+              "total_seconds": 1.001972541,
+              "status_codes": {
+                "200": 92116
+              }
+            },
+            {
+              "requests_per_second": 95343.57873042238,
+              "success_rate": 1.0,
+              "p50_ms": 0.6085,
+              "p95_ms": 1.1451250000000002,
+              "p99_ms": 1.370459,
+              "max_ms": 3.300083,
+              "total_seconds": 1.001661583,
+              "status_codes": {
+                "200": 95502
+              }
+            },
+            {
+              "requests_per_second": 99393.414498721,
+              "success_rate": 1.0,
+              "p50_ms": 0.5892080000000001,
+              "p95_ms": 1.1039590000000001,
+              "p99_ms": 1.2573750000000001,
+              "max_ms": 2.930625,
+              "total_seconds": 1.003245542,
+              "status_codes": {
+                "200": 99716
+              }
+            }
+          ],
+          "median": {
+            "requests_per_second": 95343.57873042238,
+            "p50_ms": 0.6085,
+            "p95_ms": 1.1445839999999998,
+            "p99_ms": 1.370459,
+            "max_ms": 2.930625
+          }
+        }
+      },
+      "startupMedianMs": 20.240917,
+      "idleRssMedianBytes": 43761664,
+      "postWarmupRssMedianBytes": 130285568
+    }
+  },
+  "comparisons": {
+    "1": {
+      "tinytsxToBunRps": 1.0318579682305409,
+      "tinytsxToBunP99": 1.618239316239316
+    },
+    "8": {
+      "tinytsxToBunRps": 0.7132674360589039,
+      "tinytsxToBunP99": 10.053649484536082
+    },
+    "32": {
+      "tinytsxToBunRps": 0.7236936214343807,
+      "tinytsxToBunP99": 29.477173482164766
+    },
+    "64": {
+      "tinytsxToBunRps": 0.743480653593951,
+      "tinytsxToBunP99": 30.845505046119584
+    }
+  }
+}

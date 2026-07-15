@@ -328,6 +328,11 @@ produces and serves a native Mach-O executable from the example TSX source.
 - Arena-only light lambdas are now the default memory decision. Persistent
   managed heaps and GC are optional compatibility profiles triggered only by an
   executed escaping graph, not assumed roadmap endpoints.
+- The keep-alive Hono JSX matrix proves worker scaling at concurrency 64:
+  23.8k/43.0k/70.9k/102.8k requests/s for 1/2/4/8 workers, while warm RSS stays
+  at 5.91/5.97/6.08/6.30 MiB. Eight workers reach 1.04x the paired Bun
+  throughput there, but TinyTSX p99 is 26.3 ms versus Bun's 1.25 ms because
+  excess persistent connections wait behind a worker's bounded turn.
 
 Verification:
 
@@ -367,17 +372,17 @@ rtk npm run benchmark:hono-jsx-ssr
 ## Active slice
 
 The reusable native worker pool now drives bounded keep-alive HTTP with per-worker
-arenas and wire-level concurrency, isolation, overload, OOM, and recovery proof.
-The active slice is the persistent-connection 1/2/4/8 Hono JSX matrix; the next
-compatibility slice is request-time Hono JSX. Keep fixed-layout records separate
-from dynamic `Map`.
+arenas and wire-level concurrency, isolation, overload, OOM, recovery, and
+1/2/4/8 scaling evidence. The active compatibility slice is genuinely
+request-time Hono JSX; connection fairness remains a measured optimization
+target. Keep fixed-layout records separate from dynamic `Map`.
 
 ## Resume point
 
 Read `doc/WORKERS.md`, `doc/PERFORMANCE.md`, and `doc/BACKLOG.md`. Run
 `rtk cargo test -p tinytsx-runtime-worker` and
 `rtk cargo test -p tinytsx worker_pool_serves_in_parallel_and_recovers_after_saturation`.
-Run `benchmarks/scripts/run_static.py --workload hono-jsx-ssr --keep-alive` for
-workers 1, 2, 4, and 8 with unique output prefixes, then compare it directly to
-the retained connection-close matrix. Move next to request-time JSX before AI
-SDK intake.
+Add a pinned Hono JSX route that renders unbounded request query/header data at
+request time through escaped text and quoted attributes into the reusable arena.
+Require exact Bun/native response equivalence before adding it to the benchmark
+matrix. Streaming follows that dynamic render slice, before AI SDK intake.

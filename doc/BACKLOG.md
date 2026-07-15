@@ -31,7 +31,7 @@ commit message.
       root HTML, then record startup, RSS, and load through concurrency 64.
 - [ ] Resolve the Hono response-clone Content-Type difference with direct
       Web-platform evidence and an explicit compatibility decision.
-- [ ] Implement HTTP/1.1 keep-alive and rerun equivalent transport tests.
+- [x] Implement HTTP/1.1 keep-alive and rerun equivalent transport tests.
 - [x] Implement the bounded native worker pool and benchmark 1/2/4/8 workers.
 - [ ] Benchmark dynamic escaping, request arenas, route parameters, JSON/query
       branches, and representative response sizes.

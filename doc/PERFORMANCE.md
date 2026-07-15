@@ -137,6 +137,34 @@ The raw source reports and combined interpretation are in
 request-time rendering workload are required before the matrix can say whether
 application execution scales.
 
+## Fixed-worker keep-alive matrix
+
+The same exact-source/Bun response gate was rerun with persistent HTTP/1.1
+connections. TinyTSX closes each connection after 100 requests or five idle
+seconds and keeps a live connection on one executor for its bounded turn.
+
+| Workers | Warm RSS | RPS c8 | RPS c32 | RPS c64 | c64 vs 1 worker | p99 c64 |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 5.91 MiB | 24,760 | 24,035 | 23,783 | 1.00x | 133.569 ms |
+| 2 | 5.97 MiB | 42,233 | 42,536 | 42,988 | 1.81x | 72.794 ms |
+| 4 | 6.08 MiB | 68,777 | 72,164 | 70,886 | 2.98x | 42.273 ms |
+| 8 | 6.30 MiB | 86,471 | 96,023 | 102,796 | 4.32x | 26.293 ms |
+
+This is the first direct evidence that the worker pool scales: eight workers
+deliver 4.32x the one-worker throughput at concurrency 64 for 0.39 MiB more
+warm RSS. The paired eight-worker run reaches 0.90x/0.97x/1.04x Bun throughput
+at concurrency 8/32/64.
+
+The tail is the important counterweight. TinyTSX p99 remains 12.8–26.3 ms at
+concurrency 32–64 while Bun records 0.6–1.3 ms. Blocking connection affinity
+queues excess persistent connections behind a worker's current 100-request
+turn. The result validates parallel execution but also proves that throughput
+alone is not sufficient. Request-time JSX comes next; connection fairness should
+then be profiled before choosing a more complex socket scheduler.
+
+Raw reports and the combined interpretation are retained under
+`benchmarks/results/2026-07-15-m5-max-hono-jsx-ssr-keepalive-*`.
+
 ## Roadmap
 
 ### P0 — make the comparison semantically and mechanically fair
@@ -156,6 +184,9 @@ application execution scales.
    request, the complete Hono matrix stays green, and 1/2/4/8-worker results
    report bounded RSS plus throughput and latency without connection-close
    transport masking scheduler behavior.
+
+   **Complete.** The bounded parser, per-worker reusable arena, OOM recovery,
+   pipelining/body-framing E2E, and retained 1/2/4/8 matrix satisfy this gate.
 
 ### P1 — expose native-code and no-JIT behavior
 

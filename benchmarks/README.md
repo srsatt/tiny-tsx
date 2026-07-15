@@ -100,3 +100,9 @@ and `2026-07-15-m5-max-hono-jsx-ssr-workers-summary.md`. It found no throughput
 gain from 2/4/8 workers on the closed JSX root, while warm RSS rose from 6.05 MiB
 at one worker to 6.41 MiB at eight. This is the baseline that keep-alive and a
 request-time workload must replace before scheduler conclusions.
+
+The persistent-connection rerun is retained as four
+`2026-07-15-m5-max-hono-jsx-ssr-keepalive-w*.{json,md}` reports plus a combined
+summary. Throughput at concurrency 64 scales from 23.8k requests/s with one
+worker to 102.8k with eight for 0.39 MiB more warm RSS. The summary also records
+the remaining p99 problem caused by bounded blocking connection affinity.
