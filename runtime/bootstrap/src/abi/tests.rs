@@ -2,11 +2,17 @@ use super::{
     BAD_REQUEST, CONTENT_TYPE_HTML, CONTENT_TYPE_NONE, CONTENT_TYPE_TEXT, INTERNAL_ERROR,
     MAX_DYNAMIC_HEADER_BYTES, MAX_RESPONSE_HEADERS, OK, REQUEST_OOM, TinyHeader,
     TinyResponseWriter, TinyStringView, request, request_with_headers,
-    tinytsx_html_write_path_segment, tinytsx_html_write_request_header, tinytsx_html_write_static,
+    tinytsx_html_write_fetch_status, tinytsx_html_write_path_segment,
+    tinytsx_html_write_request_header, tinytsx_html_write_static,
     tinytsx_request_basic_auth_equals, tinytsx_request_if_none_match,
     tinytsx_request_method_equals, tinytsx_request_path_equals, tinytsx_request_path_matches,
     tinytsx_request_query_has, tinytsx_response_begin, tinytsx_response_header_elapsed_millis,
     tinytsx_response_header_static, write_console_error,
+};
+use std::{
+    io::{Read, Write},
+    net::TcpListener,
+    thread,
 };
 
 #[test]
@@ -372,6 +378,29 @@ fn response_headers_format_elapsed_milliseconds_in_writer_storage() {
     assert_eq!(view(&writer.headers[0].name), b"X-Response-Time");
     assert_eq!(view(&writer.headers[0].value), b"42ms");
     assert_eq!(writer.dynamic_header_cursor, 4);
+}
+
+#[test]
+fn fetch_status_writes_the_local_http_response_code() {
+    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind local fetch peer");
+    let address = listener.local_addr().expect("local fetch peer address");
+    let peer = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().expect("accept local fetch");
+        let mut request = [0_u8; 1024];
+        let _ = stream.read(&mut request).expect("read local fetch");
+        stream
+            .write_all(b"HTTP/1.1 204 No Content\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+            .expect("write local fetch response");
+    });
+    let url = format!("http://{address}/status");
+    let mut output = [0_u8; 3];
+    let mut writer = writer(&mut output);
+
+    let result = unsafe { tinytsx_html_write_fetch_status(&mut writer, url.as_ptr(), url.len()) };
+
+    assert_eq!(result, OK);
+    assert_eq!(&output, b"204");
+    peer.join().expect("join local fetch peer");
 }
 
 #[test]

@@ -101,6 +101,28 @@ fn builds_and_dispatches_the_first_two_hono_basic_routes() {
 }
 
 #[test]
+fn builds_and_serves_a_closed_hono_fetch_status() {
+    build_and_serve_with_options(
+        "tests/compat/hono/fetch-status-smoke.ts",
+        expected(
+            "GET",
+            200,
+            "/fetch-url",
+            "https://example.com/ is 200",
+            "text/plain;charset=UTF-8",
+            &[],
+        ),
+        &[
+            "--alias",
+            "hono=vendor/hono/src/index.ts",
+            "--api",
+            "hono=tests/compat/hono/api.d.ts",
+        ],
+        &[],
+    );
+}
+
+#[test]
 fn builds_and_serves_a_hono_named_route_parameter() {
     build_and_serve_with_options(
         "tests/compat/hono/parameter-route-smoke.ts",

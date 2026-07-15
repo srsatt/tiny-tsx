@@ -1,6 +1,9 @@
 use std::{
+    ffi::c_void,
     io::{self, Write},
+    os::raw::{c_char, c_long},
     ptr, slice,
+    sync::OnceLock,
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -18,6 +21,30 @@ pub const CONTENT_TYPE_JSON: u16 = 3;
 pub const CONTENT_TYPE_RESPONSE_TEXT: u16 = 4;
 pub const MAX_RESPONSE_HEADERS: usize = 8;
 pub const MAX_DYNAMIC_HEADER_BYTES: usize = 256;
+
+const MAX_FETCH_URL_BYTES: usize = 2048;
+const CURLOPT_URL: u32 = 10_002;
+const CURLOPT_WRITEFUNCTION: u32 = 20_011;
+const CURLOPT_FOLLOWLOCATION: u32 = 52;
+const CURLOPT_NOSIGNAL: u32 = 99;
+const CURLOPT_TIMEOUT_MS: u32 = 155;
+const CURLINFO_RESPONSE_CODE: u32 = 0x20_0002;
+const CURL_GLOBAL_DEFAULT: c_long = 3;
+const CURLE_OK: i32 = 0;
+
+type CurlWriteCallback = unsafe extern "C" fn(*mut c_char, usize, usize, *mut c_void) -> usize;
+
+#[link(name = "curl")]
+unsafe extern "C" {
+    fn curl_global_init(flags: c_long) -> i32;
+    fn curl_easy_init() -> *mut c_void;
+    fn curl_easy_setopt(handle: *mut c_void, option: u32, ...) -> i32;
+    fn curl_easy_perform(handle: *mut c_void) -> i32;
+    fn curl_easy_getinfo(handle: *mut c_void, info: u32, ...) -> i32;
+    fn curl_easy_cleanup(handle: *mut c_void);
+}
+
+static CURL_READY: OnceLock<bool> = OnceLock::new();
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -405,6 +432,74 @@ pub unsafe extern "C" fn tinytsx_html_write_request_header(
     }
     // SAFETY: The fallback literal is static for the duration of the copy.
     unsafe { tinytsx_html_write_static(writer, b"undefined".as_ptr(), b"undefined".len()) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tinytsx_html_write_fetch_status(
+    writer: *mut TinyResponseWriter,
+    url: *const u8,
+    url_len: usize,
+) -> u32 {
+    if writer.is_null() || url.is_null() || url_len == 0 || url_len > MAX_FETCH_URL_BYTES {
+        return INTERNAL_ERROR;
+    }
+    // SAFETY: Generated static data is valid for its declared length.
+    let url = unsafe { slice::from_raw_parts(url, url_len) };
+    let Some(status) = fetch_response_status(url) else {
+        // SAFETY: The non-null writer is owned by this synchronous request.
+        unsafe { (*writer).status = RENDER_ERROR };
+        return RENDER_ERROR;
+    };
+    let mut storage = [0_u8; 20];
+    let status = decimal_bytes(u64::from(status), &mut storage);
+    // SAFETY: The decimal storage remains alive during the synchronous copy.
+    unsafe { tinytsx_html_write_static(writer, status.as_ptr(), status.len()) }
+}
+
+fn fetch_response_status(url: &[u8]) -> Option<u16> {
+    if url.contains(&0)
+        || !*CURL_READY.get_or_init(|| {
+            // SAFETY: This process-wide initialization is protected by `OnceLock`.
+            unsafe { curl_global_init(CURL_GLOBAL_DEFAULT) == CURLE_OK }
+        })
+    {
+        return None;
+    }
+    let mut nul_terminated = [0_u8; MAX_FETCH_URL_BYTES + 1];
+    nul_terminated[..url.len()].copy_from_slice(url);
+    // SAFETY: libcurl owns no pointers after cleanup; all supplied storage lives through this call.
+    unsafe {
+        let handle = curl_easy_init();
+        if handle.is_null() {
+            return None;
+        }
+        let configured = curl_easy_setopt(handle, CURLOPT_URL, nul_terminated.as_ptr()) == CURLE_OK
+            && curl_easy_setopt(
+                handle,
+                CURLOPT_WRITEFUNCTION,
+                discard_fetch_body as CurlWriteCallback,
+            ) == CURLE_OK
+            && curl_easy_setopt(handle, CURLOPT_FOLLOWLOCATION, 1 as c_long) == CURLE_OK
+            && curl_easy_setopt(handle, CURLOPT_NOSIGNAL, 1 as c_long) == CURLE_OK
+            && curl_easy_setopt(handle, CURLOPT_TIMEOUT_MS, 10_000 as c_long) == CURLE_OK;
+        let mut response_code = 0 as c_long;
+        let completed = configured
+            && curl_easy_perform(handle) == CURLE_OK
+            && curl_easy_getinfo(handle, CURLINFO_RESPONSE_CODE, &mut response_code) == CURLE_OK;
+        curl_easy_cleanup(handle);
+        completed
+            .then_some(response_code)
+            .and_then(|code| u16::try_from(code).ok())
+    }
+}
+
+unsafe extern "C" fn discard_fetch_body(
+    _bytes: *mut c_char,
+    size: usize,
+    items: usize,
+    _data: *mut c_void,
+) -> usize {
+    size.checked_mul(items).unwrap_or(0)
 }
 
 #[unsafe(no_mangle)]
