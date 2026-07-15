@@ -4,24 +4,50 @@ Last updated: 2026-07-15
 
 ## Current conclusion
 
-TinyTSX is already compelling for footprint and steady-state startup, but the
-current benchmark does not show a throughput advantage over Bun. On the complete
-pinned Hono basic application, TinyTSX delivers 97–99% of Bun's request rate
-across concurrency 1–128 while using far less memory. Both servers plateau near
-31,000 requests/second because every request opens a new TCP connection; that
-transport cost masks most application-code and JIT differences.
+TinyTSX is compelling for footprint and startup, and its lack of a JIT has not
+created a throughput penalty in either complete Hono workload. On the pinned
+Hono basic application it delivers 97–99% of Bun's request rate across
+concurrency 1–128. On the byte-identical 881-byte JSX SSR root page it ranges
+from 90% to 114% of Bun across concurrency 1–64. Both servers plateau near
+32,000 requests/second because every request opens a new TCP connection;
+transport cost still masks much of the application-code difference.
 
 The honest claim is therefore:
 
-- **yes for footprint:** 5.84 MiB idle and 6.09 MiB after warm-up versus Bun's
-  41.73 MiB and 70.41 MiB;
-- **yes for normal repeated startup:** 9.77 ms median versus Bun's 19.91 ms;
-- **parity, not a win, for this throughput test:** TinyTSX is 1–3% behind Bun;
+- **yes for footprint:** JSX SSR uses 5.83 MiB idle and 5.98 MiB after warm-up
+  versus Bun's 42.03 MiB and 98.19 MiB;
+- **yes for normal repeated startup:** JSX SSR is 7.14 ms median versus Bun's
+  19.32 ms;
+- **parity under load:** JSX SSR is between 10% behind and 14% ahead in these
+  short samples, with near-identical latency at concurrency 64;
 - **not yet answered for CPU-heavy dynamic work:** the measured route has a
   six-byte closed body and connection-close HTTP dominates the request cost.
 
 Raw samples and the generated report are in
-`benchmarks/results/2026-07-15-m5-max-hono-complete-load.{json,md}`.
+`benchmarks/results/2026-07-15-m5-max-hono-complete-load.{json,md}` and
+`benchmarks/results/2026-07-15-m5-max-hono-jsx-ssr-load.{json,md}`.
+
+## Real JSX SSR result
+
+The second workload compiles the untouched pinned
+`vendor/hono-examples/jsx-ssr/src/index.tsx` graph. Bun produces the reference
+body first; the harness then requires both servers to return the same 881 bytes,
+status, content length, and normalized HTML content type. The application uses
+typed component props, children, closed records and arrays, `Array.map`, a Hono
+`html` tagged template, Unicode, and HTML escaping. Its request-selected post
+route and both 404 paths are covered by Bun and native E2Es, but the load sample
+targets the closed root route.
+
+| Concurrency | TinyTSX req/s | Bun req/s | Tiny/Bun | Tiny p99 | Bun p99 |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 9,914 | 8,710 | 1.14x | 0.114 ms | 0.126 ms |
+| 8 | 31,952 | 33,677 | 0.95x | 0.315 ms | 0.384 ms |
+| 32 | 29,042 | 32,101 | 0.90x | 1.162 ms | 1.101 ms |
+| 64 | 32,446 | 32,175 | 1.01x | 2.159 ms | 2.155 ms |
+
+The useful conclusion is not that TinyTSX is categorically faster. It is that
+removing the JS engine buys a 7–16x RSS reduction and roughly 2.7x faster
+startup here without sacrificing throughput for a fully closed SSR page.
 
 ## Method
 
@@ -111,10 +137,12 @@ escaping, parsing, or allocation-heavy handlers.
    `/auth/*`, and representative 1 KiB/16 KiB bodies. Exclude external Fetch
    latency from CPU comparisons. Exit: every route has a pinned Bun/TinyTSX
    response contract and repeated latency/RPS samples.
-5. **Add a genuinely request-dependent TSX workload.** Include query parsing,
-   HTML escaping, record projection, arrays/loops, and bounded response writes.
-   This is the first workload that can answer whether AOT code beats a warmed
-   JIT for application work.
+5. **Add a genuinely request-time TSX workload.** The pinned SSR application now
+   proves compile-time records, arrays, mapping, escaping, and finite route
+   specialization. The next workload must render unbounded request data through
+   native escaping and bounded response writes instead of selecting a closed
+   pre-rendered response. This is the first workload that can answer whether
+   AOT code beats a warmed JIT for dynamic application work.
 6. **Capture CPU, syscalls, allocations, and peak RSS during each sample.** Use
    macOS `sample`/Instruments or equivalent counters and record warm-up phases
    separately. Exit: every throughput result names the dominant CPU path and
@@ -136,6 +164,7 @@ escaping, parsing, or allocation-heavy handlers.
     and repeated days/machines. Publish no general performance claim before
     these gates pass.
 
-The next implementation slice should be keep-alive after the response-clone
-contract test. It removes the largest known benchmark confounder and makes the
-worker-pool and dynamic-workload results materially more informative.
+The next performance slice should be keep-alive after the response-clone
+contract test. In parallel, the compatibility slice should add request-time
+escaped JSX text/attributes so the next benchmark exercises native application
+work rather than only closed response selection.

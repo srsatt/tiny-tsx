@@ -1,13 +1,16 @@
 # TinyTSX benchmarks
 
-The harness has two workloads:
+The harness has three workloads:
 
 - `static-page` compares the current static TinyTSX vertical slice to an
   idiomatic `Bun.serve` server returning the same response;
 - `hono-basic` runs the complete pinned 34-module
   `vendor/hono-examples/basic/src/index.ts` application through TinyTSX and Bun.
   Bun uses only a host `Bun.serve` adapter and path aliases to the same pinned
-  Hono source submodule.
+  Hono source submodule;
+- `hono-jsx-ssr` runs the complete pinned 31-module JSX SSR graph. Bun's root
+  response is captured as the byte reference, then both targets must return the
+  same 881-byte HTML before startup, RSS, and load samples are accepted.
 
 Both verify status, content length, response bytes, powered-by behavior, and a
 numeric response-time header before collecting samples. Target-specific content
@@ -16,8 +19,9 @@ middleware clones the body, TinyTSX preserves `text/plain;charset=UTF-8` while
 Bun 1.3.13 serves the stream as `application/octet-stream`.
 
 This is deliberately not presented as a general TypeScript performance result.
-TinyTSX currently supports only a static page, one worker, and connection-close
-HTTP. The client therefore disables keep-alive for both targets.
+TinyTSX currently uses one worker and connection-close HTTP. The JSX root is
+closed and rendered at AOT time; request-selected post behavior is tested but is
+not the throughput target. The client disables keep-alive for both targets.
 
 ## Prerequisites
 
@@ -39,6 +43,7 @@ Run the exact-source Hono comparison with:
 
 ```bash
 npm run benchmark:hono
+npm run benchmark:hono-jsx-ssr
 ```
 
 A shorter exploratory run is useful during development:
