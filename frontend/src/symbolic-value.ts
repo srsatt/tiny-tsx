@@ -14,6 +14,9 @@ export type Value =
   | {kind: "array"; items: Value[]}
   | {kind: "record"; fields: Map<string, Value>}
   | {kind: "headers"; entries: Map<string, {name: string; value: string}>}
+  | {kind: "request"; routePattern: string}
+  | {kind: "routeParameter"; name: string}
+  | {kind: "runtimeString"; parts: RuntimeStringPart[]}
   | {
       kind: "closure";
       span: SourceSpan;
@@ -25,13 +28,17 @@ export type Value =
   | {kind: "constructed"; name: string; module: string}
   | {
       kind: "response";
-      body: string;
+      body: string | RuntimeStringPart[];
       status: number;
       contentType: string;
       headers: Map<string, {name: string; value: string}>;
     }
   | {kind: "instance"; fields: Map<string, Value>}
   | {kind: "unknown"; reason: string};
+
+export type RuntimeStringPart =
+  | {kind: "literal"; value: string}
+  | {kind: "routeParameter"; name: string};
 
 export interface ExecutionResult {
   returned: boolean;
@@ -116,11 +123,14 @@ export function truthiness(value: Value): boolean | undefined {
     case "array":
     case "record":
     case "headers":
+    case "request":
     case "closure":
     case "reference":
     case "constructed":
     case "response":
     case "instance": return true;
+    case "routeParameter": return true;
+    case "runtimeString": return value.parts.length > 0;
     case "unknown": return undefined;
   }
 }
@@ -132,6 +142,8 @@ export function typeOf(value: Value): string {
     case "number": return "number";
     case "bigint": return "bigint";
     case "string": return "string";
+    case "routeParameter":
+    case "runtimeString": return "string";
     case "closure":
     case "reference": return "function";
     default: return "object";
@@ -148,4 +160,33 @@ export function stringValue(value: Value): string {
     case "string": return value.value;
     default: return "[object Object]";
   }
+}
+
+export function runtimeStringParts(value: Value): RuntimeStringPart[] | undefined {
+  switch (value.kind) {
+    case "string": return value.value === "" ? [] : [{kind: "literal", value: value.value}];
+    case "routeParameter": return [{kind: "routeParameter", name: value.name}];
+    case "runtimeString": return value.parts;
+    default: return undefined;
+  }
+}
+
+export function joinRuntimeStrings(values: Value[]): Value | undefined {
+  const parts: RuntimeStringPart[] = [];
+  for (const value of values) {
+    const next = runtimeStringParts(value);
+    if (next === undefined) return undefined;
+    for (const part of next) {
+      const previous = parts.at(-1);
+      if (part.kind === "literal" && previous?.kind === "literal") {
+        previous.value += part.value;
+      } else if (part.kind !== "literal" || part.value !== "") {
+        parts.push({...part});
+      }
+    }
+  }
+  if (parts.every(part => part.kind === "literal")) {
+    return {kind: "string", value: parts.map(part => part.value).join("")};
+  }
+  return {kind: "runtimeString", parts};
 }

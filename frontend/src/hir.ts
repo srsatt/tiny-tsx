@@ -74,6 +74,17 @@ export type ValueExpression =
       function: number;
       arguments: ValueExpression[];
       span: SourceSpan;
+    }
+  | {
+      kind: "concat";
+      values: ValueExpression[];
+      span: SourceSpan;
+    }
+  | {
+      kind: "routeParameter";
+      name: string;
+      segment: number;
+      span: SourceSpan;
     };
 
 export interface FunctionParameter {

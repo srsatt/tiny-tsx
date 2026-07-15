@@ -18,6 +18,7 @@ import {resolveRuntimeCallable} from "./runtime-callable.js";
 import {
   continued,
   detail,
+  joinRuntimeStrings,
   type ExecutionResult,
   fromStaged,
   readProperty,
@@ -27,6 +28,7 @@ import {
   UNDEFINED,
   unknown,
   type Value,
+  type RuntimeStringPart,
   valuesEqual,
 } from "./symbolic-value.js";
 
@@ -56,7 +58,7 @@ export interface EvaluatedRoute {
 
 export interface EvaluatedResponse {
   kind: "text";
-  body: string;
+  body: string | RuntimeStringPart[];
   status: number;
   contentType: string;
   headers?: Array<{name: string; value: string}>;
@@ -196,7 +198,7 @@ function summarizeRoutes(
       matchingMiddleware(candidate, path.value)
     );
     const response = method.value === "GET" && handler?.kind === "closure"
-      ? evaluateRouteHandler(evaluator, handler, middleware)
+      ? evaluateRouteHandler(evaluator, handler, middleware, path.value)
       : undefined;
     return [{
       method: method.value,
@@ -216,6 +218,7 @@ function evaluateRouteHandler(
   evaluator: Evaluator,
   handler: Value & {kind: "closure"},
   middleware: Array<Value & {kind: "closure"}>,
+  routePattern: string,
 ): EvaluatedResponse | undefined {
   const contextClass = findRuntimeClass(evaluator, "Context");
   if (contextClass === undefined) {
@@ -228,6 +231,7 @@ function evaluateRouteHandler(
     [unknown("runtime Request"), UNDEFINED],
     context,
   );
+  context.fields.set("req", {kind: "request", routePattern});
   const response = invokeClosure(evaluator, handler, [context], context);
   if (response.kind === "response") {
     for (const middlewareHandler of [...middleware].reverse()) {
@@ -684,6 +688,15 @@ function evaluateCall(
   if (ts.isPropertyAccessExpression(call.expression)) {
     const receiver = evaluate(evaluator, call.expression.expression, module, environment, instance);
     const name = memberName(call.expression.name);
+    if (receiver.kind === "request" && name === "param") {
+      const key = arguments_[0];
+      if (key?.kind !== "string") {
+        return unknown("request parameter name is not a closed string");
+      }
+      return routeParameterNames(receiver.routePattern).includes(key.value)
+        ? {kind: "routeParameter", name: key.value}
+        : UNDEFINED;
+    }
     if (receiver.kind === "instance") {
       const callable = receiver.fields.get(name);
       if (callable?.kind === "closure") {
@@ -852,6 +865,14 @@ function evaluate(
         value: operator === ts.SyntaxKind.EqualsEqualsEqualsToken ? equal : !equal,
       };
     }
+    if (operator === ts.SyntaxKind.PlusToken) {
+      const right = evaluate(evaluator, expression.right, module, environment, instance);
+      const joined = joinRuntimeStrings([left, right]);
+      if (joined !== undefined) return joined;
+      if (left.kind === "number" && right.kind === "number") {
+        return {kind: "number", value: left.value + right.value};
+      }
+    }
   }
   if (ts.isConditionalExpression(expression)) {
     const condition = evaluate(evaluator, expression.condition, module, environment, instance);
@@ -871,14 +892,27 @@ function evaluate(
       const body = expression.arguments?.[0] === undefined
         ? UNDEFINED
         : evaluate(evaluator, expression.arguments[0], module, environment, instance);
-      if (body.kind !== "string" && body.kind !== "undefined" && body.kind !== "null") {
+      if (
+        body.kind !== "string"
+        && body.kind !== "runtimeString"
+        && body.kind !== "routeParameter"
+        && body.kind !== "undefined"
+        && body.kind !== "null"
+      ) {
         return unknown("Response body is not a closed string or null");
       }
+      const runtimeBody = body.kind === "routeParameter"
+        ? [{kind: "routeParameter" as const, name: body.name}]
+        : body.kind === "runtimeString"
+          ? body.parts
+          : undefined;
       return {
         kind: "response",
-        body: body.kind === "string" ? body.value : "",
+        body: runtimeBody ?? (body.kind === "string" ? body.value : ""),
         status: responseStatus(evaluator, expression, module, environment, instance),
-        contentType: body.kind === "string" ? "text/plain;charset=UTF-8" : "",
+        contentType: body.kind === "string" || runtimeBody !== undefined
+          ? "text/plain;charset=UTF-8"
+          : "",
         headers: responseHeaders(evaluator, expression, module, environment, instance),
       };
     }
@@ -914,14 +948,25 @@ function evaluate(
     return evaluate(evaluator, expression.expression, module, environment, instance);
   }
   if (ts.isTemplateExpression(expression)) {
-    let value = expression.head.text;
+    const values: Value[] = [{kind: "string", value: expression.head.text}];
     for (const span of expression.templateSpans) {
       const part = evaluate(evaluator, span.expression, module, environment, instance);
-      value += stringValue(part) + span.literal.text;
+      values.push(
+        part.kind === "routeParameter" || part.kind === "runtimeString"
+          ? part
+          : {kind: "string", value: stringValue(part)},
+        {kind: "string", value: span.literal.text},
+      );
     }
-    return {kind: "string", value};
+    return joinRuntimeStrings(values) ?? unknown("template value is not string-compatible");
   }
   return unknown(`expression ${ts.SyntaxKind[expression.kind]} is not supported`);
+}
+
+function routeParameterNames(pattern: string): string[] {
+  return pattern.split("/").flatMap(segment =>
+    segment.startsWith(":") && segment.length > 1 ? [segment.slice(1)] : []
+  );
 }
 
 function responseStatus(

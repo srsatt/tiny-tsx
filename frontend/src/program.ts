@@ -218,14 +218,27 @@ function lowerApplicationInitialization(
   const strings = new StringTable();
   const handlers = routes.map(route => {
     const response = route.response!;
-    const body = strings.intern(response.body);
+    const value = typeof response.body === "string"
+      ? {kind: "stringLiteral" as const, string: strings.intern(response.body), span}
+      : {
+        kind: "concat" as const,
+        values: response.body.map(part => part.kind === "literal"
+          ? {kind: "stringLiteral" as const, string: strings.intern(part.value), span}
+          : {
+            kind: "routeParameter" as const,
+            name: part.name,
+            segment: routeParameterSegment(route.path, part.name),
+            span,
+          }),
+        span,
+      };
     return {
       method: "GET" as const,
       path: route.path,
       ...(response.headers === undefined ? {} : {headers: response.headers}),
       response: {
         kind: "text" as const,
-        value: {kind: "stringLiteral" as const, string: body, span},
+        value,
         contentType: response.contentType as "text/plain;charset=UTF-8",
       },
       span,
@@ -250,9 +263,21 @@ function lowerApplicationInitialization(
         (total, value) => total + Buffer.byteLength(value.value, "utf8"),
         0,
       ),
-      dynamicHtmlExpressions: 0,
+      dynamicHtmlExpressions: routes.reduce((total, route) =>
+        total + (typeof route.response?.body === "string"
+          ? 0
+          : route.response?.body.filter(part => part.kind === "routeParameter").length ?? 0), 0),
     },
   };
+}
+
+function routeParameterSegment(pattern: string, name: string): number {
+  const segments = pattern.split("/").filter(Boolean);
+  const index = segments.findIndex(segment => segment === `:${name}`);
+  if (index < 0) {
+    throw new Error(`route parameter \`${name}\` is absent from pattern \`${pattern}\``);
+  }
+  return index;
 }
 
 function isResponseIntrinsicDiagnostic(diagnostic: ts.Diagnostic): boolean {

@@ -209,6 +209,42 @@ test("preserves upstream mergePath semantics across two basic routes", () => {
   ]);
 });
 
+test("lowers a Hono named parameter into a request-time text expression", () => {
+  const entry = path.join(repository, "tests/compat/hono/parameter-route-smoke.ts");
+  const graph = loadModuleGraph(entry, {
+    aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+  });
+  const application = analyzeApplicationEntry(graph.modules[0]!.sourceFile);
+  assert.ok(application);
+
+  const result = evaluateApplicationInitialization(graph, application);
+
+  assert.deepEqual(result?.issues, []);
+  assert.deepEqual(result?.routes[0]?.response?.body, [
+    {kind: "literal", value: "Your ID is "},
+    {kind: "routeParameter", name: "id"},
+  ]);
+
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+    apiAliases: {hono: path.join(repository, "tests/compat/hono/api.d.ts")},
+  });
+  assert.deepEqual(hir.handlers[0]?.response, {
+    kind: "text",
+    value: {
+      kind: "concat",
+      values: [
+        {kind: "stringLiteral", string: 0, span: hir.handlers[0]!.span},
+        {kind: "routeParameter", name: "id", segment: 1, span: hir.handlers[0]!.span},
+      ],
+      span: hir.handlers[0]!.span,
+    },
+    contentType: "text/plain;charset=UTF-8",
+  });
+  assert.equal(hir.statistics.dynamicHtmlExpressions, 1);
+});
+
 test("lowers closed Response init headers from a Hono route", () => {
   const entry = path.join(repository, "tests/compat/hono/response-headers-smoke.ts");
   const hir = compileEntry(entry, {

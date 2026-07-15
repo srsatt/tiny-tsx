@@ -95,6 +95,24 @@ fn builds_and_dispatches_the_first_two_hono_basic_routes() {
 }
 
 #[test]
+fn builds_and_serves_a_hono_named_route_parameter() {
+    build_and_serve_with_options(
+        "tests/compat/hono/parameter-route-smoke.ts",
+        "Your ID is hello world/ok",
+        "text/plain;charset=UTF-8",
+        "/entry/hello%20world%2Fok",
+        &[],
+        &[
+            "--alias",
+            "hono=vendor/hono/src/index.ts",
+            "--api",
+            "hono=tests/compat/hono/api.d.ts",
+        ],
+        &[],
+    );
+}
+
+#[test]
 fn builds_and_serves_static_response_headers() {
     build_and_serve_with_options(
         "tests/compat/hono/response-headers-smoke.ts",
