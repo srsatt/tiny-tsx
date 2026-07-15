@@ -52,7 +52,10 @@ commit message.
       basic example, alongside the smaller `hono/tiny` tracer.
 - [x] Pin the upstream `honojs/examples` revision and intake its complete basic
       source and behavior test rather than only the first route.
-- [ ] Add native Test262 execution; syntax intake alone is not conformance.
+- [x] Add an allowlist-driven native Test262 compiler/runner and execute the
+      exact `typeof undefined` case as a standalone Mach-O program.
+- [ ] Promote the remaining syntax-only Test262 cases only as their complete
+      assertion programs become executable.
 - [ ] Compile function values, closures, records, arrays, and ordinary loops.
 - [x] Keep compile-time closed records distinct from dynamic `Map` values in
       staging, HIR terminology, tests, and the documented object model.

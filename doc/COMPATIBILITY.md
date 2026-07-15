@@ -309,6 +309,17 @@ its closed literal `[...[3, 4, 5]]` is folded by a frontend test. The complete
 Test262 program is still not executed natively, so this is staging evidence, not
 an ECMAScript conformance claim.
 
+The allowlisted `language/expressions/typeof/undefined.js` case is the first
+`mode: native` Test262 entry. `tinytsx test262 <case> --output <binary>` parses
+the untouched upstream source and lowers its two top-level
+`assert.sameValue(...)` calls into typed Test262 HIR. The Apple arm64 backend
+emits a standalone `_main` that compares the lowered actual and expected bytes
+and returns a failing process status on the first mismatch. The allowlist-driven
+runner builds and executes the Mach-O file without a JavaScript runtime. This is
+semantic evidence for the two `typeof undefined`/`typeof void 0` assertions
+only; every other case remains explicitly `mode: syntax` until its entire
+assertion program is supported.
+
 ### Typed constant materialization
 
 Closed staged bindings now enter HIR v2 as source-located, tagged constants.

@@ -69,8 +69,8 @@ produces and serves a native Mach-O executable from the example TSX source.
   and `new Response(text)`, then lowers into path-checked native HIR.
 - A second tracer imports the full `hono` entry and preserves the upstream basic
   example's first route. Its graph contains 27 modules, 4,177 lines, and 117,684
-  bytes and selects the same constructed application root. This is not yet the
-  complete basic example.
+  bytes and selects the same constructed application root; the separate pinned
+  complete-source regression now covers the entire basic application.
 - Application imports can use a narrow `api.d.ts` declaration alias while the
   compiler independently loads real upstream Hono runtime source. An invalid
   route-path test proves the overlay participates in TypeScript checking.
@@ -79,8 +79,10 @@ produces and serves a native Mach-O executable from the example TSX source.
 - Test262 intake validates the pin, provenance metadata, and parsing of fourteen
   allowlisted class, loop, RegExp, async, array-spread, primitive, function,
   throw, Error, `Date.now`, subtraction, record-membership, and array-unshift
-  cases. These are explicitly syntax-only and are not semantic conformance
-  results.
+  cases. Evidence mode is explicit per case. The exact `typeof undefined` case
+  lowers both upstream assertions into Test262 HIR, builds as a standalone
+  native Mach-O executable, and exits successfully after native comparisons.
+  The other thirteen cases remain syntax-only and are not conformance results.
 - The dedicated native API suite currently covers Request method/path/query
   views, elapsed-header formatting, and exact-fit, OOM, and invalid
   response-writer behavior.
@@ -257,6 +259,7 @@ rtk npm run audit:hono-basic
 rtk npm run try:compile:hono-basic  # emits full-package single-route HIR
 rtk cargo run -q -p tinytsx -- build tests/compat/hono/basic-smoke.ts --alias hono=vendor/hono/src/index.ts --api hono=tests/compat/hono/api.d.ts --output dist/hono-basic
 rtk npm run test:test262-intake
+rtk npm run test:test262-native
 rtk npm run test:hono-intake
 rtk npm run test:wpt-intake
 rtk npm run test:native-api
@@ -273,8 +276,8 @@ records distinct from bounded dynamic maps. Type-layout specialization should
 handle closed request-time records without pretending their values are compile-
 time constants. Custom Hono declaration overlays may narrow tested method
 surfaces but must continue to execute pinned upstream runtime source.
-Test262 cases move from syntax intake to native execution only when their
-complete semantics are implemented.
+The next Test262 case should move from syntax intake to native execution only
+when its complete assertion program is implemented.
 
 ## Resume point
 

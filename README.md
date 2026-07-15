@@ -151,12 +151,14 @@ the initial allowlisted Test262 intake plus native host API behavior:
 ```bash
 npm run audit:hono
 npm run test:test262-intake
+npm run test:test262-native
 npm run test:native-api
 ```
 
-The Test262 intake is syntax-only at this stage and is not reported as semantic
-conformance. See `doc/COMPATIBILITY.md` for pins, test layers, and completion
-criteria.
+Test262 evidence is recorded per case. The `typeof undefined` case now compiles
+to and executes as a standalone native Mach-O assertion program; the remaining
+allowlisted cases are syntax-only and are not reported as semantic conformance.
+See `doc/COMPATIBILITY.md` for pins, test layers, and completion criteria.
 
 An exploratory static performance comparison against an equivalent idiomatic Bun
 server is available separately:
