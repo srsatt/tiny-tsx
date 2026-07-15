@@ -212,6 +212,28 @@ fn builds_and_serves_honos_wildcard_api_fallback() {
 }
 
 #[test]
+fn builds_and_serves_a_same_method_hono_handler_chain() {
+    build_and_serve_with_options(
+        "tests/compat/hono/handler-chain-smoke.ts",
+        expected(
+            "GET",
+            200,
+            "/chain",
+            "chained",
+            "text/plain;charset=UTF-8",
+            &[("X-Chain", "yes")],
+        ),
+        &[
+            "--alias",
+            "hono=vendor/hono/src/index.ts",
+            "--api",
+            "hono=tests/compat/hono/api.d.ts",
+        ],
+        &[],
+    );
+}
+
+#[test]
 fn builds_and_serves_static_response_headers() {
     build_and_serve_with_options(
         "tests/compat/hono/response-headers-smoke.ts",
