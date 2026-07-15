@@ -44,6 +44,140 @@ fn builds_and_serves_static_tsx_as_native_macho() {
 }
 
 #[test]
+fn worker_pool_serves_in_parallel_and_recovers_after_saturation() {
+    const WORKERS: usize = 2;
+    const QUEUED_CONNECTIONS: usize = WORKERS * 8;
+
+    let _build_guard = NATIVE_BUILD.lock().expect("lock native E2E build");
+    let root = repository_root();
+    build_frontend(&root);
+    let directory = temporary_directory();
+    let binary = directory.join("worker-server");
+    let port = available_port();
+    let mut build_command = Command::new(env!("CARGO_BIN_EXE_tinytsx"));
+    build_command
+        .current_dir(&root)
+        .args(["build", "tests/compat/hono/multi-route-smoke.ts", "--port"])
+        .arg(port.to_string())
+        .arg("--workers")
+        .arg(WORKERS.to_string())
+        .arg("--output")
+        .arg(&binary)
+        .args([
+            "--alias",
+            "hono=vendor/hono/src/index.ts",
+            "--api",
+            "hono=tests/compat/hono/api.d.ts",
+        ]);
+    let build = build_command.output().expect("build worker server");
+    assert!(
+        build.status.success(),
+        "build failed:\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&build.stdout),
+        String::from_utf8_lossy(&build.stderr),
+    );
+    let report: serde_json::Value = serde_json::from_slice(
+        &fs::read(with_suffix(&binary, ".build.json")).expect("read report"),
+    )
+    .expect("parse build report");
+    assert_eq!(report["workers"], WORKERS);
+    assert!(
+        report["runtimeFeatures"]
+            .as_array()
+            .expect("runtime feature list")
+            .iter()
+            .any(|feature| feature == "bounded-worker-pool")
+    );
+
+    let child = Command::new(&binary).spawn().expect("start worker server");
+    let _server = Server(child);
+
+    let mut stalled = vec![connect_with_retry(port)];
+    stalled[0]
+        .write_all(b"GET / HTTP/1.1\r\nHost: localhost\r\n")
+        .expect("stall first worker");
+    thread::sleep(Duration::from_millis(50));
+
+    let mut parallel = TcpStream::connect(("127.0.0.1", port)).expect("connect parallel request");
+    parallel
+        .set_read_timeout(Some(Duration::from_secs(1)))
+        .expect("set parallel timeout");
+    parallel
+        .write_all(b"GET /hello HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
+        .expect("send parallel request");
+    let mut parallel_response = String::new();
+    parallel
+        .read_to_string(&mut parallel_response)
+        .expect("parallel worker responds while first is stalled");
+    assert!(
+        parallel_response.starts_with("HTTP/1.1 200 OK\r\n"),
+        "{parallel_response}"
+    );
+    assert!(parallel_response.ends_with("This is /hello"));
+
+    stalled[0]
+        .write_all(b"Connection: close\r\n\r\n")
+        .expect("finish first worker request");
+    stalled[0]
+        .set_read_timeout(Some(Duration::from_secs(1)))
+        .expect("set first worker timeout");
+    let mut first_response = String::new();
+    stalled[0]
+        .read_to_string(&mut first_response)
+        .expect("read first worker response");
+    assert!(first_response.starts_with("HTTP/1.1 200 OK\r\n"));
+    assert!(first_response.ends_with("Hono!!"));
+    stalled.clear();
+
+    for _ in 0..WORKERS + QUEUED_CONNECTIONS {
+        let mut connection =
+            TcpStream::connect(("127.0.0.1", port)).expect("connect saturated request");
+        connection
+            .write_all(b"GET / HTTP/1.1\r\nHost: localhost\r\n")
+            .expect("stall saturated request");
+        stalled.push(connection);
+    }
+    thread::sleep(Duration::from_millis(100));
+
+    let mut overload = TcpStream::connect(("127.0.0.1", port)).expect("connect overload request");
+    overload
+        .set_read_timeout(Some(Duration::from_secs(1)))
+        .expect("set overload timeout");
+    overload
+        .write_all(b"GET / HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
+        .expect("send overload request");
+    let mut overload_response = String::new();
+    overload
+        .read_to_string(&mut overload_response)
+        .expect("read overload response");
+    assert!(
+        overload_response.starts_with("HTTP/1.1 503 Service Unavailable\r\n"),
+        "{overload_response}"
+    );
+    assert!(overload_response.ends_with("server overloaded"));
+
+    drop(stalled);
+    thread::sleep(Duration::from_millis(200));
+    let mut recovered = TcpStream::connect(("127.0.0.1", port)).expect("connect recovery request");
+    recovered
+        .set_read_timeout(Some(Duration::from_secs(1)))
+        .expect("set recovery timeout");
+    recovered
+        .write_all(b"GET / HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
+        .expect("send recovery request");
+    let mut recovered_response = String::new();
+    recovered
+        .read_to_string(&mut recovered_response)
+        .expect("read recovery response");
+    assert!(
+        recovered_response.starts_with("HTTP/1.1 200 OK\r\n"),
+        "{recovered_response}"
+    );
+
+    fs::remove_dir_all(directory).expect("remove worker test artifacts");
+}
+
+#[test]
 fn builds_and_serves_an_imported_component() {
     build_and_serve(
         "examples/multi-module/server.tsx",

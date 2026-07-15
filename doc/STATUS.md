@@ -287,8 +287,14 @@ produces and serves a native Mach-O executable from the example TSX source.
   every positive `--workers N`. The bootstrap creates that many native executor
   threads and a queue of eight waiting connections per worker. Its single
   acceptor submits owned streams without blocking; saturation returns a bounded
-  `server overloaded` HTTP 503. A two-worker native smoke test kept one worker
-  blocked on a partial request while the other returned the exact static page.
+  `server overloaded` HTTP 503. The overload path consumes a request head for at
+  most 10 ms and half-closes its response so unread TCP bytes cannot hide the
+  status behind a reset.
+- A focused two-worker pinned-Hono E2E keeps one executor blocked on a partial
+  root request while the other returns `/hello`, then validates the root reply,
+  occupies both executors plus all 16 queue slots, observes the next connection's
+  503, releases the sockets, and receives a later 200. It also asserts the build
+  report's worker count/runtime feature and passed three consecutive runs.
 
 Verification:
 
@@ -327,17 +333,18 @@ rtk npm run benchmark:hono-jsx-ssr
 
 ## Active slice
 
-The reusable native worker pool now drives HTTP and `--workers N` is emitted into
-the executable. The active slice is native E2E proof of parallel request service,
-deterministic saturation 503, response isolation, and recovery after overload.
-Keep fixed-layout records separate from dynamic `Map`; do not infer generic
-arrays, maps, regexps, or Promise semantics from finite Hono specialization.
+The reusable native worker pool now drives HTTP and has wire-level concurrency,
+isolation, overload, and recovery proof. The active performance slice is to make
+the benchmark harness build 1/2/4/8-worker variants and record an initial
+connection-close baseline, then add keep-alive before interpreting scheduler
+scaling. Keep fixed-layout records separate from dynamic `Map`.
 
 ## Resume point
 
 Read `doc/WORKERS.md`, `doc/PERFORMANCE.md`, and `doc/BACKLOG.md`. Run
-`rtk cargo test -p tinytsx-runtime-worker`, then add a focused native server test
-that occupies executor threads with partial requests, fills the waiting queue,
-observes the next connection's 503, releases the stalled connections, and
-verifies a later 200. Preserve the current `Connection: close` contract for this
-slice; keep-alive follows before publication-grade worker scaling measurements.
+`rtk cargo test -p tinytsx-runtime-worker` and
+`rtk cargo test -p tinytsx worker_pool_serves_in_parallel_and_recovers_after_saturation`.
+Extend the existing benchmark harness without changing its response-equivalence
+gate so TinyTSX worker counts can be compared on the pinned Hono workload.
+Preserve the current `Connection: close` result as a baseline; keep-alive follows
+before publication-grade worker scaling claims.

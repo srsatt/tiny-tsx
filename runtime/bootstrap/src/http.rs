@@ -1,6 +1,7 @@
 use std::{
     io::{Read, Write},
-    net::{TcpListener, TcpStream},
+    net::{Shutdown, TcpListener, TcpStream},
+    time::Duration,
 };
 
 use tinytsx_runtime_worker::WorkerPool;
@@ -42,13 +43,7 @@ pub fn serve() -> std::io::Result<()> {
             Ok(stream) => {
                 if let Err(rejected) = pool.try_submit(stream) {
                     let mut stream = rejected.into_inner();
-                    if let Err(error) = write_response(
-                        &mut stream,
-                        503,
-                        CONTENT_TYPE_TEXT,
-                        b"server overloaded",
-                        &[],
-                    ) {
+                    if let Err(error) = write_overload_response(&mut stream) {
                         eprintln!("overload response error: {error}");
                     }
                 }
@@ -57,6 +52,13 @@ pub fn serve() -> std::io::Result<()> {
         }
     }
     Ok(())
+}
+
+fn write_overload_response(stream: &mut TcpStream) -> std::io::Result<()> {
+    stream.set_read_timeout(Some(Duration::from_millis(10)))?;
+    let _ = read_request_head(stream);
+    write_response(stream, 503, CONTENT_TYPE_TEXT, b"server overloaded", &[])?;
+    stream.shutdown(Shutdown::Write)
 }
 
 fn handle_connection(stream: &mut TcpStream, request_memory: usize) -> std::io::Result<()> {

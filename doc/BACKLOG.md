@@ -45,7 +45,7 @@ commit message.
 - [x] Add a zero-dependency reusable native worker-pool crate with a bounded
       FIFO queue, worker-local state, panic recovery, and draining shutdown.
 - [x] Make the HTTP bootstrap consume the shared pool and enable `--workers N`.
-- [ ] Prove concurrent request execution, deterministic saturation 503, response
+- [x] Prove concurrent request execution, deterministic saturation 503, response
       isolation, and recovery after overload.
 - [ ] Benchmark equivalent Hono workloads with 1/2/4/8 workers, reporting RSS,
       throughput, median/p99 latency, and queue saturation behavior.
@@ -237,5 +237,5 @@ commit message.
 - [ ] Dynamic component props and request query lookup.
 - [ ] HTML text and quoted-attribute escaping.
 - [ ] Fixed request arena and recoverable request OOM.
-- [ ] Fixed native worker pool and bounded dispatch queue.
+- [x] Fixed native worker pool and bounded dispatch queue.
 - [ ] Add request parsing and response equivalence cases beyond the static page.
