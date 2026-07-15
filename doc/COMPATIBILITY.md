@@ -104,6 +104,14 @@ basic example. Native tests pin Hono's behavior that the pattern matches `/api`,
 404 and text body; unmatched non-API paths still use the bootstrap 404. Optional
 and constrained patterns remain pending.
 
+Hono registrations that share a method and path now retain handler-chain order.
+The compiler emits only the terminal route and applies earlier post-`next()`
+effects around its response; a native E2E verifies the response header mutation.
+This collapses the complete example's two GET `/api/posts` entries into one
+route with the correct compact JSON body. Full `prettyJSON()` behavior is not
+claimed yet because `?pretty` requires a request-time query predicate and a
+conditional response body.
+
 ### Type-only API overlay
 
 The compiling frontend accepts `--api <specifier>=<api.d.ts>` independently of

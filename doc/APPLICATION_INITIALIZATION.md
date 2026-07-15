@@ -108,6 +108,18 @@ router for this subset. The basic example's `GET /api/*` fallback therefore
 serves its own status 404 and `API endpoint is not found` body instead of falling
 through to the bootstrap's unmatched-route response.
 
+Multiple registrations with the same method and path now form one ordered
+handler chain. Earlier handlers are not emitted as duplicate native routes;
+their post-`next()` effects are applied in reverse around the terminal response.
+A focused native E2E verifies an async first handler mutating the response header
+after a final text handler. In the complete basic source, the two GET
+`/api/posts` registrations now become one route with the compact JSON response.
+The `prettyJSON()` query-dependent body transformation remains pending.
+
+Async/await syntax is admitted only inside constructed-application handlers
+that the initialization evaluator consumes completely. This does not introduce
+native Promise objects, suspension, or a task executor.
+
 Closed middleware registrations are retained as `ALL` routes during symbolic
 initialization. For a matching static route, the evaluator invokes preceding
 middleware around the handler and applies post-handler effects in reverse

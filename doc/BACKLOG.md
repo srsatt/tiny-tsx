@@ -106,7 +106,9 @@ commit message.
       segments, and compile the basic example's `/api/*` 404 fallback.
 - [ ] Add optional, constrained, and additional multi-segment route patterns plus
       broader request-dependent handler bodies.
-- [ ] Compose same-method/path handler chains such as
+- [x] Compose same-method/path handlers into one ordered route and apply closed
+      post-`next()` response effects.
+- [ ] Lower the request-query-dependent response branch in
       `app.get('/api/posts', prettyJSON(), handler)`.
 - [x] Apply closed post-handler middleware and compile upstream `poweredBy()`
       through native response-header emission.
@@ -128,6 +130,8 @@ commit message.
 - [ ] Execute selected Web Platform Tests through the native compiler/runtime;
       declaration-level and derived testing are not conformance.
 - [ ] Add exceptions, Promise, async/await, and a bounded native task executor.
+- [x] Admit async/await handlers when application initialization fully stages
+      them without creating a native Promise or suspended task.
 - [x] Reproduce the pinned basic example's selected root-route status and
       `X-Powered-By: Hono` assertions through a native HTTP E2E.
 - [ ] Run broader upstream Hono behavior tests as features become available.
