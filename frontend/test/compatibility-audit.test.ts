@@ -320,7 +320,7 @@ test("lowers Hono JSON serialization and status through Context newResponse", ()
   const result = evaluateApplicationInitialization(graph, application);
 
   assert.deepEqual(result?.issues, []);
-  assert.deepEqual(result?.routes[0]?.response, {
+  assert.deepEqual(result?.routes.find(route => route.method === "POST")?.response, {
     kind: "text",
     body: "{\"message\":\"Created!\"}",
     status: 201,
@@ -558,6 +558,28 @@ test("lowers an upstream Hono request header into request-time text", () => {
     "Your UserAgent is ",
     "User-Agent",
   ]);
+});
+
+test("rolls back an unsupported middleware effect without corrupting the response", () => {
+  const entry = path.join(repository, "tests/compat/hono/middleware-rollback-smoke.ts");
+  const graph = loadModuleGraph(entry, {
+    aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+  });
+  const application = analyzeApplicationEntry(graph.modules[0]!.sourceFile);
+  assert.ok(application);
+
+  const result = evaluateApplicationInitialization(graph, application);
+
+  assert.equal(result?.issues.length, 1);
+  assert.deepEqual(result?.routes.find(route => route.method === "GET")?.response, {
+    kind: "text",
+    body: [
+      {kind: "literal", value: "Your UserAgent is "},
+      {kind: "requestHeader", name: "User-Agent"},
+    ],
+    status: 200,
+    contentType: "text/plain;charset=UTF-8",
+  });
 });
 
 test("lowers the tiny-preset Hono route into native HIR", () => {
