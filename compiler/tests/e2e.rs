@@ -1086,6 +1086,17 @@ fn builds_and_serves_upstream_hono_stream_text_without_body_buffering() {
         String::from_utf8_lossy(&build.stdout),
         String::from_utf8_lossy(&build.stderr),
     );
+    let report: serde_json::Value = serde_json::from_slice(
+        &fs::read(with_suffix(&binary, ".build.json")).expect("read stream build report"),
+    )
+    .expect("parse stream build report");
+    assert!(
+        report["runtimeFeatures"]
+            .as_array()
+            .expect("runtime feature list")
+            .iter()
+            .any(|feature| feature == "bounded-response-streaming")
+    );
 
     let child = Command::new(&binary)
         .spawn()

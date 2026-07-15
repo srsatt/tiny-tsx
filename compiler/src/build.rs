@@ -41,7 +41,7 @@ struct BuildReport<'a> {
     constants: usize,
     static_html_bytes: usize,
     dynamic_html_expressions: usize,
-    runtime_features: [&'a str; 4],
+    runtime_features: [&'a str; 5],
 }
 
 pub fn execute(options: &Options) -> Result<PathBuf, String> {
@@ -221,6 +221,7 @@ fn write_report(output: &Path, compilation: &Compilation, options: &Options) -> 
             "bounded-writer",
             "bounded-worker-pool",
             "keep-alive",
+            "bounded-response-streaming",
         ],
     };
     let json = serde_json::to_string_pretty(&report)
