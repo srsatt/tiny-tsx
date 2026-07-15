@@ -1377,6 +1377,7 @@ function evaluate(
         body.kind !== "string"
         && body.kind !== "runtimeString"
         && body.kind !== "routeParameter"
+        && body.kind !== "responseBody"
         && body.kind !== "undefined"
         && body.kind !== "null"
       ) {
@@ -1386,6 +1387,8 @@ function evaluate(
         ? [{kind: "routeParameter" as const, name: body.name}]
         : body.kind === "runtimeString"
           ? body.parts
+          : body.kind === "responseBody"
+            ? body.body
           : undefined;
       const headers = responseHeaders(evaluator, expression, module, environment, instance);
       const contentTypeHeader = headers.get("content-type")?.value;

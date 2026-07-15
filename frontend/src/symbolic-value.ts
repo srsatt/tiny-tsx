@@ -34,6 +34,7 @@ export type Value =
     }
   | {kind: "reference"; name: string; module: string; callable?: ResolvedCallable}
   | {kind: "constructed"; name: string; module: string}
+  | {kind: "responseBody"; body: ResponseBody}
   | {
       kind: "response";
       body: ResponseBody;
@@ -94,7 +95,7 @@ export function readProperty(value: Value, name: string): Value {
   if (value.kind === "response" && name === "body") {
     if (typeof value.body === "string") return {kind: "string", value: value.body};
     if (Array.isArray(value.body)) return {kind: "runtimeString", parts: value.body};
-    return unknown("query-conditional Response.body is not directly reusable");
+    return {kind: "responseBody", body: value.body};
   }
   if (value.kind === "response" && name === "status") {
     return {kind: "number", value: value.status};
@@ -183,6 +184,7 @@ export function truthiness(value: Value): boolean | undefined {
     case "closure":
     case "reference":
     case "constructed":
+    case "responseBody":
     case "response":
     case "instance": return true;
     case "routeParameter": return true;

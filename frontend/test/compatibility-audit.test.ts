@@ -469,6 +469,57 @@ test("lowers the upstream response-time middleware into a native elapsed header"
   );
 });
 
+test("preserves response timing when prettyJSON clones a conditional body", () => {
+  const entry = path.join(
+    repository,
+    "tests/compat/hono/response-time-pretty-json-smoke.ts",
+  );
+  const options = {
+    aliases: {
+      hono: path.join(repository, "vendor/hono/src/index.ts"),
+      "hono/pretty-json": path.join(
+        repository,
+        "vendor/hono/src/middleware/pretty-json/index.ts",
+      ),
+    },
+    apiAliases: {
+      hono: path.join(repository, "tests/compat/hono/api.d.ts"),
+      "hono/pretty-json": path.join(repository, "tests/compat/hono/pretty-json-api.d.ts"),
+    },
+  };
+  const graph = loadModuleGraph(entry, options);
+  const application = analyzeApplicationEntry(graph.modules[0]!.sourceFile);
+  assert.ok(application);
+
+  const result = evaluateApplicationInitialization(graph, application);
+
+  assert.deepEqual(result?.issues, []);
+  const route = result?.routes.find(candidate => candidate.method === "GET");
+  assert.deepEqual(route?.response?.headers, [{
+    name: "X-Response-Time",
+    value: [
+      {kind: "elapsedMilliseconds"},
+      {kind: "literal", value: "ms"},
+    ],
+  }]);
+
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    ...options,
+  });
+  assert.deepEqual(hir.handlers[0]?.elapsedHeaders, [{
+    name: "X-Response-Time",
+    suffix: "ms",
+  }]);
+  assert.equal(hir.handlers[0]?.response.kind, "text");
+  assert.equal(
+    hir.handlers[0]?.response.kind === "text"
+      ? hir.handlers[0].response.value.kind
+      : undefined,
+    "queryConditional",
+  );
+});
+
 test("lowers upstream prettyJSON into a query-conditional native response", () => {
   const entry = path.join(repository, "tests/compat/hono/pretty-json-smoke.ts");
   const options = {
