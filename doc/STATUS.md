@@ -348,6 +348,11 @@ produces and serves a native Mach-O executable from the example TSX source.
   concurrency 8–64. TinyTSX p99 remains 30–44 ms at c64, confirming connection
   fairness is still the main tail problem. Bun collects the finite stream to a
   19-byte Content-Length response while TinyTSX preserves three wire chunks.
+- The reusable runtime crate now layers bounded logical-worker mailboxes over
+  the native executor pool. Tests prove per-worker FIFO ordering and isolated
+  state, parallel execution across logical workers, returned ownership on
+  overload, queued-message cancellation on termination, panic recovery, and
+  draining shutdown. Bootstrap/ABI and TypeScript syntax integration remain.
 
 Verification:
 

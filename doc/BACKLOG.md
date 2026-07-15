@@ -53,6 +53,11 @@ commit message.
       throughput, median/p99 latency, and queue saturation behavior.
 - [ ] Implement compile-time-known module Workers as syntax sugar over isolated
       mailboxes and a separate application task pool.
+- [x] Add bounded logical-worker mailboxes with per-worker state, request/reply
+      ownership, parallel workers, termination, panic recovery, and draining
+      shutdown tests to the zero-dependency runtime library.
+- [ ] Connect that application pool to the bootstrap ABI and lower the first
+      compile-time-known TypeScript `Worker` module.
 - [ ] Pin an exact AI SDK Core revision and run the Hono-style syntax/type/source
       intake against `ai`, `@ai-sdk/provider`, `@ai-sdk/provider-utils`, its
       gateway dependency, and the selected schema dependency.

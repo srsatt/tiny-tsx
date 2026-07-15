@@ -44,6 +44,17 @@ The pool guarantees:
 The pool does not know about TCP, Hono, JavaScript modules, request arenas, or
 garbage collection.
 
+The runtime library now also exposes `ApplicationPool` and `LogicalWorker` as
+the request/reply layer for TypeScript sugar. It adds one bounded mailbox per
+logical worker while retaining the shared executor queue. Exactly one drain job
+per logical worker may be scheduled, so messages execute in FIFO order against
+isolated worker state while distinct logical workers can run in parallel.
+`try_post` transfers ownership into the mailbox and returns a `Reply`; `call`
+is the blocking bridge permitted only from a different pool. Full, closed, and
+terminated submissions return message ownership. Termination cancels queued
+messages, active work completes, and a panicking message reports failure
+without preventing later delivery.
+
 ## HTTP use
 
 The bootstrap runtime owns one listener and submits each accepted `TcpStream`
@@ -106,6 +117,10 @@ independent instances when application workers arrive:
 
 A later scheduler may unify them only after it proves progress under nested
 submission. No mutable application object is shared across logical workers.
+
+The logical application-pool library is implemented and tested independently.
+Bootstrap/ABI and TypeScript `Worker` lowering are the remaining integration
+steps; HTTP binaries still instantiate only the connection pool.
 
 ## Verification gates
 
