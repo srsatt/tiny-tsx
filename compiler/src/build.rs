@@ -220,7 +220,7 @@ fn write_report(output: &Path, compilation: &Compilation, options: &Options) -> 
             "http1",
             "bounded-writer",
             "bounded-worker-pool",
-            "connection-close",
+            "keep-alive",
         ],
     };
     let json = serde_json::to_string_pretty(&report)

@@ -945,17 +945,29 @@ fn valid_header_value(value: &[u8]) -> bool {
         .any(|byte| matches!(byte, b'\0' | b'\r' | b'\n'))
 }
 
-pub struct RenderedResponse {
+pub struct RequestArena {
+    output: Vec<u8>,
+}
+
+impl RequestArena {
+    pub fn new(capacity: usize) -> Self {
+        Self {
+            output: vec![0_u8; capacity],
+        }
+    }
+}
+
+pub struct RenderedResponse<'a> {
     pub application_status: u32,
     pub http_status: u16,
     pub content_type: u16,
-    pub body: Vec<u8>,
+    pub body: &'a [u8],
     pub headers: Vec<(Vec<u8>, Vec<u8>)>,
 }
 
-pub fn render(request: &TinyRequest, capacity: usize) -> RenderedResponse {
-    let mut output = vec![0_u8; capacity];
-    let start = output.as_mut_ptr();
+pub fn render<'a>(request: &TinyRequest, arena: &'a mut RequestArena) -> RenderedResponse<'a> {
+    let start = arena.output.as_mut_ptr();
+    let capacity = arena.output.len();
     // SAFETY: `start` points at a `capacity`-byte allocation.
     let end = unsafe { start.add(capacity) };
     let mut writer = TinyResponseWriter {
@@ -975,7 +987,6 @@ pub fn render(request: &TinyRequest, capacity: usize) -> RenderedResponse {
     // for the duration of the call.
     let status = unsafe { tinytsx_handle_get(request, &mut writer) };
     let written = writer.cursor as usize - writer.start as usize;
-    output.truncate(written);
     let headers = writer.headers[..writer.header_count]
         .iter()
         .map(|header| {
@@ -991,7 +1002,7 @@ pub fn render(request: &TinyRequest, capacity: usize) -> RenderedResponse {
         application_status: status,
         http_status: writer.http_status,
         content_type: writer.content_type,
-        body: output,
+        body: &arena.output[..written],
         headers,
     }
 }

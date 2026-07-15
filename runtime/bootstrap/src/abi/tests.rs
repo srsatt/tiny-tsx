@@ -1,7 +1,7 @@
 use super::{
     BAD_REQUEST, CONTENT_TYPE_HTML, CONTENT_TYPE_NONE, CONTENT_TYPE_TEXT, INTERNAL_ERROR,
-    MAX_DYNAMIC_HEADER_BYTES, MAX_RESPONSE_HEADERS, OK, REQUEST_OOM, TinyHeader,
-    TinyResponseWriter, TinyStringView, request, request_with_headers,
+    MAX_DYNAMIC_HEADER_BYTES, MAX_RESPONSE_HEADERS, OK, REQUEST_OOM, RequestArena, TinyHeader,
+    TinyResponseWriter, TinyStringView, render, request, request_with_headers,
     tinytsx_html_write_fetch_status, tinytsx_html_write_path_segment,
     tinytsx_html_write_request_header, tinytsx_html_write_static,
     tinytsx_request_basic_auth_equals, tinytsx_request_if_none_match,
@@ -14,6 +14,19 @@ use std::{
     net::TcpListener,
     thread,
 };
+
+#[test]
+fn request_arena_reuses_one_bounded_output_allocation() {
+    let request = request(b"GET", b"/");
+    let mut arena = RequestArena::new(128);
+    let start = arena.output.as_ptr();
+
+    drop(render(&request, &mut arena));
+    drop(render(&request, &mut arena));
+
+    assert_eq!(arena.output.as_ptr(), start);
+    assert_eq!(arena.output.len(), 128);
+}
 
 #[test]
 fn request_exposes_method_path_and_query_as_borrowed_views() {
