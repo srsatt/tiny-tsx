@@ -24,7 +24,7 @@ const apiAliases = {
 };
 const args = [
   "run", "-q", "-p", "tinytsx", "--", "build",
-  "tests/compat/ai/hono-generate-text-smoke.ts",
+  process.env.TINYTSX_AI_ENTRY ?? "tests/compat/ai/hono-generate-text-smoke.ts",
   "--port", process.env.TINYTSX_AI_PORT ?? "39451",
   ...aliases("--alias", runtimeAliases),
   ...aliases("--api", apiAliases),

@@ -38,6 +38,25 @@ test("compiles invalid AI SDK prompt handling through the pinned Hono runtime", 
   assertArenaMemoryReport(hir);
 });
 
+test("compiles deterministic AI SDK streaming through a Web Response", () => {
+  const hir = compileAiEntry("hono-stream-text-smoke.ts");
+
+  const route = hir.handlers.find(handler => handler.path === "/ai-stream");
+  assert.equal(route?.response.kind, "stream");
+  assert.equal(
+    route?.response.kind === "stream" ? route.response.contentType : undefined,
+    "text/plain; charset=utf-8",
+  );
+  assert.deepEqual(
+    route?.response.kind === "stream"
+      ? route.response.chunks.map(chunk => staticExpressionText(hir, chunk))
+      : [],
+    ["Hello", " from streaming AI"],
+  );
+  assertArenaMemoryReport(hir);
+  assert.ok(hir.memory.summary.request > 0);
+});
+
 function assertArenaMemoryReport(hir) {
   assert.equal(hir.memory.policy, "arena");
   assert.equal(hir.memory.managedHeapRequired, false);
@@ -77,6 +96,12 @@ function compileAiEntry(entry) {
 function staticText(hir, route) {
   return route?.response.kind === "text" && route.response.value.kind === "stringLiteral"
     ? hir.staticStrings[route.response.value.string]?.value ?? ""
+    : "";
+}
+
+function staticExpressionText(hir, expression) {
+  return expression.kind === "stringLiteral"
+    ? hir.staticStrings[expression.string]?.value ?? ""
     : "";
 }
 
