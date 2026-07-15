@@ -67,6 +67,28 @@ WORKLOADS = {
             "--tsconfig-override", "benchmarks/bun/hono-tsconfig.json",
         ],
     },
+    "hono-jsx-ssr": {
+        "body": b"",
+        "content_type": "text/html; charset=UTF-8",
+        "headers": {},
+        "numeric_headers": [],
+        "path": "/",
+        "scope": "complete pinned 31-module Hono jsx-ssr application, GET / rendering five posts through typed JSX components; HTTP/1.1; connection close; localhost",
+        "limitation": "The measured root route is fully closed and AOT-rendered; request-selected /post/:id behavior is correctness-tested but not part of this throughput sample.",
+        "reference_target": "bun",
+        "tiny_entry": "vendor/hono-examples/jsx-ssr/src/index.tsx",
+        "tiny_args": [
+            "--alias", "hono=vendor/hono/src/index.ts",
+            "--alias", "hono/html=vendor/hono/src/helper/html/index.ts",
+            "--api", "hono=tests/compat/hono/api.d.ts",
+            "--api", "hono/html=tests/compat/hono/html-api.d.ts",
+        ],
+        "bun_script": "benchmarks/bun/hono-jsx-ssr-server.ts",
+        "bun_args": [
+            "--jsx-import-source", "hono/jsx",
+            "--tsconfig-override", "benchmarks/bun/hono-jsx-ssr-tsconfig.json",
+        ],
+    },
 }
 
 
@@ -102,6 +124,13 @@ def main() -> int:
             "path": workload["path"],
         },
     }
+    if reference_target := workload.get("reference_target"):
+        workload = dict(workload)
+        workload["body"] = capture_reference_body(
+            specs[str(reference_target)],
+            port,
+            workload,
+        )
 
     targets: dict[str, Any] = {
         name: {
@@ -117,7 +146,9 @@ def main() -> int:
     for run in range(arguments.startup_runs):
         order = ["tinytsx", "bun"] if run % 2 == 0 else ["bun", "tinytsx"]
         for name in order:
-            targets[name]["startupSamplesMs"].append(measure_startup(specs[name], port))
+            targets[name]["startupSamplesMs"].append(
+                measure_startup(specs[name], port, workload)
+            )
 
     for run in range(arguments.runs):
         order = ["tinytsx", "bun"] if run % 2 == 0 else ["bun", "tinytsx"]
@@ -240,13 +271,37 @@ def start_server(spec: dict[str, Any]) -> subprocess.Popen[bytes]:
     )
 
 
-def measure_startup(spec: dict[str, Any], port: int) -> float:
+def measure_startup(
+    spec: dict[str, Any],
+    port: int,
+    workload: dict[str, Any],
+) -> float:
     started = time.perf_counter_ns()
     process = start_server(spec)
     try:
         response = wait_for_response(process, port, spec["path"])
-        assert_correct(response, WORKLOADS[spec["workload"]], spec["name"])
+        assert_correct(response, workload, spec["name"])
         return (time.perf_counter_ns() - started) / 1_000_000
+    finally:
+        stop_server(process)
+
+
+def capture_reference_body(
+    spec: dict[str, Any],
+    port: int,
+    workload: dict[str, Any],
+) -> bytes:
+    process = start_server(spec)
+    try:
+        response = wait_for_response(process, port, spec["path"])
+        actual_type = normalize_content_type(response["headers"].get("content-type"))
+        expected_type = normalize_content_type(expected_content_type(workload, spec["name"]))
+        if response["status"] != 200 or actual_type != expected_type:
+            raise RuntimeError(
+                "reference response mismatch: "
+                f"status={response['status']}, content-type={actual_type}"
+            )
+        return bytes(response["body"])
     finally:
         stop_server(process)
 

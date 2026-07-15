@@ -36,6 +36,20 @@ class StaticHarnessTest(unittest.TestCase):
             "application/octet-stream",
         )
 
+    def test_hono_jsx_workload_uses_bun_as_the_byte_reference(self) -> None:
+        workload = WORKLOADS["hono-jsx-ssr"]
+        self.assertEqual(
+            workload["tiny_entry"],
+            "vendor/hono-examples/jsx-ssr/src/index.tsx",
+        )
+        self.assertEqual(workload["path"], "/")
+        self.assertEqual(workload["reference_target"], "bun")
+        self.assertTrue(any(
+            argument.startswith("hono/html=")
+            for argument in workload["tiny_args"]
+        ))
+        self.assertIn("hono/jsx", workload["bun_args"])
+
     def test_response_equivalence_includes_required_headers(self) -> None:
         workload = {
             "body": b"Hono!!",

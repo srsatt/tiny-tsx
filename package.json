@@ -4,10 +4,13 @@
   "scripts": {
     "audit:hono": "npm run build:frontend && node frontend/dist/src/cli.js --audit-compat tests/compat/hono/smoke.ts --alias hono/tiny=vendor/hono/src/preset/tiny.ts",
     "audit:hono-basic": "npm run build:frontend && node frontend/dist/src/cli.js --audit-compat tests/compat/hono/basic-smoke.ts --alias hono=vendor/hono/src/index.ts",
+    "audit:hono-jsx-ssr": "npm run build:frontend && node frontend/dist/src/cli.js --audit-compat vendor/hono-examples/jsx-ssr/src/index.tsx --alias hono=vendor/hono/src/index.ts --alias hono/html=vendor/hono/src/helper/html/index.ts",
     "build:hono-basic-example": "npm run build:frontend && cargo run -q -p tinytsx -- build vendor/hono-examples/basic/src/index.ts --alias hono=vendor/hono/src/index.ts --alias hono/basic-auth=vendor/hono/src/middleware/basic-auth/index.ts --alias hono/etag=vendor/hono/src/middleware/etag/index.ts --alias hono/powered-by=vendor/hono/src/middleware/powered-by/index.ts --alias hono/pretty-json=vendor/hono/src/middleware/pretty-json/index.ts --api hono=tests/compat/hono/api.d.ts --api hono/basic-auth=tests/compat/hono/basic-auth-api.d.ts --api hono/etag=tests/compat/hono/etag-api.d.ts --api hono/powered-by=tests/compat/hono/powered-by-api.d.ts --api hono/pretty-json=tests/compat/hono/pretty-json-api.d.ts --output dist/hono-basic-example",
+    "build:hono-jsx-ssr-example": "npm run build:frontend && cargo run -q -p tinytsx -- build vendor/hono-examples/jsx-ssr/src/index.tsx --alias hono=vendor/hono/src/index.ts --alias hono/html=vendor/hono/src/helper/html/index.ts --api hono=tests/compat/hono/api.d.ts --api hono/html=tests/compat/hono/html-api.d.ts --output dist/hono-jsx-ssr-example",
     "build:frontend": "npm --prefix frontend run build",
     "benchmark:static": "python3 benchmarks/scripts/run_static.py",
     "benchmark:hono": "python3 benchmarks/scripts/run_static.py --workload hono-basic",
+    "benchmark:hono-jsx-ssr": "python3 benchmarks/scripts/run_static.py --workload hono-jsx-ssr",
     "test:benchmarks": "python3 -m unittest discover -s benchmarks/tests -p 'test_*.py'",
     "test:frontend": "npm --prefix frontend test",
     "test:native-api": "cargo test -p tinytsx-runtime-bootstrap abi::tests",
@@ -19,6 +22,7 @@
     "test:wpt-native": "npm run build:frontend && node --test tests/compat/wpt/native.test.mjs",
     "try:compile:hono": "npm run build:frontend && node frontend/dist/src/cli.js tests/compat/hono/smoke.ts --alias hono/tiny=vendor/hono/src/preset/tiny.ts --api hono/tiny=tests/compat/hono/api.d.ts",
     "try:compile:hono-basic": "npm run build:frontend && node frontend/dist/src/cli.js tests/compat/hono/basic-smoke.ts --alias hono=vendor/hono/src/index.ts --api hono=tests/compat/hono/api.d.ts",
+    "try:compile:hono-jsx-ssr": "npm run build:frontend && node frontend/dist/src/cli.js vendor/hono-examples/jsx-ssr/src/index.tsx --alias hono=vendor/hono/src/index.ts --alias hono/html=vendor/hono/src/helper/html/index.ts --api hono=tests/compat/hono/api.d.ts --api hono/html=tests/compat/hono/html-api.d.ts",
     "test": "npm run test:frontend && npm run test:hono-intake && npm run test:hono-jsx-reference && npm run test:test262-intake && npm run test:test262-native && npm run test:wpt-intake && npm run test:wpt-native && npm run test:benchmarks && cargo test --workspace"
   }
 }
