@@ -12,6 +12,10 @@ as work progresses.
   conformance program.
 - `PERFORMANCE.md` records measured TinyTSX/Bun results, limitations, and the
   ordered performance roadmap.
+- `WORKERS.md` defines the reusable native executor, logical Worker API, and
+  isolation/overload contracts.
+- `MEMORY_MANAGEMENT.md` classifies value lifetimes and defines the decision
+  boundary for adopting a garbage collector.
 
 Update status and backlog in the same commit as the work they describe. Do not
 mark a capability complete until its listed verification has run successfully.

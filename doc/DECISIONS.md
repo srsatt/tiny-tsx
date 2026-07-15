@@ -55,3 +55,20 @@ runtime property-set mutation require separate bounded dynamic storage. An AOT
 specialization may replace a fixed-key map use with slots only when whole-
 program analysis proves the observable semantics; staging must never relabel a
 general map as a record.
+
+## D-008: Logical workers reuse fixed native executors
+
+The public `Worker` concept is an isolated mailbox and module context scheduled
+on a fixed native executor. Creating or terminating a logical worker does not
+create or terminate an operating-system thread. HTTP consumes the same generic,
+zero-dependency pool library but remains a distinct pool from future application
+workers until nested scheduling can prove freedom from starvation and deadlock.
+
+## D-009: Copy messages and isolate future heaps per worker
+
+Supported worker messages cross the isolation boundary by value. Object
+identity and mutable heaps are not shared. Static data and request arenas remain
+the default memory strategies; collector integration starts only after an
+exact-source compatibility case proves a persistent escaping graph is required.
+TinyTSX will evaluate established collectors/toolkits and will not build a
+production tracing collector from scratch in the worker milestone.

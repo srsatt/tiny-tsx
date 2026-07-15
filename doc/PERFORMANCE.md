@@ -120,15 +120,16 @@ escaping, parsing, or allocation-heavy handlers.
    standard, Bun compatibility, or exposes the difference explicitly. Exit:
    the choice is documented and both the Hono E2E and benchmark contract enforce
    it.
-2. **Implement HTTP/1.1 keep-alive in the bounded runtime.** Reuse one connection
-   for multiple requests and benchmark both targets with keep-alive enabled.
-   Exit: parser state resets safely, request memory is reclaimed per request,
-   malformed/oversized requests recover or close deterministically, and the
-   complete Hono matrix stays green.
-3. **Implement the fixed native worker pool and bounded accept queue.** Make
+2. **Implement the reusable worker pool and bounded HTTP dispatch.** Make
    `--workers` real, preserve per-request arenas, and define overload behavior.
-   Exit: measurements at 1, 2, 4, and 8 workers show scaling and bounded RSS;
-   queue saturation returns a controlled failure rather than unbounded growth.
+   Exit: concurrency and saturation behavior are proven independently of HTTP,
+   then native E2E tests prove parallel service and recovery after a 503.
+3. **Implement HTTP/1.1 keep-alive, then run the scaling comparison.** Reuse one
+   connection for multiple requests and benchmark both targets with keep-alive
+   enabled. Exit: parser state resets safely, request memory is reclaimed per
+   request, the complete Hono matrix stays green, and 1/2/4/8-worker results
+   report bounded RSS plus throughput and latency without connection-close
+   transport masking scheduler behavior.
 
 ### P1 — expose native-code and no-JIT behavior
 

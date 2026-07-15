@@ -38,6 +38,33 @@ commit message.
 - [ ] Add CPU, syscall, allocation, peak-RSS, and first-launch instrumentation.
 - [ ] Run controlled, longer-duration release comparisons before publishing claims.
 
+## Workers, AI, and managed memory
+
+- [x] Define native executor versus logical worker terminology, lifecycle,
+      isolation, message ownership, overload, and shutdown contracts.
+- [ ] Add a zero-dependency reusable native worker-pool crate with a bounded
+      FIFO queue, worker-local state, panic recovery, and draining shutdown.
+- [ ] Make the HTTP bootstrap consume the shared pool and enable `--workers N`.
+- [ ] Prove concurrent request execution, deterministic saturation 503, response
+      isolation, and recovery after overload.
+- [ ] Benchmark equivalent Hono workloads with 1/2/4/8 workers, reporting RSS,
+      throughput, median/p99 latency, and queue saturation behavior.
+- [ ] Implement compile-time-known module Workers as syntax sugar over isolated
+      mailboxes and a separate application task pool.
+- [ ] Pin an exact AI SDK Core revision and run the Hono-style syntax/type/source
+      intake against `ai`, `@ai-sdk/provider`, `@ai-sdk/provider-utils`, its
+      gateway dependency, and the selected schema dependency.
+- [ ] Compile a deterministic AI SDK Core test with a fake model and no network,
+      credentials, or provider package before attempting streaming/provider I/O.
+- [ ] Inventory Promise, async iterator, Web Streams, AbortSignal, encoding,
+      Fetch, URL, crypto, timer, and persistent-heap gaps from that exact graph.
+- [x] Define static, request, worker, message, and managed-heap lifetimes plus
+      the evidence threshold for starting a collector integration spike.
+- [ ] Add escape classification, heap ABI descriptors, roots, safepoints/stack
+      maps, and write-barrier sites before selecting a precise collector.
+- [ ] Compare an established conservative collector and a precise per-worker
+      collector/toolkit; do not implement a production GC from scratch.
+
 ## Next slice
 
 - [x] Load relative ESM runtime graphs for TypeScript, TSX, and JavaScript source.
