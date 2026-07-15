@@ -1,3 +1,4 @@
+import {createHash} from "node:crypto";
 import ts from "typescript";
 import type {ApplicationArgument, ApplicationEntry} from "./application-entry.js";
 import {spanOf} from "./diagnostics.js";
@@ -67,11 +68,17 @@ export interface EvaluatedResponse {
   headers?: Array<{name: string; value: ResponseHeaderValue}>;
   stderr?: string[];
   basicAuthorization?: EvaluatedBasicAuthorization;
+  entityTag?: EvaluatedEntityTag;
 }
 
 export interface EvaluatedBasicAuthorization {
   credentials: Array<{username: string; password: string}>;
   rejected: EvaluatedResponse;
+}
+
+export interface EvaluatedEntityTag {
+  value: string;
+  notModified: EvaluatedResponse;
 }
 
 export interface ApplicationInitializationEvaluation extends ConstructorEvaluation {
@@ -334,6 +341,11 @@ function evaluateRouteHandler(
     rejectedStderr: string[];
     protectedHeaders: Set<string>;
   } | undefined;
+  let entityTag: {
+    value: string;
+    notModified: Value & {kind: "response"};
+    protectedHeaders: Set<string>;
+  } | undefined;
   if (response.kind === "response") {
     for (const middlewareHandler of [...middleware].reverse()) {
       const middlewareContext: Value & {kind: "instance"} = {kind: "instance", fields: new Map()};
@@ -351,6 +363,22 @@ function evaluateRouteHandler(
       });
       middlewareContext.fields.set("#res", cloneResponse(response));
       middlewareContext.fields.set("finalized", {kind: "boolean", value: true});
+      const tag = closedEntityTag(middlewareHandler, response);
+      if (tag !== undefined && entityTag === undefined) {
+        response.headers.set("etag", {name: "ETag", value: tag});
+        entityTag = {
+          value: tag,
+          notModified: {
+            kind: "response",
+            body: "",
+            status: 304,
+            contentType: "",
+            headers: new Map([["etag", {name: "ETag", value: tag}]]),
+          },
+          protectedHeaders: new Set(response.headers.keys()),
+        };
+        continue;
+      }
       const authorization = closedBasicAuthorization(middlewareHandler);
       if (authorization !== undefined) {
         const rejected = evaluateBasicAuthorizationRejection(
@@ -394,6 +422,13 @@ function evaluateRouteHandler(
       }
     }
   }
+  if (entityTag !== undefined) {
+    for (const [name, header] of response.headers) {
+      if (!entityTag.protectedHeaders.has(name)) {
+        entityTag.notModified.headers.set(name, header);
+      }
+    }
+  }
   const headers = [...response.headers.values()].filter(header =>
     header.name.toLowerCase() !== "content-type"
   );
@@ -419,7 +454,37 @@ function evaluateRouteHandler(
           ),
         },
       }),
+    ...(entityTag === undefined
+      ? {}
+      : {
+        entityTag: {
+          value: entityTag.value,
+          notModified: evaluatedResponse(entityTag.notModified, []),
+        },
+      }),
   };
+}
+
+function closedEntityTag(
+  middleware: Value & {kind: "closure"},
+  response: Value & {kind: "response"},
+): string | undefined {
+  const module = middleware.module.path.replaceAll("\\", "/");
+  if (
+    !module.endsWith("/middleware/etag/index.ts")
+    || !ts.isFunctionExpression(middleware.expression)
+    || middleware.expression.name?.text !== "etag"
+  ) {
+    return undefined;
+  }
+  const weak = middleware.environment.get("weak");
+  const generator = middleware.environment.get("generator");
+  if (weak?.kind !== "boolean" || generator?.kind !== "undefined") return undefined;
+  const existing = response.headers.get("etag")?.value;
+  if (typeof existing === "string") return existing;
+  if (typeof response.body !== "string" || response.body.length === 0) return undefined;
+  const digest = createHash("sha1").update(response.body, "utf8").digest("hex");
+  return `${weak.value ? "W/" : ""}\"${digest}\"`;
 }
 
 interface ClosedBasicAuthorization {

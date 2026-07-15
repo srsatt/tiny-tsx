@@ -616,6 +616,45 @@ test("preserves Hono middleware order around rejected Basic Authorization", () =
   });
 });
 
+test("specializes the upstream ETag middleware for a closed response body", () => {
+  const entry = path.join(repository, "tests/compat/hono/etag-smoke.ts");
+  const options = {
+    aliases: {
+      hono: path.join(repository, "vendor/hono/src/index.ts"),
+      "hono/etag": path.join(repository, "vendor/hono/src/middleware/etag/index.ts"),
+    },
+    apiAliases: {
+      hono: path.join(repository, "tests/compat/hono/api.d.ts"),
+      "hono/etag": path.join(repository, "tests/compat/hono/etag-api.d.ts"),
+    },
+  };
+  const graph = loadModuleGraph(entry, options);
+  const application = analyzeApplicationEntry(graph.modules[0]!.sourceFile);
+  assert.ok(application);
+
+  const result = evaluateApplicationInitialization(graph, application);
+
+  assert.deepEqual(result?.issues, []);
+  const response = result?.routes.find(route => route.method === "GET")?.response;
+  assert.deepEqual(response?.headers, [{
+    name: "ETag",
+    value: '"90ea638841fff3c326fc22cbd156f1146ac0ac02"',
+  }]);
+  assert.deepEqual(
+    (response as unknown as {entityTag?: unknown})?.entityTag,
+    {
+      value: '"90ea638841fff3c326fc22cbd156f1146ac0ac02"',
+      notModified: {
+        kind: "text",
+        body: "",
+        status: 304,
+        contentType: "",
+        headers: [{name: "ETag", value: '"90ea638841fff3c326fc22cbd156f1146ac0ac02"'}],
+      },
+    },
+  );
+});
+
 test("lowers upstream prettyJSON into a query-conditional native response", () => {
   const entry = path.join(repository, "tests/compat/hono/pretty-json-smoke.ts");
   const options = {
