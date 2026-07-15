@@ -4,7 +4,7 @@ use super::{
     request_with_headers, tinytsx_html_write_path_segment, tinytsx_html_write_request_header,
     tinytsx_html_write_static, tinytsx_request_method_equals, tinytsx_request_path_equals,
     tinytsx_request_path_matches, tinytsx_request_query_has, tinytsx_response_begin,
-    tinytsx_response_header_static,
+    tinytsx_response_header_static, write_console_error,
 };
 
 #[test]
@@ -197,6 +197,16 @@ fn response_writer_accepts_an_exact_fit() {
     assert_eq!(writer.status, OK);
     assert_eq!(writer.cursor, writer.end);
     assert_eq!(&output, b"Hono");
+}
+
+#[test]
+fn console_error_writes_one_line() {
+    let mut output = Vec::new();
+
+    let status = write_console_error(&mut output, b"Error: failed");
+
+    assert_eq!(status, OK);
+    assert_eq!(output, b"Error: failed\n");
 }
 
 #[test]

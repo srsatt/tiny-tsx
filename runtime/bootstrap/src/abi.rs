@@ -1,4 +1,7 @@
-use std::{ptr, slice};
+use std::{
+    io::{self, Write},
+    ptr, slice,
+};
 
 pub const OK: u32 = 0;
 pub const REQUEST_OOM: u32 = 1;
@@ -127,6 +130,27 @@ pub unsafe extern "C" fn tinytsx_html_write_static(
         writer.cursor = unsafe { writer.cursor.add(len) };
     }
     OK
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tinytsx_console_error_static(bytes: *const u8, len: usize) -> u32 {
+    if bytes.is_null() && len != 0 {
+        return INTERNAL_ERROR;
+    }
+    // SAFETY: Generated code points at immutable static data for `len` bytes.
+    let bytes = unsafe { slice::from_raw_parts(bytes, len) };
+    let mut stderr = io::stderr().lock();
+    write_console_error(&mut stderr, bytes)
+}
+
+fn write_console_error(output: &mut impl Write, bytes: &[u8]) -> u32 {
+    match output
+        .write_all(bytes)
+        .and_then(|()| output.write_all(b"\n"))
+    {
+        Ok(()) => OK,
+        Err(_) => INTERNAL_ERROR,
+    }
 }
 
 #[unsafe(no_mangle)]
