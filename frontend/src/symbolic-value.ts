@@ -17,6 +17,7 @@ export type Value =
   | {kind: "headers"; entries: Map<string, {name: string; value: string}>}
   | {kind: "request"; routePattern: string}
   | {kind: "routeParameter"; name: string}
+  | {kind: "requestHeader"; name: string}
   | {kind: "queryParameter"; name: string}
   | {kind: "queryPredicate"; name: string; test: "truthy" | "empty" | "present"}
   | {kind: "runtimeString"; parts: RuntimeStringPart[]}
@@ -41,7 +42,8 @@ export type Value =
 
 export type RuntimeStringPart =
   | {kind: "literal"; value: string}
-  | {kind: "routeParameter"; name: string};
+  | {kind: "routeParameter"; name: string}
+  | {kind: "requestHeader"; name: string};
 
 export type ResponseBody =
   | string
@@ -147,6 +149,7 @@ export function truthiness(value: Value): boolean | undefined {
     case "response":
     case "instance": return true;
     case "routeParameter": return true;
+    case "requestHeader": return undefined;
     case "queryParameter":
     case "queryPredicate": return undefined;
     case "runtimeString": return value.parts.length > 0;
@@ -163,6 +166,7 @@ export function typeOf(value: Value): string {
     case "string": return "string";
     case "routeParameter":
     case "runtimeString": return "string";
+    case "requestHeader": return "string";
     case "queryParameter": return "string";
     case "queryPredicate": return "boolean";
     case "closure":
@@ -187,6 +191,7 @@ export function runtimeStringParts(value: Value): RuntimeStringPart[] | undefine
   switch (value.kind) {
     case "string": return value.value === "" ? [] : [{kind: "literal", value: value.value}];
     case "routeParameter": return [{kind: "routeParameter", name: value.name}];
+    case "requestHeader": return [{kind: "requestHeader", name: value.name}];
     case "runtimeString": return value.parts;
     default: return undefined;
   }

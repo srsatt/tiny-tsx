@@ -884,6 +884,12 @@ function evaluateCall(
         ? {kind: "queryParameter", name: key.value}
         : unknown("request query name is not a closed string");
     }
+    if (receiver.kind === "request" && name === "header") {
+      const key = arguments_[0];
+      return key?.kind === "string"
+        ? {kind: "requestHeader", name: key.value}
+        : unknown("request header name is not a closed string");
+    }
     if (receiver.kind === "reference" && receiver.name === "Object" && name === "entries") {
       const value = arguments_[0];
       return value?.kind === "record"
@@ -1323,7 +1329,9 @@ function evaluate(
         return unknown("template value is not closed or lowerable");
       }
       values.push(
-        part.kind === "routeParameter" || part.kind === "runtimeString"
+        part.kind === "routeParameter"
+          || part.kind === "requestHeader"
+          || part.kind === "runtimeString"
           ? part
           : {kind: "string", value: stringValue(part)},
         {kind: "string", value: span.literal.text},

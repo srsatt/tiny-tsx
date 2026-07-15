@@ -87,6 +87,11 @@ export type ValueExpression =
       span: SourceSpan;
     }
   | {
+      kind: "requestHeader";
+      header: number;
+      span: SourceSpan;
+    }
+  | {
       kind: "queryConditional";
       query: number;
       whenPresent: ValueExpression;

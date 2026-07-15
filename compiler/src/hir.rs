@@ -119,6 +119,10 @@ pub enum ValueExpression {
         segment: usize,
         span: SourceSpan,
     },
+    RequestHeader {
+        header: usize,
+        span: SourceSpan,
+    },
     QueryConditional {
         query: usize,
         #[serde(rename = "whenPresent")]
@@ -382,6 +386,7 @@ impl Program {
             }
             ValueExpression::Concat { .. }
             | ValueExpression::RouteParameter { .. }
+            | ValueExpression::RequestHeader { .. }
             | ValueExpression::QueryConditional { .. } => {
                 return Err(
                     "request-time expressions are only valid in handler responses".to_owned(),
@@ -415,6 +420,15 @@ impl Program {
                     return Err(format!(
                         "route parameter `{name}` does not match segment {segment} of `{route_pattern}`"
                     ));
+                }
+                Ok(())
+            }
+            ValueExpression::RequestHeader { header, .. } => {
+                let Some(header) = self.static_strings.get(*header) else {
+                    return Err("request header references a missing static string".to_owned());
+                };
+                if header.value.is_empty() {
+                    return Err("request header name must not be empty".to_owned());
                 }
                 Ok(())
             }

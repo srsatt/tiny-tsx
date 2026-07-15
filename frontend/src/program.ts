@@ -300,14 +300,20 @@ function lowerRuntimeString(
 ): ValueExpression {
   return {
     kind: "concat",
-    values: parts.map(part => part.kind === "literal"
-      ? {kind: "stringLiteral", string: strings.intern(part.value), span}
-      : {
+    values: parts.map(part => {
+      if (part.kind === "literal") {
+        return {kind: "stringLiteral" as const, string: strings.intern(part.value), span};
+      }
+      if (part.kind === "requestHeader") {
+        return {kind: "requestHeader" as const, header: strings.intern(part.name), span};
+      }
+      return {
         kind: "routeParameter",
         name: part.name,
         segment: routeParameterSegment(routePath, part.name),
         span,
-      }),
+      };
+    }),
     span,
   };
 }
@@ -315,7 +321,7 @@ function lowerRuntimeString(
 function dynamicResponseExpressions(body: ResponseBody): number {
   if (typeof body === "string") return 0;
   if (Array.isArray(body)) {
-    return body.filter(part => part.kind === "routeParameter").length;
+    return body.filter(part => part.kind === "routeParameter" || part.kind === "requestHeader").length;
   }
   return 1
     + dynamicResponseExpressions(body.whenPresent)

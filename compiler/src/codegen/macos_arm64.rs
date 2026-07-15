@@ -263,6 +263,18 @@ fn emit_handler_text_expression(
             emit_immediate(assembly, "x2", *segment as u64);
             writeln!(assembly, "    bl _tinytsx_html_write_path_segment").unwrap();
         }
+        ValueExpression::RequestHeader { header, .. } => {
+            writeln!(assembly, "    ldr x0, [sp, #16]").unwrap();
+            writeln!(assembly, "    ldr x1, [sp, #24]").unwrap();
+            writeln!(assembly, "    adrp x2, Ltinytsx_string_{header}@PAGE").unwrap();
+            writeln!(assembly, "    add x2, x2, Ltinytsx_string_{header}@PAGEOFF").unwrap();
+            emit_immediate(
+                assembly,
+                "x3",
+                program.static_strings[*header].value.len() as u64,
+            );
+            writeln!(assembly, "    bl _tinytsx_html_write_request_header").unwrap();
+        }
         ValueExpression::QueryConditional {
             query,
             when_present,
@@ -387,6 +399,7 @@ fn emit_value_expression(
         }
         ValueExpression::Concat { .. }
         | ValueExpression::RouteParameter { .. }
+        | ValueExpression::RequestHeader { .. }
         | ValueExpression::QueryConditional { .. } => {
             return Err("request-time expression used outside a handler response".to_owned());
         }
