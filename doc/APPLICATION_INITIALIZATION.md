@@ -126,12 +126,15 @@ body, and no content type.
 The `/user-agent` handler retains a symbolic request-header part in its response
 body. Native code performs case-insensitive lookup against the borrowed request
 head and streams the value. Middleware evaluation uses a cloned response and
-commits it only when the effect is fully supported, preventing an unresolved
-runtime response-time header from erasing this otherwise valid body.
+commits it only when the effect is fully supported.
 
 The same transaction boundary lets the supported `/hello/*` middleware commit
-its finalized-response clone and static `X-message` header while the later
-runtime response-time middleware remains unresolved and rolls back alone.
+its finalized-response clone and static `X-message` header. The exact global
+response-time middleware retains two `Date.now()` readings and their subtraction
+as one runtime elapsed-millisecond value. HIR records an elapsed-header recipe;
+generated code measures around the native body and formats `X-Response-Time`
+into writer-owned storage. A retained symbolic response-body value also lets
+Hono clone the `prettyJSON()` query-conditional response before setting timing.
 
 An explicit `notFound()` application call is also retained. After route
 registration completes, the evaluator invokes Hono's installed private closure
@@ -152,17 +155,17 @@ native Promise objects, suspension, or a task executor.
 Closed middleware registrations are retained as `ALL` routes during symbolic
 initialization. For a matching static route, the evaluator invokes preceding
 middleware around the handler and applies post-handler effects in reverse
-order. The current executable case resolves and invokes the actual upstream
-`poweredBy()` factory and async middleware closure. Its
-`res.headers.set('X-Powered-By', 'Hono')` effect becomes a static response header
-and is verified on the native root route.
+order. The executable cases resolve and invoke the actual upstream
+`poweredBy()` factory, the response-time closure, and async middleware. The
+powered-by effect becomes a static response header; response timing is verified
+as a numeric millisecond header over native HTTP.
 
 This is deliberately a narrow AOT fast path. Optional and constrained route
-patterns, broader request-dependent bodies, general
-response construction, dynamic headers, pre-handler control flow, and the
-general Context/Request/Response
-runtime remain pending. Middleware path matching currently covers exact paths,
-`*`, and suffix-wildcard prefixes; it is not a general native Hono router.
+patterns, broader request-dependent bodies, general response construction,
+general dynamic headers, pre-handler control flow, and the general
+Context/Request/Response runtime remain pending. Middleware path matching
+currently covers exact paths, `*`, and suffix-wildcard prefixes; it is not a
+general native Hono router.
 
 Partial evaluation must execute the upstream source semantics. The trace is not
 permission to replace Hono routing with a separately implemented interface. If

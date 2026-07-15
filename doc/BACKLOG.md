@@ -124,8 +124,11 @@ commit message.
       and POST native fallback dispatch.
 - [x] Route a closed thrown `Error` through an explicitly installed Hono
       `onError()` handler, including native `console.error` output.
-- [ ] Compile the remaining basic-example middleware, including `basicAuth`,
-      `etag`, and the runtime response-time header.
+- [x] Compile the basic example's exact `Date.now()` response-time middleware
+      into a bounded runtime-formatted header, including composition with
+      `prettyJSON()` response clones.
+- [ ] Compile the remaining basic-example middleware, including `basicAuth`
+      and `etag`.
 - [ ] Compile the required rest/spread operations.
 - [ ] Add a native RegExp backend and allowlisted Test262 cases.
 - [ ] Add the general Request, Response, Headers, URL, and encoding native APIs.

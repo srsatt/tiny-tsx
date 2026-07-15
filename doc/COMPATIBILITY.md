@@ -133,6 +133,16 @@ response clone, and the static `X-message` mutation reaches native HTTP. A
 failed surrounding middleware effect is rolled back independently rather than
 partially mutating the supported response.
 
+The exact global response-time middleware also compiles without replacing Hono.
+`Date.now()` values remain symbolic until native dispatch, subtraction becomes a
+bounded elapsed-millisecond value, and the template suffix stays static. Native
+code brackets the response body and the runtime formats a numeric
+`X-Response-Time: <n>ms` value in writer-owned storage. A composition tracer
+proves the header survives Hono's `prettyJSON()` clone of a query-conditional
+body. The complete 34-module evaluation now retains 21 routes, closes 14 route
+responses with timing on all 14, and reports four remaining diagnostics, all in
+the `basicAuth` path.
+
 When source explicitly calls `app.notFound(handler)`, the evaluator reads the
 installed upstream `#notFoundHandler` closure and lowers its response after all
 registered routes. Native dispatch emits ordered GET and POST `/*` fallbacks,
@@ -311,6 +321,8 @@ intrinsic. Closed static response headers now lower through a bounded native
 writer. The writer validates names and values, replaces names
 case-insensitively, and emits custom headers on the wire. The upstream
 `poweredBy()` middleware uses this path to produce `X-Powered-By: Hono`. The
+response-time middleware uses a separate bounded runtime-formatted value path
+while preserving the same header validation and eight-entry limit. The
 pinned WPT casing source is connected to native-derived ABI coverage, but is
 not yet executed as JavaScript. General Response and Headers construction
 remains pending.

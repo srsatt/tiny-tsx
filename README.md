@@ -1130,6 +1130,8 @@ pub struct TinyResponseWriter {
     pub content_type: u16,
     pub header_count: usize,
     pub headers: [TinyHeader; 8],
+    pub dynamic_header_cursor: usize,
+    pub dynamic_header_bytes: [u8; 256],
 }
 ```
 

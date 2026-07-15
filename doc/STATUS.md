@@ -76,12 +76,13 @@ produces and serves a native Mach-O executable from the example TSX source.
   route-path test proves the overlay participates in TypeScript checking.
 - Relative ESM components now compile through multi-module HIR into the native
   server; a second real HTTP E2E test verifies the imported component output.
-- Test262 intake validates the pin, provenance metadata, and parsing of ten
+- Test262 intake validates the pin, provenance metadata, and parsing of twelve
   allowlisted class, loop, RegExp, async, array-spread, primitive, function,
-  throw, and Error cases. These are explicitly syntax-only and are not semantic
-  conformance results.
+  throw, Error, `Date.now`, and subtraction cases. These are explicitly
+  syntax-only and are not semantic conformance results.
 - The dedicated native API suite currently covers Request method/path/query
-  views and exact-fit, OOM, and invalid response-writer behavior.
+  views, elapsed-header formatting, and exact-fit, OOM, and invalid
+  response-writer behavior.
 - A conservative AOT staging pass now evaluates imported closed arrays and
   records, folds constant spread, and materializes rest values when their source
   is compile-time closed. The compatibility audit exposes constant versus
@@ -178,11 +179,11 @@ produces and serves a native Mach-O executable from the example TSX source.
   performs case-insensitive lookup and streams the basic example's `User-Agent`
   value; missing headers format as JavaScript `undefined`. Unsupported dynamic
   middleware effects are transactional, so they cannot corrupt an otherwise
-  lowerable response. The complete trace has 21 routes and 20 diagnostics.
+  lowerable response.
 - The exact `/hello/*` custom async middleware now matches `/hello`, clones the
   finalized response through upstream Context code, and emits
-  `X-message: This is addHeader middleware!` over native HTTP. Unsupported
-  response-time middleware still rolls back independently.
+  `X-message: This is addHeader middleware!` over native HTTP. A focused
+  rollback test still protects responses from unsupported raw clock values.
 - An explicitly installed upstream `notFound()` closure now becomes ordered
   terminal GET/POST fallback handlers. Native HTTP serves the basic example's
   `Custom 404 Not Found` body and status; the global closed `poweredBy()` effect
@@ -193,11 +194,16 @@ produces and serves a native Mach-O executable from the example TSX source.
 - Closed throw completion now reaches an explicitly installed upstream
   `onError()` closure. The basic `/error` route serves `Custom Error Message`
   with status 500 and logs `Error: Error has occurred` to native stderr per
-  request. The complete trace now has 19 diagnostics; general try/catch and
-  runtime exceptions remain unsupported.
-- The pinned Test262 syntax allowlist now includes its throw sanity case and
-  Error message-property case. These are intake provenance, not native Test262
-  execution claims.
+  request. General try/catch and runtime exceptions remain unsupported.
+- The exact response-time middleware now lowers `Date.now() - start` into an
+  elapsed-header HIR recipe. Generated code measures around the native response,
+  and a native E2E verifies numeric `X-Response-Time: <n>ms` output. The timing
+  header also survives `prettyJSON()` cloning of a query-conditional body. The
+  complete 34-module trace retains 21 routes, closes 14 responses with timing on
+  all 14, and has four diagnostics, all in `basicAuth`.
+- The pinned Test262 syntax allowlist now also includes `Date.now()` returning a
+  number and reference-based numeric subtraction. These are intake provenance,
+  not native Test262 execution claims.
 - Async/await entry handlers are accepted only when application initialization
   fully stages them. Native Promise/suspension semantics remain unimplemented.
 - Static `Response` headers lower into a bounded eight-entry native writer with
@@ -242,9 +248,8 @@ rtk python3 benchmarks/scripts/run_static.py --workload hono-basic --duration 1 
 ## Active slice
 
 Compatibility substrate: compile the next complete-basic-example frontier:
-authentication, ETags, and the
-remaining middleware and request-dependent handlers. Extend the executable
-function slice with locals,
+authentication, ETags, and the remaining request-dependent handlers. Extend the
+executable function slice with locals,
 record property access, branches, and closures. Type-layout specialization should
 handle closed request-time records without pretending their values are
 compile-time constants.

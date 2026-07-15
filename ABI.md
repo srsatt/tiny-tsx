@@ -41,6 +41,8 @@ pub struct TinyResponseWriter {
     pub content_type: u16,
     pub header_count: usize,
     pub headers: [TinyHeader; 8],
+    pub dynamic_header_cursor: usize,
+    pub dynamic_header_bytes: [u8; 256],
 }
 ```
 
@@ -120,6 +122,18 @@ extern "C" fn tinytsx_response_header_static(
     value: *const u8,
     value_len: usize,
 ) -> u32;
+
+extern "C" fn tinytsx_date_now_millis() -> u64;
+
+extern "C" fn tinytsx_response_header_elapsed_millis(
+    writer: *mut TinyResponseWriter,
+    name: *const u8,
+    name_len: usize,
+    started_at: u64,
+    ended_at: u64,
+    suffix: *const u8,
+    suffix_len: usize,
+) -> u32;
 ```
 
 `tinytsx_html_write_static` retains its v1 symbol name, but the operation is a
@@ -150,6 +164,12 @@ JavaScript template fallback `undefined`.
 
 `tinytsx_response_header_static` validates HTTP token names and values, replaces
 existing names case-insensitively, and stores at most eight custom headers.
+`tinytsx_date_now_millis` supplies a wall-clock millisecond reading for the
+current AOT timing slice. Generated code brackets the native handler body and
+passes both readings to `tinytsx_response_header_elapsed_millis`. That helper
+formats the saturating difference plus a static suffix into the writer-owned
+256-byte store, then uses the same validation, replacement, and eight-header
+bound as static headers.
 
 ## Content types
 
@@ -184,7 +204,7 @@ content type, and body selected through the response writer.
 Static string data lives for the process lifetime in Mach-O read-only data.
 Request input views and arena-backed values live only until the generated handler
 returns. Generated code must not retain pointers globally. The runtime owns and
-resets the writer and arena between requests.
+resets the writer, its dynamic header bytes, and the arena between requests.
 
 ## Compatibility policy
 

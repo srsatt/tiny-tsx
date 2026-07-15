@@ -41,8 +41,9 @@ reaches `new Response(text)` with a closed string at compile time. A closed
 `new Response(body, { headers: { ... } })` also carries static headers into HIR
 and the native response writer. This preserves body, status, content type, and
 bounded static headers. It is not a general runtime `Response` or `Headers`
-implementation: dynamic bodies and header names/values, general init objects,
-general iteration, body consumption, and streams remain pending.
+implementation: dynamic bodies, runtime-selected header names, arbitrary
+dynamic header values, general init objects, iteration, body consumption, and
+streams remain pending.
 
 An explicit no-content-type ABI value supports Hono's closed redirect response.
 The HTTP writer emits `302 Found`, `Location`, and `Content-Length: 0` without
@@ -57,7 +58,10 @@ not implemented.
 
 The native writer currently holds at most eight custom headers. It validates
 HTTP token names, rejects values containing NUL, CR, or LF, and implements
-case-insensitive replacement. The selected upstream WPT source is
+case-insensitive replacement. The response-time slice additionally formats one
+elapsed millisecond value plus a static suffix into 256 bytes of writer-owned
+storage; it does not provide a general dynamic string or Headers implementation.
+The selected upstream WPT source is
 `tests/compat/wpt/upstream/headers-casing.any.js`, pinned by revision and digest
 in `tests/compat/wpt/manifest.json`. Its `Headers.set()` casing assertion is
 classified as `native-derived`: focused ABI tests cover that behavior, but the
