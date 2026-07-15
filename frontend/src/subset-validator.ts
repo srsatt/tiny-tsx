@@ -11,16 +11,20 @@ const supportedAttributes = new Set([
 export function validateForbiddenSyntax(
   sourceFile: ts.SourceFile,
   computedAccesses: readonly ComputedAccessDecision[] = [],
+  allowStagedAsync = false,
 ): void {
   const closedComputed = new Set(computedAccesses
     .filter(access => access.disposition === "closed")
     .map(access => spanKey(access.span)));
   function visit(node: ts.Node): void {
     if (
+      !allowStagedAsync
+      && (
       (ts.isFunctionLike(node)
         && ts.canHaveModifiers(node)
         && ts.getModifiers(node)?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword))
       || ts.isAwaitExpression(node)
+      )
     ) {
       throw tinyError("TINY1003", "async functions are not supported by TinyTSX", node, undefined, sourceFile);
     }

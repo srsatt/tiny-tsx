@@ -72,7 +72,8 @@ export function compileEntry(entryPath: string, options: CompileOptions): HirPro
     }
     return loaded;
   });
-  validateForbiddenSyntax(sourceFile, staging.computedAccesses);
+  const application = analyzeApplicationEntry(sourceFile);
+  validateForbiddenSyntax(sourceFile, staging.computedAccesses, application !== undefined);
   const entryDiagnostics = ts.getPreEmitDiagnostics(program, sourceFile)
     .filter(diagnostic => !isResponseIntrinsicDiagnostic(diagnostic));
   if (entryDiagnostics.length > 0) {
@@ -85,7 +86,6 @@ export function compileEntry(entryPath: string, options: CompileOptions): HirPro
   }
   const getDeclarations = sourceFile.statements.filter(isGetDeclaration);
   if (getDeclarations.length === 0) {
-    const application = analyzeApplicationEntry(sourceFile);
     if (application !== undefined) {
       const calls = application.calls.map(call => call.method).join(", ") || "none";
       const classPlan = resolveRuntimeClassPlan(graph, application);
