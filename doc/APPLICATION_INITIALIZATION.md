@@ -81,6 +81,11 @@ proves `/` and `/hello` preserve Hono's merged paths and dispatch independently.
 Both the `hono/tiny` tracer and the full-package first-route tracer compile; the
 latter is also covered by real Mach-O HTTP E2E tests.
 
+The complete pinned basic entry now compiles in the same pass. Its 34 runtime
+modules yield 18 emitted GET/POST handlers, including request-dependent values,
+middleware guards, installed error/not-found behavior, and the exact external
+fetch status boundary. A native E2E builds that upstream source directly.
+
 A route segment of the closed form `:name` now matches one non-empty request
 segment. The handler's `c.req.param('name')` becomes a request-time HIR value;
 template and string concatenation stream literal and parameter chunks directly
@@ -161,6 +166,13 @@ closure. A closed throw from a route transfers control to that closure, records
 its `console.error` effect, and lowers its response. Generated dispatch repeats
 the log and 500 response on every matching request; the exception is not erased
 at compile time.
+
+A truthy non-`Response` return takes Hono's distinct Context-finalization path.
+For the pinned `/type-error` route, the evaluator preserves the invalid context
+assignment, two enclosing middleware failures, three installed-error-handler
+logs, and the final header-free 500 response. This narrow path exists because
+the upstream example deliberately suppresses its type error; it does not admit
+arbitrary invalid return values throughout the language runtime.
 
 Async/await syntax is admitted only inside constructed-application handlers
 that the initialization evaluator consumes completely. This does not introduce

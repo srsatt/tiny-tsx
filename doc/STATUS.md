@@ -200,8 +200,7 @@ produces and serves a native Mach-O executable from the example TSX source.
   elapsed-header HIR recipe. Generated code measures around the native response,
   and a native E2E verifies numeric `X-Response-Time: <n>ms` output. The timing
   header also survives `prettyJSON()` cloning of a query-conditional body. The
-  complete 34-module trace retains 21 routes, closes 14 responses with timing on
-  all 14, and has four diagnostics, all in `basicAuth`.
+  complete 34-module trace retains 21 symbolic registrations.
 - The pinned Test262 syntax allowlist now also includes `Date.now()` returning a
   number and reference-based numeric subtraction. These are intake provenance,
   not native Test262 execution claims.
@@ -217,9 +216,13 @@ produces and serves a native Mach-O executable from the example TSX source.
 - The exact `/fetch-url` route now retains a request-time
   `fetch('https://example.com/').status` expression through upstream async Hono
   handling. The Apple runtime uses system libcurl without a Cargo/npm package,
-  and native HTTP verifies `https://example.com/ is 200`. The complete
-  34-module trace now closes 15 route responses with timing; the deliberate
-  `/type-error` handler is the only unresolved concrete GET/POST handler.
+  and native HTTP verifies `https://example.com/ is 200`.
+- The deliberate `/type-error` route now preserves Hono's truthy non-Response
+  finalization failure. Native code emits the three observed Bun/Hono TypeError
+  lines, returns `Custom Error Message` with status 500, and omits powered-by
+  and timing headers. The complete 34-module trace has zero issues, closes all
+  16 concrete route responses, and lowers them plus GET/POST installed fallbacks
+  into 18 native handlers. A complete-source Mach-O E2E is green.
 - Async/await entry handlers are accepted only when application initialization
   fully stages them. Native Promise/suspension semantics remain unimplemented.
 - Static `Response` headers lower into a bounded eight-entry native writer with
@@ -263,11 +266,13 @@ rtk python3 benchmarks/scripts/run_static.py --workload hono-basic --duration 1 
 
 ## Active slice
 
-Compatibility substrate: compile the next complete-basic-example frontier: the
-deliberately invalid return-value handler through Hono's installed error path.
-Then extend the executable function slice with locals, record property access,
-branches, and closures. Type-layout specialization should handle closed request-
-time records without pretending their values are compile-time constants.
+The pinned complete Hono basic application milestone is implemented. The next
+compatibility slice should extend the executable function model with locals,
+record property access, branches, and closures, while keeping fixed-layout
+records distinct from bounded dynamic maps. Type-layout specialization should
+handle closed request-time records without pretending their values are compile-
+time constants. Custom Hono declaration overlays may narrow tested method
+surfaces but must continue to execute pinned upstream runtime source.
 Test262 cases move from syntax intake to native execution only when their
 complete semantics are implemented.
 
@@ -275,7 +280,7 @@ complete semantics are implemented.
 
 Read `README.md`, `doc/COMPATIBILITY.md`, and `doc/BACKLOG.md`. Run
 `npm run audit:hono-basic` for graph-level requirements, then evaluate
-`vendor/hono-examples/basic/src/index.ts` to find the next reachable source
-frontier. Preserve upstream registration and middleware semantics rather than
-special-casing Hono routes. Run the verification commands recorded here before
-moving an item to verified.
+`vendor/hono-examples/basic/src/index.ts` as the complete-source regression.
+Choose the next requirement from the record-layout/native-Test262 backlog,
+preserve upstream registration and middleware semantics, and run the
+verification commands recorded here before moving an item to verified.

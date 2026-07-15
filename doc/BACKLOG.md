@@ -136,6 +136,9 @@ commit message.
 - [x] Compile the exact `await fetch('https://example.com/').status` route into
       a request-time native fetch expression, with focused ABI and HTTP E2E
       coverage.
+- [x] Preserve Hono's deliberately invalid truthy handler return through its
+      installed error path, then compile/build the complete pinned 110-line
+      basic application as one native executable.
 - [ ] Generalize Fetch to Request/init inputs, response bodies and headers,
       abort/timeout semantics, and portable non-macOS host transports.
 - [ ] Compile the required rest/spread operations.

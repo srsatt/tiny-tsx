@@ -65,17 +65,19 @@ path-checked native HIR.
 The upstream basic example imports the full `hono` entry rather than
 `hono/tiny`. The complete 110-line application and its selected behavior test
 are pinned in `vendor/hono-examples` and checked by the Hono intake suite. The
-manifest records all 16 `app`/`book` GET and POST registrations. The intake is
-source provenance, not a compilation claim: `tests/compat/hono/basic-smoke.ts`
-still preserves only its first `GET /` route as a compiling tracer.
+manifest records all 16 `app`/`book` GET and POST registrations. The focused
+`tests/compat/hono/basic-smoke.ts` remains a fast first-route tracer, while the
+complete upstream file now compiles to 18 native handlers: its 16 concrete
+registrations plus installed GET/POST not-found fallbacks.
 
 A two-route tracer compiles the basic example's `/` and `/hello` registrations
 into ordered exact-path native dispatch. A separate tracer evaluates the actual
 upstream `poweredBy()` factory and middleware closure, lowers its post-handler
 header mutation, and reproduces the selected upstream test's root status and
 `X-Powered-By: Hono` behavior over native HTTP. The complete basic application
-still contains unsupported broader patterns and request-dependent handlers,
-GET handlers, and additional middleware.
+now builds as one native Mach-O application. This is evidence for that pinned
+program, not a claim that broader route patterns or arbitrary Hono applications
+are supported.
 
 The basic example's `/entry/:id` shape is the first request-dependent route.
 One closed `:name` segment becomes a native matcher and `c.req.param('name')`
@@ -139,8 +141,9 @@ bounded elapsed-millisecond value, and the template suffix stays static. Native
 code brackets the response body and the runtime formats a numeric
 `X-Response-Time: <n>ms` value in writer-owned storage. A composition tracer
 proves the header survives Hono's `prettyJSON()` clone of a query-conditional
-body. The complete 34-module evaluation now retains 21 routes, closes 14 route
-responses with timing on all 14, and reports no initialization diagnostics.
+body. The complete 34-module evaluation now retains 21 routes, closes 16
+concrete responses, applies timing to the 15 successful/non-finalization paths,
+and reports no initialization diagnostics.
 
 The basic example's exact `basicAuth` options are also specialized from upstream
 source. Closed `in` checks and `users.unshift()` build the credential list; HIR
@@ -181,6 +184,15 @@ feeds `console.error`, HIR records the request-time stderr line, and native code
 logs it before returning the custom 500 response. This admits only exceptions
 fully consumed during application specialization; standalone throw and all
 try/catch syntax remain rejected.
+
+The complete example's deliberate `@ts-ignore` route returns a truthy string
+instead of a `Response`. Hono stores that invalid value in the Context and its
+two enclosing post-`next()` middleware paths fail while finalizing it. The
+evaluator preserves the three observed Bun/Hono TypeError lines, invokes the
+installed upstream error closure, and emits the final 500 response without
+powered-by or timing headers. A complete-source native E2E verifies this exact
+failure ordering; it is a pinned Hono/Bun compatibility specialization rather
+than general runtime type-error or Promise rejection support.
 
 ### Type-only API overlay
 
