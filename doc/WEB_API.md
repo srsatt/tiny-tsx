@@ -12,7 +12,7 @@ The current boundary is:
 
 | API | Type contract | Native behavior |
 | --- | --- | --- |
-| `Request` | standard DOM declaration | borrowed method, path, and query ABI views |
+| `Request` | standard DOM declaration | borrowed method, path, and raw query ABI views; exact query-name presence predicate |
 | `Response` | standard DOM declaration | bounded body writer, explicit status, HTML/text/JSON content-type IDs; closed `new Response(string, { status, headers })` AOT fast path |
 | `Headers` | standard DOM declaration | closed construction/cloning plus bounded response-header storage, validation, case-insensitive replacement, and wire emission for statically known values |
 | `URL` / `URLSearchParams` | standard DOM declaration | pending |
@@ -59,9 +59,21 @@ the same WPT revision. Only its status-propagation idea for the closed 201 case
 is marked native-derived. The wider status/statusText/default/SameObject cases
 in that file are not executed or claimed.
 
+The selected `url/urlsearchparams-has.any.js` source is also pinned by revision
+and digest. Its one-argument name-presence idea is marked native-derived for the
+query ABI helper: focused tests cover absent, bare, empty, valued, and exact-name
+matching. TinyTSX does not yet construct `URLSearchParams`, percent-decode query
+names, or implement the two-argument overload, append, and delete cases in that
+source.
+
 The pinned Hono `poweredBy()` middleware now executes symbolically from upstream
 source. Its post-handler `res.headers.set('X-Powered-By', 'Hono')` effect lowers
 through this same native header path and is verified over a real HTTP request.
+
+The pinned Hono `prettyJSON()` middleware likewise executes from upstream
+source. Its default `pretty` key becomes a native query-presence branch; response
+body parsing/stringification remains a closed AOT transformation rather than a
+general native `Response.json()` implementation.
 
 Native API behavior belongs in the dedicated runtime tests. Selected Web
 Platform Tests should progress from exact-source intake, to native-derived

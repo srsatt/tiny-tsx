@@ -7,17 +7,20 @@
   },
   "packageAliases": {
     "hono": "vendor/hono/src/index.ts",
-    "hono/tiny": "vendor/hono/src/preset/tiny.ts"
+    "hono/tiny": "vendor/hono/src/preset/tiny.ts",
+    "hono/pretty-json": "vendor/hono/src/middleware/pretty-json/index.ts"
   },
   "apiAliases": {
     "hono": "tests/compat/hono/api.d.ts",
-    "hono/tiny": "tests/compat/hono/api.d.ts"
+    "hono/tiny": "tests/compat/hono/api.d.ts",
+    "hono/pretty-json": "tests/compat/hono/pretty-json-api.d.ts"
   },
   "smokeEntry": "tests/compat/hono/smoke.ts",
   "basicSmokeEntry": "tests/compat/hono/basic-smoke.ts",
   "multiRouteSmokeEntry": "tests/compat/hono/multi-route-smoke.ts",
   "responseHeadersSmokeEntry": "tests/compat/hono/response-headers-smoke.ts",
   "poweredBySmokeEntry": "tests/compat/hono/powered-by-smoke.ts",
+  "prettyJsonSmokeEntry": "tests/compat/hono/pretty-json-smoke.ts",
   "basicSource": "https://github.com/honojs/examples/tree/main/basic",
   "behaviorContracts": {
     "textResponse": {

@@ -27,9 +27,18 @@ left for runtime lowering. Hono uses both models: many option/header objects can
 be records, while `Context.#var` is an actual `Map` and must stay dynamic unless
 whole-program analysis proves a fixed-key specialization.
 
+Borrowed request state is modeled separately from both. For example,
+`c.req.query('pretty')` produces a request-time query predicate, not a record
+field and not a `Map` lookup. That distinction lets AOT code branch on presence
+without claiming that the query value was known during compilation.
+
 ## Declaration overlays
 
 An `api.d.ts` overlay may expose a narrower, compiler-supported type surface to
 an application import. It is type information only. Runtime graph resolution
 still loads and compiles the pinned upstream implementation, so an overlay must
 never replace Hono routing, context, middleware, or Web API behavior.
+
+Middleware overlays are split by package entrypoint. The focused
+`pretty-json-api.d.ts` declaration exposes only the tested options and handler
+shape while runtime resolution still loads Hono's pinned middleware source.

@@ -113,8 +113,10 @@ handler chain. Earlier handlers are not emitted as duplicate native routes;
 their post-`next()` effects are applied in reverse around the terminal response.
 A focused native E2E verifies an async first handler mutating the response header
 after a final text handler. In the complete basic source, the two GET
-`/api/posts` registrations now become one route with the compact JSON response.
-The `prettyJSON()` query-dependent body transformation remains pending.
+`/api/posts` registrations now become one route. The upstream `prettyJSON()`
+middleware reads the symbolic request query, consumes the closed JSON response,
+clones it, and replaces its body conditionally. Native dispatch selects the
+compact body when `pretty` is absent and the indented body when it is present.
 
 Async/await syntax is admitted only inside constructed-application handlers
 that the initialization evaluator consumes completely. This does not introduce

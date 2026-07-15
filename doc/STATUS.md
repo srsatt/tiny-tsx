@@ -167,6 +167,10 @@ produces and serves a native Mach-O executable from the example TSX source.
   staged async handlers can run post-`next()` effects; a native E2E verifies a
   response-header mutation. The complete evaluator now reports one GET
   `/api/posts` route with its compact JSON body instead of duplicate routes.
+- The pinned upstream `prettyJSON()` factory and async middleware now compile
+  into a request-query presence branch. Native HTTP returns compact JSON without
+  `pretty` and indented JSON for a bare `?pretty`; the complete 34-module basic
+  trace retains 21 routes and now reports 20 remaining diagnostics.
 - Async/await entry handlers are accepted only when application initialization
   fully stages them. Native Promise/suspension semantics remain unimplemented.
 - Static `Response` headers lower into a bounded eight-entry native writer with
@@ -211,7 +215,7 @@ rtk python3 benchmarks/scripts/run_static.py --workload hono-basic --duration 1 
 ## Active slice
 
 Compatibility substrate: compile the next complete-basic-example frontier:
-the `prettyJSON()` request-query branch, request headers, redirects, and the
+request headers, redirects, and the
 remaining middleware and request-dependent handlers. Extend the executable
 function slice with locals,
 record property access, branches, and closures. Type-layout specialization should

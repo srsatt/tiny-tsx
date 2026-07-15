@@ -108,7 +108,7 @@ commit message.
       broader request-dependent handler bodies.
 - [x] Compose same-method/path handlers into one ordered route and apply closed
       post-`next()` response effects.
-- [ ] Lower the request-query-dependent response branch in
+- [x] Lower the request-query-dependent response branch in
       `app.get('/api/posts', prettyJSON(), handler)`.
 - [x] Apply closed post-handler middleware and compile upstream `poweredBy()`
       through native response-header emission.
@@ -127,6 +127,8 @@ commit message.
       it to focused native-derived ABI evidence.
 - [x] Intake the pinned WPT `ResponseInit.status` source and connect its closed
       201 case to native-derived Hono E2E evidence.
+- [x] Intake the pinned WPT `URLSearchParams.has(name)` source and connect its
+      one-argument presence case to focused native query ABI evidence.
 - [ ] Execute selected Web Platform Tests through the native compiler/runtime;
       declaration-level and derived testing are not conformance.
 - [ ] Add exceptions, Promise, async/await, and a bounded native task executor.

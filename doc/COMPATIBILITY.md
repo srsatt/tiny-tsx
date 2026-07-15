@@ -108,9 +108,12 @@ Hono registrations that share a method and path now retain handler-chain order.
 The compiler emits only the terminal route and applies earlier post-`next()`
 effects around its response; a native E2E verifies the response header mutation.
 This collapses the complete example's two GET `/api/posts` entries into one
-route with the correct compact JSON body. Full `prettyJSON()` behavior is not
-claimed yet because `?pretty` requires a request-time query predicate and a
-conditional response body.
+route. The actual upstream `prettyJSON()` middleware now evaluates its query
+condition, `Response.json()`, `JSON.stringify(..., space)`, and response clone.
+HIR records a query-presence conditional, and native HTTP E2E verifies compact
+JSON without `?pretty` and two-space JSON with a bare `?pretty` key. This is the
+default query-name/presence path only, not general URL parsing or arbitrary
+runtime JSON transformation.
 
 ### Type-only API overlay
 
@@ -285,6 +288,10 @@ Closed records and dynamic maps are separate compiler concepts. A record has a
 known layout and may use direct field offsets; a map has runtime membership and
 requires bounded dynamic lookup. `new Map(...)` is deliberately not staged as a
 record. The detailed rules are recorded in `doc/OBJECT_MODEL.md`.
+
+Request query state is neither model: it is a borrowed request view lowered to
+a dedicated predicate. The `prettyJSON()` trace therefore does not turn a query
+string into a compile-time record or introduce a generic dynamic map.
 
 ## Compatibility order
 
