@@ -5,43 +5,70 @@ import {fileURLToPath} from "node:url";
 import {compileWptEntry} from "../src/wpt.js";
 
 const repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
-const urlSearchParamsGet = path.join(
-  repository,
-  "tests/compat/wpt/upstream/urlsearchparams-get.any.js",
-);
 
-test("lowers the complete pinned URLSearchParams get WPT", () => {
-  const program = compileWptEntry(urlSearchParamsGet);
+function upstream(name: string): string {
+  return path.join(repository, "tests/compat/wpt/upstream", name);
+}
 
-  assert.equal(program.assertions.length, 11);
-  assert.deepEqual(program.assertions.map(assertion => assertion.kind), [
-    "urlSearchParamsGet",
-    "urlSearchParamsGet",
-    "urlSearchParamsGet",
-    "urlSearchParamsGet",
-    "urlSearchParamsGet",
-    "urlSearchParamsGet",
-    "urlSearchParamsConstructed",
-    "urlSearchParamsHas",
-    "urlSearchParamsGet",
-    "urlSearchParamsGet",
-    "urlSearchParamsGet",
+test("lowers the complete pinned URLSearchParams get WPT as sequential operations", () => {
+  const program = compileWptEntry(upstream("urlsearchparams-get.any.js"));
+
+  assert.equal(program.version, 2);
+  assert.deepEqual(program.tests.map(wptTest => [wptTest.name, wptTest.slots, wptTest.operations.length]), [
+    ["Get basics", 1, 10],
+    ["More get() basics", 1, 6],
   ]);
-  assert.deepEqual(program.assertions[3], {
-    kind: "urlSearchParamsGet",
-    query: "a=b&c=d&a=e",
-    name: "a",
-    expected: "b",
-    testName: "Get basics",
-    span: program.assertions[3]?.span,
+  assert.deepEqual(program.tests[0]?.operations[4], {
+    kind: "urlSearchParamsConstruct",
+    slot: 0,
+    input: "a=b&c=d&a=e",
+    span: program.tests[0]?.operations[4]?.span,
   });
-  assert.deepEqual(program.assertions.at(-1), {
-    kind: "urlSearchParamsGet",
-    query: "first=second&third&&",
+  assert.deepEqual(program.tests[1]?.operations.at(-1), {
+    kind: "urlSearchParamsAssertGet",
+    slot: 0,
     name: "fourth",
     expected: null,
     message: "Search params object has no \"fourth\" name and value.",
-    testName: "More get() basics",
-    span: program.assertions.at(-1)?.span,
+    span: program.tests[1]?.operations.at(-1)?.span,
+  });
+});
+
+test("lowers the complete pinned URLSearchParams has WPT with mutation and coercion", () => {
+  const program = compileWptEntry(upstream("urlsearchparams-has.any.js"));
+
+  assert.deepEqual(program.tests.map(wptTest => [wptTest.name, wptTest.operations.length]), [
+    ["Has basics", 10],
+    ["has() following delete()", 9],
+    ["Two-argument has()", 10],
+    ["Two-argument has() respects undefined as second arg", 5],
+  ]);
+  assert.deepEqual(program.tests[0]?.operations.at(-1), {
+    kind: "urlSearchParamsAssertHas",
+    slot: 0,
+    name: "null",
+    expected: true,
+    span: program.tests[0]?.operations.at(-1)?.span,
+  });
+  assert.deepEqual(program.tests[1]?.operations.slice(1, 3).map(operation => {
+    const {span: _span, ...observable} = operation;
+    return observable;
+  }), [
+    {kind: "urlSearchParamsAppend", slot: 0, name: "first", value: "1"},
+    {kind: "urlSearchParamsAppend", slot: 0, name: "first", value: "2"},
+  ]);
+  assert.deepEqual(program.tests[2]?.operations.at(-2), {
+    kind: "urlSearchParamsDelete",
+    slot: 0,
+    name: "a",
+    value: "b",
+    span: program.tests[2]?.operations.at(-2)?.span,
+  });
+  assert.deepEqual(program.tests[3]?.operations.at(-1), {
+    kind: "urlSearchParamsAssertHas",
+    slot: 0,
+    name: "a",
+    expected: true,
+    span: program.tests[3]?.operations.at(-1)?.span,
   });
 });

@@ -5,38 +5,73 @@ import {CompileFailure, fromTypeScript, spanOf, tinyError} from "./diagnostics.j
 import type {SourceSpan} from "./hir.js";
 
 export interface WptProgram {
-  version: 1;
+  version: 2;
   target: "aarch64-apple-darwin";
   entry: string;
-  assertions: WptAssertion[];
+  tests: WptTest[];
 }
 
-export type WptAssertion =
-  | UrlSearchParamsConstructedAssertion
-  | UrlSearchParamsGetAssertion
-  | UrlSearchParamsHasAssertion;
-
-interface WptAssertionBase {
-  query: string;
-  message?: string;
-  testName: string;
+export interface WptTest {
+  name: string;
+  slots: number;
+  operations: WptOperation[];
   span: SourceSpan;
 }
 
-export interface UrlSearchParamsConstructedAssertion extends WptAssertionBase {
-  kind: "urlSearchParamsConstructed";
+export type WptOperation =
+  | UrlSearchParamsConstructOperation
+  | UrlSearchParamsAppendOperation
+  | UrlSearchParamsDeleteOperation
+  | UrlSearchParamsAssertConstructedOperation
+  | UrlSearchParamsAssertGetOperation
+  | UrlSearchParamsAssertHasOperation;
+
+interface WptOperationBase {
+  slot: number;
+  span: SourceSpan;
 }
 
-export interface UrlSearchParamsGetAssertion extends WptAssertionBase {
-  kind: "urlSearchParamsGet";
+export interface UrlSearchParamsConstructOperation extends WptOperationBase {
+  kind: "urlSearchParamsConstruct";
+  input: string;
+}
+
+export interface UrlSearchParamsAppendOperation extends WptOperationBase {
+  kind: "urlSearchParamsAppend";
+  name: string;
+  value: string;
+}
+
+export interface UrlSearchParamsDeleteOperation extends WptOperationBase {
+  kind: "urlSearchParamsDelete";
+  name: string;
+  value?: string;
+}
+
+export interface UrlSearchParamsAssertConstructedOperation extends WptOperationBase {
+  kind: "urlSearchParamsAssertConstructed";
+  message?: string;
+}
+
+export interface UrlSearchParamsAssertGetOperation extends WptOperationBase {
+  kind: "urlSearchParamsAssertGet";
   name: string;
   expected: string | null;
+  message?: string;
 }
 
-export interface UrlSearchParamsHasAssertion extends WptAssertionBase {
-  kind: "urlSearchParamsHas";
+export interface UrlSearchParamsAssertHasOperation extends WptOperationBase {
+  kind: "urlSearchParamsAssertHas";
   name: string;
+  value?: string;
   expected: boolean;
+  message?: string;
+}
+
+interface MemberCall {
+  slot: number;
+  method: string;
+  arguments: readonly ts.Expression[];
 }
 
 export function compileWptEntry(entryPath: string): WptProgram {
@@ -58,14 +93,14 @@ export function compileWptEntry(entryPath: string): WptProgram {
     throw new CompileFailure(parseDiagnostics.map(fromTypeScript));
   }
 
-  const assertions = sourceFile.statements.flatMap(statement => lowerTest(statement, sourceFile));
-  if (assertions.length === 0) {
+  const tests = sourceFile.statements.map(statement => lowerTest(statement, sourceFile));
+  if (tests.length === 0 || tests.every(test => test.operations.length === 0)) {
     throw tinyError("TINYWPT1", "WPT case must contain an assertion", sourceFile, undefined, sourceFile);
   }
-  return {version: 1, target: "aarch64-apple-darwin", entry, assertions};
+  return {version: 2, target: "aarch64-apple-darwin", entry, tests};
 }
 
-function lowerTest(statement: ts.Statement, sourceFile: ts.SourceFile): WptAssertion[] {
+function lowerTest(statement: ts.Statement, sourceFile: ts.SourceFile): WptTest {
   if (!ts.isExpressionStatement(statement) || !ts.isCallExpression(statement.expression)) {
     throw unsupported(statement, "top-level WPT test(...) calls", sourceFile);
   }
@@ -74,34 +109,41 @@ function lowerTest(statement: ts.Statement, sourceFile: ts.SourceFile): WptAsser
     throw unsupported(call, "top-level WPT test(callback, name) calls", sourceFile);
   }
   const [callback, nameExpression] = call.arguments;
-  const testName = stringLiteral(nameExpression!, "WPT test name", sourceFile);
+  const name = stringLiteral(nameExpression!, "WPT test name", sourceFile);
   if ((!ts.isFunctionExpression(callback!) && !ts.isArrowFunction(callback!)) || !ts.isBlock(callback!.body)) {
     throw unsupported(callback!, "WPT test callbacks with block bodies", sourceFile);
   }
 
-  const variables = new Map<string, string>();
-  const assertions: WptAssertion[] = [];
+  const variables = new Map<string, number>();
+  const operations: WptOperation[] = [];
   for (const callbackStatement of callback!.body.statements) {
     if (ts.isVariableStatement(callbackStatement)) {
-      lowerVariable(callbackStatement, variables, sourceFile);
+      lowerVariable(callbackStatement, variables, operations, sourceFile);
     } else if (isUrlSearchParamsAssignment(callbackStatement)) {
-      const assignment = callbackStatement.expression as ts.BinaryExpression;
-      variables.set(
-        (assignment.left as ts.Identifier).text,
-        urlSearchParamsInput(assignment.right, sourceFile),
-      );
+      const assignment = callbackStatement.expression;
+      const slot = variableSlot(assignment.left as ts.Identifier, variables, sourceFile);
+      operations.push(constructOperation(slot, assignment.right, sourceFile));
     } else if (ts.isExpressionStatement(callbackStatement) && ts.isCallExpression(callbackStatement.expression)) {
-      assertions.push(lowerAssertion(callbackStatement.expression, variables, testName, sourceFile));
+      const expression = callbackStatement.expression;
+      if (isAssertionCall(expression)) {
+        operations.push(lowerAssertion(expression, variables, sourceFile));
+      } else {
+        operations.push(lowerMutation(expression, variables, sourceFile));
+      }
     } else {
-      throw unsupported(callbackStatement, "URLSearchParams declarations, assignments, and assertions", sourceFile);
+      throw unsupported(callbackStatement, "URLSearchParams declarations, assignments, mutations, and assertions", sourceFile);
     }
   }
-  return assertions;
+  if (!operations.some(operation => operation.kind.startsWith("urlSearchParamsAssert"))) {
+    throw tinyError("TINYWPT1", "WPT test must contain an assertion", call, undefined, sourceFile);
+  }
+  return {name, slots: variables.size, operations, span: spanOf(call, sourceFile)};
 }
 
 function lowerVariable(
   statement: ts.VariableStatement,
-  variables: Map<string, string>,
+  variables: Map<string, number>,
+  operations: WptOperation[],
   sourceFile: ts.SourceFile,
 ): void {
   if (statement.declarationList.declarations.length !== 1) {
@@ -111,121 +153,217 @@ function lowerVariable(
   if (!ts.isIdentifier(declaration.name) || declaration.initializer === undefined) {
     throw unsupported(declaration, "initialized URLSearchParams variables", sourceFile);
   }
-  variables.set(declaration.name.text, urlSearchParamsInput(declaration.initializer, sourceFile));
+  if (variables.has(declaration.name.text)) {
+    throw tinyError("TINYWPT4", `duplicate WPT variable \`${declaration.name.text}\``, declaration.name, undefined, sourceFile);
+  }
+  const slot = variables.size;
+  variables.set(declaration.name.text, slot);
+  operations.push(constructOperation(slot, declaration.initializer, sourceFile));
 }
 
-function isUrlSearchParamsAssignment(statement: ts.Statement): statement is ts.ExpressionStatement {
+function isUrlSearchParamsAssignment(
+  statement: ts.Statement,
+): statement is ts.ExpressionStatement & {expression: ts.BinaryExpression} {
   return ts.isExpressionStatement(statement)
     && ts.isBinaryExpression(statement.expression)
     && statement.expression.operatorToken.kind === ts.SyntaxKind.EqualsToken
     && ts.isIdentifier(statement.expression.left);
 }
 
-function urlSearchParamsInput(expression: ts.Expression, sourceFile: ts.SourceFile): string {
+function constructOperation(
+  slot: number,
+  expression: ts.Expression,
+  sourceFile: ts.SourceFile,
+): UrlSearchParamsConstructOperation {
   if (
     ts.isNewExpression(expression)
     && ts.isIdentifier(expression.expression)
     && expression.expression.text === "URLSearchParams"
     && expression.arguments?.length === 1
   ) {
-    return stringLiteral(expression.arguments[0]!, "URLSearchParams input", sourceFile);
+    return {
+      kind: "urlSearchParamsConstruct",
+      slot,
+      input: stringLiteral(expression.arguments[0]!, "URLSearchParams input", sourceFile),
+      span: spanOf(expression, sourceFile),
+    };
   }
   throw unsupported(expression, "new URLSearchParams(string)", sourceFile);
 }
 
+function isAssertionCall(call: ts.CallExpression): boolean {
+  return ts.isIdentifier(call.expression)
+    && ["assert_equals", "assert_true", "assert_false"].includes(call.expression.text);
+}
+
+function lowerMutation(
+  call: ts.CallExpression,
+  variables: ReadonlyMap<string, number>,
+  sourceFile: ts.SourceFile,
+): UrlSearchParamsAppendOperation | UrlSearchParamsDeleteOperation {
+  const operation = memberCall(call, variables, sourceFile);
+  if (operation.method === "append" && operation.arguments.length === 2) {
+    return {
+      kind: "urlSearchParamsAppend",
+      slot: operation.slot,
+      name: webIdlString(operation.arguments[0]!, sourceFile),
+      value: webIdlString(operation.arguments[1]!, sourceFile),
+      span: spanOf(call, sourceFile),
+    };
+  }
+  if (operation.method === "delete" && operation.arguments.length >= 1 && operation.arguments.length <= 2) {
+    const value = optionalWebIdlString(operation.arguments[1], sourceFile);
+    return {
+      kind: "urlSearchParamsDelete",
+      slot: operation.slot,
+      name: webIdlString(operation.arguments[0]!, sourceFile),
+      ...(value === undefined ? {} : {value}),
+      span: spanOf(call, sourceFile),
+    };
+  }
+  throw unsupported(call, "URLSearchParams.append(name, value) or delete(name[, value])", sourceFile);
+}
+
 function lowerAssertion(
   call: ts.CallExpression,
-  variables: ReadonlyMap<string, string>,
-  testName: string,
+  variables: ReadonlyMap<string, number>,
   sourceFile: ts.SourceFile,
-): WptAssertion {
+): WptOperation {
   if (!ts.isIdentifier(call.expression)) {
-    throw unsupported(call, "assert_equals(...) or assert_true(...)", sourceFile);
+    throw unsupported(call, "assert_equals(...), assert_true(...), or assert_false(...)", sourceFile);
   }
   if (call.expression.text === "assert_equals" && call.arguments.length >= 2 && call.arguments.length <= 3) {
     const message = optionalMessage(call.arguments[2], sourceFile);
-    const operation = memberCall(call.arguments[0]!, variables, sourceFile);
-    if (operation.method !== "get") {
-      throw unsupported(call.arguments[0]!, "URLSearchParams.get(...) assertions", sourceFile);
+    const operation = memberCallExpression(call.arguments[0]!, variables, sourceFile);
+    if (operation.method !== "get" || operation.arguments.length !== 1) {
+      throw unsupported(call.arguments[0]!, "URLSearchParams.get(name) assertions", sourceFile);
     }
     const expectedExpression = call.arguments[1]!;
     const expected = expectedExpression.kind === ts.SyntaxKind.NullKeyword
       ? null
       : stringLiteral(expectedExpression, "assert_equals expected value", sourceFile);
     return {
-      kind: "urlSearchParamsGet",
-      query: operation.query,
-      name: operation.name,
+      kind: "urlSearchParamsAssertGet",
+      slot: operation.slot,
+      name: webIdlString(operation.arguments[0]!, sourceFile),
       expected,
       ...(message === undefined ? {} : {message}),
-      testName,
       span: spanOf(call, sourceFile),
     };
   }
-  if (call.expression.text === "assert_true" && call.arguments.length >= 1 && call.arguments.length <= 2) {
+  if (
+    (call.expression.text === "assert_true" || call.expression.text === "assert_false")
+    && call.arguments.length >= 1
+    && call.arguments.length <= 2
+  ) {
     const message = optionalMessage(call.arguments[1], sourceFile);
     const actual = call.arguments[0]!;
     if (
-      ts.isBinaryExpression(actual)
+      call.expression.text === "assert_true"
+      && ts.isBinaryExpression(actual)
       && actual.operatorToken.kind === ts.SyntaxKind.ExclamationEqualsToken
       && ts.isIdentifier(actual.left)
       && actual.right.kind === ts.SyntaxKind.NullKeyword
     ) {
       return {
-        kind: "urlSearchParamsConstructed",
-        query: variableQuery(actual.left, variables, sourceFile),
+        kind: "urlSearchParamsAssertConstructed",
+        slot: variableSlot(actual.left, variables, sourceFile),
         ...(message === undefined ? {} : {message}),
-        testName,
         span: spanOf(call, sourceFile),
       };
     }
-    const operation = memberCall(actual, variables, sourceFile);
-    if (operation.method !== "has") {
-      throw unsupported(actual, "URLSearchParams.has(...) assertions", sourceFile);
+    const operation = memberCallExpression(actual, variables, sourceFile);
+    if (operation.method !== "has" || operation.arguments.length < 1 || operation.arguments.length > 2) {
+      throw unsupported(actual, "URLSearchParams.has(name[, value]) assertions", sourceFile);
     }
+    const value = optionalWebIdlString(operation.arguments[1], sourceFile);
     return {
-      kind: "urlSearchParamsHas",
-      query: operation.query,
-      name: operation.name,
-      expected: true,
+      kind: "urlSearchParamsAssertHas",
+      slot: operation.slot,
+      name: webIdlString(operation.arguments[0]!, sourceFile),
+      ...(value === undefined ? {} : {value}),
+      expected: call.expression.text === "assert_true",
       ...(message === undefined ? {} : {message}),
-      testName,
       span: spanOf(call, sourceFile),
     };
   }
-  throw unsupported(call, "assert_equals(...) or assert_true(...)", sourceFile);
+  throw unsupported(call, "assert_equals(...), assert_true(...), or assert_false(...)", sourceFile);
+}
+
+function memberCallExpression(
+  expression: ts.Expression,
+  variables: ReadonlyMap<string, number>,
+  sourceFile: ts.SourceFile,
+): MemberCall {
+  if (ts.isCallExpression(expression)) {
+    return memberCall(expression, variables, sourceFile);
+  }
+  throw unsupported(expression, "URLSearchParams method calls", sourceFile);
 }
 
 function memberCall(
-  expression: ts.Expression,
-  variables: ReadonlyMap<string, string>,
+  expression: ts.CallExpression,
+  variables: ReadonlyMap<string, number>,
   sourceFile: ts.SourceFile,
-): {query: string; method: string; name: string} {
+): MemberCall {
   if (
-    ts.isCallExpression(expression)
-    && ts.isPropertyAccessExpression(expression.expression)
+    ts.isPropertyAccessExpression(expression.expression)
     && ts.isIdentifier(expression.expression.expression)
-    && expression.arguments.length === 1
   ) {
     return {
-      query: variableQuery(expression.expression.expression, variables, sourceFile),
+      slot: variableSlot(expression.expression.expression, variables, sourceFile),
       method: expression.expression.name.text,
-      name: stringLiteral(expression.arguments[0]!, "URLSearchParams method name", sourceFile),
+      arguments: expression.arguments,
     };
   }
   throw unsupported(expression, "URLSearchParams method calls", sourceFile);
 }
 
-function variableQuery(
+function variableSlot(
   identifier: ts.Identifier,
-  variables: ReadonlyMap<string, string>,
+  variables: ReadonlyMap<string, number>,
   sourceFile: ts.SourceFile,
-): string {
-  const query = variables.get(identifier.text);
-  if (query === undefined) {
+): number {
+  const slot = variables.get(identifier.text);
+  if (slot === undefined) {
     throw tinyError("TINYWPT3", `unknown URLSearchParams variable \`${identifier.text}\``, identifier, undefined, sourceFile);
   }
-  return query;
+  return slot;
+}
+
+function optionalWebIdlString(
+  expression: ts.Expression | undefined,
+  sourceFile: ts.SourceFile,
+): string | undefined {
+  if (expression === undefined || (ts.isIdentifier(expression) && expression.text === "undefined")) {
+    return undefined;
+  }
+  return webIdlString(expression, sourceFile);
+}
+
+function webIdlString(expression: ts.Expression, sourceFile: ts.SourceFile): string {
+  if (ts.isStringLiteral(expression) || ts.isNoSubstitutionTemplateLiteral(expression)) {
+    return expression.text;
+  }
+  if (ts.isNumericLiteral(expression)) {
+    return String(Number(expression.text));
+  }
+  if (ts.isBigIntLiteral(expression)) {
+    return expression.text.slice(0, -1);
+  }
+  if (expression.kind === ts.SyntaxKind.NullKeyword) {
+    return "null";
+  }
+  if (expression.kind === ts.SyntaxKind.TrueKeyword) {
+    return "true";
+  }
+  if (expression.kind === ts.SyntaxKind.FalseKeyword) {
+    return "false";
+  }
+  if (ts.isIdentifier(expression) && expression.text === "undefined") {
+    return "undefined";
+  }
+  throw unsupported(expression, "closed primitive Web IDL string conversion", sourceFile);
 }
 
 function optionalMessage(expression: ts.Expression | undefined, sourceFile: ts.SourceFile): string | undefined {
