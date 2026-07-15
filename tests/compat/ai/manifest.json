@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "upstream": {
+    "path": "vendor/ai",
+    "tag": "ai@7.0.28",
+    "commit": "3649694271aba0a13d5f9b7090adf20c5a9c1fce"
+  },
+  "packages": {
+    "ai": {
+      "version": "7.0.28",
+      "integrity": "sha512-RtynA4e6rWH2YiMX0OJz2h2i+sdJgiItuwqmstYZAiTZ0ZkZzQ8s4KVh7tQfZuDCfzIhRTg+q1h1xirT8AClkw=="
+    },
+    "@ai-sdk/gateway": {"version": "4.0.20"},
+    "@ai-sdk/provider": {"version": "4.0.3"},
+    "@ai-sdk/provider-utils": {"version": "5.0.10"},
+    "zod": {
+      "version": "3.25.76",
+      "integrity": "sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ=="
+    }
+  },
+  "runtimeAliases": {
+    "ai": "vendor/ai/packages/ai/src/index.ts",
+    "@ai-sdk/gateway": "vendor/ai/packages/gateway/src/index.ts",
+    "@ai-sdk/provider": "vendor/ai/packages/provider/src/index.ts",
+    "@ai-sdk/provider-utils": "vendor/ai/packages/provider-utils/src/index.ts",
+    "zod/v4": "tests/compat/ai/node_modules/zod/v4/index.js",
+    "zod/v3": "tests/compat/ai/node_modules/zod/v3/index.js",
+    "eventsource-parser/stream": "tests/compat/ai/node_modules/eventsource-parser/stream.js",
+    "@workflow/serde": "tests/compat/ai/node_modules/@workflow/serde/dist/index.js",
+    "@vercel/oidc": "tests/compat/ai/node_modules/@vercel/oidc/dist/index.js"
+  },
+  "smokeEntry": "tests/compat/ai/generate-text-smoke.ts",
+  "audit": {
+    "modules": 609,
+    "sourceBytes": 2065807,
+    "sourceLines": 64774,
+    "requirements": {
+      "functions-as-values": 1535,
+      "classes": 138,
+      "async-await": 821,
+      "exceptions": 565,
+      "computed-access": 650,
+      "loops": 262,
+      "rest-spread": 945,
+      "regular-expressions": 93,
+      "generators": 4
+    },
+    "builtins": {
+      "Promise": 267,
+      "Map": 37,
+      "Set": 51,
+      "Response": 19,
+      "TransformStream": 37,
+      "URL": 51,
+      "TextEncoder": 4,
+      "TextDecoder": 4
+    },
+    "staging": {
+      "constantBindings": 304,
+      "constantSpreads": 6,
+      "runtimeSpreads": 939,
+      "closedComputedAccesses": 0,
+      "runtimeComputedAccesses": 650
+    }
+  }
+}
