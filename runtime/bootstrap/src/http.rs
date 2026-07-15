@@ -15,7 +15,7 @@ use crate::abi::{
 
 const MAX_REQUEST_HEAD: usize = 16 * 1024;
 const MAX_REQUEST_HEADERS: usize = 64;
-const CONNECTION_QUEUE_PER_WORKER: usize = 8;
+const CONNECTION_QUEUE_PER_WORKER: usize = 64;
 
 pub fn serve() -> std::io::Result<()> {
     let port = configured_port();

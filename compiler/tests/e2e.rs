@@ -46,7 +46,7 @@ fn builds_and_serves_static_tsx_as_native_macho() {
 #[test]
 fn worker_pool_serves_in_parallel_and_recovers_after_saturation() {
     const WORKERS: usize = 2;
-    const QUEUED_CONNECTIONS: usize = WORKERS * 8;
+    const QUEUED_CONNECTIONS: usize = WORKERS * 64;
 
     let _build_guard = NATIVE_BUILD.lock().expect("lock native E2E build");
     let root = repository_root();

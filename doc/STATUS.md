@@ -285,16 +285,21 @@ produces and serves a native Mach-O executable from the example TSX source.
   state, panic recovery, and draining.
 - Generated objects now export the configured worker count, and the CLI accepts
   every positive `--workers N`. The bootstrap creates that many native executor
-  threads and a queue of eight waiting connections per worker. Its single
+  threads and a queue of 64 waiting connections per worker. Its single
   acceptor submits owned streams without blocking; saturation returns a bounded
   `server overloaded` HTTP 503. The overload path consumes a request head for at
   most 10 ms and half-closes its response so unread TCP bytes cannot hide the
   status behind a reset.
 - A focused two-worker pinned-Hono E2E keeps one executor blocked on a partial
   root request while the other returns `/hello`, then validates the root reply,
-  occupies both executors plus all 16 queue slots, observes the next connection's
+  occupies both executors plus all 128 queue slots, observes the next connection's
   503, releases the sockets, and receives a later 200. It also asserts the build
   report's worker count/runtime feature and passed three consecutive runs.
+- The first one-worker `oha -c 64` attempt proved that eight waiting slots were
+  too shallow for the existing comparison: 123 requests received the intended
+  503 and the harness rejected the sample. The bound is now 64 per worker, which
+  covers the current maximum client concurrency without becoming unbounded;
+  overload remains covered at the new 128-slot two-worker boundary.
 - The existing equivalence-gated TinyTSX/Bun harness now accepts a positive
   `--workers` count, emits it into a distinct release executable, records it in
   JSON/Markdown, and labels the connection-close limitation explicitly. A unit

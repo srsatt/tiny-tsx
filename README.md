@@ -215,7 +215,7 @@ samples through `oha`. See `benchmarks/README.md` for methodology and limitation
 
 The present bootstrap accepts GET and POST requests with `Connection: close` on
 a configurable fixed native worker pool. One acceptor submits owned connections
-to a bounded queue with eight waiting slots per worker; saturation returns HTTP
+to a bounded queue with 64 waiting slots per worker; saturation returns HTTP
 503. Keep-alive and a reusable request arena remain subsequent milestones
 tracked in `doc/BACKLOG.md`.
 
