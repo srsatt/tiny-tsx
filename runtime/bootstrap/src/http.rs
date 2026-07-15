@@ -38,7 +38,7 @@ fn handle_connection(stream: &mut TcpStream, request_memory: usize) -> std::io::
     let Some((method, target)) = parse_request_line(&head) else {
         return write_response(stream, 400, CONTENT_TYPE_TEXT, b"bad request", &[]);
     };
-    if method != b"GET" {
+    if method != b"GET" && method != b"POST" {
         return write_response(stream, 405, CONTENT_TYPE_TEXT, b"method not allowed", &[]);
     }
 
@@ -124,6 +124,7 @@ fn write_response(
 ) -> std::io::Result<()> {
     let reason = match status {
         200 => "OK",
+        201 => "Created",
         400 => "Bad Request",
         404 => "Not Found",
         405 => "Method Not Allowed",
@@ -166,6 +167,14 @@ mod tests {
             .expect("valid request");
         assert_eq!(method, b"GET");
         assert_eq!(target, b"/hello?name=Ada");
+    }
+
+    #[test]
+    fn parses_post_request_line() {
+        let (method, target) =
+            parse_request_line(b"POST /api/posts HTTP/1.1\r\nHost: x\r\n").expect("valid request");
+        assert_eq!(method, b"POST");
+        assert_eq!(target, b"/api/posts");
     }
 
     #[test]

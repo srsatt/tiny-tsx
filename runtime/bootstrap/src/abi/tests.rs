@@ -1,8 +1,9 @@
 use super::{
     BAD_REQUEST, CONTENT_TYPE_HTML, CONTENT_TYPE_TEXT, INTERNAL_ERROR, MAX_RESPONSE_HEADERS, OK,
     REQUEST_OOM, TinyHeader, TinyResponseWriter, TinyStringView, request,
-    tinytsx_html_write_path_segment, tinytsx_html_write_static, tinytsx_request_path_equals,
-    tinytsx_request_path_matches, tinytsx_response_begin, tinytsx_response_header_static,
+    tinytsx_html_write_path_segment, tinytsx_html_write_static, tinytsx_request_method_equals,
+    tinytsx_request_path_equals, tinytsx_request_path_matches, tinytsx_response_begin,
+    tinytsx_response_header_static,
 };
 
 #[test]
@@ -33,6 +34,20 @@ fn request_path_matching_uses_the_path_without_the_query() {
     );
     assert_eq!(
         unsafe { tinytsx_request_path_equals(&request, b"/other".as_ptr(), b"/other".len()) },
+        0
+    );
+}
+
+#[test]
+fn request_method_matching_distinguishes_get_and_post() {
+    let request = request(b"POST", b"/book");
+
+    assert_eq!(
+        unsafe { tinytsx_request_method_equals(&request, b"POST".as_ptr(), 4) },
+        1
+    );
+    assert_eq!(
+        unsafe { tinytsx_request_method_equals(&request, b"GET".as_ptr(), 3) },
         0
     );
 }
