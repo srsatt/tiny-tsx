@@ -16,7 +16,7 @@ export function validateForbiddenSyntax(
   const closedComputed = new Set(computedAccesses
     .filter(access => access.disposition === "closed")
     .map(access => spanKey(access.span)));
-  function visit(node: ts.Node): void {
+  function visit(node: ts.Node, inComponentAttributes = false): void {
     if (
       !allowStagedAsync
       && (
@@ -44,7 +44,12 @@ export function validateForbiddenSyntax(
 
     if (ts.isJsxAttribute(node) && ts.isIdentifier(node.name)) {
       const name = node.name.text;
-      if (!supportedAttributes.has(name) && !name.startsWith("data-") && !name.startsWith("aria-")) {
+      if (
+        !inComponentAttributes
+        && !supportedAttributes.has(name)
+        && !name.startsWith("data-")
+        && !name.startsWith("aria-")
+      ) {
         throw tinyError("TINY1204", `JSX attribute \`${name}\` is not supported`, node.name, undefined, sourceFile);
       }
     }
@@ -63,10 +68,19 @@ export function validateForbiddenSyntax(
       );
     }
 
-    ts.forEachChild(node, visit);
+    const childComponentAttributes = (
+      ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)
+    )
+      ? isComponentTag(node.tagName)
+      : inComponentAttributes;
+    ts.forEachChild(node, child => visit(child, childComponentAttributes));
   }
 
   visit(sourceFile);
+}
+
+function isComponentTag(tag: ts.JsxTagNameExpression): boolean {
+  return ts.isIdentifier(tag) && /^[A-Z]/.test(tag.text);
 }
 
 function spanKey(span: {
