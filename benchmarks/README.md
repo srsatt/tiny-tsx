@@ -4,12 +4,16 @@ The harness has two workloads:
 
 - `static-page` compares the current static TinyTSX vertical slice to an
   idiomatic `Bun.serve` server returning the same response;
-- `hono-basic` runs the exact pinned `tests/compat/hono/basic-smoke.ts`
-  application through TinyTSX and Bun. Bun uses a host-only `Bun.serve` adapter
-  and a path alias to the same pinned Hono submodule.
+- `hono-basic` runs the complete pinned 34-module
+  `vendor/hono-examples/basic/src/index.ts` application through TinyTSX and Bun.
+  Bun uses only a host `Bun.serve` adapter and path aliases to the same pinned
+  Hono source submodule.
 
-Both verify status, content type, content length, and response bytes before
-collecting samples.
+Both verify status, content length, response bytes, powered-by behavior, and a
+numeric response-time header before collecting samples. Target-specific content
+types are recorded instead of hidden: after the example's response-time
+middleware clones the body, TinyTSX preserves `text/plain;charset=UTF-8` while
+Bun 1.3.13 serves the stream as `application/octet-stream`.
 
 This is deliberately not presented as a general TypeScript performance result.
 TinyTSX currently supports only a static page, one worker, and connection-close
@@ -52,11 +56,16 @@ The harness builds a stripped release TinyTSX executable, alternates target orde
 between runs, warms each process, and retains every sample. It writes adjacent
 JSON and Markdown reports under `benchmarks/results/`.
 
-The first exact-source Hono preview is persisted as
+The first Hono smoke preview is persisted as
 `2026-07-15-m5-max-hono-preview.{json,md}`. It uses three one-second samples at
-concurrency 1 and 8. Treat it as directional evidence only: the response is six
-closed bytes, both servers close every connection, and no request-dependent
-Hono behavior executes.
+concurrency 1 and 8 against the earlier single-route tracer. Treat it as
+historical directional evidence only; it predates the complete-source workload.
+
+The harness alternates TinyTSX/Bun process order for both startup and load
+samples. Load concurrency runs ascending on even samples and descending on odd
+samples, reducing systematic warm-up, JIT, and thermal-order bias. Idle RSS is
+measured after one correctness request; post-warm-up RSS is measured after one
+second at the maximum requested concurrency.
 
 For credible comparative runs, connect the Mac to power, disable Low Power Mode,
 close unnecessary applications, and avoid indexing or builds while measuring.
