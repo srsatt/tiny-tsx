@@ -1,7 +1,7 @@
 export interface HonoRequestApi {
   readonly method: string;
   readonly path: string;
-  param(name: string): string | undefined;
+  param(name: string): string;
   query(name: string): string | undefined;
   header(name: string): string | undefined;
 }
@@ -11,9 +11,10 @@ export interface HonoContextApi {
   readonly res: Response;
   header(name: string, value: string): void;
   text(body: string, status?: number): Response;
-  html(body: string, status?: number): Response;
+  html(body: string | JSX.Element, status?: number): Response;
   json(value: unknown, status?: number): Response;
   redirect(location: string | URL, status?: 301 | 302 | 303 | 307 | 308): Response;
+  notFound(): Response;
 }
 
 export type HonoHandlerApi = (
