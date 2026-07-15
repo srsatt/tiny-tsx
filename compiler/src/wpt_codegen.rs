@@ -47,9 +47,9 @@ static int tiny_url_search_params_find_first(\n\
 
     for (index, assertion) in program.assertions.iter().enumerate() {
         let query = match assertion {
-            WptAssertion::UrlSearchParamsConstructed { query, .. }
-            | WptAssertion::UrlSearchParamsGet { query, .. }
-            | WptAssertion::UrlSearchParamsHas { query, .. } => query,
+            WptAssertion::Constructed { query, .. }
+            | WptAssertion::Get { query, .. }
+            | WptAssertion::Has { query, .. } => query,
         };
         emit_bytes(
             &mut source,
@@ -57,8 +57,8 @@ static int tiny_url_search_params_find_first(\n\
             query.as_bytes(),
         );
         match assertion {
-            WptAssertion::UrlSearchParamsConstructed { .. } => {}
-            WptAssertion::UrlSearchParamsGet { name, expected, .. } => {
+            WptAssertion::Constructed { .. } => {}
+            WptAssertion::Get { name, expected, .. } => {
                 emit_bytes(&mut source, &format!("tiny_name_{index}"), name.as_bytes());
                 if let Some(expected) = expected {
                     emit_bytes(
@@ -68,7 +68,7 @@ static int tiny_url_search_params_find_first(\n\
                     );
                 }
             }
-            WptAssertion::UrlSearchParamsHas { name, .. } => {
+            WptAssertion::Has { name, .. } => {
                 emit_bytes(&mut source, &format!("tiny_name_{index}"), name.as_bytes());
             }
         }
@@ -79,7 +79,7 @@ static int tiny_url_search_params_find_first(\n\
     writeln!(source, "    size_t value_len = 0;").unwrap();
     for (index, assertion) in program.assertions.iter().enumerate() {
         match assertion {
-            WptAssertion::UrlSearchParamsConstructed { .. } => {
+            WptAssertion::Constructed { .. } => {
                 writeln!(
                     source,
                     "    tiny_url_search_params params_{index} = tiny_url_search_params_construct(tiny_query_{index}, tiny_query_{index}_len);"
@@ -91,7 +91,7 @@ static int tiny_url_search_params_find_first(\n\
                 )
                 .unwrap();
             }
-            WptAssertion::UrlSearchParamsGet { expected, .. } => {
+            WptAssertion::Get { expected, .. } => {
                 writeln!(
                     source,
                     "    int found_{index} = tiny_url_search_params_find_first(tiny_query_{index}, tiny_query_{index}_len, tiny_name_{index}, tiny_name_{index}_len, &value, &value_len);"
@@ -108,7 +108,7 @@ static int tiny_url_search_params_find_first(\n\
                     writeln!(source, "    if (found_{index}) return 1;").unwrap();
                 }
             }
-            WptAssertion::UrlSearchParamsHas { expected, .. } => {
+            WptAssertion::Has { expected, .. } => {
                 writeln!(
                     source,
                     "    int found_{index} = tiny_url_search_params_find_first(tiny_query_{index}, tiny_query_{index}_len, tiny_name_{index}, tiny_name_{index}_len, &value, &value_len);"

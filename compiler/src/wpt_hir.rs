@@ -14,7 +14,8 @@ pub struct WptProgram {
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum WptAssertion {
-    UrlSearchParamsConstructed {
+    #[serde(rename = "urlSearchParamsConstructed")]
+    Constructed {
         query: String,
         #[serde(default)]
         message: Option<String>,
@@ -22,7 +23,8 @@ pub enum WptAssertion {
         test_name: String,
         span: SourceSpan,
     },
-    UrlSearchParamsGet {
+    #[serde(rename = "urlSearchParamsGet")]
+    Get {
         query: String,
         name: String,
         expected: Option<String>,
@@ -32,7 +34,8 @@ pub enum WptAssertion {
         test_name: String,
         span: SourceSpan,
     },
-    UrlSearchParamsHas {
+    #[serde(rename = "urlSearchParamsHas")]
+    Has {
         query: String,
         name: String,
         expected: bool,
