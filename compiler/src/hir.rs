@@ -45,6 +45,8 @@ pub struct Handler {
     pub path: String,
     #[serde(default)]
     pub headers: Vec<StaticHeader>,
+    #[serde(default, rename = "elapsedHeaders")]
+    pub elapsed_headers: Vec<ElapsedHeader>,
     #[serde(default)]
     pub stderr: Vec<usize>,
     pub response: HandlerResponse,
@@ -55,6 +57,12 @@ pub struct Handler {
 pub struct StaticHeader {
     pub name: String,
     pub value: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct ElapsedHeader {
+    pub name: String,
+    pub suffix: String,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -226,6 +234,9 @@ impl Program {
                 ));
             }
             let mut header_names = HashSet::new();
+            if handler.headers.len() + handler.elapsed_headers.len() > 8 {
+                return Err("handler contains more than eight response headers".to_owned());
+            }
             for header in &handler.headers {
                 let normalized = header.name.to_ascii_lowercase();
                 if !valid_header_name(header.name.as_bytes())
@@ -235,7 +246,19 @@ impl Program {
                         .any(|byte| matches!(byte, b'\0' | b'\r' | b'\n'))
                     || !header_names.insert(normalized)
                 {
-                    return Err("GET handler contains invalid or duplicate headers".to_owned());
+                    return Err("handler contains invalid or duplicate headers".to_owned());
+                }
+            }
+            for header in &handler.elapsed_headers {
+                let normalized = header.name.to_ascii_lowercase();
+                if !valid_header_name(header.name.as_bytes())
+                    || header
+                        .suffix
+                        .bytes()
+                        .any(|byte| matches!(byte, b'\0' | b'\r' | b'\n'))
+                    || !header_names.insert(normalized)
+                {
+                    return Err("handler contains invalid or duplicate headers".to_owned());
                 }
             }
             if handler

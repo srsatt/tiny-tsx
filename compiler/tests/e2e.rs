@@ -22,6 +22,7 @@ struct ExpectedResponse<'a> {
     body: &'a str,
     content_type: Option<&'a str>,
     headers: &'a [(&'a str, &'a str)],
+    millisecond_headers: &'a [&'a str],
     request_headers: &'a [(&'a str, &'a str)],
     stderr: Option<&'a str>,
 }
@@ -284,6 +285,31 @@ fn builds_and_serves_the_upstream_powered_by_middleware() {
 }
 
 #[test]
+fn builds_and_serves_the_upstream_response_time_middleware() {
+    build_and_serve_with_options(
+        "tests/compat/hono/response-time-smoke.ts",
+        ExpectedResponse {
+            method: "GET",
+            status: 200,
+            path: "/timed",
+            body: "timed",
+            content_type: Some("text/plain;charset=UTF-8"),
+            headers: &[],
+            millisecond_headers: &["X-Response-Time"],
+            request_headers: &[],
+            stderr: None,
+        },
+        &[
+            "--alias",
+            "hono=vendor/hono/src/index.ts",
+            "--api",
+            "hono=tests/compat/hono/api.d.ts",
+        ],
+        &[],
+    );
+}
+
+#[test]
 fn builds_and_serves_upstream_pretty_json_by_query_presence() {
     build_and_serve_with_options(
         "tests/compat/hono/pretty-json-smoke.ts",
@@ -324,6 +350,7 @@ fn builds_and_serves_upstream_hono_redirect() {
             body: "",
             content_type: None,
             headers: &[("Location", "/")],
+            millisecond_headers: &[],
             request_headers: &[],
             stderr: None,
         },
@@ -348,6 +375,7 @@ fn builds_and_serves_an_upstream_hono_request_header() {
             body: "Your UserAgent is tiny-client/1.0",
             content_type: Some("text/plain;charset=UTF-8"),
             headers: &[],
+            millisecond_headers: &[],
             request_headers: &[("User-Agent", "tiny-client/1.0")],
             stderr: None,
         },
@@ -416,6 +444,7 @@ fn builds_and_serves_upstream_custom_error_handler() {
             body: "Custom Error Message",
             content_type: Some("text/plain; charset=UTF-8"),
             headers: &[],
+            millisecond_headers: &[],
             request_headers: &[],
             stderr: Some("Error: Error has occurred"),
         },
@@ -453,6 +482,7 @@ fn expected<'a>(
         body,
         content_type: Some(content_type),
         headers,
+        millisecond_headers: &[],
         request_headers: &[],
         stderr: None,
     }
@@ -532,6 +562,20 @@ fn build_and_serve_with_options(
         assert!(
             response.contains(&format!("{name}: {value}\r\n")),
             "{response}"
+        );
+    }
+    for name in expected.millisecond_headers {
+        let prefix = format!("{name}: ");
+        let value = response
+            .lines()
+            .find_map(|line| line.strip_prefix(&prefix))
+            .unwrap_or_else(|| panic!("missing {name} header in {response}"));
+        let milliseconds = value
+            .strip_suffix("ms")
+            .unwrap_or_else(|| panic!("{name} is not measured in milliseconds: {value}"));
+        assert!(
+            !milliseconds.is_empty() && milliseconds.bytes().all(|byte| byte.is_ascii_digit()),
+            "{name} is not a numeric millisecond duration: {value}"
         );
     }
     if let Some(expected_stderr) = expected.stderr {

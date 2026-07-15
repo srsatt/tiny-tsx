@@ -7,6 +7,8 @@ use crate::{
 
 use super::constant_data;
 
+const HANDLER_SCRATCH_BASE: usize = 48;
+
 pub fn emit(program: &Program, options: Options) -> Result<String, String> {
     program.validate()?;
     let mut assembly = String::new();
@@ -119,8 +121,8 @@ fn emit_handlers(assembly: &mut String, program: &Program) -> Result<(), String>
         .handlers
         .iter()
         .map(|handler| match &handler.response {
-            HandlerResponse::Text { value, .. } => value_frame_size(32, value),
-            HandlerResponse::Html { .. } => Ok(32),
+            HandlerResponse::Text { value, .. } => value_frame_size(HANDLER_SCRATCH_BASE, value),
+            HandlerResponse::Html { .. } => Ok(HANDLER_SCRATCH_BASE),
         })
         .collect::<Result<Vec<_>, _>>()?
         .into_iter()
@@ -160,6 +162,10 @@ fn emit_handlers(assembly: &mut String, program: &Program) -> Result<(), String>
     writeln!(assembly, "    b {return_label}").unwrap();
     for (index, handler) in program.handlers.iter().enumerate() {
         writeln!(assembly, "Ltinytsx_handle_get_match_{index}:").unwrap();
+        if !handler.elapsed_headers.is_empty() {
+            writeln!(assembly, "    bl _tinytsx_date_now_millis").unwrap();
+            writeln!(assembly, "    str x0, [sp, #32]").unwrap();
+        }
         for string in &handler.stderr {
             writeln!(assembly, "    adrp x0, Ltinytsx_string_{string}@PAGE").unwrap();
             writeln!(assembly, "    add x0, x0, Ltinytsx_string_{string}@PAGEOFF").unwrap();
@@ -198,6 +204,40 @@ fn emit_handlers(assembly: &mut String, program: &Program) -> Result<(), String>
             writeln!(assembly, "    cbnz w0, {return_label}").unwrap();
         }
         emit_handler_response(assembly, &handler.response, program, return_label, index)?;
+        if !handler.elapsed_headers.is_empty() {
+            writeln!(assembly, "    cbnz w0, {return_label}").unwrap();
+            writeln!(assembly, "    bl _tinytsx_date_now_millis").unwrap();
+            writeln!(assembly, "    str x0, [sp, #40]").unwrap();
+        }
+        for (header_index, header) in handler.elapsed_headers.iter().enumerate() {
+            writeln!(assembly, "    ldr x0, [sp, #16]").unwrap();
+            writeln!(
+                assembly,
+                "    adrp x1, Ltinytsx_handler_{index}_elapsed_{header_index}_name@PAGE"
+            )
+            .unwrap();
+            writeln!(
+                assembly,
+                "    add x1, x1, Ltinytsx_handler_{index}_elapsed_{header_index}_name@PAGEOFF"
+            )
+            .unwrap();
+            emit_immediate(assembly, "x2", header.name.len() as u64);
+            writeln!(assembly, "    ldr x3, [sp, #32]").unwrap();
+            writeln!(assembly, "    ldr x4, [sp, #40]").unwrap();
+            writeln!(
+                assembly,
+                "    adrp x5, Ltinytsx_handler_{index}_elapsed_{header_index}_suffix@PAGE"
+            )
+            .unwrap();
+            writeln!(
+                assembly,
+                "    add x5, x5, Ltinytsx_handler_{index}_elapsed_{header_index}_suffix@PAGEOFF"
+            )
+            .unwrap();
+            emit_immediate(assembly, "x6", header.suffix.len() as u64);
+            writeln!(assembly, "    bl _tinytsx_response_header_elapsed_millis").unwrap();
+            writeln!(assembly, "    cbnz w0, {return_label}").unwrap();
+        }
         writeln!(assembly, "    b {return_label}").unwrap();
     }
     writeln!(assembly, "{return_label}:").unwrap();
@@ -328,7 +368,7 @@ fn emit_handler_text_expression(
             writeln!(assembly, "{end_label}:").unwrap();
         }
         _ => {
-            emit_value_expression(assembly, expression, program, 32)?;
+            emit_value_expression(assembly, expression, program, HANDLER_SCRATCH_BASE)?;
             writeln!(assembly, "    mov x2, x1").unwrap();
             writeln!(assembly, "    mov x1, x0").unwrap();
             writeln!(assembly, "    ldr x0, [sp, #16]").unwrap();
@@ -483,6 +523,22 @@ fn emit_static_data(assembly: &mut String, program: &Program) -> Result<(), Stri
             .unwrap();
             emit_bytes(assembly, header.value.as_bytes());
         }
+        for (header_index, header) in handler.elapsed_headers.iter().enumerate() {
+            writeln!(assembly, ".p2align 3").unwrap();
+            writeln!(
+                assembly,
+                "Ltinytsx_handler_{index}_elapsed_{header_index}_name:"
+            )
+            .unwrap();
+            emit_bytes(assembly, header.name.as_bytes());
+            writeln!(assembly, ".p2align 3").unwrap();
+            writeln!(
+                assembly,
+                "Ltinytsx_handler_{index}_elapsed_{header_index}_suffix:"
+            )
+            .unwrap();
+            emit_bytes(assembly, header.suffix.as_bytes());
+        }
     }
     for string in &program.static_strings {
         writeln!(assembly, ".p2align 3").unwrap();
@@ -593,6 +649,7 @@ mod tests {
               "handlers": [{
                 "method": "GET",
                 "headers": [{"name":"X-Test","value":"yes"}],
+                "elapsedHeaders": [{"name":"X-Response-Time","suffix":"ms"}],
                 "response": {
                   "kind": "text",
                   "value": {
@@ -630,12 +687,16 @@ mod tests {
         assert!(first.contains("bl _tinytsx_response_begin"));
         assert!(first.contains("bl _tinytsx_request_path_matches"));
         assert!(first.contains("bl _tinytsx_response_header_static"));
+        assert!(first.contains("bl _tinytsx_date_now_millis"));
+        assert!(first.contains("bl _tinytsx_response_header_elapsed_millis"));
         assert!(first.contains("Ltinytsx_handler_0_header_0_name:"));
+        assert!(first.contains("Ltinytsx_handler_0_elapsed_0_name:"));
+        assert!(first.contains("Ltinytsx_handler_0_elapsed_0_suffix:"));
         assert!(first.contains("Ltinytsx_handler_path_0:"));
         assert!(first.contains("bl _tinytsx_function_0"));
         assert!(first.contains("_tinytsx_function_0:"));
         assert!(first.contains("stp x0, x1, [sp, #16]"));
-        assert!(first.contains("ldp x0, x1, [sp, #32]"));
+        assert!(first.contains("ldp x0, x1, [sp, #48]"));
         assert!(first.contains("bl _tinytsx_function_1"));
         assert!(first.contains(
             "_tinytsx_function_1:\n    stp x29, x30, [sp, #-16]!\n    mov x29, sp\n    adrp"
