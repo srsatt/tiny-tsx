@@ -576,6 +576,7 @@ test("retains the closed upstream basicAuth factory as a request guard", () => {
       },
     },
   );
+
 });
 
 test("preserves Hono middleware order around rejected Basic Authorization", () => {
@@ -650,6 +651,26 @@ test("specializes the upstream ETag middleware for a closed response body", () =
         status: 304,
         contentType: "",
         headers: [{name: "ETag", value: '"90ea638841fff3c326fc22cbd156f1146ac0ac02"'}],
+      },
+    },
+  );
+
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    ...options,
+  });
+  assert.deepEqual(
+    (hir.handlers[0] as unknown as {entityTag?: unknown}).entityTag,
+    {
+      value: '"90ea638841fff3c326fc22cbd156f1146ac0ac02"',
+      notModified: {
+        headers: [{name: "ETag", value: '"90ea638841fff3c326fc22cbd156f1146ac0ac02"'}],
+        response: {
+          kind: "text",
+          value: {kind: "stringLiteral", string: 1, span: hir.handlers[0]?.span},
+          status: 304,
+          contentType: "",
+        },
       },
     },
   );

@@ -5,6 +5,7 @@ import {
   evaluateApplicationConstructor,
   evaluateApplicationInitialization,
   type EvaluatedBasicAuthorization,
+  type EvaluatedEntityTag,
   type EvaluatedResponse,
   type ApplicationInitializationEvaluation,
 } from "./constructor-evaluator.js";
@@ -15,6 +16,7 @@ import type {
   Component,
   BasicAuthorization,
   ElapsedHeader,
+  EntityTag,
   Handler,
   HirProgram,
   SourceSpan,
@@ -248,11 +250,15 @@ function lowerApplicationInitialization(
     const basicAuthorization = response.basicAuthorization === undefined
       ? undefined
       : lowerBasicAuthorization(response.basicAuthorization, route.path, strings, span);
+    const entityTag = response.entityTag === undefined
+      ? undefined
+      : lowerEntityTag(response.entityTag, route.path, strings, span);
     return {
       method: route.method as "GET" | "POST",
       path: route.path,
       ...responseHeaders,
       ...(basicAuthorization === undefined ? {} : {basicAuthorization}),
+      ...(entityTag === undefined ? {} : {entityTag}),
       ...(response.stderr === undefined
         ? {}
         : {stderr: response.stderr.map(line => strings.intern(line))}),
@@ -301,28 +307,48 @@ function lowerBasicAuthorization(
   strings: StringTable,
   span: SourceSpan,
 ): BasicAuthorization {
-  const rejected = authorization.rejected;
-  const headers = lowerResponseHeaders(rejected.headers);
-  if (headers === undefined) {
-    throw new Error("validated Basic Authorization rejection headers did not lower");
-  }
   return {
     credentials: authorization.credentials,
-    rejected: {
-      ...headers,
-      ...(rejected.stderr === undefined
-        ? {}
-        : {stderr: rejected.stderr.map(line => strings.intern(line))}),
-      response: {
-        kind: "text",
-        value: lowerResponseBody(rejected.body, routePath, strings, span),
-        ...(rejected.status === 200 ? {} : {status: rejected.status}),
-        contentType: rejected.contentType as
-          | ""
-          | "text/plain; charset=UTF-8"
-          | "text/plain;charset=UTF-8"
-          | "application/json",
-      },
+    rejected: lowerGuardedResponse(authorization.rejected, routePath, strings, span),
+  };
+}
+
+function lowerEntityTag(
+  entityTag: EvaluatedEntityTag,
+  routePath: string,
+  strings: StringTable,
+  span: SourceSpan,
+): EntityTag {
+  return {
+    value: entityTag.value,
+    notModified: lowerGuardedResponse(entityTag.notModified, routePath, strings, span),
+  };
+}
+
+function lowerGuardedResponse(
+  response: EvaluatedResponse,
+  routePath: string,
+  strings: StringTable,
+  span: SourceSpan,
+) {
+  const headers = lowerResponseHeaders(response.headers);
+  if (headers === undefined) {
+    throw new Error("validated guarded response headers did not lower");
+  }
+  return {
+    ...headers,
+    ...(response.stderr === undefined
+      ? {}
+      : {stderr: response.stderr.map(line => strings.intern(line))}),
+    response: {
+      kind: "text" as const,
+      value: lowerResponseBody(response.body, routePath, strings, span),
+      ...(response.status === 200 ? {} : {status: response.status}),
+      contentType: response.contentType as
+        | ""
+        | "text/plain; charset=UTF-8"
+        | "text/plain;charset=UTF-8"
+        | "application/json",
     },
   };
 }
@@ -343,10 +369,17 @@ function isLowerableEvaluatedResponse(response: EvaluatedResponse): boolean {
     return false;
   }
   const authorization = response.basicAuthorization;
-  return authorization === undefined
+  const authorizationLowerable = authorization === undefined
     || (authorization.credentials.length > 0
       && authorization.rejected.basicAuthorization === undefined
+      && authorization.rejected.entityTag === undefined
       && isLowerableEvaluatedResponse(authorization.rejected));
+  const entityTag = response.entityTag;
+  const entityTagLowerable = entityTag === undefined
+    || (entityTag.notModified.basicAuthorization === undefined
+      && entityTag.notModified.entityTag === undefined
+      && isLowerableEvaluatedResponse(entityTag.notModified));
+  return authorizationLowerable && entityTagLowerable;
 }
 
 function lowerResponseHeaders(

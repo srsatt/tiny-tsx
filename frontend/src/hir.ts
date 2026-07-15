@@ -135,6 +135,7 @@ export interface Handler {
   elapsedHeaders?: ElapsedHeader[];
   stderr?: number[];
   basicAuthorization?: BasicAuthorization;
+  entityTag?: EntityTag;
   response: HandlerResponse;
   span: SourceSpan;
 }
@@ -157,6 +158,11 @@ export interface BasicAuthorization {
 export interface BasicCredential {
   username: string;
   password: string;
+}
+
+export interface EntityTag {
+  value: string;
+  notModified: GuardedResponse;
 }
 
 export interface GuardedResponse {
