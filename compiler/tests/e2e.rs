@@ -281,6 +281,36 @@ fn builds_and_serves_the_upstream_powered_by_middleware() {
     );
 }
 
+#[test]
+fn builds_and_serves_upstream_pretty_json_by_query_presence() {
+    build_and_serve_with_options(
+        "tests/compat/hono/pretty-json-smoke.ts",
+        expected(
+            "GET",
+            200,
+            "/api/posts",
+            "[{\"id\":1,\"title\":\"Good Morning\"}]",
+            "application/json",
+            &[],
+        ),
+        &[
+            "--alias",
+            "hono=vendor/hono/src/index.ts",
+            "--alias",
+            "hono/pretty-json=vendor/hono/src/middleware/pretty-json/index.ts",
+            "--api",
+            "hono=tests/compat/hono/api.d.ts",
+            "--api",
+            "hono/pretty-json=tests/compat/hono/pretty-json-api.d.ts",
+        ],
+        &[(
+            "/api/posts?pretty",
+            "[\n  {\n    \"id\": 1,\n    \"title\": \"Good Morning\"\n  }\n]",
+            "application/json",
+        )],
+    );
+}
+
 fn build_and_serve(entry: &str, expected_body: &str, expected_content_type: &str) {
     build_and_serve_with_options(
         entry,
