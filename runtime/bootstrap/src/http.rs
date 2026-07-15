@@ -135,7 +135,7 @@ fn write_response(
     let content_type = match content_type {
         CONTENT_TYPE_HTML => "text/html; charset=utf-8",
         CONTENT_TYPE_TEXT => "text/plain; charset=UTF-8",
-        CONTENT_TYPE_JSON => "application/json; charset=UTF-8",
+        CONTENT_TYPE_JSON => "application/json",
         CONTENT_TYPE_RESPONSE_TEXT => "text/plain;charset=UTF-8",
         _ => "application/octet-stream",
     };
