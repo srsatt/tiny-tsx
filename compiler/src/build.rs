@@ -34,6 +34,8 @@ struct BuildReport<'a> {
     binary_bytes: u64,
     port: u16,
     workers: usize,
+    application_workers: usize,
+    logical_workers: usize,
     request_memory_bytes: usize,
     gc: &'a str,
     modules: usize,
@@ -41,7 +43,7 @@ struct BuildReport<'a> {
     constants: usize,
     static_html_bytes: usize,
     dynamic_html_expressions: usize,
-    runtime_features: [&'a str; 5],
+    runtime_features: [&'a str; 6],
 }
 
 pub fn execute(options: &Options) -> Result<PathBuf, String> {
@@ -209,6 +211,8 @@ fn write_report(output: &Path, compilation: &Compilation, options: &Options) -> 
         binary_bytes,
         port: options.port,
         workers: options.workers,
+        application_workers: usize::from(!compilation.program.workers.is_empty()) * options.workers,
+        logical_workers: compilation.program.workers.len(),
         request_memory_bytes: options.request_memory,
         gc: "disabled",
         modules: compilation.program.statistics.modules,
@@ -222,6 +226,7 @@ fn write_report(output: &Path, compilation: &Compilation, options: &Options) -> 
             "bounded-worker-pool",
             "keep-alive",
             "bounded-response-streaming",
+            "bounded-application-worker-pool",
         ],
     };
     let json = serde_json::to_string_pretty(&report)
@@ -243,6 +248,11 @@ fn print_summary(
     println!("Target:              aarch64-apple-darwin");
     println!("Runtime:             bootstrap");
     println!("Workers:             {}", options.workers);
+    println!(
+        "Application workers: {} executors; {} logical workers",
+        usize::from(!compilation.program.workers.is_empty()) * options.workers,
+        compilation.program.workers.len(),
+    );
     println!("Request memory:      {} bytes", options.request_memory);
     println!(
         "TypeScript modules:  {}",

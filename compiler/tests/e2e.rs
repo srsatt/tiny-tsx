@@ -1048,6 +1048,38 @@ fn builds_and_serves_request_time_hono_jsx_with_exact_escaping() {
 }
 
 #[test]
+fn builds_and_serves_hono_through_a_separate_application_worker_pool() {
+    build_and_serve_with_options(
+        "tests/compat/workers/hono-worker-smoke.ts",
+        expected(
+            "GET",
+            200,
+            "/worker?input=hello+worker",
+            "HELLO WORKER",
+            "text/plain;charset=UTF-8",
+            &[],
+        ),
+        &[
+            "--workers",
+            "2",
+            "--alias",
+            "hono=vendor/hono/src/index.ts",
+            "--api",
+            "hono=tests/compat/hono/api.d.ts",
+        ],
+        &[
+            (200, "/worker", "HELLO WORKER", "text/plain;charset=UTF-8"),
+            (
+                200,
+                "/worker?input=disposable%20worker",
+                "DISPOSABLE WORKER",
+                "text/plain;charset=UTF-8",
+            ),
+        ],
+    );
+}
+
+#[test]
 fn builds_and_serves_upstream_hono_stream_text_without_body_buffering() {
     let _build_guard = NATIVE_BUILD.lock().expect("lock native E2E build");
     let root = repository_root();
