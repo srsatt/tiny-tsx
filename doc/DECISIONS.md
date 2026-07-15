@@ -81,3 +81,12 @@ workspace dependencies, then execute `generateText` against a deterministic
 fake model before adding streaming or real provider I/O. Network access,
 credentials, provider availability, and schema-generation breadth must not be
 prerequisites for the first native behavior test.
+
+## D-011: Light lambdas are arena-only by default
+
+The default deployment profile uses immutable executable data plus bounded
+request, message, and logical-worker arenas. A lambda that cannot keep its
+observable state within those ownership domains is rejected until an explicit
+compatibility profile supports it. GC is not an assumed destination: only an
+executed cyclic/aliased escaping graph can justify a collector spike, and any
+result remains isolated per worker rather than becoming a shared process heap.

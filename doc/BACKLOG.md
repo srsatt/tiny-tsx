@@ -238,6 +238,6 @@ commit message.
       keep-alive HTTP are available.
 - [ ] Dynamic component props and request query lookup.
 - [ ] HTML text and quoted-attribute escaping.
-- [ ] Fixed request arena and recoverable request OOM.
+- [x] Fixed request arena and recoverable request OOM.
 - [x] Fixed native worker pool and bounded dispatch queue.
 - [ ] Add request parsing and response equivalence cases beyond the static page.

@@ -55,9 +55,11 @@ response and closes that connection. A rejected connection must not consume a
 request arena. Each accepted connection stays on one executor thread through
 parsing, rendering, response writing, and close.
 
-The first HTTP integration retains `Connection: close`. Keep-alive is the next
-transport slice and must reuse the same worker job instead of re-enqueueing each
-request on the connection.
+HTTP/1.1 keep-alive reuses the same worker job instead of re-enqueueing each
+request on the connection. Pipelined bytes stay in a bounded connection buffer;
+request bodies are consumed by validated `Content-Length` framing up to 1 MiB.
+A connection closes on explicit `Connection: close`, invalid/ambiguous framing,
+request OOM/internal failure, 100 completed requests, or five idle seconds.
 
 ## JavaScript-facing Worker subset
 

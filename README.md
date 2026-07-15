@@ -213,11 +213,12 @@ The harness verifies equivalent status, content type, content length, and body,
 then records repeated startup-to-first-response, RSS, throughput, and latency
 samples through `oha`. See `benchmarks/README.md` for methodology and limitations.
 
-The present bootstrap accepts GET and POST requests with `Connection: close` on
-a configurable fixed native worker pool. One acceptor submits owned connections
-to a bounded queue with 64 waiting slots per worker; saturation returns HTTP
-503. Keep-alive and a reusable request arena remain subsequent milestones
-tracked in `doc/BACKLOG.md`.
+The present bootstrap accepts GET and POST requests over bounded HTTP/1.1
+keep-alive on a configurable fixed native worker pool. One acceptor submits
+owned connections to a bounded queue with 64 waiting slots per worker;
+saturation returns HTTP 503. A live connection stays on one executor, closes
+after 100 requests or five idle seconds, and reuses that worker's request arena
+for every response.
 
 ---
 

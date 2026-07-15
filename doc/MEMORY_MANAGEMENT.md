@@ -8,16 +8,17 @@ the narrowest lifetime that matches its observable behavior.
 | --- | --- | --- |
 | closed constants and records | executable read-only data | process exit |
 | request-local non-escaping values | per-worker request arena | reset after request |
-| logical-worker mutable state | isolated worker heap | worker termination or collection |
-| copied messages | receiver-owned message arena/heap | after delivery or retention analysis |
+| logical-worker mutable state | isolated invocation/worker arena by default | worker termination or arena reset |
+| copied messages | receiver-owned message arena | after delivery or retention analysis |
 | genuinely shared/escaping graphs | unsupported until a collector contract exists | collector-defined |
 
 ## Worker boundary
 
-Each logical worker owns its mutable heap. Messages copy supported values and
-never share object identity. This makes worker termination useful as a bulk
+Each logical worker owns its mutable arena domain. Messages copy supported values
+and never share object identity. This makes worker termination useful as a bulk
 reclamation boundary and avoids a process-wide stop-the-world collector merely
-to support parallel workers.
+to support parallel workers. A managed heap is an optional future compatibility
+profile, not the default representation of worker state.
 
 HTTP executor threads own reusable request arenas, but an arena is reset for
 every request. An executor thread is not itself a JavaScript heap or logical
@@ -59,11 +60,13 @@ integration complexity, root accuracy, pause isolation, retained RSS, worker
 termination cost, and Apple-arm64/Linux portability. Reference counting alone
 is not the JavaScript heap solution because observable cycles remain.
 
-The preferred end state is a non-moving heap per logical worker with no shared
-objects. A conservative collector may be a useful compatibility experiment,
-but accidental retention and process-wide thread scanning make it a poor
-default until measurements say otherwise.
+The preferred default is an arena-only light-lambda profile: immutable static
+captures, bounded invocation state, copied messages, and bulk reclamation at
+request/message/worker boundaries. If executed compatibility evidence later
+requires cyclic escaping graphs, a separate profile may add a non-moving heap
+per logical worker with no shared objects. A conservative collector may be a
+useful experiment, but accidental retention and process-wide thread scanning
+make it a poor default until measurements say otherwise.
 
 No production tracing collector should be written from scratch as part of the
 worker milestone.
-

@@ -316,6 +316,18 @@ produces and serves a native Mach-O executable from the example TSX source.
   a deterministic fake model and Bun reference—no credentials or network—then
   streaming, Hono integration, and provider transport in that order. No AI
   source or dependency is pinned yet.
+- HTTP/1.1 connections now stay on one executor for up to 100 requests or five
+  idle seconds. A 16 KiB parser preserves pipelined bytes, consumes validated
+  bodies up to 1 MiB, rejects duplicate Content-Length/transfer encoding, and
+  closes deterministically on framing or application failures.
+- Every HTTP executor now allocates its configured response arena once and
+  reuses the same pointer for subsequent requests. Native Hono E2E covers two
+  pipelined routes, body framing, the 100-request cap, malformed/oversized close,
+  saturation recovery, and an 8-byte arena that serves a normal response,
+  returns OOM for a larger route, then serves a normal request again.
+- Arena-only light lambdas are now the default memory decision. Persistent
+  managed heaps and GC are optional compatibility profiles triggered only by an
+  executed escaping graph, not assumed roadmap endpoints.
 
 Verification:
 
@@ -354,18 +366,18 @@ rtk npm run benchmark:hono-jsx-ssr
 
 ## Active slice
 
-The reusable native worker pool now drives HTTP and has wire-level concurrency,
-isolation, overload, recovery, RSS, and 1/2/4/8 load evidence. The next runtime
-slice is HTTP/1.1 keep-alive; the next compatibility slice is request-time Hono
-JSX. Only then should the worker matrix be interpreted. Keep fixed-layout
-records separate from dynamic `Map`.
+The reusable native worker pool now drives bounded keep-alive HTTP with per-worker
+arenas and wire-level concurrency, isolation, overload, OOM, and recovery proof.
+The active slice is the persistent-connection 1/2/4/8 Hono JSX matrix; the next
+compatibility slice is request-time Hono JSX. Keep fixed-layout records separate
+from dynamic `Map`.
 
 ## Resume point
 
 Read `doc/WORKERS.md`, `doc/PERFORMANCE.md`, and `doc/BACKLOG.md`. Run
 `rtk cargo test -p tinytsx-runtime-worker` and
 `rtk cargo test -p tinytsx worker_pool_serves_in_parallel_and_recovers_after_saturation`.
-Implement bounded HTTP/1.1 keep-alive without moving a live connection between
-workers. Reset request parsing and request memory for every message, close on
-malformed/oversized input, and keep the Hono response matrix green. Then rerun
-the retained worker matrix before moving to request-time JSX and AI SDK intake.
+Run `benchmarks/scripts/run_static.py --workload hono-jsx-ssr --keep-alive` for
+workers 1, 2, 4, and 8 with unique output prefixes, then compare it directly to
+the retained connection-close matrix. Move next to request-time JSX before AI
+SDK intake.
