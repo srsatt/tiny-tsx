@@ -96,7 +96,7 @@ fn builds_and_dispatches_the_first_two_hono_basic_routes() {
             "--api",
             "hono=tests/compat/hono/api.d.ts",
         ],
-        &[("/hello", "This is /hello", "text/plain;charset=UTF-8")],
+        &[(200, "/hello", "This is /hello", "text/plain;charset=UTF-8")],
     );
 }
 
@@ -163,6 +163,7 @@ fn builds_and_serves_nested_hono_routes() {
             "hono=tests/compat/hono/api.d.ts",
         ],
         &[(
+            200,
             "/book/hello%20world",
             "Get Book: hello world",
             "text/plain;charset=UTF-8",
@@ -507,11 +508,13 @@ fn builds_and_serves_upstream_pretty_json_by_query_presence() {
         ],
         &[
             (
+                200,
                 "/api/posts?pretty",
                 "[\n  {\n    \"id\": 1,\n    \"title\": \"Good Morning\"\n  }\n]",
                 "application/json",
             ),
             (
+                200,
                 "/api/posts?%70retty",
                 "[\n  {\n    \"id\": 1,\n    \"title\": \"Good Morning\"\n  }\n]",
                 "application/json",
@@ -676,7 +679,36 @@ fn builds_and_serves_the_complete_pinned_hono_basic_source() {
             "--api",
             "hono/pretty-json=tests/compat/hono/pretty-json-api.d.ts",
         ],
-        &[("/hello", "This is /hello", "text/plain;charset=UTF-8")],
+        &[(200, "/hello", "This is /hello", "text/plain;charset=UTF-8")],
+    );
+}
+
+#[test]
+fn builds_and_serves_the_exact_pinned_hono_jsx_ssr_source() {
+    let root = include_str!("../../tests/compat/hono/fixtures/jsx-ssr-root.html")
+        .strip_suffix('\n')
+        .expect("root fixture ends with a newline");
+    let post = include_str!("../../tests/compat/hono/fixtures/jsx-ssr-post-1.html")
+        .strip_suffix('\n')
+        .expect("post fixture ends with a newline");
+    build_and_serve_with_options(
+        "vendor/hono-examples/jsx-ssr/src/index.tsx",
+        expected("GET", 200, "/", root, "text/html; charset=utf-8", &[]),
+        &[
+            "--alias",
+            "hono=vendor/hono/src/index.ts",
+            "--alias",
+            "hono/html=vendor/hono/src/helper/html/index.ts",
+            "--api",
+            "hono=tests/compat/hono/api.d.ts",
+            "--api",
+            "hono/html=tests/compat/hono/html-api.d.ts",
+        ],
+        &[
+            (200, "/post/1", post, "text/html; charset=utf-8"),
+            (404, "/post/99", "404 Not Found", "text/plain; charset=UTF-8"),
+            (404, "/post/nope", "404 Not Found", "text/plain; charset=UTF-8"),
+        ],
     );
 }
 
@@ -714,7 +746,7 @@ fn build_and_serve_with_options(
     entry: &str,
     expected: ExpectedResponse<'_>,
     frontend_options: &[&str],
-    additional_routes: &[(&str, &str, &str)],
+    additional_routes: &[(u16, &str, &str, &str)],
 ) {
     let _build_guard = NATIVE_BUILD.lock().expect("lock native E2E build");
     let root = repository_root();
@@ -810,7 +842,7 @@ fn build_and_serve_with_options(
         }
     }
 
-    for (path, body, content_type) in additional_routes {
+    for (status, path, body, content_type) in additional_routes {
         let mut route = TcpStream::connect(("127.0.0.1", port)).expect("connect for route");
         write!(
             route,
@@ -822,7 +854,7 @@ fn build_and_serve_with_options(
             .read_to_string(&mut route_response)
             .expect("read route response");
         assert!(
-            route_response.starts_with("HTTP/1.1 200 OK\r\n"),
+            route_response.starts_with(&format!("HTTP/1.1 {status} ")),
             "{route_response}"
         );
         assert!(
@@ -848,6 +880,7 @@ fn build_and_serve_with_options(
         );
         assert!(
             missing_response.ends_with("not found")
+                || missing_response.ends_with("404 Not Found")
                 || missing_response.ends_with("Custom 404 Not Found"),
             "{missing_response}"
         );
