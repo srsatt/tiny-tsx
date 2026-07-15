@@ -28,7 +28,7 @@ produces and serves a native Mach-O executable from the example TSX source.
 - Assembly uses native component functions, the documented writer helper, static
   bytes in `__TEXT,__const`, and a global `tinytsx_handle_get` entrypoint.
 - Apple clang assembles generated text and Cargo/rustc links the object into the
-  single-worker Rust bootstrap runtime. No generated application code passes
+  fixed-worker Rust bootstrap runtime. No generated application code passes
   through LLVM, JavaScript, WebAssembly, or an interpreter.
 - The bootstrap runtime handles GET over HTTP/1.1, emits required headers, closes
   each connection, and renders through a bounded writer using the ABI status.
@@ -283,6 +283,12 @@ produces and serves a native Mach-O executable from the example TSX source.
   containment, and close/drain/join shutdown. Six unit tests prove invalid
   configuration, true two-thread progress, saturation/closed behavior, local
   state, panic recovery, and draining.
+- Generated objects now export the configured worker count, and the CLI accepts
+  every positive `--workers N`. The bootstrap creates that many native executor
+  threads and a queue of eight waiting connections per worker. Its single
+  acceptor submits owned streams without blocking; saturation returns a bounded
+  `server overloaded` HTTP 503. A two-worker native smoke test kept one worker
+  blocked on a partial request while the other returned the exact static page.
 
 Verification:
 
@@ -321,17 +327,17 @@ rtk npm run benchmark:hono-jsx-ssr
 
 ## Active slice
 
-The reusable native worker pool is implemented independently of HTTP. The active
-slice is to make the bootstrap consume it, emit the configured worker count,
-return a deterministic 503 when the bounded connection queue is full, and prove
-parallel request service plus overload recovery. Keep fixed-layout records
-separate from dynamic `Map`; do not infer generic arrays, maps, regexps, or
-Promise semantics from finite Hono specialization.
+The reusable native worker pool now drives HTTP and `--workers N` is emitted into
+the executable. The active slice is native E2E proof of parallel request service,
+deterministic saturation 503, response isolation, and recovery after overload.
+Keep fixed-layout records separate from dynamic `Map`; do not infer generic
+arrays, maps, regexps, or Promise semantics from finite Hono specialization.
 
 ## Resume point
 
 Read `doc/WORKERS.md`, `doc/PERFORMANCE.md`, and `doc/BACKLOG.md`. Run
-`cargo test -p tinytsx-runtime-worker`, then add the generated worker-count ABI
-and submit accepted `TcpStream` jobs from the bootstrap listener. Preserve the
-current `Connection: close` contract for this slice; keep-alive follows before
-publication-grade worker scaling measurements.
+`rtk cargo test -p tinytsx-runtime-worker`, then add a focused native server test
+that occupies executor threads with partial requests, fills the waiting queue,
+observes the next connection's 503, releases the stalled connections, and
+verifies a later 200. Preserve the current `Connection: close` contract for this
+slice; keep-alive follows before publication-grade worker scaling measurements.

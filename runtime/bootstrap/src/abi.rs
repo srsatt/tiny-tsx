@@ -112,6 +112,7 @@ pub struct TinyResponseWriter {
 unsafe extern "C" {
     pub fn tinytsx_handle_get(request: *const TinyRequest, writer: *mut TinyResponseWriter) -> u32;
     pub fn tinytsx_config_port() -> u16;
+    pub fn tinytsx_config_workers() -> usize;
     pub fn tinytsx_config_request_memory() -> usize;
 }
 
@@ -126,6 +127,11 @@ unsafe extern "C" fn tinytsx_handle_get(
 #[cfg(not(feature = "generated"))]
 unsafe extern "C" fn tinytsx_config_port() -> u16 {
     3000
+}
+
+#[cfg(not(feature = "generated"))]
+unsafe extern "C" fn tinytsx_config_workers() -> usize {
+    1
 }
 
 #[cfg(not(feature = "generated"))]
@@ -993,6 +999,11 @@ pub fn render(request: &TinyRequest, capacity: usize) -> RenderedResponse {
 pub fn configured_port() -> u16 {
     // SAFETY: The generated object always provides the configuration functions.
     unsafe { tinytsx_config_port() }
+}
+
+pub fn configured_workers() -> usize {
+    // SAFETY: The generated object always provides the configuration functions.
+    unsafe { tinytsx_config_workers() }
 }
 
 pub fn configured_request_memory() -> usize {

@@ -48,7 +48,7 @@ garbage collection.
 
 The bootstrap runtime owns one listener and submits each accepted `TcpStream`
 to the shared pool. `--workers N` selects the executor count. The initial queue
-capacity is a documented fixed multiple of `N`; it is never unbounded.
+capacity is eight waiting connections per worker; it is never unbounded.
 
 When `try_submit` reports a full queue, the acceptor writes a minimal HTTP 503
 response and closes that connection. A rejected connection must not consume a
@@ -116,4 +116,3 @@ draining shutdown. HTTP integration additionally requires:
 - controlled 503 behavior at saturation and recovery afterward;
 - response isolation across concurrent routes;
 - RSS and load results for 1, 2, 4, and 8 workers.
-

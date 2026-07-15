@@ -3,27 +3,54 @@ use std::{
     net::{TcpListener, TcpStream},
 };
 
+use tinytsx_runtime_worker::WorkerPool;
+
 use crate::abi::{
     BAD_REQUEST, CONTENT_TYPE_HTML, CONTENT_TYPE_JSON, CONTENT_TYPE_NONE,
     CONTENT_TYPE_RESPONSE_TEXT, CONTENT_TYPE_TEXT, INTERNAL_ERROR, NOT_FOUND, OK, RENDER_ERROR,
-    REQUEST_OOM, TinyHeader, TinyStringView, configured_port, configured_request_memory, render,
-    request_with_headers,
+    REQUEST_OOM, TinyHeader, TinyStringView, configured_port, configured_request_memory,
+    configured_workers, render, request_with_headers,
 };
 
 const MAX_REQUEST_HEAD: usize = 16 * 1024;
 const MAX_REQUEST_HEADERS: usize = 64;
+const CONNECTION_QUEUE_PER_WORKER: usize = 8;
 
 pub fn serve() -> std::io::Result<()> {
     let port = configured_port();
+    let workers = configured_workers();
     let request_memory = configured_request_memory();
+    let queue_capacity = workers
+        .checked_mul(CONNECTION_QUEUE_PER_WORKER)
+        .ok_or_else(|| std::io::Error::other("connection queue capacity overflow"))?;
+    let pool = WorkerPool::new(
+        workers,
+        queue_capacity,
+        move |_| request_memory,
+        |request_memory, mut stream| {
+            if let Err(error) = handle_connection(&mut stream, *request_memory) {
+                eprintln!("request error: {error}");
+            }
+        },
+    )?;
     let listener = TcpListener::bind(("127.0.0.1", port))?;
     println!("TinyTSX listening on http://127.0.0.1:{port}");
+    println!("Workers: {workers}; queued connections: {queue_capacity}");
 
     for stream in listener.incoming() {
         match stream {
-            Ok(mut stream) => {
-                if let Err(error) = handle_connection(&mut stream, request_memory) {
-                    eprintln!("request error: {error}");
+            Ok(stream) => {
+                if let Err(rejected) = pool.try_submit(stream) {
+                    let mut stream = rejected.into_inner();
+                    if let Err(error) = write_response(
+                        &mut stream,
+                        503,
+                        CONTENT_TYPE_TEXT,
+                        b"server overloaded",
+                        &[],
+                    ) {
+                        eprintln!("overload response error: {error}");
+                    }
                 }
             }
             Err(error) => eprintln!("accept error: {error}"),

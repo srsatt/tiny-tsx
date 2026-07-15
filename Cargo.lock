@@ -97,6 +97,9 @@ dependencies = [
 [[package]]
 name = "tinytsx-runtime-bootstrap"
 version = "0.1.0"
+dependencies = [
+ "tinytsx-runtime-worker",
+]
 
 [[package]]
 name = "tinytsx-runtime-worker"

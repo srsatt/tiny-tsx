@@ -41,7 +41,7 @@ struct BuildReport<'a> {
     constants: usize,
     static_html_bytes: usize,
     dynamic_html_expressions: usize,
-    runtime_features: [&'a str; 3],
+    runtime_features: [&'a str; 4],
 }
 
 pub fn execute(options: &Options) -> Result<PathBuf, String> {
@@ -51,6 +51,7 @@ pub fn execute(options: &Options) -> Result<PathBuf, String> {
         &compilation.program,
         CodegenOptions {
             port: options.port,
+            workers: options.workers,
             request_memory: options.request_memory,
         },
     )?;
@@ -215,7 +216,12 @@ fn write_report(output: &Path, compilation: &Compilation, options: &Options) -> 
         constants: compilation.program.statistics.constants,
         static_html_bytes: compilation.program.statistics.static_html_bytes,
         dynamic_html_expressions: compilation.program.statistics.dynamic_html_expressions,
-        runtime_features: ["http1", "bounded-writer", "connection-close"],
+        runtime_features: [
+            "http1",
+            "bounded-writer",
+            "bounded-worker-pool",
+            "connection-close",
+        ],
     };
     let json = serde_json::to_string_pretty(&report)
         .map_err(|error| format!("could not serialize build report: {error}"))?;

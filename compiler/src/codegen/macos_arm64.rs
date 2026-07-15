@@ -40,6 +40,11 @@ fn emit_config(assembly: &mut String, options: Options) {
     emit_immediate(assembly, "x0", u64::from(options.port));
     writeln!(assembly, "    ret").unwrap();
 
+    writeln!(assembly, "\n.globl _tinytsx_config_workers").unwrap();
+    writeln!(assembly, "_tinytsx_config_workers:").unwrap();
+    emit_immediate(assembly, "x0", options.workers as u64);
+    writeln!(assembly, "    ret").unwrap();
+
     writeln!(assembly, "\n.globl _tinytsx_config_request_memory").unwrap();
     writeln!(assembly, "_tinytsx_config_request_memory:").unwrap();
     emit_immediate(assembly, "x0", options.request_memory as u64);
@@ -883,6 +888,7 @@ mod tests {
         assert!(first.contains(".byte 60, 104, 49"));
         assert!(first.contains(".byte 4, 5, 0, 0, 0, 72, 101, 108, 108, 111"));
         assert!(first.contains("_tinytsx_config_port:\n    movz x0, #3000"));
+        assert!(first.contains("_tinytsx_config_workers:\n    movz x0, #1"));
     }
 
     #[test]

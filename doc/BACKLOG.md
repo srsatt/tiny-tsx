@@ -44,7 +44,7 @@ commit message.
       isolation, message ownership, overload, and shutdown contracts.
 - [x] Add a zero-dependency reusable native worker-pool crate with a bounded
       FIFO queue, worker-local state, panic recovery, and draining shutdown.
-- [ ] Make the HTTP bootstrap consume the shared pool and enable `--workers N`.
+- [x] Make the HTTP bootstrap consume the shared pool and enable `--workers N`.
 - [ ] Prove concurrent request execution, deterministic saturation 503, response
       isolation, and recovery after overload.
 - [ ] Benchmark equivalent Hono workloads with 1/2/4/8 workers, reporting RSS,

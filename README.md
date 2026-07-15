@@ -214,8 +214,10 @@ then records repeated startup-to-first-response, RSS, throughput, and latency
 samples through `oha`. See `benchmarks/README.md` for methodology and limitations.
 
 The present bootstrap accepts GET and POST requests with `Connection: close` on
-one worker. A reusable request arena and the fixed worker pool remain subsequent
-milestones tracked in `doc/BACKLOG.md`.
+a configurable fixed native worker pool. One acceptor submits owned connections
+to a bounded queue with eight waiting slots per worker; saturation returns HTTP
+503. Keep-alive and a reusable request arena remain subsequent milestones
+tracked in `doc/BACKLOG.md`.
 
 ---
 
@@ -2472,7 +2474,7 @@ export function GET(request: Request): Response {
 2. A bootstrap Rust runtime using:
 
 * `TcpListener`;
-* one worker initially;
+* a configurable fixed native worker pool;
 * GET;
 * `Connection: close`;
 * `Content-Length`;

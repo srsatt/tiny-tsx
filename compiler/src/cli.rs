@@ -143,7 +143,7 @@ fn parse_build_options(
             }
             "--worker-stack" => {
                 return Err(
-                    "--worker-stack is not available in the single-worker bootstrap runtime"
+                    "--worker-stack is not yet available in the fixed-worker bootstrap runtime"
                         .to_owned(),
                 );
             }
@@ -162,8 +162,8 @@ fn parse_build_options(
     if options.port == 0 {
         return Err("port must be greater than zero".to_owned());
     }
-    if options.workers != 1 {
-        return Err("the first bootstrap runtime supports exactly one worker".to_owned());
+    if options.workers == 0 {
+        return Err("workers must be greater than zero".to_owned());
     }
     if options.request_memory == 0 {
         return Err("request memory must be greater than zero".to_owned());
