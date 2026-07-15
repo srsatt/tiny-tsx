@@ -11,6 +11,7 @@ export type Value =
   | {kind: "number"; value: number}
   | {kind: "bigint"; value: bigint}
   | {kind: "string"; value: string}
+  | {kind: "regexp"; source: string; flags: string}
   | {kind: "array"; items: Value[]}
   | {kind: "record"; fields: Map<string, Value>}
   | {kind: "headers"; entries: Map<string, {name: string; value: string}>}
@@ -137,6 +138,7 @@ export function truthiness(value: Value): boolean | undefined {
     case "string": return value.value.length > 0;
     case "array":
     case "record":
+    case "regexp":
     case "headers":
     case "request":
     case "closure":

@@ -117,6 +117,7 @@ export type HandlerResponse =
       value: ValueExpression;
       status?: number;
       contentType?:
+        | ""
         | "text/plain; charset=UTF-8"
         | "text/plain;charset=UTF-8"
         | "application/json";

@@ -777,9 +777,7 @@ function executeEffectCall(
   }
   const receiver = evaluate(evaluator, call.expression.expression, module, environment, instance);
   const name = memberName(call.expression.name);
-  const arguments_ = call.arguments.map(argument =>
-    evaluate(evaluator, argument, module, environment, instance)
-  );
+  const arguments_ = evaluateCallArguments(evaluator, call, module, environment, instance);
   if (receiver.kind === "array" && name === "push") {
     receiver.items.push(...arguments_);
     return true;
@@ -800,6 +798,11 @@ function executeEffectCall(
     }
   }
   if (receiver.kind === "instance") {
+    const callable = receiver.fields.get(name);
+    if (callable?.kind === "closure") {
+      invokeClosure(evaluator, callable, arguments_, receiver);
+      return true;
+    }
     const method = findInstanceMethod(evaluator, name, receiver);
     if (method !== undefined) {
       invokeFunctionLike(
@@ -843,11 +846,15 @@ function evaluateCall(
   environment: Map<string, Value>,
   instance: Value & {kind: "instance"},
 ): Value {
-  const arguments_ = call.arguments.map(argument =>
-    evaluate(evaluator, argument, module, environment, instance)
-  );
+  const arguments_ = evaluateCallArguments(evaluator, call, module, environment, instance);
   if (ts.isIdentifier(call.expression)) {
     const callable = evaluate(evaluator, call.expression, module, environment, instance);
+    if (callable.kind === "reference" && callable.name === "String") {
+      const argument = arguments_[0] ?? UNDEFINED;
+      return argument.kind === "unknown"
+        ? unknown("String argument is not closed")
+        : {kind: "string", value: stringValue(argument)};
+    }
     if (callable.kind === "reference" && callable.callable !== undefined) {
       return invokeFunctionLike(
         evaluator,
@@ -911,6 +918,12 @@ function evaluateCall(
         return unknown("Response body is not valid JSON");
       }
     }
+    if (receiver.kind === "regexp" && name === "test") {
+      const input = arguments_[0];
+      return input?.kind === "string"
+        ? {kind: "boolean", value: new RegExp(receiver.source, receiver.flags).test(input.value)}
+        : unknown("RegExp.test input is not a closed string");
+    }
     if (receiver.kind === "instance") {
       const callable = receiver.fields.get(name);
       if (callable?.kind === "closure") {
@@ -956,6 +969,29 @@ function evaluateCall(
   return unknown("call expression is not a supported compile-time callable");
 }
 
+function evaluateCallArguments(
+  evaluator: Evaluator,
+  call: ts.CallExpression,
+  module: SourceModule,
+  environment: Map<string, Value>,
+  instance: Value & {kind: "instance"},
+): Value[] {
+  const arguments_: Value[] = [];
+  for (const argument of call.arguments) {
+    if (!ts.isSpreadElement(argument)) {
+      arguments_.push(evaluate(evaluator, argument, module, environment, instance));
+      continue;
+    }
+    const spread = evaluate(evaluator, argument.expression, module, environment, instance);
+    if (spread.kind === "array") {
+      arguments_.push(...spread.items);
+    } else {
+      arguments_.push(unknown("call spread is not a closed array"));
+    }
+  }
+  return arguments_;
+}
+
 function combineQueryOr(left: Value, right: Value): Value | undefined {
   const leftPredicate = left.kind === "queryParameter"
     ? {kind: "queryPredicate" as const, name: left.name, test: "truthy" as const}
@@ -986,6 +1022,14 @@ function evaluate(
   }
   if (ts.isNumericLiteral(expression)) {
     return {kind: "number", value: Number(expression.text)};
+  }
+  if (ts.isRegularExpressionLiteral(expression)) {
+    const separator = expression.text.lastIndexOf("/");
+    return {
+      kind: "regexp",
+      source: expression.text.slice(1, separator),
+      flags: expression.text.slice(separator + 1),
+    };
   }
   if (expression.kind === ts.SyntaxKind.TrueKeyword || expression.kind === ts.SyntaxKind.FalseKeyword) {
     return {kind: "boolean", value: expression.kind === ts.SyntaxKind.TrueKeyword};
@@ -1092,6 +1136,12 @@ function evaluate(
   if (ts.isBinaryExpression(expression)) {
     const operator = expression.operatorToken.kind;
     const left = evaluate(evaluator, expression.left, module, environment, instance);
+    if (operator === ts.SyntaxKind.QuestionQuestionEqualsToken) {
+      if (left.kind !== "undefined" && left.kind !== "null") return left;
+      const right = evaluate(evaluator, expression.right, module, environment, instance);
+      assign(evaluator, expression.left, right, module, environment, instance);
+      return right;
+    }
     if (operator === ts.SyntaxKind.AmpersandAmpersandToken) {
       const decision = truthiness(left);
       if (decision === false) return left;
@@ -1265,6 +1315,13 @@ function evaluate(
     const values: Value[] = [{kind: "string", value: expression.head.text}];
     for (const span of expression.templateSpans) {
       const part = evaluate(evaluator, span.expression, module, environment, instance);
+      if (
+        part.kind === "unknown"
+        || part.kind === "queryParameter"
+        || part.kind === "queryPredicate"
+      ) {
+        return unknown("template value is not closed or lowerable");
+      }
       values.push(
         part.kind === "routeParameter" || part.kind === "runtimeString"
           ? part

@@ -210,6 +210,7 @@ function lowerApplicationInitialization(
     route.response === undefined
     || route.response.kind !== "text"
     || ![
+      "",
       "text/plain; charset=UTF-8",
       "text/plain;charset=UTF-8",
       "application/json",
@@ -232,6 +233,7 @@ function lowerApplicationInitialization(
         value,
         ...(response.status === 200 ? {} : {status: response.status}),
         contentType: response.contentType as
+          | ""
           | "text/plain; charset=UTF-8"
           | "text/plain;charset=UTF-8"
           | "application/json",

@@ -247,7 +247,7 @@ impl Program {
                     if content_type.as_deref().is_some_and(|value| {
                         !matches!(
                             value,
-                            "text/plain; charset=UTF-8"
+                            "" | "text/plain; charset=UTF-8"
                                 | "text/plain;charset=UTF-8"
                                 | "application/json"
                         )
