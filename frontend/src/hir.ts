@@ -148,6 +148,7 @@ export type HandlerResponse =
       contentType?:
         | ""
         | "text/plain; charset=UTF-8"
+        | "text/plain; charset=utf-8"
         | "text/plain;charset=UTF-8"
         | "text/html; charset=UTF-8"
         | "application/json";
@@ -159,6 +160,7 @@ export type HandlerResponse =
       contentType?:
         | ""
         | "text/plain; charset=UTF-8"
+        | "text/plain; charset=utf-8"
         | "text/plain;charset=UTF-8"
         | "text/html; charset=UTF-8"
         | "application/json";

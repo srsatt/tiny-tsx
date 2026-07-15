@@ -5,7 +5,7 @@ use std::{
 
 use crate::abi::{
     CONTENT_TYPE_HTML, CONTENT_TYPE_JSON, CONTENT_TYPE_NONE, CONTENT_TYPE_RESPONSE_TEXT,
-    CONTENT_TYPE_TEXT,
+    CONTENT_TYPE_STREAM_TEXT, CONTENT_TYPE_TEXT,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -111,6 +111,7 @@ fn write_response_head(
             CONTENT_TYPE_TEXT => "text/plain; charset=UTF-8",
             CONTENT_TYPE_JSON => "application/json",
             CONTENT_TYPE_RESPONSE_TEXT => "text/plain;charset=UTF-8",
+            CONTENT_TYPE_STREAM_TEXT => "text/plain; charset=utf-8",
             _ => "application/octet-stream",
         };
         write!(stream, "Content-Type: {content_type}\r\n")?;
@@ -144,7 +145,7 @@ fn is_framing_header(name: &[u8]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{ConnectionDirective, write_response, write_stream_response};
-    use crate::abi::CONTENT_TYPE_NONE;
+    use crate::abi::{CONTENT_TYPE_NONE, CONTENT_TYPE_STREAM_TEXT};
 
     #[test]
     fn response_selects_keep_alive_or_close() {
@@ -181,7 +182,7 @@ mod tests {
         write_stream_response(
             &mut output,
             200,
-            CONTENT_TYPE_NONE,
+            CONTENT_TYPE_STREAM_TEXT,
             [b"first\n".as_slice(), b"second\n".as_slice()],
             &[(b"Transfer-Encoding".to_vec(), b"invalid-duplicate".to_vec())],
             ConnectionDirective::KeepAlive,
@@ -189,6 +190,10 @@ mod tests {
         .expect("write stream response");
 
         assert!(find(&output, b"Transfer-Encoding: chunked\r\n"));
+        assert!(find(
+            &output,
+            b"Content-Type: text/plain; charset=utf-8\r\n"
+        ));
         assert!(!find(&output, b"Content-Length:"));
         assert!(find(&output, b"6\r\nfirst\n\r\n7\r\nsecond\n\r\n0\r\n\r\n"));
         assert!(!find(&output, b"invalid-duplicate"));

@@ -332,6 +332,7 @@ function lowerApplicationInitialization(
         contentType: response.contentType as
           | ""
           | "text/plain; charset=UTF-8"
+          | "text/plain; charset=utf-8"
           | "text/plain;charset=UTF-8"
           | "text/html; charset=UTF-8"
           | "application/json",
@@ -343,6 +344,7 @@ function lowerApplicationInitialization(
         contentType: response.contentType as
           | ""
           | "text/plain; charset=UTF-8"
+          | "text/plain; charset=utf-8"
           | "text/plain;charset=UTF-8"
           | "text/html; charset=UTF-8"
           | "application/json",
@@ -462,6 +464,7 @@ function lowerGuardedResponse(
       contentType: response.contentType as
         | ""
         | "text/plain; charset=UTF-8"
+        | "text/plain; charset=utf-8"
         | "text/plain;charset=UTF-8"
         | "text/html; charset=UTF-8"
         | "application/json",
@@ -473,6 +476,7 @@ function isLowerableEvaluatedResponse(response: EvaluatedResponse): boolean {
   const contentType = [
     "",
     "text/plain; charset=UTF-8",
+    "text/plain; charset=utf-8",
     "text/plain;charset=UTF-8",
     "text/html; charset=UTF-8",
     "application/json",

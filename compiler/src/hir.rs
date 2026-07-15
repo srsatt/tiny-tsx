@@ -539,6 +539,7 @@ impl Program {
                     !matches!(
                         value,
                         "" | "text/plain; charset=UTF-8"
+                            | "text/plain; charset=utf-8"
                             | "text/plain;charset=UTF-8"
                             | "text/html; charset=UTF-8"
                             | "application/json"
@@ -563,6 +564,7 @@ impl Program {
                     !matches!(
                         value,
                         "" | "text/plain; charset=UTF-8"
+                            | "text/plain; charset=utf-8"
                             | "text/plain;charset=UTF-8"
                             | "text/html; charset=UTF-8"
                             | "application/json"

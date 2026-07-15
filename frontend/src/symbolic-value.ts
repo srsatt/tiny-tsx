@@ -40,7 +40,7 @@ export type Value =
   | {
       kind: "closure";
       span: SourceSpan;
-      expression: ts.ArrowFunction | ts.FunctionExpression;
+      expression: ts.ArrowFunction | ts.FunctionExpression | ts.MethodDeclaration;
       module: SourceModule;
       environment: Map<string, Value>;
     }
@@ -79,6 +79,7 @@ export type ResponseHeaderValue = string | RuntimeStringPart[];
 
 export interface StreamState {
   chunks: Array<string | RuntimeStringPart[]>;
+  values?: Value[];
   closed: boolean;
 }
 

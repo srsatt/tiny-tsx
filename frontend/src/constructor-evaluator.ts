@@ -1744,6 +1744,9 @@ function evaluateCall(
   }
   if (ts.isIdentifier(call.expression)) {
     const callable = evaluate(evaluator, call.expression, module, environment, instance);
+    if (callable.kind === "reference" && isPinnedStreamText(callable)) {
+      return evaluatePinnedStreamText(evaluator, arguments_, instance);
+    }
     if (callable.kind === "closure") {
       return invokeClosure(evaluator, callable, arguments_, instance);
     }
@@ -1836,6 +1839,12 @@ function evaluateCall(
         ? input
         : unknown("TextEncoder input is not a closed string");
     }
+    if (receiver.kind === "streamWriter" && name === "enqueue") {
+      const input = arguments_[0];
+      if (input === undefined) return unknown("stream controller enqueue requires one value");
+      (receiver.state.values ??= []).push(input);
+      return UNDEFINED;
+    }
     if (receiver.kind === "streamWriter" && name === "write") {
       const input = arguments_[0];
       const chunk = input === undefined ? undefined : streamChunk(input);
@@ -1846,6 +1855,15 @@ function evaluateCall(
     if (receiver.kind === "streamWriter" && (name === "close" || name === "releaseLock")) {
       if (name === "close") receiver.state.closed = true;
       return UNDEFINED;
+    }
+    if (receiver.kind === "record" && name === "toTextStreamResponse") {
+      const response = receiver.fields.get("#textStreamResponse");
+      if (response?.kind !== "response") {
+        return unknown("streamText result has no closed text response");
+      }
+      const source = receiver.fields.get("#sourceStream");
+      if (source !== undefined) markValueEscape(evaluator.memory, source, "response");
+      return response;
     }
     if (receiver.kind === "streamReader" && name === "cancel") {
       receiver.state.closed = true;
@@ -2201,6 +2219,106 @@ function evaluateCall(
   );
 }
 
+function isPinnedStreamText(value: Value & {kind: "reference"}): boolean {
+  return value.name === "streamText"
+    && value.callable?.module.path.replaceAll("\\", "/")
+      .endsWith("/packages/ai/src/generate-text/stream-text.ts") === true;
+}
+
+function evaluatePinnedStreamText(
+  evaluator: Evaluator,
+  arguments_: Value[],
+  instance: Value & {kind: "instance"},
+): Value {
+  const options = arguments_[0];
+  if (arguments_.length !== 1 || options?.kind !== "record") {
+    return unknown("pinned streamText tracer requires one closed options record");
+  }
+  if ([...options.fields.keys()].some(name => !["model", "prompt"].includes(name))) {
+    return unknown("pinned streamText tracer only supports model and prompt options");
+  }
+  const model = options.fields.get("model");
+  const prompt = options.fields.get("prompt");
+  const doStream = model?.kind === "instance" ? model.fields.get("doStream") : undefined;
+  if (model?.kind !== "instance" || prompt?.kind !== "string" || doStream?.kind !== "closure") {
+    return unknown("pinned streamText tracer requires a closed model and string prompt");
+  }
+  const callOptions: Value = {
+    kind: "record",
+    fields: new Map([["prompt", {
+      kind: "array",
+      items: [{
+        kind: "record",
+        fields: new Map([
+          ["role", {kind: "string", value: "user"}],
+          ["content", {
+            kind: "array",
+            items: [{
+              kind: "record",
+              fields: new Map([
+                ["type", {kind: "string", value: "text"}],
+                ["text", prompt],
+              ]),
+            }],
+          }],
+          ["providerOptions", UNDEFINED],
+        ]),
+      }],
+    }]]),
+  };
+  const modelResult = invokeClosure(evaluator, doStream, [callOptions], model);
+  if (modelResult.kind === "thrown") return modelResult;
+  const source = modelResult.kind === "record" ? modelResult.fields.get("stream") : undefined;
+  if (source?.kind !== "readableStream" || source.state.closed !== true) {
+    return unknown("pinned streamText model must return a closed readable stream");
+  }
+
+  const chunks: string[] = [];
+  const activeTextIds = new Set<string>();
+  let finished = false;
+  for (const part of source.state.values ?? []) {
+    if (part.kind !== "record") {
+      return unknown("pinned streamText model emitted a non-record part");
+    }
+    const type = closedRecordString(part, "type");
+    const id = closedRecordString(part, "id");
+    if (type === "text-start" && id !== undefined) {
+      activeTextIds.add(id);
+    } else if (type === "text-delta" && id !== undefined && activeTextIds.has(id)) {
+      const delta = closedRecordString(part, "delta");
+      if (delta === undefined) return unknown("pinned streamText delta is not a closed string");
+      if (delta.length > 0) chunks.push(delta);
+    } else if (type === "text-end" && id !== undefined && activeTextIds.delete(id)) {
+      // The matching text part is complete.
+    } else if (type === "finish") {
+      finished = true;
+    } else {
+      return unknown(`pinned streamText part is unsupported: ${type ?? part.kind}`);
+    }
+  }
+  if (!finished || activeTextIds.size > 0 || chunks.length === 0 || chunks.length > 16) {
+    return unknown("pinned streamText model did not produce one finite completed text stream");
+  }
+  return {
+    kind: "record",
+    fields: new Map<string, Value>([
+      ["#sourceStream", source],
+      ["#textStreamResponse", {
+        kind: "response",
+        body: {kind: "stream", chunks},
+        status: 200,
+        contentType: "text/plain; charset=utf-8",
+        headers: new Map(),
+      }],
+    ]),
+  };
+}
+
+function closedRecordString(value: Value & {kind: "record"}, name: string): string | undefined {
+  const field = value.fields.get(name);
+  return field?.kind === "string" ? field.value : undefined;
+}
+
 function evaluateCallArguments(
   evaluator: Evaluator,
   call: ts.CallExpression,
@@ -2446,6 +2564,22 @@ function evaluateExpression(
         );
         if (name === undefined) return unknown("object getter name is not closed");
         fields.set(name, UNDEFINED);
+      } else if (ts.isMethodDeclaration(property)) {
+        const name = evaluatedPropertyName(
+          evaluator,
+          property.name,
+          module,
+          environment,
+          instance,
+        );
+        if (name === undefined) return unknown("object method name is not closed");
+        fields.set(name, {
+          kind: "closure",
+          span: spanOf(property, module.sourceFile),
+          expression: property,
+          module,
+          environment: new Map(environment),
+        });
       } else {
         return unknown("object member is not supported");
       }
@@ -2836,12 +2970,23 @@ function evaluateExpression(
         ? UNDEFINED
         : evaluate(evaluator, expression.arguments[0], module, environment, instance);
       const writer = instance.fields.get("writer");
+      const state: StreamState = streamStateFromInitializer(initializer)
+        ?? (writer?.kind === "streamWriter"
+          ? writer.state
+          : {chunks: [], values: [], closed: false});
+      const start = initializer.kind === "record" ? initializer.fields.get("start") : undefined;
+      if (start?.kind === "closure") {
+        const started = invokeClosure(
+          evaluator,
+          start,
+          [{kind: "streamWriter", state}],
+          instance,
+        );
+        if (started.kind === "thrown" || started.kind === "unknown") return started;
+      }
       return {
         kind: "readableStream",
-        state: streamStateFromInitializer(initializer)
-          ?? (writer?.kind === "streamWriter"
-            ? writer.state
-            : {chunks: [], closed: false}),
+        state,
       };
     }
     const resolved = resolveRuntimeClass(module, expression.expression.text, evaluator.modules);
@@ -3631,6 +3776,10 @@ function markValueEscape(
     markValueEscape(tracker, value.fallback, target, visited);
   } else if (value.kind === "thrown") {
     markValueEscape(tracker, value.value, target, visited);
+  } else if (value.kind === "readableStream" || value.kind === "writableStream") {
+    for (const streamed of value.state.values ?? []) {
+      markValueEscape(tracker, streamed, target, visited);
+    }
   }
 }
 

@@ -20,6 +20,7 @@ pub const CONTENT_TYPE_HTML: u16 = 1;
 pub const CONTENT_TYPE_TEXT: u16 = 2;
 pub const CONTENT_TYPE_JSON: u16 = 3;
 pub const CONTENT_TYPE_RESPONSE_TEXT: u16 = 4;
+pub const CONTENT_TYPE_STREAM_TEXT: u16 = 5;
 pub const MAX_RESPONSE_HEADERS: usize = 8;
 pub const MAX_DYNAMIC_HEADER_BYTES: usize = 256;
 pub const MAX_STREAM_CHUNKS: usize = 16;
@@ -319,6 +320,7 @@ pub unsafe extern "C" fn tinytsx_response_begin(
                 | CONTENT_TYPE_TEXT
                 | CONTENT_TYPE_JSON
                 | CONTENT_TYPE_RESPONSE_TEXT
+                | CONTENT_TYPE_STREAM_TEXT
         )
     {
         writer.status = INTERNAL_ERROR;
