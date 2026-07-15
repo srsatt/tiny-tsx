@@ -1,6 +1,6 @@
 use std::{ffi::OsString, path::PathBuf};
 
-use crate::{build, codegen, frontend};
+use crate::{build, codegen, frontend, test262_build};
 
 const USAGE: &str = "\
 TinyTSX native TSX compiler
@@ -9,6 +9,7 @@ Usage:
   tinytsx check <entry.tsx> [--emit-hir | --emit-asm] [--alias specifier=path] [--api specifier=path]
   tinytsx build <entry.tsx> [options]
   tinytsx run <entry.tsx> [options]
+  tinytsx test262 <case.js> [--output path]
 ";
 
 pub fn run(arguments: impl Iterator<Item = OsString>) -> Result<(), String> {
@@ -24,12 +25,32 @@ pub fn run(arguments: impl Iterator<Item = OsString>) -> Result<(), String> {
         Some("check") => check(&arguments[1..]),
         Some("build") => build(&arguments[1..]),
         Some("run") => run_server(&arguments[1..]),
+        Some("test262") => test262(&arguments[1..]),
         Some("-h" | "--help") | None => {
             print!("{USAGE}");
             Ok(())
         }
         Some(command) => Err(format!("unknown command `{command}`\n\n{USAGE}")),
     }
+}
+
+fn test262(arguments: &[String]) -> Result<(), String> {
+    let mut entry = None;
+    let mut output = PathBuf::from("dist/test262");
+    let mut index = 0;
+    while index < arguments.len() {
+        match arguments[index].as_str() {
+            "--output" => output = PathBuf::from(option_value(arguments, &mut index)?),
+            option if option.starts_with('-') => {
+                return Err(format!("unknown Test262 option `{option}`"));
+            }
+            value if entry.is_none() => entry = Some(value.to_owned()),
+            value => return Err(format!("unexpected argument `{value}`")),
+        }
+        index += 1;
+    }
+    let entry = entry.ok_or_else(|| format!("test262 requires a case file\n\n{USAGE}"))?;
+    test262_build::execute(&test262_build::Options { entry, output }).map(|_| ())
 }
 
 fn build(arguments: &[String]) -> Result<(), String> {

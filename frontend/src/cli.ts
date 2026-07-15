@@ -5,15 +5,38 @@ import {fileURLToPath} from "node:url";
 import {auditCompatibility} from "./compatibility-audit.js";
 import {CompileFailure, formatDiagnostic} from "./diagnostics.js";
 import {compileEntry} from "./program.js";
+import {compileTest262Entry} from "./test262.js";
 
 const args = process.argv.slice(2);
 if (args[0] === "--audit-compat") {
   audit(args.slice(1));
+} else if (args[0] === "--test262") {
+  compileTest262(args.slice(1));
 } else if (args[0] === undefined) {
   usage();
   process.exitCode = 2;
 } else {
   compile(args);
+}
+
+function compileTest262(args: string[]): void {
+  const entry = args[0];
+  if (entry === undefined || args.length !== 1) {
+    process.stderr.write("error: --test262 requires exactly one entry file\n");
+    process.exitCode = 2;
+    return;
+  }
+  try {
+    const hir = compileTest262Entry(entry);
+    process.stdout.write(`${JSON.stringify(hir, null, 2)}\n`);
+  } catch (error) {
+    if (error instanceof CompileFailure) {
+      process.stderr.write(`${error.diagnostics.map(formatDiagnostic).join("\n\n")}\n`);
+      process.exitCode = 1;
+    } else {
+      throw error;
+    }
+  }
 }
 
 function compile(args: string[]): void {
@@ -109,6 +132,7 @@ function usage(): void {
   process.stderr.write(
     "usage: tinytsx-frontend <entry.tsx> [--sdk <index.d.ts>] [--alias <specifier>=<path>]..."
     + " [--api <specifier>=<api.d.ts>]...\n"
-    + "       tinytsx-frontend --audit-compat <entry> [--alias <specifier>=<path>]...\n",
+    + "       tinytsx-frontend --audit-compat <entry> [--alias <specifier>=<path>]...\n"
+    + "       tinytsx-frontend --test262 <entry.js>\n",
   );
 }

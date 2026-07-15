@@ -1,10 +1,15 @@
 use std::{path::PathBuf, process::Command};
 
 use crate::hir::Program;
+use crate::test262_hir::Test262Program;
 
 pub struct Compilation {
     pub program: Program,
     pub json: String,
+}
+
+pub struct Test262Compilation {
+    pub program: Test262Program,
 }
 
 pub fn compile(
@@ -52,6 +57,34 @@ pub fn compile(
         program,
         json: json.trim_end().to_owned(),
     })
+}
+
+pub fn compile_test262(entry: &str) -> Result<Test262Compilation, String> {
+    let root = repository_root();
+    let script = root.join("frontend/dist/src/cli.js");
+    if !script.is_file() {
+        return Err(format!(
+            "TinyTSX frontend is not built: {}\nrun `npm install --prefix frontend && npm run build --prefix frontend`",
+            script.display(),
+        ));
+    }
+    let output = Command::new("node")
+        .arg(&script)
+        .arg("--test262")
+        .arg(entry)
+        .output()
+        .map_err(|error| format!("failed to start the TypeScript frontend: {error}"))?;
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr)
+            .trim_end()
+            .to_owned());
+    }
+    let json = String::from_utf8(output.stdout)
+        .map_err(|_| "TypeScript frontend returned non-UTF-8 Test262 HIR".to_owned())?;
+    let program: Test262Program = serde_json::from_str(&json)
+        .map_err(|error| format!("TypeScript frontend returned invalid Test262 HIR: {error}"))?;
+    program.validate()?;
+    Ok(Test262Compilation { program })
 }
 
 pub fn repository_root() -> PathBuf {
