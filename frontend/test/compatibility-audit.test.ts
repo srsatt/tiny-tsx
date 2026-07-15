@@ -578,6 +578,44 @@ test("retains the closed upstream basicAuth factory as a request guard", () => {
   );
 });
 
+test("preserves Hono middleware order around rejected Basic Authorization", () => {
+  const entry = path.join(repository, "tests/compat/hono/basic-auth-error-smoke.ts");
+  const aliases = {
+    hono: path.join(repository, "vendor/hono/src/index.ts"),
+    "hono/basic-auth": path.join(
+      repository,
+      "vendor/hono/src/middleware/basic-auth/index.ts",
+    ),
+    "hono/powered-by": path.join(
+      repository,
+      "vendor/hono/src/middleware/powered-by/index.ts",
+    ),
+  };
+  const graph = loadModuleGraph(entry, {aliases});
+  const application = analyzeApplicationEntry(graph.modules[0]!.sourceFile);
+  assert.ok(application);
+
+  const result = evaluateApplicationInitialization(graph, application);
+
+  assert.deepEqual(result?.issues, []);
+  const response = result?.routes.find(route => route.method === "GET")?.response;
+  assert.deepEqual(response?.headers, [
+    {
+      name: "X-Response-Time",
+      value: [{kind: "elapsedMilliseconds"}, {kind: "literal", value: "ms"}],
+    },
+    {name: "X-Powered-By", value: "Hono"},
+  ]);
+  assert.deepEqual(response?.basicAuthorization?.rejected, {
+    kind: "text",
+    body: "Custom Error Message",
+    status: 500,
+    contentType: "text/plain; charset=UTF-8",
+    headers: [{name: "X-Powered-By", value: "Hono"}],
+    stderr: ["Error"],
+  });
+});
+
 test("lowers upstream prettyJSON into a query-conditional native response", () => {
   const entry = path.join(repository, "tests/compat/hono/pretty-json-smoke.ts");
   const options = {

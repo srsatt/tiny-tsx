@@ -470,6 +470,8 @@ function evaluateBasicAuthorizationRejection(
   errorHandler: Value & {kind: "closure"} | undefined,
 ): {response: Value & {kind: "response"}; stderr: string[]} | undefined {
   if (errorHandler !== undefined) {
+    context.fields.delete("#res");
+    context.fields.set("finalized", {kind: "boolean", value: false});
     const response = invokeClosure(
       evaluator,
       errorHandler,
