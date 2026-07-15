@@ -72,3 +72,12 @@ the default memory strategies; collector integration starts only after an
 exact-source compatibility case proves a persistent escaping graph is required.
 TinyTSX will evaluate established collectors/toolkits and will not build a
 production tracing collector from scratch in the worker milestone.
+
+## D-010: Probe AI SDK Core with a deterministic model first
+
+The first AI framework target is upstream Vercel AI SDK Core, not its UI/RSC
+layers or a handwritten compatible facade. Pin the source and reachable
+workspace dependencies, then execute `generateText` against a deterministic
+fake model before adding streaming or real provider I/O. Network access,
+credentials, provider availability, and schema-generation breadth must not be
+prerequisites for the first native behavior test.

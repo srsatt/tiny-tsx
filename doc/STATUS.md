@@ -310,6 +310,12 @@ produces and serves a native Mach-O executable from the example TSX source.
   31.5k/29.8k/29.2k/30.1k requests/s. More workers did not improve this
   connection-close, single-acceptor, pre-rendered workload; the combined report
   explicitly requires keep-alive and request-time rendering before conclusions.
+- AI SDK reconnaissance records `ai@7.0.28` commit `36496942` as the candidate
+  pin, including its three workspace dependencies, Zod peer, and Node >=22
+  manifest contract. The planned first native slice is Core `generateText` with
+  a deterministic fake model and Bun reference—no credentials or network—then
+  streaming, Hono integration, and provider transport in that order. No AI
+  source or dependency is pinned yet.
 
 Verification:
 

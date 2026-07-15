@@ -54,6 +54,8 @@ commit message.
 - [ ] Pin an exact AI SDK Core revision and run the Hono-style syntax/type/source
       intake against `ai`, `@ai-sdk/provider`, `@ai-sdk/provider-utils`, its
       gateway dependency, and the selected schema dependency.
+- [x] Record the exact `ai@7.0.28` candidate revision/manifest, Core-only scope,
+      deterministic fake-model target, test layers, and worker/GC exit gates.
 - [ ] Compile a deterministic AI SDK Core test with a fake model and no network,
       credentials, or provider package before attempting streaming/provider I/O.
 - [ ] Inventory Promise, async iterator, Web Streams, AbortSignal, encoding,

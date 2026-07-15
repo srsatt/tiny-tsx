@@ -16,6 +16,8 @@ as work progresses.
   isolation/overload contracts.
 - `MEMORY_MANAGEMENT.md` classifies value lifetimes and defines the decision
   boundary for adopting a garbage collector.
+- `AI_COMPATIBILITY.md` records the candidate AI SDK Core pin, deterministic
+  first slice, expected capability audit, and worker/GC integration gates.
 
 Update status and backlog in the same commit as the work they describe. Do not
 mark a capability complete until its listed verification has run successfully.

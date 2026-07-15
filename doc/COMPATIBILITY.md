@@ -491,3 +491,12 @@ Web API implementation.
 
 The order may change when the module audit proves that a smaller dependency
 frontier unlocks a useful end-to-end slice.
+
+## Next package target
+
+After keep-alive and request-time Hono JSX expose the missing async/allocation
+paths, the next package intake is Vercel AI SDK Core. The candidate upstream pin,
+deterministic fake-model vertical slice, expected Web API/task requirements, and
+collector decision boundary are defined in `doc/AI_COMPATIBILITY.md`. AI UI/RSC,
+live provider calls, and a TinyTSX-specific facade are not part of the first
+slice.
