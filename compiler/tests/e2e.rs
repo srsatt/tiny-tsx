@@ -358,6 +358,28 @@ fn builds_and_serves_an_upstream_hono_request_header() {
     );
 }
 
+#[test]
+fn builds_and_serves_upstream_custom_middleware() {
+    build_and_serve_with_options(
+        "tests/compat/hono/custom-middleware-smoke.ts",
+        expected(
+            "GET",
+            200,
+            "/hello",
+            "This is /hello",
+            "text/plain;charset=UTF-8",
+            &[("X-message", "This is addHeader middleware!")],
+        ),
+        &[
+            "--alias",
+            "hono=vendor/hono/src/index.ts",
+            "--api",
+            "hono=tests/compat/hono/api.d.ts",
+        ],
+        &[],
+    );
+}
+
 fn build_and_serve(entry: &str, expected_body: &str, expected_content_type: &str) {
     build_and_serve_with_options(
         entry,
