@@ -521,6 +521,45 @@ test("lowers upstream Context.redirect with an empty body and Location header", 
   assert.deepEqual(hir.handlers[0]?.headers, [{name: "Location", value: "/"}]);
 });
 
+test("lowers an upstream Hono request header into request-time text", () => {
+  const entry = path.join(repository, "tests/compat/hono/request-header-smoke.ts");
+  const options = {
+    aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+    apiAliases: {hono: path.join(repository, "tests/compat/hono/api.d.ts")},
+  };
+  const graph = loadModuleGraph(entry, options);
+  const application = analyzeApplicationEntry(graph.modules[0]!.sourceFile);
+  assert.ok(application);
+
+  const result = evaluateApplicationInitialization(graph, application);
+
+  assert.deepEqual(result?.issues, []);
+  assert.deepEqual(result?.routes[0]?.response?.body, [
+    {kind: "literal", value: "Your UserAgent is "},
+    {kind: "requestHeader", name: "User-Agent"},
+  ]);
+
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    ...options,
+  });
+  assert.deepEqual(
+    hir.handlers[0]?.response.kind === "text" ? hir.handlers[0].response.value : undefined,
+    {
+      kind: "concat",
+      values: [
+        {kind: "stringLiteral", string: 0, span: hir.handlers[0]?.span},
+        {kind: "requestHeader", header: 1, span: hir.handlers[0]?.span},
+      ],
+      span: hir.handlers[0]?.span,
+    },
+  );
+  assert.deepEqual(hir.staticStrings.map(string => string.value), [
+    "Your UserAgent is ",
+    "User-Agent",
+  ]);
+});
+
 test("lowers the tiny-preset Hono route into native HIR", () => {
   const hir = compileEntry(path.join(repository, "tests/compat/hono/smoke.ts"), {
     sdkPath: path.join(repository, "sdk/index.d.ts"),

@@ -3,6 +3,7 @@ export interface HonoRequestApi {
   readonly path: string;
   param(name: string): string | undefined;
   query(name: string): string | undefined;
+  header(name: string): string | undefined;
 }
 
 export interface HonoContextApi {
