@@ -21,6 +21,10 @@ fn compiles_and_runs_native_test262_programs() {
             "for-throw-counter",
             "vendor/test262/test/language/statements/for/S12.6.3_A1.js",
         ),
+        (
+            "array-unshift",
+            "vendor/test262/test/built-ins/Array/prototype/unshift/S15.4.4.13_A1_T1.js",
+        ),
     ] {
         compile_and_run(&root, &directory.join(name), case);
     }

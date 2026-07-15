@@ -12,7 +12,7 @@ test("lowers the complete pinned infinite for/throw Test262 case", () => {
     "vendor/test262/test/language/statements/for/S12.6.3_A1.js",
   ));
 
-  assert.equal(program.version, 2);
+  assert.equal(program.version, 3);
   assert.deepEqual(program.assertions, [{
     kind: "forThrowCounter",
     initial: 0,
@@ -22,4 +22,30 @@ test("lowers the complete pinned infinite for/throw Test262 case", () => {
     finalExpected: 101,
     span: program.assertions[0]?.span,
   }]);
+});
+
+test("lowers the complete pinned Array.prototype.unshift Test262 case", () => {
+  const program = compileTest262Entry(path.join(
+    repository,
+    "vendor/test262/test/built-ins/Array/prototype/unshift/S15.4.4.13_A1_T1.js",
+  ));
+
+  assert.equal(program.version, 3);
+  const assertion = program.assertions[0];
+  assert.equal(assertion?.kind, "arrayUnshiftProgram");
+  if (assertion?.kind !== "arrayUnshiftProgram") return;
+  assert.equal(assertion.capacity, 16);
+  assert.deepEqual(assertion.operations.map(({span: _span, ...operation}) => operation), [
+    {kind: "unshift", values: [1]},
+    {kind: "assertResult", expected: 1},
+    {kind: "assertElement", index: 0, expected: 1},
+    {kind: "unshift", values: []},
+    {kind: "assertResult", expected: 1},
+    {kind: "assertElement", index: 1, expected: null},
+    {kind: "unshift", values: [-1]},
+    {kind: "assertResult", expected: 2},
+    {kind: "assertElement", index: 0, expected: -1},
+    {kind: "assertElement", index: 1, expected: 1},
+    {kind: "assertLength", expected: 2},
+  ]);
 });

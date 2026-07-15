@@ -5,13 +5,16 @@ import {CompileFailure, fromTypeScript, spanOf, tinyError} from "./diagnostics.j
 import type {SourceSpan} from "./hir.js";
 
 export interface Test262Program {
-  version: 2;
+  version: 3;
   target: "aarch64-apple-darwin";
   entry: string;
   assertions: Test262Assertion[];
 }
 
-export type Test262Assertion = SameValueStringAssertion | ForThrowCounterAssertion;
+export type Test262Assertion =
+  | SameValueStringAssertion
+  | ForThrowCounterAssertion
+  | ArrayUnshiftProgramAssertion;
 
 export interface SameValueStringAssertion {
   kind: "sameValueString";
@@ -30,6 +33,19 @@ export interface ForThrowCounterAssertion {
   finalExpected: number;
   span: SourceSpan;
 }
+
+export interface ArrayUnshiftProgramAssertion {
+  kind: "arrayUnshiftProgram";
+  capacity: 16;
+  operations: ArrayUnshiftOperation[];
+  span: SourceSpan;
+}
+
+export type ArrayUnshiftOperation =
+  | {kind: "unshift"; values: number[]; span: SourceSpan}
+  | {kind: "assertResult"; expected: number; span: SourceSpan}
+  | {kind: "assertElement"; index: number; expected: number | null; span: SourceSpan}
+  | {kind: "assertLength"; expected: number; span: SourceSpan};
 
 export function compileTest262Entry(entryPath: string): Test262Program {
   const entry = path.resolve(entryPath);
@@ -61,16 +77,175 @@ export function compileTest262Entry(entryPath: string): Test262Program {
 
   const assertions = sourceFile.statements.every(isSameValueStatement)
     ? sourceFile.statements.map(statement => lowerSameValueAssertion(statement, sourceFile))
-    : [lowerForThrowCounter(sourceFile)];
+    : isEmptyArrayDeclaration(sourceFile.statements[0])
+      ? [lowerArrayUnshiftProgram(sourceFile)]
+      : [lowerForThrowCounter(sourceFile)];
   if (assertions.length === 0) {
     throw tinyError("TINY2602", "Test262 case must contain an assertion", sourceFile, undefined, sourceFile);
   }
   return {
-    version: 2,
+    version: 3,
     target: "aarch64-apple-darwin",
     entry,
     assertions,
   };
+}
+
+function isEmptyArrayDeclaration(statement: ts.Statement | undefined): boolean {
+  if (
+    statement === undefined
+    || !ts.isVariableStatement(statement)
+    || statement.declarationList.declarations.length !== 1
+  ) {
+    return false;
+  }
+  const declaration = statement.declarationList.declarations[0]!;
+  return ts.isIdentifier(declaration.name)
+    && declaration.initializer !== undefined
+    && ts.isNewExpression(declaration.initializer)
+    && ts.isIdentifier(declaration.initializer.expression)
+    && declaration.initializer.expression.text === "Array"
+    && (declaration.initializer.arguments?.length ?? 0) === 0;
+}
+
+function lowerArrayUnshiftProgram(sourceFile: ts.SourceFile): ArrayUnshiftProgramAssertion {
+  const [declaration, ...statements] = sourceFile.statements;
+  if (declaration === undefined || !isEmptyArrayDeclaration(declaration)) {
+    throw unsupportedArrayProgram(declaration ?? sourceFile, sourceFile);
+  }
+  const arrayDeclaration = (declaration as ts.VariableStatement).declarationList.declarations[0]!;
+  const arrayName = (arrayDeclaration.name as ts.Identifier).text;
+  let resultName: string | undefined;
+  const operations: ArrayUnshiftOperation[] = [];
+
+  for (const statement of statements) {
+    const unshift = arrayUnshiftDeclaration(statement, arrayName, sourceFile);
+    if (unshift !== undefined) {
+      resultName = unshift.resultName;
+      operations.push({
+        kind: "unshift",
+        values: unshift.values,
+        span: spanOf(statement, sourceFile),
+      });
+      continue;
+    }
+    if (!ts.isIfStatement(statement) || statement.elseStatement !== undefined) {
+      throw unsupportedArrayProgram(statement, sourceFile);
+    }
+    if (!isTest262ErrorThrow(statement.thenStatement)) {
+      throw unsupportedArrayProgram(statement.thenStatement, sourceFile);
+    }
+    const comparison = strictNotEqual(statement.expression, sourceFile);
+    const expected = integerOrUndefined(comparison.right, sourceFile);
+    if (ts.isIdentifier(comparison.left) && comparison.left.text === resultName) {
+      if (expected === null) throw unsupportedArrayProgram(comparison.right, sourceFile);
+      operations.push({
+        kind: "assertResult",
+        expected,
+        span: spanOf(statement, sourceFile),
+      });
+      continue;
+    }
+    if (
+      ts.isElementAccessExpression(comparison.left)
+      && ts.isIdentifier(comparison.left.expression)
+      && comparison.left.expression.text === arrayName
+      && comparison.left.argumentExpression !== undefined
+    ) {
+      operations.push({
+        kind: "assertElement",
+        index: nonNegativeIntegerLiteral(comparison.left.argumentExpression, sourceFile),
+        expected,
+        span: spanOf(statement, sourceFile),
+      });
+      continue;
+    }
+    if (
+      ts.isPropertyAccessExpression(comparison.left)
+      && ts.isIdentifier(comparison.left.expression)
+      && comparison.left.expression.text === arrayName
+      && comparison.left.name.text === "length"
+      && expected !== null
+    ) {
+      operations.push({
+        kind: "assertLength",
+        expected,
+        span: spanOf(statement, sourceFile),
+      });
+      continue;
+    }
+    throw unsupportedArrayProgram(comparison.left, sourceFile);
+  }
+
+  if (!operations.some(operation => operation.kind === "unshift")) {
+    throw unsupportedArrayProgram(sourceFile, sourceFile);
+  }
+  return {
+    kind: "arrayUnshiftProgram",
+    capacity: 16,
+    operations,
+    span: spanOf(sourceFile, sourceFile),
+  };
+}
+
+function arrayUnshiftDeclaration(
+  statement: ts.Statement,
+  arrayName: string,
+  sourceFile: ts.SourceFile,
+): {resultName: string; values: number[]} | undefined {
+  if (!ts.isVariableStatement(statement) || statement.declarationList.declarations.length !== 1) {
+    return undefined;
+  }
+  const declaration = statement.declarationList.declarations[0]!;
+  if (
+    !ts.isIdentifier(declaration.name)
+    || declaration.initializer === undefined
+    || !ts.isCallExpression(declaration.initializer)
+    || !ts.isPropertyAccessExpression(declaration.initializer.expression)
+    || !ts.isIdentifier(declaration.initializer.expression.expression)
+    || declaration.initializer.expression.expression.text !== arrayName
+    || declaration.initializer.expression.name.text !== "unshift"
+  ) {
+    return undefined;
+  }
+  return {
+    resultName: declaration.name.text,
+    values: declaration.initializer.arguments.map(argument => integerLiteral(argument, sourceFile)),
+  };
+}
+
+function strictNotEqual(
+  expression: ts.Expression,
+  sourceFile: ts.SourceFile,
+): {left: ts.Expression; right: ts.Expression} {
+  if (
+    !ts.isBinaryExpression(expression)
+    || expression.operatorToken.kind !== ts.SyntaxKind.ExclamationEqualsEqualsToken
+  ) {
+    throw unsupportedArrayProgram(expression, sourceFile);
+  }
+  return {left: expression.left, right: expression.right};
+}
+
+function integerOrUndefined(expression: ts.Expression, sourceFile: ts.SourceFile): number | null {
+  if (ts.isIdentifier(expression) && expression.text === "undefined") return null;
+  return integerLiteral(expression, sourceFile);
+}
+
+function nonNegativeIntegerLiteral(expression: ts.Expression, sourceFile: ts.SourceFile): number {
+  const value = integerLiteral(expression, sourceFile);
+  if (value < 0) throw unsupportedArrayProgram(expression, sourceFile);
+  return value;
+}
+
+function unsupportedArrayProgram(node: ts.Node, sourceFile: ts.SourceFile): CompileFailure {
+  return tinyError(
+    "TINY2608",
+    "native Test262 arrays currently support a closed dense numeric Array/unshift program",
+    node,
+    undefined,
+    sourceFile,
+  );
 }
 
 function isSameValueStatement(statement: ts.Statement): boolean {

@@ -1,6 +1,9 @@
 use std::fmt::Write;
 
-use crate::test262_hir::{Test262Assertion, Test262Program};
+use crate::test262_hir::{ArrayUnshiftOperation, Test262Assertion, Test262Program};
+
+const ARRAY_STACK_BYTES: usize = 144;
+const ARRAY_DATA_OFFSET: usize = 16;
 
 pub fn emit_macos_arm64(program: &Test262Program) -> Result<String, String> {
     program.validate()?;
@@ -31,6 +34,9 @@ pub fn emit_macos_arm64(program: &Test262Program) -> Result<String, String> {
                 *catch_expected,
                 *final_expected,
             ),
+            Test262Assertion::ArrayUnshiftProgram { operations, .. } => {
+                emit_array_unshift_program(&mut assembly, index, operations)
+            }
         }
     }
     writeln!(assembly, "    mov w0, #0").unwrap();
@@ -55,6 +61,114 @@ pub fn emit_macos_arm64(program: &Test262Program) -> Result<String, String> {
         emit_bytes(&mut assembly, expected.as_bytes());
     }
     Ok(assembly)
+}
+
+fn emit_array_unshift_program(
+    assembly: &mut String,
+    assertion_index: usize,
+    operations: &[ArrayUnshiftOperation],
+) {
+    writeln!(assembly, "    sub sp, sp, #{ARRAY_STACK_BYTES}").unwrap();
+    writeln!(assembly, "    str xzr, [sp]").unwrap();
+    writeln!(assembly, "    str xzr, [sp, #8]").unwrap();
+
+    for (operation_index, operation) in operations.iter().enumerate() {
+        let fail = format!("Ltinytsx_test262_array_fail_{assertion_index}");
+        match operation {
+            ArrayUnshiftOperation::Unshift { values, .. } => {
+                emit_array_unshift(assembly, assertion_index, operation_index, values)
+            }
+            ArrayUnshiftOperation::AssertResult { expected, .. } => {
+                writeln!(assembly, "    ldr x9, [sp, #8]").unwrap();
+                emit_immediate(assembly, "x10", *expected as u64);
+                writeln!(assembly, "    cmp x9, x10").unwrap();
+                writeln!(assembly, "    b.ne {fail}").unwrap();
+            }
+            ArrayUnshiftOperation::AssertElement {
+                index, expected, ..
+            } => {
+                writeln!(assembly, "    ldr x9, [sp]").unwrap();
+                emit_immediate(assembly, "x10", *index as u64);
+                writeln!(assembly, "    cmp x9, x10").unwrap();
+                if let Some(expected) = expected {
+                    writeln!(assembly, "    b.ls {fail}").unwrap();
+                    writeln!(assembly, "    add x11, sp, #{ARRAY_DATA_OFFSET}").unwrap();
+                    writeln!(assembly, "    ldr x9, [x11, x10, lsl #3]").unwrap();
+                    emit_immediate(assembly, "x10", *expected as u64);
+                    writeln!(assembly, "    cmp x9, x10").unwrap();
+                    writeln!(assembly, "    b.ne {fail}").unwrap();
+                } else {
+                    writeln!(assembly, "    b.hi {fail}").unwrap();
+                }
+            }
+            ArrayUnshiftOperation::AssertLength { expected, .. } => {
+                writeln!(assembly, "    ldr x9, [sp]").unwrap();
+                emit_immediate(assembly, "x10", *expected as u64);
+                writeln!(assembly, "    cmp x9, x10").unwrap();
+                writeln!(assembly, "    b.ne {fail}").unwrap();
+            }
+        }
+    }
+
+    writeln!(assembly, "    add sp, sp, #{ARRAY_STACK_BYTES}").unwrap();
+    writeln!(
+        assembly,
+        "    b Ltinytsx_test262_array_pass_{assertion_index}"
+    )
+    .unwrap();
+    writeln!(assembly, "Ltinytsx_test262_array_fail_{assertion_index}:").unwrap();
+    writeln!(assembly, "    add sp, sp, #{ARRAY_STACK_BYTES}").unwrap();
+    writeln!(assembly, "    b Ltinytsx_test262_fail").unwrap();
+    writeln!(assembly, "Ltinytsx_test262_array_pass_{assertion_index}:").unwrap();
+}
+
+fn emit_array_unshift(
+    assembly: &mut String,
+    assertion_index: usize,
+    operation_index: usize,
+    values: &[i64],
+) {
+    writeln!(assembly, "    ldr x9, [sp]").unwrap();
+    if !values.is_empty() {
+        writeln!(assembly, "    mov x10, x9").unwrap();
+        writeln!(
+            assembly,
+            "Ltinytsx_test262_array_shift_{assertion_index}_{operation_index}:"
+        )
+        .unwrap();
+        writeln!(
+            assembly,
+            "    cbz x10, Ltinytsx_test262_array_shifted_{assertion_index}_{operation_index}"
+        )
+        .unwrap();
+        writeln!(assembly, "    sub x10, x10, #1").unwrap();
+        writeln!(assembly, "    add x11, x10, #{}", values.len()).unwrap();
+        writeln!(assembly, "    add x12, sp, #{ARRAY_DATA_OFFSET}").unwrap();
+        writeln!(assembly, "    ldr x13, [x12, x10, lsl #3]").unwrap();
+        writeln!(assembly, "    str x13, [x12, x11, lsl #3]").unwrap();
+        writeln!(
+            assembly,
+            "    b Ltinytsx_test262_array_shift_{assertion_index}_{operation_index}"
+        )
+        .unwrap();
+        writeln!(
+            assembly,
+            "Ltinytsx_test262_array_shifted_{assertion_index}_{operation_index}:"
+        )
+        .unwrap();
+        for (index, value) in values.iter().enumerate() {
+            emit_immediate(assembly, "x10", *value as u64);
+            writeln!(
+                assembly,
+                "    str x10, [sp, #{}]",
+                ARRAY_DATA_OFFSET + index * 8
+            )
+            .unwrap();
+        }
+        writeln!(assembly, "    add x9, x9, #{}", values.len()).unwrap();
+        writeln!(assembly, "    str x9, [sp]").unwrap();
+    }
+    writeln!(assembly, "    str x9, [sp, #8]").unwrap();
 }
 
 fn emit_same_value(assembly: &mut String, index: usize, actual: &str, expected: &str) {
