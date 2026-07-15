@@ -240,8 +240,11 @@ commit message.
       props into request-time native JSX.
 - [x] Match Bun/Hono HTML escaping for decoded request values in JSX text and
       quoted attributes, including nested component markup.
-- [ ] Compile pinned upstream `hono/streaming` `streamText()` and emit bounded
+- [x] Compile pinned upstream `hono/streaming` `streamText()` and emit bounded
       HTTP/1.1 chunks without collecting the whole body.
+- [ ] Add request-dependent stream chunks, `sleep`, cancellation, backpressure,
+      and disconnect propagation; the first executable slice is finite and
+      statically planned.
 - [x] Fixed request arena and recoverable request OOM.
 - [x] Fixed native worker pool and bounded dispatch queue.
 - [ ] Add request parsing and response equivalence cases beyond the static page.

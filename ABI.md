@@ -43,6 +43,10 @@ pub struct TinyResponseWriter {
     pub headers: [TinyHeader; 8],
     pub dynamic_header_cursor: usize,
     pub dynamic_header_bytes: [u8; 256],
+    pub streaming: u32,
+    pub stream_chunk_count: usize,
+    pub stream_chunks: [TinyStringView; 16],
+    pub stream_chunk_start: *mut u8,
 }
 ```
 
@@ -77,6 +81,24 @@ extern "C" fn tinytsx_html_write_static(
     writer: *mut TinyResponseWriter,
     bytes: *const u8,
     len: usize,
+) -> u32;
+
+extern "C" fn tinytsx_response_stream_begin(
+    writer: *mut TinyResponseWriter,
+) -> u32;
+
+extern "C" fn tinytsx_response_stream_chunk_static(
+    writer: *mut TinyResponseWriter,
+    bytes: *const u8,
+    len: usize,
+) -> u32;
+
+extern "C" fn tinytsx_response_stream_chunk_begin(
+    writer: *mut TinyResponseWriter,
+) -> u32;
+
+extern "C" fn tinytsx_response_stream_chunk_end(
+    writer: *mut TinyResponseWriter,
 ) -> u32;
 
 extern "C" fn tinytsx_console_error_static(
@@ -153,6 +175,14 @@ extern "C" fn tinytsx_response_header_elapsed_millis(
 `tinytsx_html_write_static` retains its v1 symbol name, but the operation is a
 content-neutral byte append. It appends all bytes or appends none. Later escaped
 writer helpers use the same status convention.
+
+Streaming responses retain at most 16 ordered chunk views. Static chunks point
+directly at immutable generated data and do not consume the request arena.
+Dynamic chunks bracket normal bounded-writer calls with `chunk_begin` and
+`chunk_end`, so their views borrow the reusable arena. The bootstrap emits
+HTTP/1.1 chunk framing, filters application framing headers, flushes each chunk,
+and writes the terminal zero chunk. Exceeding the chunk bound or misnesting the
+brackets returns `RENDER_ERROR`.
 
 `tinytsx_console_error_static` writes one immutable UTF-8 line to stderr. It is
 currently used for closed `console.error` effects retained by a staged Hono

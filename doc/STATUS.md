@@ -264,6 +264,11 @@ produces and serves a native Mach-O executable from the example TSX source.
   and closed fallback through nested component props. Native HIR distinguishes
   raw nested markup from escaped dynamic text, and the arena writer matches Bun
   for missing, empty, and encoded `&<>"'` values in text and attributes.
+- The pinned upstream `hono/streaming` `streamText()` path now evaluates through
+  33 runtime modules into three ordered closed chunks. Native HTTP emits and
+  flushes real chunk framing; a 1-byte arena serves the 19-byte stream, proving
+  the body is not collected there. The first slice is capped at 16 chunks and
+  does not yet implement backpressure, cancellation, `sleep`, or SSE.
 - The JSX SSR benchmark validates Bun's 881-byte root response before sampling.
   On the M5 Max run TinyTSX started in 7.14 ms versus 19.32 ms, used 5.83/5.98
   MiB idle/warm RSS versus Bun's 42.03/98.19 MiB, and delivered 0.90–1.14x
@@ -377,16 +382,16 @@ rtk npm run benchmark:hono-jsx-ssr
 
 The reusable native worker pool now drives bounded keep-alive HTTP with per-worker
 arenas and wire-level concurrency, isolation, overload, OOM, recovery, and
-1/2/4/8 scaling evidence. The active compatibility slice is Hono response
-streaming; connection fairness remains a measured optimization
-target. Keep fixed-layout records separate from dynamic `Map`.
+1/2/4/8 scaling evidence. Request-time JSX and finite Hono text streaming now
+have Bun/native equivalence. The active slice is their benchmark comparison;
+connection fairness remains a measured optimization target. Keep fixed-layout
+records separate from dynamic `Map`.
 
 ## Resume point
 
 Read `doc/WORKERS.md`, `doc/PERFORMANCE.md`, and `doc/BACKLOG.md`. Run
 `rtk cargo test -p tinytsx-runtime-worker` and
 `rtk cargo test -p tinytsx worker_pool_serves_in_parallel_and_recovers_after_saturation`.
-Compile one pinned upstream `hono/streaming` `streamText()` route into bounded
-HTTP/1.1 chunks. Require Bun-equivalent body bytes and wire evidence that the
-native server does not first collect the complete body. Benchmark dynamic JSX
-and streaming before Worker syntax sugar and AI SDK intake.
+Add dynamic JSX and finite streaming workloads to the Bun/TinyTSX benchmark
+harness, then run startup, RSS, response, and load comparisons. Use that result
+before starting Worker syntax sugar and AI SDK intake.

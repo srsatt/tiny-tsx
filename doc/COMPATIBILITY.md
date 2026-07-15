@@ -112,7 +112,20 @@ retains the lookup, fallback, and escaping mode; the native arena writer
 form-decodes the selected value and escapes `&`, `<`, `>`, `"`, and `'`. Bun
 reference tests and native HTTP E2E require byte-identical output for missing,
 empty, and encoded hostile values. This proves bounded dynamic JSX rendering,
-but not yet incrementally streamed responses.
+but does not make the JSX response itself streaming.
+
+The pinned `hono/streaming` `streamText()` helper now supplies a separate real
+streaming slice. TinyTSX evaluates its 33-module upstream graph, including
+`TransformStream`, Hono's `StreamingApi`, async callback, `TextEncoder`, and
+`Context.newResponse`, into three ordered finite chunks. Native HTTP writes
+proper `Transfer-Encoding: chunked` framing and flushes each chunk. A 1-byte
+request-arena E2E still serves the 19-byte body, proving it is not first
+collected in the arena, while Bun pins the decoded body and Hono headers.
+
+This is bounded AOT streaming, not a complete Streams implementation: at most
+16 chunks are retained, the admitted writes are closed strings, and `sleep`,
+backpressure, cancellation, disconnect propagation, arbitrary `ReadableStream`
+pipelines, and SSE remain outside the slice.
 
 The basic example's `/entry/:id` shape is the first request-dependent route.
 One closed `:name` segment becomes a native matcher and `c.req.param('name')`

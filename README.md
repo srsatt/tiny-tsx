@@ -94,7 +94,8 @@ Hono runtime modules with typed props, closed arrays/records, escaping, Unicode,
 finite route specialization, and native 404s. The original static-page vertical
 slice remains available. A separate request-time JSX route also lowers decoded
 query data through nested component props and emits Bun-equivalent escaping
-from the bounded request arena; response streaming is the next Hono slice.
+from the bounded request arena. The pinned upstream `streamText()` path also
+emits finite native HTTP/1.1 chunks without collecting its body in that arena.
 
 Install the pinned build-time frontend and compile the Rust driver:
 
