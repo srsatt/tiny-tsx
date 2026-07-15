@@ -3,6 +3,10 @@
 //! This crate deliberately has no knowledge of HTTP or JavaScript workers. A
 //! caller supplies an owned job type, per-thread state, and a job handler.
 
+mod application;
+
+pub use application::{ApplicationPool, CallError, LogicalWorker, PostError, Reply, ReplyError};
+
 use std::{
     collections::VecDeque,
     io,
