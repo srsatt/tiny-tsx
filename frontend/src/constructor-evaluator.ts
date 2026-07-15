@@ -17,6 +17,7 @@ import {
   type EvaluationContext,
 } from "./staged-value.js";
 import {resolveRuntimeCallable} from "./runtime-callable.js";
+import {resolveRuntimeValue} from "./runtime-value.js";
 import {
   continued,
   detail,
@@ -104,6 +105,8 @@ interface Evaluator {
   root: ResolvedRuntimeClass;
   routerInsertions: number;
   instanceClasses: WeakMap<Value & {kind: "instance"}, ResolvedRuntimeClass>;
+  runtimeValues: Map<string, Value>;
+  activeRuntimeValues: Set<string>;
 }
 
 export function evaluateApplicationConstructor(
@@ -188,6 +191,8 @@ function initializeConstructor(
     root: resolved,
     routerInsertions: 0,
     instanceClasses: new WeakMap(),
+    runtimeValues: new Map(),
+    activeRuntimeValues: new Set(),
   };
   const instance: Value & {kind: "instance"} = {kind: "instance", fields: new Map()};
   evaluator.instanceClasses.set(instance, resolved);
@@ -837,7 +842,13 @@ function initializeFields(
     ) {
       continue;
     }
-    const name = propertyName(member.name);
+    const name = evaluatedPropertyName(
+      evaluator,
+      member.name,
+      resolved.module,
+      environment,
+      instance,
+    );
     if (name === undefined) {
       issue(evaluator, member.name, resolved.module, "computed class field initializer is not closed");
       continue;
@@ -875,6 +886,12 @@ function executeStatement(
         value: evaluate(evaluator, statement.expression, module, environment, instance),
       },
     };
+  }
+  if (ts.isBreakStatement(statement)) {
+    return {returned: false, value: UNDEFINED, control: "break"};
+  }
+  if (ts.isContinueStatement(statement)) {
+    return {returned: false, value: UNDEFINED, control: "continue"};
   }
   if (ts.isTryStatement(statement)) {
     let result = executeStatement(evaluator, statement.tryBlock, module, environment, instance);
@@ -949,7 +966,14 @@ function executeStatement(
   if (ts.isForOfStatement(statement)) {
     const values = evaluate(evaluator, statement.expression, module, environment, instance);
     if (values.kind !== "array" || !ts.isVariableDeclarationList(statement.initializer)) {
-      issue(evaluator, statement, module, "for-of source is not a closed array");
+      issue(
+        evaluator,
+        statement,
+        module,
+        `for-of source ${statement.expression.getText(module.sourceFile)} is not a closed array (${values.kind}${
+          values.kind === "unknown" ? `: ${values.reason}` : ""
+        })`,
+      );
       return continued();
     }
     const declaration = statement.initializer.declarations[0];
@@ -967,11 +991,104 @@ function executeStatement(
         instance,
       );
       if (result.returned) return result;
+      if (result.control === "break") return continued();
+      if (result.control === "continue") continue;
     }
     return continued();
   }
+  if (ts.isForStatement(statement)) {
+    if (statement.initializer !== undefined) {
+      if (ts.isVariableDeclarationList(statement.initializer)) {
+        for (const declaration of statement.initializer.declarations) {
+          bind(
+            evaluator,
+            declaration.name,
+            declaration.initializer === undefined
+              ? UNDEFINED
+              : evaluate(evaluator, declaration.initializer, module, environment, instance),
+            module,
+            environment,
+            instance,
+          );
+        }
+      } else {
+        evaluate(evaluator, statement.initializer, module, environment, instance);
+      }
+    }
+    for (let iteration = 0; iteration < 1024; iteration++) {
+      const condition = statement.condition === undefined
+        ? {kind: "boolean", value: true} as const
+        : evaluate(evaluator, statement.condition, module, environment, instance);
+      const decision = truthiness(condition);
+      if (decision === false) return continued();
+      if (decision === undefined) {
+        issue(evaluator, statement.condition ?? statement, module, "for condition is not closed");
+        return continued();
+      }
+      const result = executeStatement(evaluator, statement.statement, module, environment, instance);
+      if (result.returned) return result;
+      if (result.control === "break") return continued();
+      if (statement.incrementor !== undefined) {
+        evaluate(evaluator, statement.incrementor, module, environment, instance);
+      }
+    }
+    issue(evaluator, statement, module, "for loop exceeded 1024 compile-time iterations");
+    return continued();
+  }
+  if (ts.isDoStatement(statement)) {
+    for (let iteration = 0; iteration < 64; iteration++) {
+      const result = executeStatement(evaluator, statement.statement, module, environment, instance);
+      if (result.returned) return result;
+      if (result.control === "break") return continued();
+      const condition = evaluate(evaluator, statement.expression, module, environment, instance);
+      const decision = truthiness(condition);
+      if (decision === false) return continued();
+      if (decision === undefined) {
+        issue(
+          evaluator,
+          statement.expression,
+          module,
+          `do-while condition is not closed (${condition.kind}${
+            condition.kind === "unknown" ? `: ${condition.reason}` : ""
+          })`,
+        );
+        return continued();
+      }
+    }
+    issue(evaluator, statement, module, "do-while exceeded 64 compile-time iterations");
+    return continued();
+  }
+  if (ts.isSwitchStatement(statement)) {
+    const selected = evaluate(evaluator, statement.expression, module, environment, instance);
+    if (selected.kind === "unknown") {
+      issue(evaluator, statement.expression, module, `switch value is not closed: ${selected.reason}`);
+      return continued();
+    }
+    let matched = false;
+    for (const clause of statement.caseBlock.clauses) {
+      if (ts.isDefaultClause(clause)) {
+        if (!matched) matched = true;
+      } else if (!matched) {
+        const candidate = evaluate(evaluator, clause.expression, module, environment, instance);
+        matched = valuesEqual(selected, candidate);
+      }
+      if (!matched) continue;
+      const result = executeStatements(evaluator, clause.statements, module, environment, instance);
+      if (result.control === "break") return continued();
+      if (result.returned || result.control === "continue") return result;
+    }
+    return continued();
+  }
+  if (ts.isTypeAliasDeclaration(statement) || ts.isInterfaceDeclaration(statement)) {
+    return continued();
+  }
   if (!ts.isExpressionStatement(statement)) {
-    issue(evaluator, statement, module, "constructor statement is not supported");
+    issue(
+      evaluator,
+      statement,
+      module,
+      `statement ${ts.SyntaxKind[statement.kind]} is not supported`,
+    );
     return continued();
   }
   const expression = statement.expression;
@@ -1014,8 +1131,17 @@ function executeStatement(
       evaluate(evaluator, expression, module, environment, instance);
       return continued();
     }
+    const result = evaluate(evaluator, expression, module, environment, instance);
+    if (result.kind !== "unknown") {
+      return continued();
+    }
   }
-  issue(evaluator, expression, module, "constructor expression effect is not supported");
+  issue(
+    evaluator,
+    expression,
+    module,
+    `expression effect is not supported: ${expression.getText(module.sourceFile)}`,
+  );
   return continued();
 }
 
@@ -1145,7 +1271,7 @@ function executeStatements(
       }
     }
     const result = executeStatement(evaluator, statement, module, environment, instance);
-    if (result.returned) {
+    if (result.returned || result.control !== undefined) {
       return result;
     }
   }
@@ -1259,7 +1385,7 @@ function invokeClosure(
 
 function invokeFunctionLike(
   evaluator: Evaluator,
-  declaration: ts.FunctionDeclaration | ts.MethodDeclaration | ts.ArrowFunction | ts.FunctionExpression,
+  declaration: ts.FunctionDeclaration | ts.MethodDeclaration | ts.GetAccessorDeclaration | ts.ArrowFunction | ts.FunctionExpression,
   module: SourceModule,
   environment: Map<string, Value>,
   arguments_: Value[],
@@ -1492,6 +1618,24 @@ function findInstanceMethod(
   return undefined;
 }
 
+function findInstanceGetter(
+  evaluator: Evaluator,
+  name: string,
+  instance: Value & {kind: "instance"},
+): {module: SourceModule; declaration: ts.GetAccessorDeclaration} | undefined {
+  let current: ResolvedRuntimeClass | undefined = evaluator.instanceClasses.get(instance) ?? evaluator.root;
+  while (current !== undefined) {
+    const getter = current.declaration.members.find(member =>
+      ts.isGetAccessorDeclaration(member) && memberName(member.name) === name
+    );
+    if (getter !== undefined && ts.isGetAccessorDeclaration(getter)) {
+      return {module: current.module, declaration: getter};
+    }
+    current = resolveBaseRuntimeClass(current, evaluator.modules);
+  }
+  return undefined;
+}
+
 function evaluateCall(
   evaluator: Evaluator,
   call: ts.CallExpression,
@@ -1506,6 +1650,12 @@ function evaluateCall(
       (receiver.kind === "undefined" || receiver.kind === "null")
       && (call.questionDotToken !== undefined || call.expression.questionDotToken !== undefined)
     ) {
+      return UNDEFINED;
+    }
+  }
+  if (ts.isIdentifier(call.expression) && call.questionDotToken !== undefined) {
+    const callable = evaluate(evaluator, call.expression, module, environment, instance);
+    if (callable.kind === "undefined" || callable.kind === "null") {
       return UNDEFINED;
     }
   }
@@ -1558,12 +1708,45 @@ function evaluateCall(
         ? {kind: "clockNow"}
         : unknown("Date.now arguments are not supported");
     }
+    if (receiver.kind === "reference" && receiver.name === "Math" && name === "random") {
+      return arguments_.length === 0
+        ? {kind: "number", value: 0}
+        : unknown("Math.random arguments are not supported");
+    }
     if (receiver.kind === "reference" && receiver.name === "Number" && name === "isInteger") {
       const value = arguments_[0];
       return {kind: "boolean", value: value?.kind === "number" && Number.isInteger(value.value)};
     }
     if (receiver.kind === "reference" && receiver.name === "Array" && name === "isArray") {
       return {kind: "boolean", value: arguments_[0]?.kind === "array"};
+    }
+    if (receiver.kind === "reference" && receiver.name === "Promise" && name === "all") {
+      const values = arguments_[0];
+      return values?.kind === "array"
+        ? values
+        : unknown("Promise.all input is not a closed array");
+    }
+    if (receiver.kind === "reference" && receiver.name === "Symbol" && name === "for") {
+      const key = arguments_[0];
+      return key?.kind === "string"
+        ? {kind: "string", value: `@@symbol.for:${key.value}`}
+        : unknown("Symbol.for key is not a closed string");
+    }
+    if (
+      receiver.kind === "reference"
+      && receiver.name === "z"
+      && ["array", "literal", "object", "record", "string", "union", "unknown"].includes(name)
+    ) {
+      return {kind: "schema"};
+    }
+    if (receiver.kind === "reference" && receiver.name === "z4" && name === "safeParseAsync") {
+      return {
+        kind: "record",
+        fields: new Map([
+          ["success", {kind: "boolean", value: true}],
+          ["data", arguments_[1] ?? UNDEFINED],
+        ]),
+      };
     }
     if (receiver.kind === "writableStream" && name === "getWriter") {
       return {kind: "streamWriter", state: receiver.state};
@@ -1649,6 +1832,12 @@ function evaluateCall(
         }
         : unknown("Object.entries argument is not a closed record");
     }
+    if (receiver.kind === "reference" && receiver.name === "Object" && name === "values") {
+      const value = arguments_[0];
+      return value?.kind === "record"
+        ? {kind: "array", items: [...value.fields.values()]}
+        : unknown("Object.values argument is not a closed record");
+    }
     if (receiver.kind === "reference" && receiver.name === "Object" && name === "fromEntries") {
       const entries = arguments_[0];
       if (entries?.kind !== "array") {
@@ -1711,6 +1900,12 @@ function evaluateCall(
         ? {kind: "boolean", value: new RegExp(receiver.source, receiver.flags).test(input.value)}
         : unknown("RegExp.test input is not a closed string");
     }
+    if (
+      receiver.kind === "schema"
+      && ["array", "describe", "nullable", "nullish", "optional"].includes(name)
+    ) {
+      return receiver;
+    }
     if (receiver.kind === "array" && name === "map") {
       const callback = arguments_[0];
       if (callback?.kind !== "closure") {
@@ -1726,9 +1921,33 @@ function evaluateCall(
         )),
       };
     }
+    if (receiver.kind === "array" && name === "flatMap") {
+      const callback = arguments_[0];
+      if (callback?.kind !== "closure") {
+        return unknown("Array.flatMap callback is not a compile-time closure");
+      }
+      const items: Value[] = [];
+      for (const [index, value] of receiver.items.entries()) {
+        const mapped = invokeClosure(
+          evaluator,
+          callback,
+          [value, {kind: "number", value: index}, receiver],
+          instance,
+        );
+        if (mapped.kind === "array") items.push(...mapped.items);
+        else items.push(mapped);
+      }
+      return {kind: "array", items};
+    }
     if (receiver.kind === "array" && name === "includes") {
       const searched = arguments_[0] ?? UNDEFINED;
       return {kind: "boolean", value: receiver.items.some(item => valuesEqual(item, searched))};
+    }
+    if (receiver.kind === "array" && name === "at") {
+      const index = arguments_[0];
+      return index?.kind === "number"
+        ? receiver.items.at(index.value) ?? UNDEFINED
+        : unknown("Array.at index is not a closed number");
     }
     if (receiver.kind === "array" && name === "filter") {
       const callback = arguments_[0];
@@ -1856,6 +2075,12 @@ function evaluateCall(
     }
     if (receiver.kind === "string") {
       if (name === "toUpperCase") return {kind: "string", value: receiver.value.toUpperCase()};
+      if (name === "includes") {
+        const searched = arguments_[0];
+        return searched?.kind === "string"
+          ? {kind: "boolean", value: receiver.value.includes(searched.value)}
+          : unknown("String.includes search value is not a closed string");
+      }
       if (name === "startsWith") {
         const prefix = arguments_[0];
         return prefix?.kind === "string"
@@ -1949,6 +2174,17 @@ function looselyEqual(left: Value, right: Value): boolean {
   return valuesEqual(left, right);
 }
 
+function numericValue(value: Value): number | undefined {
+  switch (value.kind) {
+    case "undefined": return Number.NaN;
+    case "null": return 0;
+    case "boolean": return value.value ? 1 : 0;
+    case "number": return value.value;
+    case "string": return Number(value.value);
+    default: return undefined;
+  }
+}
+
 function routeParameterEquality(
   left: Value,
   right: Value,
@@ -2035,6 +2271,29 @@ function evaluate(
     if (expression.text === "undefined") {
       return UNDEFINED;
     }
+    const runtimeValue = resolveRuntimeValue(evaluator.modules, module, expression.text);
+    if (
+      runtimeValue?.declaration.initializer !== undefined
+      && !ts.isArrowFunction(runtimeValue.declaration.initializer)
+      && !ts.isFunctionExpression(runtimeValue.declaration.initializer)
+    ) {
+      const key = `${runtimeValue.module.path}\0${runtimeValue.declaration.name.getText()}`;
+      const cached = evaluator.runtimeValues.get(key);
+      if (cached !== undefined) return cached;
+      if (!evaluator.activeRuntimeValues.has(key)) {
+        evaluator.activeRuntimeValues.add(key);
+        const value = evaluate(
+          evaluator,
+          runtimeValue.declaration.initializer,
+          runtimeValue.module,
+          new Map(),
+          instance,
+        );
+        evaluator.activeRuntimeValues.delete(key);
+        evaluator.runtimeValues.set(key, value);
+        return value;
+      }
+    }
     const callable = resolveRuntimeCallable(evaluator.modules, module, expression.text);
     return {
       kind: "reference",
@@ -2049,7 +2308,9 @@ function evaluate(
       if (ts.isSpreadElement(element)) {
         const spread = evaluate(evaluator, element.expression, module, environment, instance);
         if (spread.kind !== "array") {
-          return unknown("array spread is not closed");
+          return unknown(`array spread is not closed (${spread.kind}${
+            spread.kind === "unknown" ? `: ${spread.reason}` : ""
+          })`);
         }
         items.push(...spread.items);
       } else if (!ts.isOmittedExpression(element)) {
@@ -2062,7 +2323,13 @@ function evaluate(
     const fields = new Map<string, Value>();
     for (const property of expression.properties) {
       if (ts.isPropertyAssignment(property)) {
-        const name = propertyName(property.name);
+        const name = evaluatedPropertyName(
+          evaluator,
+          property.name,
+          module,
+          environment,
+          instance,
+        );
         if (name === undefined) {
           return unknown("object property name is not closed");
         }
@@ -2080,6 +2347,16 @@ function evaluate(
         for (const [name, value] of spread.fields) {
           fields.set(name, value);
         }
+      } else if (ts.isGetAccessorDeclaration(property)) {
+        const name = evaluatedPropertyName(
+          evaluator,
+          property.name,
+          module,
+          environment,
+          instance,
+        );
+        if (name === undefined) return unknown("object getter name is not closed");
+        fields.set(name, UNDEFINED);
       } else {
         return unknown("object member is not supported");
       }
@@ -2099,10 +2376,25 @@ function evaluate(
     };
   }
   if (ts.isPropertyAccessExpression(expression)) {
-    return readProperty(
-      evaluate(evaluator, expression.expression, module, environment, instance),
-      expression.name.text,
-    );
+    const receiver = evaluate(evaluator, expression.expression, module, environment, instance);
+    const direct = readProperty(receiver, expression.name.text);
+    if (direct.kind !== "undefined") {
+      return direct;
+    }
+    if (receiver.kind === "instance") {
+      const getter = findInstanceGetter(evaluator, expression.name.text, receiver);
+      if (getter !== undefined) {
+        return invokeFunctionLike(
+          evaluator,
+          getter.declaration,
+          getter.module,
+          new Map(),
+          [],
+          receiver,
+        );
+      }
+    }
+    return direct;
   }
   if (ts.isElementAccessExpression(expression) && expression.argumentExpression !== undefined) {
     const key = evaluate(evaluator, expression.argumentExpression, module, environment, instance);
@@ -2124,6 +2416,9 @@ function evaluate(
     const left = evaluate(evaluator, expression.left, module, environment, instance);
     if (operator === ts.SyntaxKind.InKeyword) {
       const right = evaluate(evaluator, expression.right, module, environment, instance);
+      if (left.kind === "string" && right.kind === "schema") {
+        return {kind: "boolean", value: left.value === "~standard" || left.value === "_zod"};
+      }
       return left.kind === "string" && (right.kind === "record" || right.kind === "instance")
         ? {kind: "boolean", value: right.fields.has(left.value)}
         : unknown("in operands are not a closed property key and record");
@@ -2254,6 +2549,20 @@ function evaluate(
                 : left.value >= right.value,
         };
       }
+      const leftNumber = numericValue(left);
+      const rightNumber = numericValue(right);
+      if (leftNumber !== undefined && rightNumber !== undefined) {
+        return {
+          kind: "boolean",
+          value: operator === ts.SyntaxKind.LessThanToken
+            ? leftNumber < rightNumber
+            : operator === ts.SyntaxKind.LessThanEqualsToken
+              ? leftNumber <= rightNumber
+              : operator === ts.SyntaxKind.GreaterThanToken
+                ? leftNumber > rightNumber
+                : leftNumber >= rightNumber,
+        };
+      }
     }
     if (operator === ts.SyntaxKind.PlusToken) {
       const right = evaluate(evaluator, expression.right, module, environment, instance);
@@ -2272,6 +2581,31 @@ function evaluate(
         return {kind: "number", value: left.value - right.value};
       }
     }
+    if (
+      operator === ts.SyntaxKind.AsteriskToken
+      || operator === ts.SyntaxKind.SlashToken
+      || operator === ts.SyntaxKind.PercentToken
+    ) {
+      const right = evaluate(evaluator, expression.right, module, environment, instance);
+      if (left.kind === "number" && right.kind === "number") {
+        return {
+          kind: "number",
+          value: operator === ts.SyntaxKind.AsteriskToken
+            ? left.value * right.value
+            : operator === ts.SyntaxKind.SlashToken
+              ? left.value / right.value
+              : left.value % right.value,
+        };
+      }
+    }
+    if (operator === ts.SyntaxKind.BarToken) {
+      const right = evaluate(evaluator, expression.right, module, environment, instance);
+      if (left.kind === "number" && right.kind === "number") {
+        return {kind: "number", value: left.value | right.value};
+      }
+    }
+    const right = evaluate(evaluator, expression.right, module, environment, instance);
+    return unknown(`binary operator ${ts.SyntaxKind[operator]} is not closed (${left.kind}, ${right.kind})`);
   }
   if (ts.isConditionalExpression(expression)) {
     const condition = evaluate(evaluator, expression.condition, module, environment, instance);
@@ -2297,6 +2631,35 @@ function evaluate(
       return message.kind === "unknown"
         ? unknown("Error message is not closed")
         : {kind: "error", name: "Error", message: message.kind === "undefined" ? "" : stringValue(message)};
+    }
+    if (expression.expression.text === "Array") {
+      const arguments_ = expression.arguments ?? [];
+      if (arguments_.length === 1) {
+        const length = evaluate(evaluator, arguments_[0]!, module, environment, instance);
+        return length.kind === "number" && Number.isInteger(length.value) && length.value >= 0
+          ? {kind: "array", items: Array.from({length: length.value}, () => UNDEFINED)}
+          : unknown("Array length is not a closed non-negative integer");
+      }
+      return {
+        kind: "array",
+        items: arguments_.map(argument => evaluate(evaluator, argument, module, environment, instance)),
+      };
+    }
+    if (expression.expression.text === "Set") {
+      const source = expression.arguments?.[0] === undefined
+        ? {kind: "array", items: []} as const
+        : evaluate(evaluator, expression.arguments[0], module, environment, instance);
+      if (source.kind !== "array") return unknown("Set initializer is not a closed array");
+      const items = source.items.filter((value, index, values) =>
+        values.findIndex(candidate => valuesEqual(candidate, value)) === index
+      );
+      return {kind: "array", items};
+    }
+    if (expression.expression.text === "Map") {
+      return {
+        kind: "record",
+        fields: new Map([["size", {kind: "number", value: 0}]]),
+      };
     }
     if (expression.expression.text === "Response") {
       const body = expression.arguments?.[0] === undefined
@@ -2424,6 +2787,26 @@ function evaluate(
         value: expression.operator === ts.SyntaxKind.MinusToken ? -operand.value : operand.value,
       }
       : unknown("numeric unary operand is not a closed number");
+  }
+  if (
+    ts.isPostfixUnaryExpression(expression)
+    && (expression.operator === ts.SyntaxKind.PlusPlusToken
+      || expression.operator === ts.SyntaxKind.MinusMinusToken)
+  ) {
+    const operand = evaluate(evaluator, expression.operand, module, environment, instance);
+    if (operand.kind !== "number") return unknown("postfix operand is not a closed number");
+    assign(
+      evaluator,
+      expression.operand,
+      {
+        kind: "number",
+        value: operand.value + (expression.operator === ts.SyntaxKind.PlusPlusToken ? 1 : -1),
+      },
+      module,
+      environment,
+      instance,
+    );
+    return operand;
   }
   if (ts.isPrefixUnaryExpression(expression) && expression.operator === ts.SyntaxKind.ExclamationToken) {
     const operand = evaluate(evaluator, expression.operand, module, environment, instance);
@@ -2941,6 +3324,10 @@ function assign(
   if (ts.isElementAccessExpression(target) && target.argumentExpression !== undefined) {
     const receiver = evaluate(evaluator, target.expression, module, environment, instance);
     const key = evaluate(evaluator, target.argumentExpression, module, environment, instance);
+    if (receiver.kind === "array" && key.kind === "number") {
+      receiver.items[key.value] = value;
+      return;
+    }
     if ((receiver.kind === "instance" || receiver.kind === "record") && key.kind === "string") {
       receiver.fields.set(key.value, value);
       return;
@@ -3037,6 +3424,24 @@ function propertyName(name: ts.PropertyName): string | undefined {
   return ts.isIdentifier(name) || ts.isStringLiteral(name) || ts.isNumericLiteral(name)
     ? name.text
     : undefined;
+}
+
+function evaluatedPropertyName(
+  evaluator: Evaluator,
+  name: ts.PropertyName,
+  module: SourceModule,
+  environment: Map<string, Value>,
+  instance: Value & {kind: "instance"},
+): string | undefined {
+  const closed = propertyName(name);
+  if (closed !== undefined) return closed;
+  if (!ts.isComputedPropertyName(name)) return undefined;
+  const value = evaluate(evaluator, name.expression, module, environment, instance);
+  return value.kind === "string"
+    ? value.value
+    : value.kind === "number"
+      ? String(value.value)
+      : undefined;
 }
 
 function unwrap(expression: ts.Expression): ts.Expression {

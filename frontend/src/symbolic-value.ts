@@ -13,6 +13,7 @@ export type Value =
   | {kind: "string"; value: string}
   | {kind: "html"; value: string}
   | {kind: "regexp"; source: string; flags: string}
+  | {kind: "schema"}
   | {kind: "error"; name: string; message: string}
   | {kind: "thrown"; value: Value}
   | {kind: "array"; items: Value[]}
@@ -100,6 +101,7 @@ export type ResponseBody =
 export interface ExecutionResult {
   returned: boolean;
   value: Value;
+  control?: "break" | "continue";
 }
 
 export const UNDEFINED: Value = {kind: "undefined"};
@@ -150,6 +152,12 @@ export function readProperty(value: Value, name: string): Value {
   }
   if (value.kind === "record" || value.kind === "instance") {
     return value.fields.get(name) ?? UNDEFINED;
+  }
+  if (value.kind === "schema" && name === "~standard") {
+    return {
+      kind: "record",
+      fields: new Map([["vendor", {kind: "string", value: "zod"}]]),
+    };
   }
   if (name === "length" && value.kind === "array") {
     return {kind: "number", value: value.items.length};
@@ -223,6 +231,7 @@ export function truthiness(value: Value): boolean | undefined {
     case "array":
     case "record":
     case "regexp":
+    case "schema":
     case "error":
     case "thrown":
     case "headers":
@@ -276,6 +285,7 @@ export function typeOf(value: Value): string {
     case "streamReader": return "object";
     case "worker": return "object";
     case "workerCall": return "string";
+    case "schema": return "object";
     case "closure":
     case "reference": return "function";
     default: return "object";
