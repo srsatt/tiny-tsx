@@ -329,7 +329,10 @@ produces and serves a native Mach-O executable from the example TSX source.
   arm64 build is 1,051,848 bytes, reports no JavaScript engine and GC disabled,
   and a real `/ai` request returns the exact 27-byte deterministic response.
   The current Zod boundary is intentionally limited to the known-valid tracer;
-  invalid-schema/error equivalence is still open.
+  invalid-schema equivalence is still open. A second Bun/native compiler test
+  passes the mutually exclusive `prompt` and `messages`, executes the upstream
+  `InvalidPromptError` inheritance chain, and lowers the installed Hono error
+  handler to the matching status-500 message.
 - HTTP/1.1 connections now stay on one executor for up to 100 requests or five
   idle seconds. A 16 KiB parser preserves pipelined bytes, consumes validated
   bodies up to 1 MiB, rejects duplicate Content-Length/transfer encoding, and

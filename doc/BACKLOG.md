@@ -69,8 +69,10 @@ commit message.
       deterministic fake-model target, test layers, and worker/GC exit gates.
 - [x] Compile a deterministic AI SDK Core test with a fake model and no network,
       credentials, or provider package before attempting streaming/provider I/O.
-- [ ] Add deterministic invalid-prompt/schema behavior before treating the
-      native Zod boundary as more than a known-valid tracer specialization.
+- [x] Compile deterministic invalid prompt behavior through the upstream AI SDK
+      error class and installed Hono error handler, matched against Bun.
+- [ ] Add deterministic invalid-schema behavior before treating the native Zod
+      boundary as more than a known-valid tracer specialization.
 - [ ] Compile deterministic multi-step/tool-call behavior, then `streamText`
       and a Hono Web `Response` stream before local provider HTTP I/O.
 - [x] Inventory Promise, async iterator, Web Streams, AbortSignal, encoding,

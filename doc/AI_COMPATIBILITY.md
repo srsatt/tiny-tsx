@@ -78,6 +78,12 @@ uses a compile-time witness for SDK-internal IDs that do not escape into the
 response. Invalid schema behavior, ID escape detection, tool calls, streaming,
 and provider I/O remain separate promotion gates.
 
+A second unchanged-style Hono target deliberately supplies both `prompt` and
+`messages`. Bun and TinyTSX both route the upstream `InvalidPromptError` through
+the installed Hono error handler as status 500 with the upstream message. This
+proves thrown completion across dependency classes and star re-exports; it does
+not replace the still-open invalid-Zod-schema gate.
+
 ## Pin and intake contract
 
 When this milestone starts:
