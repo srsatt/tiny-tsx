@@ -375,6 +375,7 @@ fn emit_handler_response(
         } => {
             let content_type_id = match content_type.as_deref() {
                 Some("") => 0,
+                Some("text/html; charset=UTF-8") => 1,
                 Some("text/plain;charset=UTF-8") => 4,
                 Some("application/json") => 3,
                 _ => 2,

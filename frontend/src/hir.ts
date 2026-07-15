@@ -130,6 +130,7 @@ export type HandlerResponse =
         | ""
         | "text/plain; charset=UTF-8"
         | "text/plain;charset=UTF-8"
+        | "text/html; charset=UTF-8"
         | "application/json";
     };
 

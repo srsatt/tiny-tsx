@@ -270,6 +270,7 @@ function lowerApplicationInitialization(
           | ""
           | "text/plain; charset=UTF-8"
           | "text/plain;charset=UTF-8"
+          | "text/html; charset=UTF-8"
           | "application/json",
       },
       span,
@@ -348,6 +349,7 @@ function lowerGuardedResponse(
         | ""
         | "text/plain; charset=UTF-8"
         | "text/plain;charset=UTF-8"
+        | "text/html; charset=UTF-8"
         | "application/json",
     },
   };
@@ -358,6 +360,7 @@ function isLowerableEvaluatedResponse(response: EvaluatedResponse): boolean {
     "",
     "text/plain; charset=UTF-8",
     "text/plain;charset=UTF-8",
+    "text/html; charset=UTF-8",
     "application/json",
   ].includes(response.contentType);
   if (
