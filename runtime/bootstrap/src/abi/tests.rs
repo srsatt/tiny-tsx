@@ -3,9 +3,9 @@ use super::{
     MAX_DYNAMIC_HEADER_BYTES, MAX_RESPONSE_HEADERS, OK, REQUEST_OOM, TinyHeader,
     TinyResponseWriter, TinyStringView, request, request_with_headers,
     tinytsx_html_write_path_segment, tinytsx_html_write_request_header, tinytsx_html_write_static,
-    tinytsx_request_method_equals, tinytsx_request_path_equals, tinytsx_request_path_matches,
-    tinytsx_request_query_has, tinytsx_response_begin, tinytsx_response_header_elapsed_millis,
-    tinytsx_response_header_static, write_console_error,
+    tinytsx_request_basic_auth_equals, tinytsx_request_method_equals, tinytsx_request_path_equals,
+    tinytsx_request_path_matches, tinytsx_request_query_has, tinytsx_response_begin,
+    tinytsx_response_header_elapsed_millis, tinytsx_response_header_static, write_console_error,
 };
 
 #[test]
@@ -50,6 +50,34 @@ fn request_method_matching_distinguishes_get_and_post() {
     );
     assert_eq!(
         unsafe { tinytsx_request_method_equals(&request, b"GET".as_ptr(), 3) },
+        0
+    );
+}
+
+#[test]
+fn request_basic_auth_matches_the_configured_credentials() {
+    let authorization = TinyHeader {
+        name: TinyStringView::from_bytes(b"authorization"),
+        value: TinyStringView::from_bytes(b"basic   aG9ubzphY29vbHByb2plY3Q=  "),
+    };
+    let request = request_with_headers(b"GET", b"/auth/test", &[authorization]);
+
+    assert_eq!(
+        unsafe {
+            tinytsx_request_basic_auth_equals(
+                &request,
+                b"hono".as_ptr(),
+                4,
+                b"acoolproject".as_ptr(),
+                12,
+            )
+        },
+        1
+    );
+    assert_eq!(
+        unsafe {
+            tinytsx_request_basic_auth_equals(&request, b"hono".as_ptr(), 4, b"wrong".as_ptr(), 5)
+        },
         0
     );
 }

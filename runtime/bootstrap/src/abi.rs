@@ -407,6 +407,147 @@ pub unsafe extern "C" fn tinytsx_html_write_request_header(
     unsafe { tinytsx_html_write_static(writer, b"undefined".as_ptr(), b"undefined".len()) }
 }
 
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tinytsx_request_basic_auth_equals(
+    request: *const TinyRequest,
+    username: *const u8,
+    username_len: usize,
+    password: *const u8,
+    password_len: usize,
+) -> u32 {
+    if request.is_null()
+        || (username.is_null() && username_len != 0)
+        || (password.is_null() && password_len != 0)
+    {
+        return 0;
+    }
+    // SAFETY: Generated code passes the request supplied by this runtime and
+    // immutable credential bytes for the duration of this call.
+    let request = unsafe { &*request };
+    let username = unsafe { slice::from_raw_parts(username, username_len) };
+    let password = unsafe { slice::from_raw_parts(password, password_len) };
+    if username.contains(&b':') {
+        return 0;
+    }
+    // SAFETY: Header views borrow the parsed request head for dispatch.
+    let Some(value) = (unsafe { request_header_value(request, b"Authorization") }) else {
+        return 0;
+    };
+    let Some(encoded) = basic_authorization_payload(value) else {
+        return 0;
+    };
+    u32::from(base64_matches_credentials(encoded, username, password))
+}
+
+unsafe fn request_header_value<'a>(request: &'a TinyRequest, expected: &[u8]) -> Option<&'a [u8]> {
+    if request.headers.is_null() && request.header_count != 0 {
+        return None;
+    }
+    // SAFETY: The request owns this borrowed table for the duration of dispatch.
+    let headers = unsafe { slice::from_raw_parts(request.headers, request.header_count) };
+    for header in headers {
+        if (header.name.ptr.is_null() && header.name.len != 0)
+            || (header.value.ptr.is_null() && header.value.len != 0)
+        {
+            return None;
+        }
+        // SAFETY: Each view belongs to the request head backing storage.
+        let name = unsafe { slice::from_raw_parts(header.name.ptr, header.name.len) };
+        if name.eq_ignore_ascii_case(expected) {
+            // SAFETY: The value view has the same request lifetime as its name.
+            return Some(unsafe { slice::from_raw_parts(header.value.ptr, header.value.len) });
+        }
+    }
+    None
+}
+
+fn basic_authorization_payload(value: &[u8]) -> Option<&[u8]> {
+    let value = trim_ascii_spaces(value);
+    if value.len() < 6 || !value[..5].eq_ignore_ascii_case(b"Basic") || value[5] != b' ' {
+        return None;
+    }
+    let payload = trim_ascii_spaces(&value[5..]);
+    if payload.is_empty()
+        || payload
+            .iter()
+            .any(|byte| !byte.is_ascii_alphanumeric() && !matches!(byte, b'+' | b'/' | b'='))
+    {
+        return None;
+    }
+    Some(payload)
+}
+
+fn trim_ascii_spaces(mut value: &[u8]) -> &[u8] {
+    while value.first() == Some(&b' ') {
+        value = &value[1..];
+    }
+    while value.last() == Some(&b' ') {
+        value = &value[..value.len() - 1];
+    }
+    value
+}
+
+fn base64_matches_credentials(encoded: &[u8], username: &[u8], password: &[u8]) -> bool {
+    let padding = encoded
+        .iter()
+        .rev()
+        .take_while(|byte| **byte == b'=')
+        .count();
+    if padding > 2 {
+        return false;
+    }
+    let core_len = encoded.len() - padding;
+    if encoded[..core_len].contains(&b'=')
+        || core_len % 4 == 1
+        || (padding != 0
+            && (encoded.len() % 4 != 0
+                || (padding == 1 && core_len % 4 != 3)
+                || (padding == 2 && core_len % 4 != 2)))
+    {
+        return false;
+    }
+    let expected_len = username.len() + 1 + password.len();
+    let mut accumulator = 0_u32;
+    let mut bit_count = 0_u8;
+    let mut decoded_len = 0_usize;
+    let mut difference = 0_u8;
+    for byte in &encoded[..core_len] {
+        let Some(value) = base64_value(*byte) else {
+            return false;
+        };
+        accumulator = (accumulator << 6) | u32::from(value);
+        bit_count += 6;
+        if bit_count >= 8 {
+            bit_count -= 8;
+            let decoded = ((accumulator >> bit_count) & 0xff) as u8;
+            let expected = if decoded_len < username.len() {
+                username[decoded_len]
+            } else if decoded_len == username.len() {
+                b':'
+            } else {
+                password
+                    .get(decoded_len - username.len() - 1)
+                    .copied()
+                    .unwrap_or(0)
+            };
+            difference |= decoded ^ expected;
+            decoded_len += 1;
+        }
+    }
+    decoded_len == expected_len && difference == 0
+}
+
+fn base64_value(byte: u8) -> Option<u8> {
+    match byte {
+        b'A'..=b'Z' => Some(byte - b'A'),
+        b'a'..=b'z' => Some(byte - b'a' + 26),
+        b'0'..=b'9' => Some(byte - b'0' + 52),
+        b'+' => Some(62),
+        b'/' => Some(63),
+        _ => None,
+    }
+}
+
 fn route_segments(path: &[u8]) -> impl Iterator<Item = &[u8]> {
     path.split(|byte| *byte == b'/')
         .skip(usize::from(path.first() == Some(&b'/')))
