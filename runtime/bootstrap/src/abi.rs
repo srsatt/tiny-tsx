@@ -211,15 +211,18 @@ pub unsafe extern "C" fn tinytsx_request_path_matches(
     let mut actual_segments = route_segments(actual);
     let mut pattern_segments = route_segments(pattern);
     loop {
-        match (actual_segments.next(), pattern_segments.next()) {
-            (None, None) => return 1,
-            (Some(actual), Some(pattern)) => {
+        match pattern_segments.next() {
+            None => return u32::from(actual_segments.next().is_none()),
+            Some(b"*") => return 1,
+            Some(pattern) => {
+                let Some(actual) = actual_segments.next() else {
+                    return 0;
+                };
                 let parameter = pattern.len() > 1 && pattern[0] == b':';
                 if (parameter && actual.is_empty()) || (!parameter && actual != pattern) {
                     return 0;
                 }
             }
-            _ => return 0,
         }
     }
 }

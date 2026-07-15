@@ -78,6 +78,24 @@ fn request_path_patterns_match_nonempty_named_segments() {
 }
 
 #[test]
+fn request_path_patterns_match_terminal_wildcards() {
+    for target in [b"/api".as_slice(), b"/api/", b"/api/x", b"/api/x/y"] {
+        let request = request(b"GET", target);
+        assert_eq!(
+            unsafe { tinytsx_request_path_matches(&request, b"/api/*".as_ptr(), b"/api/*".len()) },
+            1,
+            "{}",
+            String::from_utf8_lossy(target)
+        );
+    }
+    let other = request(b"GET", b"/other");
+    assert_eq!(
+        unsafe { tinytsx_request_path_matches(&other, b"/api/*".as_ptr(), b"/api/*".len()) },
+        0
+    );
+}
+
+#[test]
 fn response_writer_decodes_a_named_path_segment() {
     let request = request(b"GET", b"/entry/hello%20world%2Fok");
     let mut output = [0_u8; 14];
