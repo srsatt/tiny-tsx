@@ -4,6 +4,7 @@
   "scripts": {
     "audit:hono": "npm run build:frontend && node frontend/dist/src/cli.js --audit-compat tests/compat/hono/smoke.ts --alias hono/tiny=vendor/hono/src/preset/tiny.ts",
     "audit:hono-basic": "npm run build:frontend && node frontend/dist/src/cli.js --audit-compat tests/compat/hono/basic-smoke.ts --alias hono=vendor/hono/src/index.ts",
+    "build:hono-basic-example": "npm run build:frontend && cargo run -q -p tinytsx -- build vendor/hono-examples/basic/src/index.ts --alias hono=vendor/hono/src/index.ts --alias hono/basic-auth=vendor/hono/src/middleware/basic-auth/index.ts --alias hono/etag=vendor/hono/src/middleware/etag/index.ts --alias hono/powered-by=vendor/hono/src/middleware/powered-by/index.ts --alias hono/pretty-json=vendor/hono/src/middleware/pretty-json/index.ts --api hono=tests/compat/hono/api.d.ts --api hono/basic-auth=tests/compat/hono/basic-auth-api.d.ts --api hono/etag=tests/compat/hono/etag-api.d.ts --api hono/powered-by=tests/compat/hono/powered-by-api.d.ts --api hono/pretty-json=tests/compat/hono/pretty-json-api.d.ts --output dist/hono-basic-example",
     "build:frontend": "npm --prefix frontend run build",
     "benchmark:static": "python3 benchmarks/scripts/run_static.py",
     "benchmark:hono": "python3 benchmarks/scripts/run_static.py --workload hono-basic",
