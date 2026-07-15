@@ -19,5 +19,32 @@
       },
       "body": "Hono!!"
     }
+  },
+  "jsxSsr": {
+    "entry": "vendor/hono-examples/jsx-ssr/src/index.tsx",
+    "files": [
+      "vendor/hono-examples/jsx-ssr/src/index.tsx",
+      "vendor/hono-examples/jsx-ssr/src/components/Layout.tsx",
+      "vendor/hono-examples/jsx-ssr/src/pages/top.tsx",
+      "vendor/hono-examples/jsx-ssr/src/pages/page.tsx"
+    ],
+    "expectedRoutes": 2,
+    "behavior": {
+      "root": {
+        "method": "GET",
+        "path": "/",
+        "contains": ["<!DOCTYPE html>", "<h2>Posts</h2>", "こんにちは"]
+      },
+      "post": {
+        "method": "GET",
+        "path": "/post/1",
+        "contains": ["<title>Good Morning</title>", "Let us eat breakfast"]
+      },
+      "missingPost": {
+        "method": "GET",
+        "path": "/post/99",
+        "status": 404
+      }
+    }
   }
 }
