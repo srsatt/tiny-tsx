@@ -193,6 +193,40 @@ fn request_path_patterns_match_nonempty_named_segments() {
 }
 
 #[test]
+fn request_path_patterns_match_numeric_named_segments() {
+    for target in [b"/post/1".as_slice(), b"/post/123"] {
+        let request = request(b"GET", target);
+        assert_eq!(
+            unsafe {
+                tinytsx_request_path_matches(
+                    &request,
+                    b"/post/:id{[0-9]+}".as_ptr(),
+                    b"/post/:id{[0-9]+}".len(),
+                )
+            },
+            1,
+            "{}",
+            String::from_utf8_lossy(target)
+        );
+    }
+    for target in [b"/post/nope".as_slice(), b"/post/12a", b"/post/"] {
+        let request = request(b"GET", target);
+        assert_eq!(
+            unsafe {
+                tinytsx_request_path_matches(
+                    &request,
+                    b"/post/:id{[0-9]+}".as_ptr(),
+                    b"/post/:id{[0-9]+}".len(),
+                )
+            },
+            0,
+            "{}",
+            String::from_utf8_lossy(target)
+        );
+    }
+}
+
+#[test]
 fn request_path_patterns_match_terminal_wildcards() {
     for target in [b"/api".as_slice(), b"/api/", b"/api/x", b"/api/x/y"] {
         let request = request(b"GET", target);

@@ -487,7 +487,11 @@ impl Program {
                     .split('/')
                     .filter(|part| !part.is_empty())
                     .collect();
-                if segments.get(*segment).copied() != Some(&format!(":{name}")) {
+                if segments
+                    .get(*segment)
+                    .and_then(|segment| route_parameter_name(segment))
+                    != Some(name.as_str())
+                {
                     return Err(format!(
                         "route parameter `{name}` does not match segment {segment} of `{route_pattern}`"
                     ));
@@ -595,10 +599,14 @@ fn validate_route_pattern(pattern: &str) -> Result<(), String> {
             continue;
         }
         if let Some(name) = segment.strip_prefix(':') {
+            let (name, constraint) = name
+                .split_once('{')
+                .map_or((name, None), |(name, constraint)| (name, Some(constraint)));
             if name.is_empty()
                 || !name
                     .bytes()
                     .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+                || constraint.is_some_and(|constraint| constraint != "[0-9]+}")
             {
                 return Err(format!("unsupported route parameter segment `{segment}`"));
             }
@@ -607,6 +615,11 @@ fn validate_route_pattern(pattern: &str) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+fn route_parameter_name(segment: &str) -> Option<&str> {
+    let parameter = segment.strip_prefix(':')?;
+    Some(parameter.strip_suffix("{[0-9]+}").unwrap_or(parameter))
 }
 
 fn root_path() -> String {

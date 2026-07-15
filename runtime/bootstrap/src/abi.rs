@@ -333,12 +333,24 @@ pub unsafe extern "C" fn tinytsx_request_path_matches(
                     return 0;
                 };
                 let parameter = pattern.len() > 1 && pattern[0] == b':';
-                if (parameter && actual.is_empty()) || (!parameter && actual != pattern) {
+                if (parameter && !route_parameter_matches(pattern, actual))
+                    || (!parameter && actual != pattern)
+                {
                     return 0;
                 }
             }
         }
     }
+}
+
+fn route_parameter_matches(pattern: &[u8], actual: &[u8]) -> bool {
+    if actual.is_empty() {
+        return false;
+    }
+    if pattern.strip_suffix(b"{[0-9]+}").is_some() {
+        return actual.iter().all(u8::is_ascii_digit);
+    }
+    true
 }
 
 #[unsafe(no_mangle)]
