@@ -1,4 +1,5 @@
 import {createHash} from "node:crypto";
+import path from "node:path";
 import ts from "typescript";
 import type {ApplicationArgument, ApplicationEntry} from "./application-entry.js";
 import {spanOf} from "./diagnostics.js";
@@ -1105,8 +1106,24 @@ function sameResponseHeaderValue(left: ResponseHeaderValue, right: ResponseHeade
     if (part.kind === "fetchStatus") {
       return candidate?.kind === "fetchStatus" && candidate.url === part.url;
     }
+    if (part.kind === "workerCall") {
+      return candidate?.kind === "workerCall"
+        && candidate.module === part.module
+        && sameWorkerMessage(candidate.input, part.input);
+    }
     return candidate?.kind === part.kind && candidate.name === part.name;
   });
+}
+
+function sameWorkerMessage(
+  left: Extract<RuntimeStringPart, {kind: "workerCall"}>["input"],
+  right: Extract<RuntimeStringPart, {kind: "workerCall"}>["input"],
+): boolean {
+  return left.kind === right.kind && (left.kind === "literal"
+    ? right.kind === "literal" && left.value === right.value
+    : right.kind === "queryParameter"
+      && left.name === right.name
+      && left.fallback === right.fallback);
 }
 
 function executeStatements(
@@ -1366,6 +1383,10 @@ function executeEffectCall(
     receiver.items.unshift(...arguments_);
     return true;
   }
+  if (receiver.kind === "worker" && name === "terminate" && arguments_.length === 0) {
+    receiver.state.terminated = true;
+    return true;
+  }
   if (receiver.kind === "constructed" && name === "add") {
     evaluator.routerInsertions++;
     return true;
@@ -1571,6 +1592,30 @@ function evaluateCall(
       return key?.kind === "string"
         ? {kind: "requestHeader", name: key.value}
         : unknown("request header name is not a closed string");
+    }
+    if (receiver.kind === "worker" && name === "request") {
+      if (receiver.state.terminated) {
+        return unknown("Worker.request cannot target a terminated worker");
+      }
+      const input = arguments_[0];
+      if (arguments_.length !== 1 || input === undefined) {
+        return unknown("Worker.request requires one string message");
+      }
+      if (input.kind === "string") {
+        return {
+          kind: "workerCall",
+          module: receiver.state.module,
+          input: {kind: "literal", value: input.value},
+        };
+      }
+      if (input.kind === "queryParameter") {
+        return {
+          kind: "workerCall",
+          module: receiver.state.module,
+          input: {kind: "queryParameter", name: input.name, fallback: input.fallback},
+        };
+      }
+      return unknown("Worker.request message is not a lowerable string");
     }
     if (receiver.kind === "reference" && receiver.name === "Object" && name === "entries") {
       const value = arguments_[0];
@@ -2047,6 +2092,9 @@ function evaluate(
       : unknown("conditional test is not a closed boolean");
   }
   if (ts.isNewExpression(expression) && ts.isIdentifier(expression.expression)) {
+    if (expression.expression.text === "Worker") {
+      return evaluateWorkerConstruction(evaluator, expression, module, environment, instance);
+    }
     if (expression.expression.text === "Error") {
       const message = expression.arguments?.[0] === undefined
         ? UNDEFINED
@@ -2065,6 +2113,7 @@ function evaluate(
         && body.kind !== "runtimeString"
         && body.kind !== "runtimeHtml"
         && body.kind !== "readableStream"
+        && body.kind !== "workerCall"
         && body.kind !== "routeParameter"
         && body.kind !== "responseBody"
         && body.kind !== "undefined"
@@ -2074,6 +2123,8 @@ function evaluate(
       }
       const runtimeBody = body.kind === "routeParameter"
         ? [{kind: "routeParameter" as const, name: body.name}]
+        : body.kind === "workerCall"
+          ? runtimeStringParts(body)
         : body.kind === "runtimeString"
           ? body.parts
           : body.kind === "runtimeHtml"
@@ -2223,6 +2274,48 @@ function evaluate(
     return joinRuntimeStrings(values) ?? unknown("template value is not string-compatible");
   }
   return unknown(`expression ${ts.SyntaxKind[expression.kind]} is not supported`);
+}
+
+function evaluateWorkerConstruction(
+  evaluator: Evaluator,
+  expression: ts.NewExpression,
+  module: SourceModule,
+  environment: Map<string, Value>,
+  instance: Value & {kind: "instance"},
+): Value {
+  const url = expression.arguments?.[0];
+  const options = expression.arguments?.[1] === undefined
+    ? UNDEFINED
+    : evaluate(evaluator, expression.arguments[1], module, environment, instance);
+  if (
+    url === undefined
+    || !ts.isNewExpression(url)
+    || !ts.isIdentifier(url.expression)
+    || url.expression.text !== "URL"
+    || url.arguments?.length !== 2
+    || !ts.isStringLiteralLike(url.arguments[0]!)
+    || !isImportMetaUrl(url.arguments[1]!)
+  ) {
+    return unknown("Worker requires new URL(\"./module.ts\", import.meta.url)");
+  }
+  const type = options.kind === "record" ? options.fields.get("type") : undefined;
+  if (type?.kind !== "string" || type.value !== "module") {
+    return unknown("Worker requires { type: \"module\" }");
+  }
+  const candidate = path.resolve(path.dirname(module.path), url.arguments[0]!.text);
+  const workerModule = module.dependencies.find(dependency => dependency === candidate);
+  if (workerModule === undefined || !evaluator.modules.has(workerModule)) {
+    return unknown(`Worker module is not in the runtime graph: ${url.arguments[0]!.text}`);
+  }
+  return {kind: "worker", state: {module: workerModule, terminated: false}};
+}
+
+function isImportMetaUrl(expression: ts.Expression): boolean {
+  return ts.isPropertyAccessExpression(expression)
+    && expression.name.text === "url"
+    && ts.isMetaProperty(expression.expression)
+    && expression.expression.keywordToken === ts.SyntaxKind.ImportKeyword
+    && expression.expression.name.text === "meta";
 }
 
 const jsxVoidTags = new Set([

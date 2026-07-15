@@ -34,6 +34,8 @@ export type Value =
   | {kind: "writableStream"; state: StreamState}
   | {kind: "streamWriter"; state: StreamState}
   | {kind: "streamReader"; state: StreamState}
+  | {kind: "worker"; state: WorkerState}
+  | {kind: "workerCall"; module: string; input: WorkerMessage}
   | {
       kind: "closure";
       span: SourceSpan;
@@ -60,7 +62,17 @@ export type RuntimeStringPart =
   | {kind: "requestHeader"; name: string}
   | {kind: "queryParameter"; name: string; fallback: string | undefined; escapeHtml: boolean}
   | {kind: "fetchStatus"; url: string}
-  | {kind: "elapsedMilliseconds"};
+  | {kind: "elapsedMilliseconds"}
+  | {kind: "workerCall"; module: string; input: WorkerMessage};
+
+export type WorkerMessage =
+  | {kind: "literal"; value: string}
+  | {kind: "queryParameter"; name: string; fallback: string | undefined};
+
+export interface WorkerState {
+  module: string;
+  terminated: boolean;
+}
 
 export type ResponseHeaderValue = string | RuntimeStringPart[];
 
@@ -226,6 +238,8 @@ export function truthiness(value: Value): boolean | undefined {
     case "writableStream":
     case "streamWriter":
     case "streamReader": return true;
+    case "worker": return true;
+    case "workerCall": return undefined;
     case "routeParameter": return true;
     case "routeChoice": return undefined;
     case "requestHeader": return undefined;
@@ -260,6 +274,8 @@ export function typeOf(value: Value): string {
     case "writableStream":
     case "streamWriter":
     case "streamReader": return "object";
+    case "worker": return "object";
+    case "workerCall": return "string";
     case "closure":
     case "reference": return "function";
     default: return "object";
@@ -298,6 +314,7 @@ export function runtimeStringParts(value: Value): RuntimeStringPart[] | undefine
     case "elapsedMilliseconds": return [{kind: "elapsedMilliseconds"}];
     case "runtimeString": return value.parts;
     case "runtimeHtml": return value.parts;
+    case "workerCall": return [{kind: "workerCall", module: value.module, input: value.input}];
     default: return undefined;
   }
 }

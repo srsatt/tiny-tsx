@@ -510,6 +510,9 @@ function lowerRuntimeString(
       if (part.kind === "elapsedMilliseconds") {
         throw new Error("elapsed milliseconds are only lowerable in response headers");
       }
+      if (part.kind === "workerCall") {
+        throw new Error("worker calls require a worker table before lowering");
+      }
       return {
         kind: "routeParameter",
         name: part.name,

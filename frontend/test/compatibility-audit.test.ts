@@ -60,6 +60,25 @@ test("loads a compile-time-known Worker module without treating it as an import 
   assert.ok(!graph.modules[0]?.runtimeImports.some(binding => binding.path === worker));
 });
 
+test("preserves an awaited Worker request as a request-time response value", () => {
+  const entry = path.join(repository, "tests/compat/workers/hono-worker-smoke.ts");
+  const worker = path.join(repository, "tests/compat/workers/uppercase.worker.ts");
+  const graph = loadModuleGraph(entry, {
+    aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+  });
+  const application = analyzeApplicationEntry(graph.modules[0]!.sourceFile);
+  assert.ok(application);
+
+  const result = evaluateApplicationInitialization(graph, application);
+
+  assert.deepEqual(result?.issues, []);
+  assert.deepEqual(result?.routes.find(route => route.path === "/worker")?.response?.body, [{
+    kind: "workerCall",
+    module: worker,
+    input: {kind: "queryParameter", name: "input", fallback: "hello worker"},
+  }]);
+});
+
 test("audits the pinned hono/tiny runtime graph", () => {
   const report = auditCompatibility(path.join(repository, "tests/compat/hono/smoke.ts"), {
     root: repository,
