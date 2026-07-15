@@ -438,6 +438,52 @@ test("applies the upstream poweredBy middleware after the root handler", () => {
   assert.deepEqual(hir.handlers[0]?.headers, [{name: "X-Powered-By", value: "Hono"}]);
 });
 
+test("lowers upstream prettyJSON into a query-conditional native response", () => {
+  const entry = path.join(repository, "tests/compat/hono/pretty-json-smoke.ts");
+  const options = {
+    aliases: {
+      hono: path.join(repository, "vendor/hono/src/index.ts"),
+      "hono/pretty-json": path.join(
+        repository,
+        "vendor/hono/src/middleware/pretty-json/index.ts",
+      ),
+    },
+    apiAliases: {
+      hono: path.join(repository, "tests/compat/hono/api.d.ts"),
+      "hono/pretty-json": path.join(repository, "tests/compat/hono/pretty-json-api.d.ts"),
+    },
+  };
+  const graph = loadModuleGraph(entry, options);
+  const application = analyzeApplicationEntry(graph.modules[0]!.sourceFile);
+  assert.ok(application);
+
+  const result = evaluateApplicationInitialization(graph, application);
+
+  assert.deepEqual(result?.issues, []);
+  assert.deepEqual(result?.routes.map(route => route.response?.body), [{
+    kind: "queryConditional",
+    query: "pretty",
+    whenPresent: '[\n  {\n    "id": 1,\n    "title": "Good Morning"\n  }\n]',
+    whenAbsent: '[{"id":1,"title":"Good Morning"}]',
+  }]);
+
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    ...options,
+  });
+  assert.equal(hir.handlers[0]?.path, "/api/posts");
+  assert.deepEqual(
+    hir.handlers[0]?.response.kind === "text" ? hir.handlers[0].response.value : undefined,
+    {
+      kind: "queryConditional",
+      query: 0,
+      whenPresent: {kind: "stringLiteral", string: 1, span: hir.handlers[0]?.span},
+      whenAbsent: {kind: "stringLiteral", string: 2, span: hir.handlers[0]?.span},
+      span: hir.handlers[0]?.span,
+    },
+  );
+});
+
 test("lowers the tiny-preset Hono route into native HIR", () => {
   const hir = compileEntry(path.join(repository, "tests/compat/hono/smoke.ts"), {
     sdkPath: path.join(repository, "sdk/index.d.ts"),
