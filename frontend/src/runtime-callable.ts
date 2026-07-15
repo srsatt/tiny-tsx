@@ -96,6 +96,20 @@ function resolveExportedCallable(
       }
       return resolveRuntimeCallable(modules, module, sourceName, active);
     }
+    if (
+      ts.isExportDeclaration(statement)
+      && statement.exportClause === undefined
+      && statement.moduleSpecifier !== undefined
+      && ts.isStringLiteral(statement.moduleSpecifier)
+    ) {
+      const target = importedModule(modules, module, statement.moduleSpecifier.text);
+      const resolved = target === undefined
+        ? undefined
+        : resolveExportedCallable(modules, target, exportedName, active);
+      if (resolved !== undefined) {
+        return resolved;
+      }
+    }
   }
   return undefined;
 }
