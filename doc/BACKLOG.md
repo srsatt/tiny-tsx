@@ -120,6 +120,8 @@ commit message.
       through upstream `route()`, `basePath()`, `#clone()`, and `#addRoute`.
 - [x] Compile the basic example's closed `/hello/*` async middleware and static
       post-`next()` response header.
+- [x] Lower an explicitly installed Hono `notFound()` handler into ordered GET
+      and POST native fallback dispatch.
 - [ ] Compile the remaining basic-example middleware, including `basicAuth`,
       `etag`, and the runtime response-time header.
 - [ ] Compile the required rest/spread operations.

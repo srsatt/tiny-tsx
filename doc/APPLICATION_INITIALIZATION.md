@@ -133,6 +133,12 @@ The same transaction boundary lets the supported `/hello/*` middleware commit
 its finalized-response clone and static `X-message` header while the later
 runtime response-time middleware remains unresolved and rolls back alone.
 
+An explicit `notFound()` application call is also retained. After route
+registration completes, the evaluator invokes Hono's installed private closure
+with matching global middleware and lowers the result as final GET/POST
+fallback dispatch. This is derived from Hono state rather than a compiler-owned
+replacement router.
+
 Async/await syntax is admitted only inside constructed-application handlers
 that the initialization evaluator consumes completely. This does not introduce
 native Promise objects, suspension, or a task executor.

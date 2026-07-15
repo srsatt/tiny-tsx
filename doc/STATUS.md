@@ -183,6 +183,13 @@ produces and serves a native Mach-O executable from the example TSX source.
   finalized response through upstream Context code, and emits
   `X-message: This is addHeader middleware!` over native HTTP. Unsupported
   response-time middleware still rolls back independently.
+- An explicitly installed upstream `notFound()` closure now becomes ordered
+  terminal GET/POST fallback handlers. Native HTTP serves the basic example's
+  `Custom 404 Not Found` body and status; the global closed `poweredBy()` effect
+  is retained in the complete symbolic response.
+- Unknown property access is now conservative rather than becoming
+  `undefined`. The external-fetch route is correctly left unresolved instead
+  of being miscompiled as static text.
 - Async/await entry handlers are accepted only when application initialization
   fully stages them. Native Promise/suspension semantics remain unimplemented.
 - Static `Response` headers lower into a bounded eight-entry native writer with

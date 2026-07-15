@@ -133,6 +133,12 @@ response clone, and the static `X-message` mutation reaches native HTTP. A
 failed surrounding middleware effect is rolled back independently rather than
 partially mutating the supported response.
 
+When source explicitly calls `app.notFound(handler)`, the evaluator reads the
+installed upstream `#notFoundHandler` closure and lowers its response after all
+registered routes. Native dispatch emits ordered GET and POST `/*` fallbacks,
+preserving the custom 404 status/body. Default Hono fallback synthesis remains
+separate from explicit application behavior.
+
 ### Type-only API overlay
 
 The compiling frontend accepts `--api <specifier>=<api.d.ts>` independently of
