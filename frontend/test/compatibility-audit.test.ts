@@ -282,6 +282,33 @@ test("mounts a nested Hono application through upstream route semantics", () => 
   assert.deepEqual(hir.handlers.map(handler => handler.path), ["/book", "/book/:id"]);
 });
 
+test("lowers a closed Hono POST route into method-aware HIR", () => {
+  const entry = path.join(repository, "tests/compat/hono/post-route-smoke.ts");
+  const graph = loadModuleGraph(entry, {
+    aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+  });
+  const application = analyzeApplicationEntry(graph.modules[0]!.sourceFile);
+  assert.ok(application);
+
+  const result = evaluateApplicationInitialization(graph, application);
+
+  assert.deepEqual(result?.issues, []);
+  assert.deepEqual(result?.routes.map(route => ({
+    method: route.method,
+    path: route.path,
+    status: route.response?.status,
+    body: route.response?.body,
+  })), [{method: "POST", path: "/book", status: 200, body: "Create Book"}]);
+
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+    apiAliases: {hono: path.join(repository, "tests/compat/hono/api.d.ts")},
+  });
+  assert.equal(hir.handlers[0]?.method, "POST");
+  assert.equal(hir.handlers[0]?.path, "/book");
+});
+
 test("lowers closed Response init headers from a Hono route", () => {
   const entry = path.join(repository, "tests/compat/hono/response-headers-smoke.ts");
   const hir = compileEntry(entry, {

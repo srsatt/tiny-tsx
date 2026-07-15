@@ -25,6 +25,7 @@ export type HonoMiddlewareApi = (
 
 export declare class Hono {
   get(path: string, ...handlers: HonoHandlerApi[]): this;
+  post(path: string, ...handlers: HonoHandlerApi[]): this;
   use(path: string, ...middleware: HonoMiddlewareApi[]): this;
   on(method: string | string[], path: string | string[], ...handlers: HonoHandlerApi[]): this;
   route(path: string, application: Hono): this;

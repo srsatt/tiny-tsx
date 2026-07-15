@@ -64,6 +64,8 @@ fn builds_and_serves_the_pinned_hono_basic_route() {
         "tests/compat/hono/basic-smoke.ts",
         "Hono!!",
         "text/plain;charset=UTF-8",
+        "GET",
+        200,
         "/",
         &[],
         &[
@@ -82,6 +84,8 @@ fn builds_and_dispatches_the_first_two_hono_basic_routes() {
         "tests/compat/hono/multi-route-smoke.ts",
         "Hono!!",
         "text/plain;charset=UTF-8",
+        "GET",
+        200,
         "/",
         &[],
         &[
@@ -100,6 +104,8 @@ fn builds_and_serves_a_hono_named_route_parameter() {
         "tests/compat/hono/parameter-route-smoke.ts",
         "Your ID is hello world/ok",
         "text/plain;charset=UTF-8",
+        "GET",
+        200,
         "/entry/hello%20world%2Fok",
         &[],
         &[
@@ -118,6 +124,8 @@ fn builds_and_serves_nested_hono_routes() {
         "tests/compat/hono/nested-route-smoke.ts",
         "List Books",
         "text/plain;charset=UTF-8",
+        "GET",
+        200,
         "/book",
         &[],
         &[
@@ -135,11 +143,33 @@ fn builds_and_serves_nested_hono_routes() {
 }
 
 #[test]
+fn builds_and_serves_a_hono_post_route() {
+    build_and_serve_with_options(
+        "tests/compat/hono/post-route-smoke.ts",
+        "Create Book",
+        "text/plain;charset=UTF-8",
+        "POST",
+        200,
+        "/book",
+        &[],
+        &[
+            "--alias",
+            "hono=vendor/hono/src/index.ts",
+            "--api",
+            "hono=tests/compat/hono/api.d.ts",
+        ],
+        &[],
+    );
+}
+
+#[test]
 fn builds_and_serves_static_response_headers() {
     build_and_serve_with_options(
         "tests/compat/hono/response-headers-smoke.ts",
         "Headers",
         "text/plain;charset=UTF-8",
+        "GET",
+        200,
         "/headers",
         &[("X-Test", "yes")],
         &[
@@ -158,6 +188,8 @@ fn builds_and_serves_the_upstream_powered_by_middleware() {
         "tests/compat/hono/powered-by-smoke.ts",
         "Hono!!",
         "text/plain;charset=UTF-8",
+        "GET",
+        200,
         "/",
         &[("X-Powered-By", "Hono")],
         &[
@@ -179,6 +211,8 @@ fn build_and_serve(entry: &str, expected_body: &str, expected_content_type: &str
         entry,
         expected_body,
         expected_content_type,
+        "GET",
+        200,
         "/",
         &[],
         &[],
@@ -190,6 +224,8 @@ fn build_and_serve_with_options(
     entry: &str,
     expected_body: &str,
     expected_content_type: &str,
+    expected_method: &str,
+    expected_status: u16,
     expected_path: &str,
     expected_headers: &[(&str, &str)],
     frontend_options: &[&str],
@@ -229,13 +265,16 @@ fn build_and_serve_with_options(
     let mut stream = connect_with_retry(port);
     write!(
         stream,
-        "GET {expected_path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+        "{expected_method} {expected_path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
     )
     .expect("send request");
     let mut response = String::new();
     stream.read_to_string(&mut response).expect("read response");
 
-    assert!(response.starts_with("HTTP/1.1 200 OK\r\n"), "{response}");
+    assert!(
+        response.starts_with(&format!("HTTP/1.1 {expected_status} ")),
+        "{response}"
+    );
     assert!(
         response.contains(&format!("Content-Type: {expected_content_type}\r\n")),
         "{response}"
