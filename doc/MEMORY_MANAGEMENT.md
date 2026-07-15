@@ -79,11 +79,20 @@ steps, and result object are request-local during AOT evaluation; only the
 closed 27-byte response reaches HIR and the native executable. The build still
 uses the arena-only runtime with GC disabled.
 
-The next compiler artifact must make this conclusion machine-readable rather
-than inferred from the final constant response. It should list each allocation
-site reached by the tracer, its owner/lifetime, aliases, and whether it reaches
-the response, worker state, or process state. SDK-internal generated IDs must be
-reported as non-escaping before the current compile-time randomness witness can
-be considered safe. Streaming may change the result because chunks, callbacks,
-and cancellation state can outlive one synchronous evaluation phase; that
-executed path is the next meaningful collector decision point.
+This conclusion is now machine-readable in both HIR and `<binary>.build.json`.
+The `memory` object records the `arena` policy, every allocation site reached by
+symbolic execution, source location and value kind, instance/reference counts,
+the selected lifetime and escape target, a checked summary, and the
+`managedHeapRequired` decision. The Rust HIR validator recomputes the summary
+from the sites instead of trusting frontend totals.
+
+The deterministic AI/Hono target currently reports 753 sites: 752 compile-time
+and one static response site, with 229 aliased sites, one response escape, and
+zero request, worker, message, or managed sites. Focused tests also require all
+reached SDK `generate-id.ts` sites to remain compile-time and non-escaping.
+These counts describe executed tracer evidence, not runtime allocation bytes or
+peak heap use.
+
+Streaming may change the result because chunks, callbacks, and cancellation
+state can outlive one synchronous evaluation phase; that executed path is the
+next meaningful collector decision point.

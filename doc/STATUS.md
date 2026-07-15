@@ -326,13 +326,19 @@ produces and serves a native Mach-O executable from the example TSX source.
   modules and 64,774 lines with zero unresolved runtime imports. The pinned
   `generateText`/`MockLanguageModelV4` plus Hono consumer now passes under Bun
   and compiles through 662 upstream/runtime modules into native HIR. The native
-  arm64 build is 1,051,848 bytes, reports no JavaScript engine and GC disabled,
+  arm64 build is 1,051,560 bytes, reports no JavaScript engine and GC disabled,
   and a real `/ai` request returns the exact 27-byte deterministic response.
   The current Zod boundary is intentionally limited to the known-valid tracer;
   invalid-schema equivalence is still open. A second Bun/native compiler test
   passes the mutually exclusive `prompt` and `messages`, executes the upstream
   `InvalidPromptError` inheritance chain, and lowers the installed Hono error
   handler to the matching status-500 message.
+- HIR and native build reports now contain executed allocation evidence rather
+  than inferring memory safety from a constant result. The deterministic AI
+  target reports 753 sites: 752 compile-time, one static response, 229 with
+  aliases, one response escape, and no managed sites. The Rust validator
+  recomputes those totals, `managedHeapRequired` is false, and focused tests
+  keep AI SDK generated IDs compile-time and non-escaping.
 - HTTP/1.1 connections now stay on one executor for up to 100 requests or five
   idle seconds. A 16 KiB parser preserves pipelined bytes, consumes validated
   bodies up to 1 MiB, rejects duplicate Content-Length/transfer encoding, and
@@ -426,6 +432,8 @@ itself. Connection fairness remains a measured optimization target.
 
 Read `doc/AI_COMPATIBILITY.md`, `doc/MEMORY_MANAGEMENT.md`, and
 `doc/BACKLOG.md`. Run `rtk npm run test:ai-intake`,
-`rtk npm run test:ai-reference`, and `rtk npm run build:ai-hono`. Add explicit
-escape classifications for the executed deterministic path, then add one
-invalid schema/prompt case before starting the streaming slice.
+`rtk npm run test:ai-reference`, and `rtk npm run build:ai-hono`. Start the
+deterministic `streamText` tracer and use its emitted lifetime/escape report as
+the next collector decision point. Keep invalid-Zod behavior as a separate open
+promotion gate rather than expanding the known-valid schema specialization
+inside the streaming slice.

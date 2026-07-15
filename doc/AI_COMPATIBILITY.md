@@ -67,15 +67,21 @@ getters, destructuring/defaults, optional calls, Promise/array/object helpers,
 switch and bounded `for`/`for...of`/`do...while` execution, and a minimal native
 Zod-schema boundary. `rtk npm run test:ai-intake` asserts that the produced HIR
 contains the exact `/ai` response. `rtk npm run build:ai-hono` compiles 662
-TypeScript modules into a 1,051,848-byte arm64 executable with no JavaScript
+TypeScript modules into a 1,051,560-byte arm64 executable with no JavaScript
 engine and GC disabled. A real request returned HTTP 200, the expected content
 type, and the exact 27-byte body.
+
+The same build carries an executed memory report with 753 allocation sites:
+752 compile-time and one static response, including 229 sites with observed
+aliases. It reports one response escape, no request/worker/message/managed
+sites, and `managedHeapRequired: false`. Native compile tests pin SDK internal
+generated-ID sites to the compile-time/non-escaping classification.
 
 This first target is deliberately deterministic and AOT-closed. The schema
 adapter only supplies the Zod builder/valid-result subset exercised by this
 known-valid prompt; it is not general Zod conformance. Likewise, `Math.random`
-uses a compile-time witness for SDK-internal IDs that do not escape into the
-response. Invalid schema behavior, ID escape detection, tool calls, streaming,
+uses a compile-time witness for SDK-internal IDs now proven by the escape report
+not to reach the response. Invalid schema behavior, tool calls, streaming,
 and provider I/O remain separate promotion gates.
 
 A second unchanged-style Hono target deliberately supplies both `prompt` and

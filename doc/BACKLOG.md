@@ -51,7 +51,7 @@ commit message.
       isolation, and recovery after overload.
 - [x] Benchmark equivalent Hono workloads with 1/2/4/8 workers, reporting RSS,
       throughput, median/p99 latency, and queue saturation behavior.
-- [ ] Implement compile-time-known module Workers as syntax sugar over isolated
+- [x] Implement compile-time-known module Workers as syntax sugar over isolated
       mailboxes and a separate application task pool.
 - [x] Add bounded logical-worker mailboxes with per-worker state, request/reply
       ownership, parallel workers, termination, panic recovery, and draining
@@ -79,8 +79,10 @@ commit message.
       Fetch, URL, crypto, timer, and persistent-heap gaps from that exact graph.
 - [x] Define static, request, worker, message, and managed-heap lifetimes plus
       the evidence threshold for starting a collector integration spike.
-- [ ] Add escape classification, heap ABI descriptors, roots, safepoints/stack
-      maps, and write-barrier sites before selecting a precise collector.
+- [x] Emit executed allocation-site, alias, lifetime, and escape evidence in HIR
+      and native build reports, with a machine-checked managed-heap decision.
+- [ ] Add heap ABI descriptors, roots, safepoints/stack maps, and write-barrier
+      sites before selecting a precise collector.
 - [ ] Compare an established conservative collector and a precise per-worker
       collector/toolkit; do not implement a production GC from scratch.
 - [ ] Define an optional WASM compatibility profile: loader, imports allowlist,
