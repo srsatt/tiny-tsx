@@ -13,7 +13,9 @@ use super::{
     request::{
         ConnectionInput, MAX_REQUEST_BODY, is_timeout, parse_request_headers, parse_request_line,
     },
-    response::{ConnectionDirective, write_response, write_terminal_response},
+    response::{
+        ConnectionDirective, write_response, write_stream_response, write_terminal_response,
+    },
 };
 
 const MAX_REQUESTS_PER_CONNECTION: usize = 100;
@@ -67,6 +69,14 @@ pub(super) fn handle_connection(
         };
 
         let result = match response.application_status {
+            OK if response.is_streaming() => write_stream_response(
+                stream,
+                response.http_status,
+                response.content_type,
+                response.stream_chunks(),
+                &response.headers,
+                connection,
+            ),
             OK => write_response(
                 stream,
                 response.http_status,

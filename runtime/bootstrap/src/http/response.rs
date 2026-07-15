@@ -38,6 +38,57 @@ pub(super) fn write_response(
     headers: &[(Vec<u8>, Vec<u8>)],
     connection: ConnectionDirective,
 ) -> io::Result<()> {
+    write_response_head(
+        stream,
+        status,
+        content_type,
+        headers,
+        connection,
+        BodyFraming::ContentLength(body.len()),
+    )?;
+    stream.write_all(body)?;
+    stream.flush()
+}
+
+pub(super) fn write_stream_response<'a>(
+    stream: &mut impl Write,
+    status: u16,
+    content_type: u16,
+    chunks: impl IntoIterator<Item = &'a [u8]>,
+    headers: &[(Vec<u8>, Vec<u8>)],
+    connection: ConnectionDirective,
+) -> io::Result<()> {
+    write_response_head(
+        stream,
+        status,
+        content_type,
+        headers,
+        connection,
+        BodyFraming::Chunked,
+    )?;
+    for chunk in chunks {
+        write!(stream, "{:x}\r\n", chunk.len())?;
+        stream.write_all(chunk)?;
+        stream.write_all(b"\r\n")?;
+        stream.flush()?;
+    }
+    stream.write_all(b"0\r\n\r\n")?;
+    stream.flush()
+}
+
+enum BodyFraming {
+    ContentLength(usize),
+    Chunked,
+}
+
+fn write_response_head(
+    stream: &mut impl Write,
+    status: u16,
+    content_type: u16,
+    headers: &[(Vec<u8>, Vec<u8>)],
+    connection: ConnectionDirective,
+    framing: BodyFraming,
+) -> io::Result<()> {
     let reason = match status {
         200 => "OK",
         201 => "Created",
@@ -77,13 +128,11 @@ pub(super) fn write_response(
         ConnectionDirective::KeepAlive => "keep-alive",
         ConnectionDirective::Close => "close",
     };
-    write!(
-        stream,
-        "Content-Length: {}\r\nConnection: {connection}\r\n\r\n",
-        body.len()
-    )?;
-    stream.write_all(body)?;
-    stream.flush()
+    match framing {
+        BodyFraming::ContentLength(length) => write!(stream, "Content-Length: {length}\r\n")?,
+        BodyFraming::Chunked => stream.write_all(b"Transfer-Encoding: chunked\r\n")?,
+    }
+    write!(stream, "Connection: {connection}\r\n\r\n")
 }
 
 fn is_framing_header(name: &[u8]) -> bool {
@@ -94,7 +143,7 @@ fn is_framing_header(name: &[u8]) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{ConnectionDirective, write_response};
+    use super::{ConnectionDirective, write_response, write_stream_response};
     use crate::abi::CONTENT_TYPE_NONE;
 
     #[test]
@@ -124,6 +173,25 @@ mod tests {
         assert!(find(&close, b"Connection: close\r\n"));
         assert!(find(&close, b"Location: /\r\n"));
         assert!(!find(&close, b"Content-Type:"));
+    }
+
+    #[test]
+    fn streaming_response_uses_http_chunks_without_content_length() {
+        let mut output = Vec::new();
+        write_stream_response(
+            &mut output,
+            200,
+            CONTENT_TYPE_NONE,
+            [b"first\n".as_slice(), b"second\n".as_slice()],
+            &[(b"Transfer-Encoding".to_vec(), b"invalid-duplicate".to_vec())],
+            ConnectionDirective::KeepAlive,
+        )
+        .expect("write stream response");
+
+        assert!(find(&output, b"Transfer-Encoding: chunked\r\n"));
+        assert!(!find(&output, b"Content-Length:"));
+        assert!(find(&output, b"6\r\nfirst\n\r\n7\r\nsecond\n\r\n0\r\n\r\n"));
+        assert!(!find(&output, b"invalid-duplicate"));
     }
 
     fn find(haystack: &[u8], needle: &[u8]) -> bool {

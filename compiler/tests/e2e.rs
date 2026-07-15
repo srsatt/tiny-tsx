@@ -1047,6 +1047,72 @@ fn builds_and_serves_request_time_hono_jsx_with_exact_escaping() {
     );
 }
 
+#[test]
+fn builds_and_serves_upstream_hono_stream_text_without_body_buffering() {
+    let _build_guard = NATIVE_BUILD.lock().expect("lock native E2E build");
+    let root = repository_root();
+    build_frontend(&root);
+    let directory = temporary_directory();
+    let binary = directory.join("stream-server");
+    let port = available_port();
+
+    let build = Command::new(env!("CARGO_BIN_EXE_tinytsx"))
+        .current_dir(&root)
+        .args([
+            "build",
+            "tests/compat/hono/stream-text-smoke.ts",
+            "--port",
+            &port.to_string(),
+            "--request-memory",
+            "1",
+            "--output",
+        ])
+        .arg(&binary)
+        .args([
+            "--alias",
+            "hono=vendor/hono/src/index.ts",
+            "--alias",
+            "hono/streaming=vendor/hono/src/helper/streaming/index.ts",
+            "--api",
+            "hono=tests/compat/hono/api.d.ts",
+            "--api",
+            "hono/streaming=tests/compat/hono/streaming-api.d.ts",
+        ])
+        .output()
+        .expect("build streaming server");
+    assert!(
+        build.status.success(),
+        "build failed:\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&build.stdout),
+        String::from_utf8_lossy(&build.stderr),
+    );
+
+    let child = Command::new(&binary)
+        .spawn()
+        .expect("start streaming server");
+    let _server = Server(child);
+    let mut stream = connect_with_retry(port);
+    stream
+        .write_all(b"GET /stream HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
+        .expect("send stream request");
+    let mut response = String::new();
+    stream
+        .read_to_string(&mut response)
+        .expect("read stream response");
+
+    assert!(response.starts_with("HTTP/1.1 200 OK\r\n"), "{response}");
+    assert!(response.contains("Content-Type: text/plain; charset=UTF-8\r\n"));
+    assert!(response.contains("X-Content-Type-Options: nosniff\r\n"));
+    assert!(response.contains("Transfer-Encoding: chunked\r\n"));
+    assert!(!response.contains("Content-Length:"));
+    assert!(
+        response.ends_with("6\r\nfirst\n\r\n7\r\nsecond\n\r\n6\r\nthird\n\r\n0\r\n\r\n"),
+        "{response}"
+    );
+
+    fs::remove_dir_all(directory).expect("remove test artifacts");
+}
+
 fn build_and_serve(entry: &str, expected_body: &str, expected_content_type: &str) {
     build_and_serve_with_options(
         entry,

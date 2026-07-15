@@ -1,13 +1,15 @@
 use super::{
     BAD_REQUEST, CONTENT_TYPE_HTML, CONTENT_TYPE_NONE, CONTENT_TYPE_TEXT, INTERNAL_ERROR,
-    MAX_DYNAMIC_HEADER_BYTES, MAX_RESPONSE_HEADERS, OK, REQUEST_OOM, RequestArena, TinyHeader,
-    TinyResponseWriter, TinyStringView, render, request, request_with_headers,
-    tinytsx_html_write_fetch_status, tinytsx_html_write_path_segment,
+    MAX_DYNAMIC_HEADER_BYTES, MAX_RESPONSE_HEADERS, MAX_STREAM_CHUNKS, OK, REQUEST_OOM,
+    RequestArena, TinyHeader, TinyResponseWriter, TinyStringView, render, request,
+    request_with_headers, tinytsx_html_write_fetch_status, tinytsx_html_write_path_segment,
     tinytsx_html_write_query_parameter, tinytsx_html_write_request_header,
     tinytsx_html_write_static, tinytsx_request_basic_auth_equals, tinytsx_request_if_none_match,
     tinytsx_request_method_equals, tinytsx_request_path_equals, tinytsx_request_path_matches,
     tinytsx_request_query_has, tinytsx_response_begin, tinytsx_response_header_elapsed_millis,
-    tinytsx_response_header_static, write_console_error,
+    tinytsx_response_header_static, tinytsx_response_stream_begin,
+    tinytsx_response_stream_chunk_begin, tinytsx_response_stream_chunk_end,
+    tinytsx_response_stream_chunk_static, write_console_error,
 };
 use std::{
     io::{Read, Write},
@@ -418,6 +420,35 @@ fn response_writer_reports_oom_without_overwriting_the_buffer() {
 }
 
 #[test]
+fn response_writer_retains_static_and_arena_backed_stream_chunks() {
+    let mut output = [0_u8; 7];
+    let mut writer = writer(&mut output);
+
+    assert_eq!(unsafe { tinytsx_response_stream_begin(&mut writer) }, OK);
+    assert_eq!(
+        unsafe { tinytsx_response_stream_chunk_static(&mut writer, b"first".as_ptr(), 5) },
+        OK
+    );
+    assert_eq!(
+        unsafe { tinytsx_response_stream_chunk_begin(&mut writer) },
+        OK
+    );
+    assert_eq!(
+        unsafe { tinytsx_html_write_static(&mut writer, b"second\n".as_ptr(), 7) },
+        OK
+    );
+    assert_eq!(
+        unsafe { tinytsx_response_stream_chunk_end(&mut writer) },
+        OK
+    );
+
+    assert_eq!(writer.streaming, 1);
+    assert_eq!(writer.stream_chunk_count, 2);
+    assert_eq!(view(&writer.stream_chunks[0]), b"first");
+    assert_eq!(view(&writer.stream_chunks[1]), b"second\n");
+}
+
+#[test]
 fn response_writer_rejects_a_null_source_with_nonzero_length() {
     let mut output = [0_u8; 1];
     let mut writer = writer(&mut output);
@@ -584,6 +615,13 @@ fn writer(output: &mut [u8]) -> TinyResponseWriter {
         headers: [empty_header(); MAX_RESPONSE_HEADERS],
         dynamic_header_cursor: 0,
         dynamic_header_bytes: [0; MAX_DYNAMIC_HEADER_BYTES],
+        streaming: 0,
+        stream_chunk_count: 0,
+        stream_chunks: [TinyStringView {
+            ptr: std::ptr::null(),
+            len: 0,
+        }; MAX_STREAM_CHUNKS],
+        stream_chunk_start: std::ptr::null_mut(),
     }
 }
 

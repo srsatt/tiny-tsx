@@ -21,6 +21,7 @@ pub const CONTENT_TYPE_JSON: u16 = 3;
 pub const CONTENT_TYPE_RESPONSE_TEXT: u16 = 4;
 pub const MAX_RESPONSE_HEADERS: usize = 8;
 pub const MAX_DYNAMIC_HEADER_BYTES: usize = 256;
+pub const MAX_STREAM_CHUNKS: usize = 16;
 
 const MAX_FETCH_URL_BYTES: usize = 2048;
 const CURLOPT_URL: u32 = 10_002;
@@ -106,6 +107,10 @@ pub struct TinyResponseWriter {
     pub headers: [TinyHeader; MAX_RESPONSE_HEADERS],
     pub dynamic_header_cursor: usize,
     pub dynamic_header_bytes: [u8; MAX_DYNAMIC_HEADER_BYTES],
+    pub streaming: u32,
+    pub stream_chunk_count: usize,
+    pub stream_chunks: [TinyStringView; MAX_STREAM_CHUNKS],
+    pub stream_chunk_start: *mut u8,
 }
 
 #[cfg(feature = "generated")]
@@ -216,6 +221,83 @@ pub unsafe extern "C" fn tinytsx_response_begin(
     }
     writer.http_status = http_status;
     writer.content_type = content_type;
+    OK
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tinytsx_response_stream_begin(writer: *mut TinyResponseWriter) -> u32 {
+    if writer.is_null() {
+        return INTERNAL_ERROR;
+    }
+    // SAFETY: Generated code passes the writer supplied by this runtime.
+    let writer = unsafe { &mut *writer };
+    writer.streaming = 1;
+    writer.stream_chunk_count = 0;
+    writer.stream_chunk_start = ptr::null_mut();
+    OK
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tinytsx_response_stream_chunk_static(
+    writer: *mut TinyResponseWriter,
+    bytes: *const u8,
+    len: usize,
+) -> u32 {
+    if writer.is_null() || (bytes.is_null() && len != 0) {
+        return INTERNAL_ERROR;
+    }
+    // SAFETY: Generated code passes the writer supplied by this runtime.
+    let writer = unsafe { &mut *writer };
+    if writer.streaming == 0
+        || !writer.stream_chunk_start.is_null()
+        || writer.stream_chunk_count >= MAX_STREAM_CHUNKS
+    {
+        writer.status = RENDER_ERROR;
+        return RENDER_ERROR;
+    }
+    writer.stream_chunks[writer.stream_chunk_count] = TinyStringView { ptr: bytes, len };
+    writer.stream_chunk_count += 1;
+    OK
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tinytsx_response_stream_chunk_begin(
+    writer: *mut TinyResponseWriter,
+) -> u32 {
+    if writer.is_null() {
+        return INTERNAL_ERROR;
+    }
+    // SAFETY: Generated code passes the writer supplied by this runtime.
+    let writer = unsafe { &mut *writer };
+    if writer.streaming == 0
+        || !writer.stream_chunk_start.is_null()
+        || writer.stream_chunk_count >= MAX_STREAM_CHUNKS
+    {
+        writer.status = RENDER_ERROR;
+        return RENDER_ERROR;
+    }
+    writer.stream_chunk_start = writer.cursor;
+    OK
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tinytsx_response_stream_chunk_end(writer: *mut TinyResponseWriter) -> u32 {
+    if writer.is_null() {
+        return INTERNAL_ERROR;
+    }
+    // SAFETY: Generated code passes the writer supplied by this runtime.
+    let writer = unsafe { &mut *writer };
+    if writer.streaming == 0 || writer.stream_chunk_start.is_null() {
+        writer.status = RENDER_ERROR;
+        return RENDER_ERROR;
+    }
+    let len = writer.cursor as usize - writer.stream_chunk_start as usize;
+    writer.stream_chunks[writer.stream_chunk_count] = TinyStringView {
+        ptr: writer.stream_chunk_start,
+        len,
+    };
+    writer.stream_chunk_count += 1;
+    writer.stream_chunk_start = ptr::null_mut();
     OK
 }
 
@@ -1064,6 +1146,28 @@ pub struct RenderedResponse<'a> {
     pub content_type: u16,
     pub body: &'a [u8],
     pub headers: Vec<(Vec<u8>, Vec<u8>)>,
+    streaming: bool,
+    stream_chunk_count: usize,
+    stream_chunks: [TinyStringView; MAX_STREAM_CHUNKS],
+}
+
+impl RenderedResponse<'_> {
+    pub fn is_streaming(&self) -> bool {
+        self.streaming
+    }
+
+    pub fn stream_chunks(&self) -> impl ExactSizeIterator<Item = &[u8]> {
+        self.stream_chunks[..self.stream_chunk_count]
+            .iter()
+            .map(|chunk| {
+                if chunk.len == 0 {
+                    &[][..]
+                } else {
+                    // SAFETY: Chunks point at generated static data or the borrowed request arena.
+                    unsafe { slice::from_raw_parts(chunk.ptr, chunk.len) }
+                }
+            })
+    }
 }
 
 pub fn render<'a>(request: &TinyRequest, arena: &'a mut RequestArena) -> RenderedResponse<'a> {
@@ -1082,6 +1186,10 @@ pub fn render<'a>(request: &TinyRequest, arena: &'a mut RequestArena) -> Rendere
         headers: [EMPTY_HEADER; MAX_RESPONSE_HEADERS],
         dynamic_header_cursor: 0,
         dynamic_header_bytes: [0; MAX_DYNAMIC_HEADER_BYTES],
+        streaming: 0,
+        stream_chunk_count: 0,
+        stream_chunks: [EMPTY_VIEW; MAX_STREAM_CHUNKS],
+        stream_chunk_start: ptr::null_mut(),
     };
 
     // SAFETY: The generated handler follows ABI.md and only uses these values
@@ -1105,6 +1213,9 @@ pub fn render<'a>(request: &TinyRequest, arena: &'a mut RequestArena) -> Rendere
         content_type: writer.content_type,
         body: &arena.output[..written],
         headers,
+        streaming: writer.streaming != 0,
+        stream_chunk_count: writer.stream_chunk_count,
+        stream_chunks: writer.stream_chunks,
     }
 }
 
