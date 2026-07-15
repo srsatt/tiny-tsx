@@ -160,6 +160,16 @@ fn emit_handlers(assembly: &mut String, program: &Program) -> Result<(), String>
     writeln!(assembly, "    b {return_label}").unwrap();
     for (index, handler) in program.handlers.iter().enumerate() {
         writeln!(assembly, "Ltinytsx_handle_get_match_{index}:").unwrap();
+        for string in &handler.stderr {
+            writeln!(assembly, "    adrp x0, Ltinytsx_string_{string}@PAGE").unwrap();
+            writeln!(assembly, "    add x0, x0, Ltinytsx_string_{string}@PAGEOFF").unwrap();
+            emit_immediate(
+                assembly,
+                "x1",
+                program.static_strings[*string].value.len() as u64,
+            );
+            writeln!(assembly, "    bl _tinytsx_console_error_static").unwrap();
+        }
         for (header_index, header) in handler.headers.iter().enumerate() {
             writeln!(assembly, "    ldr x0, [sp, #16]").unwrap();
             writeln!(

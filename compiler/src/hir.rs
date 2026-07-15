@@ -45,6 +45,8 @@ pub struct Handler {
     pub path: String,
     #[serde(default)]
     pub headers: Vec<StaticHeader>,
+    #[serde(default)]
+    pub stderr: Vec<usize>,
     pub response: HandlerResponse,
     pub span: SourceSpan,
 }
@@ -235,6 +237,13 @@ impl Program {
                 {
                     return Err("GET handler contains invalid or duplicate headers".to_owned());
                 }
+            }
+            if handler
+                .stderr
+                .iter()
+                .any(|string| *string >= self.static_strings.len())
+            {
+                return Err("handler stderr references a missing static string".to_owned());
             }
             match &handler.response {
                 HandlerResponse::Html { component } if *component >= self.components.len() => {

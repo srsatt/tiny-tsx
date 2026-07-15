@@ -12,6 +12,8 @@ export type Value =
   | {kind: "bigint"; value: bigint}
   | {kind: "string"; value: string}
   | {kind: "regexp"; source: string; flags: string}
+  | {kind: "error"; name: string; message: string}
+  | {kind: "thrown"; value: Value}
   | {kind: "array"; items: Value[]}
   | {kind: "record"; fields: Map<string, Value>}
   | {kind: "headers"; entries: Map<string, {name: string; value: string}>}
@@ -64,6 +66,12 @@ export const UNDEFINED: Value = {kind: "undefined"};
 
 export function readProperty(value: Value, name: string): Value {
   if (value.kind === "unknown") return value;
+  if (value.kind === "error" && name === "name") {
+    return {kind: "string", value: value.name};
+  }
+  if (value.kind === "error" && name === "message") {
+    return {kind: "string", value: value.message};
+  }
   if (value.kind === "request" && name === "method") {
     return {kind: "string", value: value.method};
   }
@@ -125,6 +133,7 @@ export function detail(value: Value): {detail?: string} {
     case "reference": return {detail: value.name};
     case "constructed": return {detail: value.name};
     case "response": return {detail: `${value.status} ${value.contentType}`};
+    case "error": return {detail: `${value.name}: ${value.message}`};
     case "unknown": return {detail: value.reason};
     default: return {};
   }
@@ -161,6 +170,8 @@ export function truthiness(value: Value): boolean | undefined {
     case "array":
     case "record":
     case "regexp":
+    case "error":
+    case "thrown":
     case "headers":
     case "request":
     case "closure":
@@ -203,6 +214,9 @@ export function stringValue(value: Value): string {
     case "number": return String(value.value);
     case "bigint": return String(value.value);
     case "string": return value.value;
+    case "error": return value.message.length === 0
+      ? value.name
+      : `${value.name}: ${value.message}`;
     default: return "[object Object]";
   }
 }

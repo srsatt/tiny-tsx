@@ -132,6 +132,7 @@ export interface Handler {
   method: "GET" | "POST";
   path: string;
   headers?: StaticHeader[];
+  stderr?: number[];
   response: HandlerResponse;
   span: SourceSpan;
 }

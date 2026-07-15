@@ -63,6 +63,7 @@ export interface EvaluatedResponse {
   status: number;
   contentType: string;
   headers?: Array<{name: string; value: string}>;
+  stderr?: string[];
 }
 
 export interface ApplicationInitializationEvaluation extends ConstructorEvaluation {
@@ -104,9 +105,15 @@ export function evaluateApplicationInitialization(
   const {evaluator, instance} = initializeConstructor(graph, application, resolved);
   executeApplicationCalls(evaluator, application, instance);
   const summary = summarize(evaluator, instance);
+  const installedErrorHandler = application.calls.some(call => call.method === "onError")
+    ? instance.fields.get("errorHandler")
+    : undefined;
+  const errorHandler = installedErrorHandler?.kind === "closure"
+    ? installedErrorHandler
+    : undefined;
   return {
     ...summary,
-    routes: summarizeRoutes(evaluator, instance),
+    routes: summarizeRoutes(evaluator, instance, errorHandler),
     ...(application.calls.some(call => call.method === "notFound")
       ? evaluateInstalledNotFound(evaluator, instance)
       : {}),
@@ -238,6 +245,7 @@ function executeApplicationCalls(
 function summarizeRoutes(
   evaluator: Evaluator,
   instance: Value & {kind: "instance"},
+  errorHandler?: Value & {kind: "closure"},
 ): EvaluatedRoute[] {
   const routes = instance.fields.get("routes");
   if (routes?.kind !== "array") {
@@ -264,7 +272,14 @@ function summarizeRoutes(
       matchingMiddleware(candidate, method.value, path.value)
     );
     const response = ["GET", "POST"].includes(method.value) && handler?.kind === "closure"
-      ? evaluateRouteHandler(evaluator, handler, middleware, path.value, method.value)
+      ? evaluateRouteHandler(
+        evaluator,
+        handler,
+        middleware,
+        path.value,
+        method.value,
+        errorHandler,
+      )
       : undefined;
     return [{
       method: method.value,
@@ -286,6 +301,7 @@ function evaluateRouteHandler(
   middleware: Array<Value & {kind: "closure"}>,
   routePattern: string,
   requestMethod: string,
+  errorHandler?: Value & {kind: "closure"},
 ): EvaluatedResponse | undefined {
   const contextClass = findRuntimeClass(evaluator, "Context");
   if (contextClass === undefined) {
@@ -301,6 +317,9 @@ function evaluateRouteHandler(
   );
   context.fields.set("req", {kind: "request", routePattern, method: requestMethod});
   let response = invokeClosure(evaluator, handler, [context], context);
+  if (response.kind === "thrown" && errorHandler !== undefined) {
+    response = invokeClosure(evaluator, errorHandler, [response.value, context], context);
+  }
   if (response.kind === "response") {
     for (const middlewareHandler of [...middleware].reverse()) {
       const middlewareContext: Value & {kind: "instance"} = {kind: "instance", fields: new Map()};
@@ -339,12 +358,17 @@ function evaluateRouteHandler(
   const headers = [...response.headers.values()].filter(header =>
     header.name.toLowerCase() !== "content-type"
   );
+  const stderr = context.fields.get("#stderr");
+  const stderrLines = stderr?.kind === "array"
+    ? stderr.items.flatMap(value => value.kind === "string" ? [value.value] : [])
+    : [];
   return {
     kind: "text",
     body: response.body,
     status: response.status,
     contentType: response.contentType,
     ...(headers.length === 0 ? {} : {headers}),
+    ...(stderrLines.length === 0 ? {} : {stderr: stderrLines}),
   };
 }
 
@@ -506,6 +530,15 @@ function executeStatement(
       value: statement.expression === undefined
         ? UNDEFINED
         : evaluate(evaluator, statement.expression, module, environment, instance),
+    };
+  }
+  if (ts.isThrowStatement(statement)) {
+    return {
+      returned: true,
+      value: {
+        kind: "thrown",
+        value: evaluate(evaluator, statement.expression, module, environment, instance),
+      },
     };
   }
   if (ts.isIfStatement(statement)) {
@@ -840,6 +873,22 @@ function executeEffectCall(
       return true;
     }
   }
+  if (receiver.kind === "reference" && receiver.name === "console" && name === "error") {
+    if (arguments_.some(argument => argument.kind === "unknown" || argument.kind === "thrown")) {
+      return false;
+    }
+    const line = arguments_.map(stringValue).join(" ");
+    const logs = instance.fields.get("#stderr");
+    if (logs?.kind === "array") {
+      logs.items.push({kind: "string", value: line});
+    } else {
+      instance.fields.set("#stderr", {
+        kind: "array",
+        items: [{kind: "string", value: line}],
+      });
+    }
+    return true;
+  }
   if (receiver.kind === "instance") {
     const callable = receiver.fields.get(name);
     if (callable?.kind === "closure") {
@@ -897,6 +946,12 @@ function evaluateCall(
       return argument.kind === "unknown"
         ? unknown("String argument is not closed")
         : {kind: "string", value: stringValue(argument)};
+    }
+    if (callable.kind === "reference" && callable.name === "Error") {
+      const message = arguments_[0] ?? UNDEFINED;
+      return message.kind === "unknown"
+        ? unknown("Error message is not closed")
+        : {kind: "error", name: "Error", message: message.kind === "undefined" ? "" : stringValue(message)};
     }
     if (callable.kind === "reference" && callable.callable !== undefined) {
       return invokeFunctionLike(
@@ -1263,6 +1318,14 @@ function evaluate(
       : unknown("conditional test is not a closed boolean");
   }
   if (ts.isNewExpression(expression) && ts.isIdentifier(expression.expression)) {
+    if (expression.expression.text === "Error") {
+      const message = expression.arguments?.[0] === undefined
+        ? UNDEFINED
+        : evaluate(evaluator, expression.arguments[0], module, environment, instance);
+      return message.kind === "unknown"
+        ? unknown("Error message is not closed")
+        : {kind: "error", name: "Error", message: message.kind === "undefined" ? "" : stringValue(message)};
+    }
     if (expression.expression.text === "Response") {
       const body = expression.arguments?.[0] === undefined
         ? UNDEFINED

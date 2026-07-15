@@ -49,7 +49,7 @@ export function validateForbiddenSyntax(
       }
     }
 
-    if (ts.isThrowStatement(node) || ts.isTryStatement(node)) {
+    if (ts.isTryStatement(node) || (ts.isThrowStatement(node) && !allowStagedAsync)) {
       throw tinyError("TINY1006", "exceptions are not supported by TinyTSX", node, undefined, sourceFile);
     }
 

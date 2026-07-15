@@ -236,6 +236,9 @@ function lowerApplicationInitialization(
       method: route.method as "GET" | "POST",
       path: route.path,
       ...(response.headers === undefined ? {} : {headers: response.headers}),
+      ...(response.stderr === undefined
+        ? {}
+        : {stderr: response.stderr.map(line => strings.intern(line))}),
       response: {
         kind: "text" as const,
         value,
