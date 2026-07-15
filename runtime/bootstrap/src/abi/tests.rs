@@ -1,9 +1,10 @@
 use super::{
     BAD_REQUEST, CONTENT_TYPE_HTML, CONTENT_TYPE_NONE, CONTENT_TYPE_TEXT, INTERNAL_ERROR,
     MAX_RESPONSE_HEADERS, OK, REQUEST_OOM, TinyHeader, TinyResponseWriter, TinyStringView, request,
-    tinytsx_html_write_path_segment, tinytsx_html_write_static, tinytsx_request_method_equals,
-    tinytsx_request_path_equals, tinytsx_request_path_matches, tinytsx_request_query_has,
-    tinytsx_response_begin, tinytsx_response_header_static,
+    request_with_headers, tinytsx_html_write_path_segment, tinytsx_html_write_request_header,
+    tinytsx_html_write_static, tinytsx_request_method_equals, tinytsx_request_path_equals,
+    tinytsx_request_path_matches, tinytsx_request_query_has, tinytsx_response_begin,
+    tinytsx_response_header_static,
 };
 
 #[test]
@@ -151,6 +152,38 @@ fn response_writer_preserves_malformed_percent_encoded_utf8() {
 
     assert_eq!(status, OK);
     assert_eq!(&output, b"a%FFb%2");
+}
+
+#[test]
+fn response_writer_reads_request_headers_case_insensitively() {
+    let headers = [TinyHeader {
+        name: TinyStringView::from_bytes(b"User-Agent"),
+        value: TinyStringView::from_bytes(b"tiny-client/1.0"),
+    }];
+    let request = request_with_headers(b"GET", b"/", &headers);
+    let mut output = [0_u8; 15];
+    let mut writer = writer(&mut output);
+
+    let status = unsafe {
+        tinytsx_html_write_request_header(&mut writer, &request, b"user-agent".as_ptr(), 10)
+    };
+
+    assert_eq!(status, OK);
+    assert_eq!(&output, b"tiny-client/1.0");
+}
+
+#[test]
+fn response_writer_formats_a_missing_request_header_as_undefined() {
+    let request = request(b"GET", b"/");
+    let mut output = [0_u8; 9];
+    let mut writer = writer(&mut output);
+
+    let status = unsafe {
+        tinytsx_html_write_request_header(&mut writer, &request, b"User-Agent".as_ptr(), 10)
+    };
+
+    assert_eq!(status, OK);
+    assert_eq!(&output, b"undefined");
 }
 
 #[test]

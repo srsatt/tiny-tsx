@@ -57,6 +57,8 @@ pub struct TinyRequest {
     pub method: TinyStringView,
     pub path: TinyStringView,
     pub query: TinyStringView,
+    pub headers: *const TinyHeader,
+    pub header_count: usize,
     pub arena: *mut TinyArena,
 }
 
@@ -339,6 +341,44 @@ pub unsafe extern "C" fn tinytsx_html_write_path_segment(
     OK
 }
 
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tinytsx_html_write_request_header(
+    writer: *mut TinyResponseWriter,
+    request: *const TinyRequest,
+    expected: *const u8,
+    expected_len: usize,
+) -> u32 {
+    if request.is_null() || (expected.is_null() && expected_len != 0) {
+        return INTERNAL_ERROR;
+    }
+    // SAFETY: Generated code passes the request supplied by this runtime.
+    let request = unsafe { &*request };
+    if request.headers.is_null() && request.header_count != 0 {
+        return INTERNAL_ERROR;
+    }
+    // SAFETY: The request owns a borrowed header table for the duration of this call.
+    let headers = unsafe { slice::from_raw_parts(request.headers, request.header_count) };
+    // SAFETY: Generated static data is valid for its declared length.
+    let expected = unsafe { slice::from_raw_parts(expected, expected_len) };
+    for header in headers {
+        if (header.name.ptr.is_null() && header.name.len != 0)
+            || (header.value.ptr.is_null() && header.value.len != 0)
+        {
+            return INTERNAL_ERROR;
+        }
+        // SAFETY: Header views borrow the parsed request head.
+        let name = unsafe { slice::from_raw_parts(header.name.ptr, header.name.len) };
+        if name.eq_ignore_ascii_case(expected) {
+            // SAFETY: Header views borrow the parsed request head and the writer is valid.
+            return unsafe {
+                tinytsx_html_write_static(writer, header.value.ptr, header.value.len)
+            };
+        }
+    }
+    // SAFETY: The fallback literal is static for the duration of the copy.
+    unsafe { tinytsx_html_write_static(writer, b"undefined".as_ptr(), b"undefined".len()) }
+}
+
 fn route_segments(path: &[u8]) -> impl Iterator<Item = &[u8]> {
     path.split(|byte| *byte == b'/')
         .skip(usize::from(path.first() == Some(&b'/')))
@@ -549,12 +589,19 @@ pub fn query_parts(target: &[u8]) -> (&[u8], &[u8]) {
     }
 }
 
+#[cfg(test)]
 pub fn request(method: &[u8], target: &[u8]) -> TinyRequest {
+    request_with_headers(method, target, &[])
+}
+
+pub fn request_with_headers(method: &[u8], target: &[u8], headers: &[TinyHeader]) -> TinyRequest {
     let (path, query) = query_parts(target);
     TinyRequest {
         method: TinyStringView::from_bytes(method),
         path: TinyStringView::from_bytes(path),
         query: TinyStringView::from_bytes(query),
+        headers: headers.as_ptr(),
+        header_count: headers.len(),
         arena: ptr::null_mut(),
     }
 }

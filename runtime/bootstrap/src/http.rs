@@ -6,10 +6,12 @@ use std::{
 use crate::abi::{
     BAD_REQUEST, CONTENT_TYPE_HTML, CONTENT_TYPE_JSON, CONTENT_TYPE_NONE,
     CONTENT_TYPE_RESPONSE_TEXT, CONTENT_TYPE_TEXT, INTERNAL_ERROR, NOT_FOUND, OK, RENDER_ERROR,
-    REQUEST_OOM, configured_port, configured_request_memory, render, request,
+    REQUEST_OOM, TinyHeader, TinyStringView, configured_port, configured_request_memory, render,
+    request_with_headers,
 };
 
 const MAX_REQUEST_HEAD: usize = 16 * 1024;
+const MAX_REQUEST_HEADERS: usize = 64;
 
 pub fn serve() -> std::io::Result<()> {
     let port = configured_port();
@@ -42,7 +44,10 @@ fn handle_connection(stream: &mut TcpStream, request_memory: usize) -> std::io::
         return write_response(stream, 405, CONTENT_TYPE_TEXT, b"method not allowed", &[]);
     }
 
-    let request = request(method, target);
+    let Some(headers) = parse_request_headers(&head) else {
+        return write_response(stream, 400, CONTENT_TYPE_TEXT, b"bad request", &[]);
+    };
+    let request = request_with_headers(method, target, &headers);
     let response = render(&request, request_memory);
     match response.application_status {
         OK => write_response(
@@ -115,6 +120,40 @@ fn parse_request_line(request: &[u8]) -> Option<(&[u8], &[u8])> {
     Some((method, target))
 }
 
+fn parse_request_headers(request: &[u8]) -> Option<Vec<TinyHeader>> {
+    let first_line_end = request.windows(2).position(|window| window == b"\r\n")?;
+    let mut headers = Vec::new();
+    for line in request[first_line_end + 2..].split(|byte| *byte == b'\n') {
+        let line = line.strip_suffix(b"\r").unwrap_or(line);
+        if line.is_empty() {
+            break;
+        }
+        if headers.len() == MAX_REQUEST_HEADERS {
+            return None;
+        }
+        let separator = line.iter().position(|byte| *byte == b':')?;
+        let name = &line[..separator];
+        if name.is_empty() {
+            return None;
+        }
+        headers.push(TinyHeader {
+            name: TinyStringView::from_bytes(name),
+            value: TinyStringView::from_bytes(trim_ascii_whitespace(&line[separator + 1..])),
+        });
+    }
+    Some(headers)
+}
+
+fn trim_ascii_whitespace(mut value: &[u8]) -> &[u8] {
+    while value.first().is_some_and(u8::is_ascii_whitespace) {
+        value = &value[1..];
+    }
+    while value.last().is_some_and(u8::is_ascii_whitespace) {
+        value = &value[..value.len() - 1];
+    }
+    value
+}
+
 fn write_response(
     stream: &mut impl Write,
     status: u16,
@@ -163,7 +202,7 @@ fn write_response(
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_request_line, write_response};
+    use super::{parse_request_headers, parse_request_line, write_response};
     use crate::abi::CONTENT_TYPE_NONE;
 
     #[test]
@@ -188,6 +227,17 @@ mod tests {
     }
 
     #[test]
+    fn parses_borrowed_request_headers() {
+        let request = b"GET / HTTP/1.1\r\nHost: localhost\r\nUser-Agent: tiny-client/1.0\r\n\r\n";
+
+        let headers = parse_request_headers(request).expect("valid headers");
+
+        assert_eq!(headers.len(), 2);
+        assert_eq!(bytes(headers[1].name), b"User-Agent");
+        assert_eq!(bytes(headers[1].value), b"tiny-client/1.0");
+    }
+
+    #[test]
     fn response_without_content_type_omits_the_header() {
         let mut response = Vec::new();
 
@@ -203,5 +253,10 @@ mod tests {
         let response = String::from_utf8(response).expect("UTF-8 response");
         assert!(response.starts_with("HTTP/1.1 302 Found\r\nLocation: /\r\n"));
         assert!(!response.contains("Content-Type:"));
+    }
+
+    fn bytes(view: crate::abi::TinyStringView) -> Vec<u8> {
+        // SAFETY: Test views point into the request byte literal for this call.
+        unsafe { std::slice::from_raw_parts(view.ptr, view.len) }.to_vec()
     }
 }
