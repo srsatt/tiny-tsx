@@ -407,14 +407,16 @@ Request query state is neither model: it is a borrowed request view lowered to
 a dedicated predicate. The `prettyJSON()` trace therefore does not turn a query
 string into a compile-time record or introduce a generic dynamic map.
 
-The native WPT runner adds a second, deliberately isolated representation: an
-ordered runtime query-pair view used by the complete pinned
-`urlsearchparams-get.any.js`. It preserves duplicates and first-value lookup,
-so it has dynamic collection semantics rather than record field semantics. It
-is not a generic `Map`, and it is not yet wired into application-generated
-`URLSearchParams` objects. The distinction prevents a successful closed WPT
-input from being misreported as general compile-time record folding or a
-production Web API implementation.
+The native WPT runner adds a second, deliberately isolated representation: a
+bounded ordered runtime pair collection used by the complete pinned
+`urlsearchparams-get.any.js` and `urlsearchparams-has.any.js`. Sequential WPT
+HIR constructs and resets callback-local slots, preserves duplicates and first-
+value lookup, appends ordered pairs, and deletes by name or name/value pair.
+That is dynamic collection behavior rather than record field semantics. It is
+not a generic `Map`, and it is not yet wired into application-generated
+`URLSearchParams` objects. The distinction prevents successful closed WPT
+inputs from being misreported as compile-time record folding or a production
+Web API implementation.
 
 ## Compatibility order
 

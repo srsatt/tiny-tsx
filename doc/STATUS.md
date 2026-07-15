@@ -89,12 +89,14 @@ produces and serves a native Mach-O executable from the example TSX source.
   views, elapsed-header formatting, and exact-fit, OOM, and invalid
   response-writer behavior.
 - Direct WPT execution now parses the complete pinned
-  `url/urlsearchparams-get.any.js`, lowers its two test bodies and eleven
-  assertions into typed WPT HIR, builds a standalone native Mach-O executable,
-  and runs it without a JavaScript runtime. The ordered native query-pair view
-  covers missing and empty names/values, duplicate-name first lookup, and
-  one-argument presence for the exact unescaped inputs. It is WPT-runner
-  evidence, not yet an application-facing `URLSearchParams` class.
+  `url/urlsearchparams-get.any.js` and `url/urlsearchparams-has.any.js`, lowers
+  all six test bodies and 33 assertions into sequential WPT HIR v2, builds two
+  standalone native Mach-O executables, and runs them without a JavaScript
+  runtime. Each callback receives bounded 64-pair ordered storage. Native
+  behavior covers missing and empty names/values, duplicate-name first lookup,
+  append/delete mutation, name/value matching, and the closed Web IDL coercions
+  used upstream. It is WPT-runner evidence, not yet an application-facing
+  `URLSearchParams` class.
 - A conservative AOT staging pass now evaluates imported closed arrays and
   records, folds constant spread, and materializes rest values when their source
   is compile-time closed. The compatibility audit exposes constant versus
@@ -279,23 +281,23 @@ rtk python3 benchmarks/scripts/run_static.py --workload hono-basic --duration 1 
 
 ## Active slice
 
-The pinned complete Hono basic application milestone and the first direct WPT
-file are implemented. The next Web API tracer is the already-pinned complete
-`urlsearchparams-has.any.js`: promote it only after ordered append/delete,
-false assertions, argument coercion, and two-argument matching execute natively.
-Keep fixed-layout records separate from this bounded dynamic pair collection;
-do not infer generic `Map` or application `URLSearchParams` support from the WPT
-runner. Custom Hono `api.d.ts` overlays may narrow tested method surfaces but
-must remain type-only while the compiler executes pinned upstream runtime
-source. The next Test262 case should move from syntax intake to native execution
-only when its complete assertion program is implemented.
+The pinned complete Hono basic application milestone and two direct
+URLSearchParams WPT files are implemented. The next Web API tracer should add
+form URL decoding (`%HH`, UTF-8, and `+`) before the ordered pair collection can
+support dynamic application query inputs. Keep fixed-layout records separate
+from this bounded dynamic pair collection; do not infer generic `Map` or
+application `URLSearchParams` support from the WPT runner. Custom Hono
+`api.d.ts` overlays may narrow tested method surfaces but must remain type-only
+while the compiler executes pinned upstream runtime source. The next Test262
+case should move from syntax intake to native execution only when its complete
+assertion program is implemented.
 
 ## Resume point
 
 Read `README.md`, `doc/COMPATIBILITY.md`, and `doc/BACKLOG.md`. Run
 `npm run audit:hono-basic` for graph-level requirements, then evaluate
 `vendor/hono-examples/basic/src/index.ts` as the complete-source regression.
-Start with the pinned `urlsearchparams-has.any.js` requirements or the next
-complete native Test262 case, preserve upstream registration and middleware
-semantics, and run the verification commands recorded here before moving an
-item to verified.
+Start with form URL decoding for the native pair collection or the next complete
+native Test262 case, preserve upstream registration and middleware semantics,
+and run the verification commands recorded here before moving an item to
+verified.

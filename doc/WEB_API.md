@@ -16,7 +16,7 @@ The current boundary is:
 | `Response` | standard DOM declaration | bounded body writer, explicit status, optional HTML/text/JSON content-type IDs; closed `new Response(string or null, { status, headers })` AOT fast path |
 | `Headers` | standard DOM declaration | closed construction/cloning; bounded request-header borrowing and response-header storage with case-insensitive lookup/replacement |
 | `fetch` | standard DOM declaration | one closed URL string; request-time GET; `.status` only; Apple system libcurl transport |
-| `URL` / `URLSearchParams` | standard DOM declaration | native WPT-only ordered query-pair construction plus `get(name)`/`has(name)` for unescaped closed string inputs; application API pending |
+| `URL` / `URLSearchParams` | standard DOM declaration | native WPT-only bounded ordered pair construction, append/delete mutation, `get(name)`, and one-/two-argument `has`; application API pending |
 | body and stream types | standard DOM declaration | pending |
 | encoding types | standard DOM declaration | pending |
 
@@ -94,28 +94,27 @@ the same WPT revision. Only its status-propagation idea for the closed 201 case
 is marked native-derived. The wider status/statusText/default/SameObject cases
 in that file are not executed or claimed.
 
-The selected `url/urlsearchparams-has.any.js` source is also pinned by revision
-and digest. Its one-argument name-presence idea is marked native-derived for the
-query ABI helper: focused tests cover absent, bare, empty, valued, and exact-name
-matching. TinyTSX does not yet construct `URLSearchParams`, percent-decode query
-names, or implement the two-argument overload, append, and delete cases in that
-source.
+The complete pinned `url/urlsearchparams-get.any.js` and
+`url/urlsearchparams-has.any.js` sources are classified as `native`.
+`tinytsx wpt <case> --output <binary>` parses the untouched upstream JavaScript
+and lowers all six `test(...)` bodies and 33 assertions into typed sequential
+WPT HIR. Each callback receives fresh bounded storage for 64 ordered name/value
+pairs. Native operations construct, append, delete, retrieve, and test presence
+without a JavaScript runtime; reassignment resets the same callback-local slot.
 
-The complete pinned `url/urlsearchparams-get.any.js` source is the first WPT
-classified as `native`. `tinytsx wpt <case> --output <binary>` parses the
-untouched upstream JavaScript, lowers both `test(...)` bodies and all eleven
-assertions into typed WPT HIR, and emits a standalone Mach-O executable. The
-native query-pair view preserves source order, empty names and values, missing
-names, and first-value lookup for duplicate names. The allowlist-driven
-`test:wpt-native` command executes the binary and treats a failed assertion as
-a non-zero process result.
+The executed behavior includes source-order preservation, empty names and
+values, missing names, first-value lookup for duplicates, deletion by name or
+name/value pair, and Web IDL string conversion for the closed `null`, numeric,
+and `undefined` arguments in the upstream sources. An explicit `undefined`
+optional second argument is treated as omitted. The allowlist-driven
+`test:wpt-native` command builds both Mach-O executables and treats any failed
+assertion as a non-zero process result.
 
-This runner is semantic evidence for that complete source file, not yet the
-application-facing `URLSearchParams` class. It does not currently percent-decode
-names or values, translate `+`, mutate the pair list, coerce non-string method
-arguments, implement two-argument `has`/`delete`, or expose object identity and
-iteration. Those requirements remain necessary before the broader pinned
-`urlsearchparams-has.any.js` file can move from `native-derived` to `native`.
+This runner is semantic evidence for those two complete source files, not yet
+the application-facing `URLSearchParams` class. It does not currently
+percent-decode names or values, translate `+`, stringify the collection, accept
+dynamic inputs, or expose object identity and iteration. Application-generated
+Request/URL objects continue to use their separate borrowed query view.
 
 The pinned Hono `poweredBy()` middleware now executes symbolically from upstream
 source. Its post-handler `res.headers.set('X-Powered-By', 'Hono')` effect lowers

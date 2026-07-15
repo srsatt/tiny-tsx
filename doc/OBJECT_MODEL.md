@@ -37,6 +37,15 @@ Borrowed request state is modeled separately from both. For example,
 field and not a `Map` lookup. That distinction lets AOT code branch on presence
 without claiming that the query value was known during compilation.
 
+The WPT-only `URLSearchParams` representation is a third collection model. It
+owns a bounded ordered list of name/value views at native runtime, preserves
+duplicate names, and supports append plus selective deletion. Sequential WPT
+HIR operations mutate it after construction, so it is not a closed record. It
+also lacks the arbitrary key/value types and identity contract of a generic
+`Map`, and it is not yet connected to application Request or URL values. Keeping
+that boundary explicit prevents standards-test specialization from silently
+changing the compiler's object model.
+
 ## Declaration overlays
 
 An `api.d.ts` overlay may expose a narrower, compiler-supported type surface to

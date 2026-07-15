@@ -162,7 +162,7 @@ commit message.
       one-argument presence case to focused native query ABI evidence.
 - [x] Add an allowlist-driven native WPT compiler/runner and execute every
       assertion in the complete pinned `URLSearchParams.get()` source.
-- [ ] Promote the complete pinned `URLSearchParams.has()` source by adding
+- [x] Promote the complete pinned `URLSearchParams.has()` source by adding
       false assertions, ordered append/delete mutation, Web IDL string
       coercion, and the two-argument `has`/`delete` semantics it exercises.
 - [ ] Extend URL form decoding with percent escapes and `+` translation before
