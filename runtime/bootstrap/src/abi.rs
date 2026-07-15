@@ -13,6 +13,7 @@ pub const BAD_REQUEST: u32 = 2;
 pub const RENDER_ERROR: u32 = 3;
 pub const INTERNAL_ERROR: u32 = 4;
 pub const NOT_FOUND: u32 = 5;
+pub const APPLICATION_OVERLOAD: u32 = 6;
 
 pub const CONTENT_TYPE_NONE: u16 = 0;
 pub const CONTENT_TYPE_HTML: u16 = 1;
@@ -119,6 +120,8 @@ unsafe extern "C" {
     pub fn tinytsx_config_port() -> u16;
     pub fn tinytsx_config_workers() -> usize;
     pub fn tinytsx_config_request_memory() -> usize;
+    pub fn tinytsx_config_worker_modules() -> usize;
+    pub fn tinytsx_worker_operation(worker: usize) -> u32;
 }
 
 #[cfg(not(feature = "generated"))]
@@ -142,6 +145,108 @@ unsafe extern "C" fn tinytsx_config_workers() -> usize {
 #[cfg(not(feature = "generated"))]
 unsafe extern "C" fn tinytsx_config_request_memory() -> usize {
     262_144
+}
+
+#[cfg(not(feature = "generated"))]
+unsafe extern "C" fn tinytsx_config_worker_modules() -> usize {
+    0
+}
+
+#[cfg(not(feature = "generated"))]
+unsafe extern "C" fn tinytsx_worker_operation(_worker: usize) -> u32 {
+    0
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tinytsx_worker_call_static(
+    writer: *mut TinyResponseWriter,
+    worker: usize,
+    input: *const u8,
+    input_len: usize,
+) -> u32 {
+    if writer.is_null() || (input.is_null() && input_len != 0) {
+        return INTERNAL_ERROR;
+    }
+    // SAFETY: Generated static string data is valid for the duration of this call.
+    let input = unsafe { slice::from_raw_parts(input, input_len) };
+    write_worker_reply(writer, worker, input)
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tinytsx_worker_call_query(
+    writer: *mut TinyResponseWriter,
+    request: *const TinyRequest,
+    worker: usize,
+    expected: *const u8,
+    expected_len: usize,
+    fallback: *const u8,
+    fallback_len: usize,
+) -> u32 {
+    if writer.is_null()
+        || request.is_null()
+        || (expected.is_null() && expected_len != 0)
+        || (fallback.is_null() && fallback_len != 0)
+    {
+        return INTERNAL_ERROR;
+    }
+    // SAFETY: Generated code supplies valid request and static string views.
+    let query = unsafe { &(*request).query };
+    if query.ptr.is_null() && query.len != 0 {
+        return INTERNAL_ERROR;
+    }
+    // SAFETY: The request and generated string views remain valid synchronously.
+    let query = unsafe { slice::from_raw_parts(query.ptr, query.len) };
+    let expected = unsafe { slice::from_raw_parts(expected, expected_len) };
+    let mut input = None;
+    for part in query.split(|byte| *byte == b'&') {
+        let separator = part.iter().position(|byte| *byte == b'=');
+        let name = separator.map_or(part, |index| &part[..index]);
+        if !part.is_empty() && form_urlencoded_name_equals(name, expected) {
+            input = Some(decode_form_urlencoded(
+                separator.map_or(&[][..], |index| &part[index + 1..]),
+            ));
+            break;
+        }
+    }
+    let fallback = if fallback_len == 0 {
+        &[][..]
+    } else {
+        // SAFETY: The non-empty fallback pointer was checked above.
+        unsafe { slice::from_raw_parts(fallback, fallback_len) }
+    };
+    write_worker_reply(writer, worker, input.as_deref().unwrap_or(fallback))
+}
+
+fn decode_form_urlencoded(encoded: &[u8]) -> Vec<u8> {
+    let mut output = Vec::with_capacity(encoded.len());
+    let mut cursor = 0;
+    while cursor < encoded.len() {
+        if encoded[cursor] == b'+' {
+            output.push(b' ');
+            cursor += 1;
+        } else if let Some(byte) = percent_byte(encoded, cursor) {
+            output.push(byte);
+            cursor += 3;
+        } else {
+            output.push(encoded[cursor]);
+            cursor += 1;
+        }
+    }
+    output
+}
+
+fn write_worker_reply(writer: *mut TinyResponseWriter, worker: usize, input: &[u8]) -> u32 {
+    match crate::application::call(worker, input) {
+        Ok(output) => {
+            // SAFETY: The worker reply remains alive while it is copied into the request arena.
+            unsafe { tinytsx_html_write_static(writer, output.as_ptr(), output.len()) }
+        }
+        Err(status) => {
+            // SAFETY: The generated handler supplied this non-null writer.
+            unsafe { (*writer).status = status };
+            status
+        }
+    }
 }
 
 #[unsafe(no_mangle)]
@@ -1227,6 +1332,16 @@ pub fn configured_port() -> u16 {
 pub fn configured_workers() -> usize {
     // SAFETY: The generated object always provides the configuration functions.
     unsafe { tinytsx_config_workers() }
+}
+
+pub fn configured_worker_modules() -> usize {
+    // SAFETY: The generated object always provides the configuration functions.
+    unsafe { tinytsx_config_worker_modules() }
+}
+
+pub fn worker_operation(worker: usize) -> u32 {
+    // SAFETY: The generated object validates the worker id and returns zero when absent.
+    unsafe { tinytsx_worker_operation(worker) }
 }
 
 pub fn configured_request_memory() -> usize {

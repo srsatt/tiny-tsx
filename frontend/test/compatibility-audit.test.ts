@@ -79,6 +79,40 @@ test("preserves an awaited Worker request as a request-time response value", () 
   }]);
 });
 
+test("lowers a static Worker module and request into typed HIR", () => {
+  const entry = path.join(repository, "tests/compat/workers/hono-worker-smoke.ts");
+  const worker = path.join(repository, "tests/compat/workers/uppercase.worker.ts");
+
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+    apiAliases: {hono: path.join(repository, "tests/compat/hono/api.d.ts")},
+  });
+
+  assert.deepEqual(hir.workers, [{id: 0, module: worker, operation: "asciiUppercase"}]);
+  assert.deepEqual(hir.handlers[0]?.response, {
+    kind: "text",
+    value: {
+      kind: "concat",
+      values: [{
+        kind: "workerCall",
+        worker: 0,
+        input: {
+          kind: "queryParameter",
+          query: 0,
+          fallback: 1,
+          escapeHtml: false,
+          span: hir.handlers[0]?.span,
+        },
+        span: hir.handlers[0]?.span,
+      }],
+      span: hir.handlers[0]?.span,
+    },
+    contentType: "text/plain;charset=UTF-8",
+  });
+  assert.deepEqual(hir.staticStrings.map(value => value.value), ["input", "hello worker"]);
+});
+
 test("audits the pinned hono/tiny runtime graph", () => {
   const report = auditCompatibility(path.join(repository, "tests/compat/hono/smoke.ts"), {
     root: repository,

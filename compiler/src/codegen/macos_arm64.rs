@@ -29,12 +29,12 @@ pub fn emit(program: &Program, options: Options) -> Result<String, String> {
     }
 
     emit_handlers(&mut assembly, program)?;
-    emit_config(&mut assembly, options);
+    emit_config(&mut assembly, options, program);
     emit_static_data(&mut assembly, program)?;
     Ok(assembly)
 }
 
-fn emit_config(assembly: &mut String, options: Options) {
+fn emit_config(assembly: &mut String, options: Options, program: &Program) {
     writeln!(assembly, "\n.globl _tinytsx_config_port").unwrap();
     writeln!(assembly, "_tinytsx_config_port:").unwrap();
     emit_immediate(assembly, "x0", u64::from(options.port));
@@ -48,6 +48,22 @@ fn emit_config(assembly: &mut String, options: Options) {
     writeln!(assembly, "\n.globl _tinytsx_config_request_memory").unwrap();
     writeln!(assembly, "_tinytsx_config_request_memory:").unwrap();
     emit_immediate(assembly, "x0", options.request_memory as u64);
+    writeln!(assembly, "    ret").unwrap();
+
+    writeln!(assembly, "\n.globl _tinytsx_config_worker_modules").unwrap();
+    writeln!(assembly, "_tinytsx_config_worker_modules:").unwrap();
+    emit_immediate(assembly, "x0", program.workers.len() as u64);
+    writeln!(assembly, "    ret").unwrap();
+
+    writeln!(assembly, "\n.globl _tinytsx_worker_operation").unwrap();
+    writeln!(assembly, "_tinytsx_worker_operation:").unwrap();
+    emit_immediate(assembly, "x1", program.workers.len() as u64);
+    writeln!(assembly, "    cmp x0, x1").unwrap();
+    writeln!(assembly, "    b.hs Ltinytsx_worker_operation_invalid").unwrap();
+    emit_immediate(assembly, "x0", 1);
+    writeln!(assembly, "    ret").unwrap();
+    writeln!(assembly, "Ltinytsx_worker_operation_invalid:").unwrap();
+    writeln!(assembly, "    mov x0, #0").unwrap();
     writeln!(assembly, "    ret").unwrap();
 }
 
@@ -580,6 +596,52 @@ fn emit_handler_text_expression(
             )?;
             writeln!(assembly, "{end_label}:").unwrap();
         }
+        ValueExpression::WorkerCall { worker, input, .. } => match input.as_ref() {
+            ValueExpression::StringLiteral { string, .. } => {
+                writeln!(assembly, "    ldr x0, [sp, #16]").unwrap();
+                emit_immediate(assembly, "x1", *worker as u64);
+                writeln!(assembly, "    adrp x2, Ltinytsx_string_{string}@PAGE").unwrap();
+                writeln!(assembly, "    add x2, x2, Ltinytsx_string_{string}@PAGEOFF").unwrap();
+                emit_immediate(
+                    assembly,
+                    "x3",
+                    program.static_strings[*string].value.len() as u64,
+                );
+                writeln!(assembly, "    bl _tinytsx_worker_call_static").unwrap();
+            }
+            ValueExpression::QueryParameter {
+                query, fallback, ..
+            } => {
+                writeln!(assembly, "    ldr x0, [sp, #16]").unwrap();
+                writeln!(assembly, "    ldr x1, [sp, #24]").unwrap();
+                emit_immediate(assembly, "x2", *worker as u64);
+                writeln!(assembly, "    adrp x3, Ltinytsx_string_{query}@PAGE").unwrap();
+                writeln!(assembly, "    add x3, x3, Ltinytsx_string_{query}@PAGEOFF").unwrap();
+                emit_immediate(
+                    assembly,
+                    "x4",
+                    program.static_strings[*query].value.len() as u64,
+                );
+                if let Some(fallback) = fallback {
+                    writeln!(assembly, "    adrp x5, Ltinytsx_string_{fallback}@PAGE").unwrap();
+                    writeln!(
+                        assembly,
+                        "    add x5, x5, Ltinytsx_string_{fallback}@PAGEOFF"
+                    )
+                    .unwrap();
+                    emit_immediate(
+                        assembly,
+                        "x6",
+                        program.static_strings[*fallback].value.len() as u64,
+                    );
+                } else {
+                    writeln!(assembly, "    mov x5, #0").unwrap();
+                    writeln!(assembly, "    mov x6, #0").unwrap();
+                }
+                writeln!(assembly, "    bl _tinytsx_worker_call_query").unwrap();
+            }
+            _ => return Err("unsupported worker call input".to_owned()),
+        },
         _ => {
             emit_value_expression(assembly, expression, program, HANDLER_SCRATCH_BASE)?;
             writeln!(assembly, "    mov x2, x1").unwrap();
@@ -665,7 +727,8 @@ fn emit_value_expression(
         | ValueExpression::RequestHeader { .. }
         | ValueExpression::FetchStatus { .. }
         | ValueExpression::QueryParameter { .. }
-        | ValueExpression::QueryConditional { .. } => {
+        | ValueExpression::QueryConditional { .. }
+        | ValueExpression::WorkerCall { .. } => {
             return Err("request-time expression used outside a handler response".to_owned());
         }
     }
@@ -709,6 +772,7 @@ fn scratch_slots(expression: &ValueExpression) -> usize {
             when_absent,
             ..
         } => scratch_slots(when_present).max(scratch_slots(when_absent)),
+        ValueExpression::WorkerCall { input, .. } => scratch_slots(input),
         _ => 0,
     }
 }

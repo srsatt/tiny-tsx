@@ -22,6 +22,7 @@ import type {
   SourceSpan,
   StaticHeader,
   ValueExpression,
+  WorkerModule,
 } from "./hir.js";
 import {StringTable} from "./hir.js";
 import {lowerComponentBody} from "./jsx-lowering.js";
@@ -33,6 +34,7 @@ import type {
   ResponseBody,
   ResponseHeaderValue,
   RuntimeStringPart,
+  WorkerMessage,
 } from "./symbolic-value.js";
 
 export interface CompileOptions {
@@ -197,6 +199,7 @@ export function compileEntry(entryPath: string, options: CompileOptions): HirPro
     modules: graph.modules.map(module => ({path: module.path})),
     functions,
     components,
+    workers: [],
     handlers: [handler],
     staticStrings: strings.values,
     constants,
@@ -250,6 +253,7 @@ function lowerApplicationInitialization(
   const exportNode = sourceFile.statements.find(statement => ts.isExportAssignment(statement)) ?? sourceFile;
   const span = spanOf(exportNode, sourceFile);
   const strings = new StringTable();
+  const workers = new WorkerTable(graph);
   const handlers = emittedRoutes.map((route, index) => {
     const response = route.response!;
     const streamBody = typeof response.body !== "string"
@@ -262,7 +266,7 @@ function lowerApplicationInitialization(
         kind: "stream" as const,
         chunks: streamBody.chunks.map(chunk => typeof chunk === "string"
           ? {kind: "stringLiteral" as const, string: strings.intern(chunk), span}
-          : lowerRuntimeString(chunk, route.path, strings, span)),
+          : lowerRuntimeString(chunk, route.path, strings, workers, span)),
         ...(response.status === 200 ? {} : {status: response.status}),
         contentType: response.contentType as
           | ""
@@ -273,7 +277,7 @@ function lowerApplicationInitialization(
       }
       : {
         kind: "text" as const,
-        value: lowerResponseBody(response.body, route.path, strings, span),
+        value: lowerResponseBody(response.body, route.path, strings, workers, span),
         ...(response.status === 200 ? {} : {status: response.status}),
         contentType: response.contentType as
           | ""
@@ -285,10 +289,10 @@ function lowerApplicationInitialization(
     const responseHeaders = loweredHeaders[index]!;
     const basicAuthorization = response.basicAuthorization === undefined
       ? undefined
-      : lowerBasicAuthorization(response.basicAuthorization, route.path, strings, span);
+      : lowerBasicAuthorization(response.basicAuthorization, route.path, strings, workers, span);
     const entityTag = response.entityTag === undefined
       ? undefined
-      : lowerEntityTag(response.entityTag, route.path, strings, span);
+      : lowerEntityTag(response.entityTag, route.path, strings, workers, span);
     return {
       method: route.method as "GET" | "POST",
       path: route.path,
@@ -309,6 +313,7 @@ function lowerApplicationInitialization(
     modules: graph.modules.map(module => ({path: module.path})),
     functions: [],
     components: [],
+    workers: workers.values,
     handlers,
     staticStrings: strings.values,
     constants: [],
@@ -332,11 +337,12 @@ function lowerBasicAuthorization(
   authorization: EvaluatedBasicAuthorization,
   routePath: string,
   strings: StringTable,
+  workers: WorkerTable,
   span: SourceSpan,
 ): BasicAuthorization {
   return {
     credentials: authorization.credentials,
-    rejected: lowerGuardedResponse(authorization.rejected, routePath, strings, span),
+    rejected: lowerGuardedResponse(authorization.rejected, routePath, strings, workers, span),
   };
 }
 
@@ -344,11 +350,12 @@ function lowerEntityTag(
   entityTag: EvaluatedEntityTag,
   routePath: string,
   strings: StringTable,
+  workers: WorkerTable,
   span: SourceSpan,
 ): EntityTag {
   return {
     value: entityTag.value,
-    notModified: lowerGuardedResponse(entityTag.notModified, routePath, strings, span),
+    notModified: lowerGuardedResponse(entityTag.notModified, routePath, strings, workers, span),
   };
 }
 
@@ -356,6 +363,7 @@ function lowerGuardedResponse(
   response: EvaluatedResponse,
   routePath: string,
   strings: StringTable,
+  workers: WorkerTable,
   span: SourceSpan,
 ) {
   const headers = lowerResponseHeaders(response.headers);
@@ -369,7 +377,7 @@ function lowerGuardedResponse(
       : {stderr: response.stderr.map(line => strings.intern(line))}),
     response: {
       kind: "text" as const,
-      value: lowerResponseBody(response.body, routePath, strings, span),
+      value: lowerResponseBody(response.body, routePath, strings, workers, span),
       ...(response.status === 200 ? {} : {status: response.status}),
       contentType: response.contentType as
         | ""
@@ -456,13 +464,14 @@ function lowerResponseBody(
   body: ResponseBody,
   routePath: string,
   strings: StringTable,
+  workers: WorkerTable,
   span: SourceSpan,
 ): ValueExpression {
   if (typeof body === "string") {
     return {kind: "stringLiteral", string: strings.intern(body), span};
   }
   if (Array.isArray(body)) {
-    return lowerRuntimeString(body, routePath, strings, span);
+    return lowerRuntimeString(body, routePath, strings, workers, span);
   }
   if (body.kind === "stream") {
     throw new Error("stream body must lower through a stream response");
@@ -472,10 +481,10 @@ function lowerResponseBody(
     query: strings.intern(body.query),
     whenPresent: typeof body.whenPresent === "string"
       ? {kind: "stringLiteral", string: strings.intern(body.whenPresent), span}
-      : lowerRuntimeString(body.whenPresent, routePath, strings, span),
+      : lowerRuntimeString(body.whenPresent, routePath, strings, workers, span),
     whenAbsent: typeof body.whenAbsent === "string"
       ? {kind: "stringLiteral", string: strings.intern(body.whenAbsent), span}
-      : lowerRuntimeString(body.whenAbsent, routePath, strings, span),
+      : lowerRuntimeString(body.whenAbsent, routePath, strings, workers, span),
     span,
   };
 }
@@ -484,6 +493,7 @@ function lowerRuntimeString(
   parts: RuntimeStringPart[],
   routePath: string,
   strings: StringTable,
+  workers: WorkerTable,
   span: SourceSpan,
 ): ValueExpression {
   return {
@@ -511,7 +521,12 @@ function lowerRuntimeString(
         throw new Error("elapsed milliseconds are only lowerable in response headers");
       }
       if (part.kind === "workerCall") {
-        throw new Error("worker calls require a worker table before lowering");
+        return {
+          kind: "workerCall",
+          worker: workers.intern(part.module),
+          input: lowerWorkerMessage(part.input, strings, span),
+          span,
+        };
       }
       return {
         kind: "routeParameter",
@@ -532,6 +547,7 @@ function dynamicResponseExpressions(body: ResponseBody): number {
       || part.kind === "requestHeader"
       || part.kind === "fetchStatus"
       || part.kind === "queryParameter"
+      || part.kind === "workerCall"
     ).length;
   }
   if (body.kind === "stream") {
@@ -541,6 +557,78 @@ function dynamicResponseExpressions(body: ResponseBody): number {
   return 1
     + dynamicResponseExpressions(body.whenPresent)
     + dynamicResponseExpressions(body.whenAbsent);
+}
+
+function lowerWorkerMessage(
+  input: WorkerMessage,
+  strings: StringTable,
+  span: SourceSpan,
+): ValueExpression {
+  if (input.kind === "literal") {
+    return {kind: "stringLiteral", string: strings.intern(input.value), span};
+  }
+  return {
+    kind: "queryParameter",
+    query: strings.intern(input.name),
+    ...(input.fallback === undefined ? {} : {fallback: strings.intern(input.fallback)}),
+    escapeHtml: false,
+    span,
+  };
+}
+
+class WorkerTable {
+  readonly values: WorkerModule[] = [];
+  readonly #ids = new Map<string, number>();
+  readonly #modules: ReadonlyMap<string, ReturnType<typeof loadModuleGraph>["modules"][number]>;
+
+  constructor(graph: ReturnType<typeof loadModuleGraph>) {
+    this.#modules = new Map(graph.modules.map(module => [module.path, module]));
+  }
+
+  intern(modulePath: string): number {
+    const existing = this.#ids.get(modulePath);
+    if (existing !== undefined) return existing;
+    const module = this.#modules.get(modulePath);
+    if (module === undefined) {
+      throw new Error(`worker module is absent from the runtime graph: ${modulePath}`);
+    }
+    validateAsciiUppercaseWorker(module.sourceFile);
+    const id = this.values.length;
+    this.values.push({id, module: modulePath, operation: "asciiUppercase"});
+    this.#ids.set(modulePath, id);
+    return id;
+  }
+}
+
+function validateAsciiUppercaseWorker(sourceFile: ts.SourceFile): void {
+  const declaration = sourceFile.statements.find((statement): statement is ts.FunctionDeclaration =>
+    ts.isFunctionDeclaration(statement)
+    && statement.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.DefaultKeyword) === true
+  );
+  const parameter = declaration?.parameters[0];
+  const returned = declaration?.body?.statements.length === 1
+    && ts.isReturnStatement(declaration.body.statements[0]!)
+    ? declaration.body.statements[0]!.expression
+    : undefined;
+  if (
+    declaration === undefined
+    || declaration.parameters.length !== 1
+    || parameter === undefined
+    || !ts.isIdentifier(parameter.name)
+    || returned === undefined
+    || !ts.isCallExpression(returned)
+    || returned.arguments.length !== 0
+    || !ts.isPropertyAccessExpression(returned.expression)
+    || returned.expression.name.text !== "toUpperCase"
+    || !ts.isIdentifier(returned.expression.expression)
+    || returned.expression.expression.text !== parameter.name.text
+  ) {
+    throw tinyError(
+      "TINY1500",
+      "worker module must default-export one (input: string) => input.toUpperCase() function",
+      declaration ?? sourceFile,
+    );
+  }
 }
 
 function routeParameterSegment(pattern: string, name: string): number {

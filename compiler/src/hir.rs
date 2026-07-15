@@ -11,6 +11,8 @@ pub struct Program {
     #[serde(default)]
     pub functions: Vec<Function>,
     pub components: Vec<Component>,
+    #[serde(default)]
+    pub workers: Vec<WorkerModule>,
     pub handlers: Vec<Handler>,
     pub static_strings: Vec<StaticString>,
     #[serde(default)]
@@ -29,6 +31,19 @@ pub struct Component {
     pub name: String,
     pub span: SourceSpan,
     pub html: Vec<HtmlOp>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct WorkerModule {
+    pub id: usize,
+    pub module: String,
+    pub operation: WorkerOperation,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum WorkerOperation {
+    AsciiUppercase,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -190,6 +205,11 @@ pub enum ValueExpression {
         when_present: Box<ValueExpression>,
         #[serde(rename = "whenAbsent")]
         when_absent: Box<ValueExpression>,
+        span: SourceSpan,
+    },
+    WorkerCall {
+        worker: usize,
+        input: Box<ValueExpression>,
         span: SourceSpan,
     },
 }
@@ -362,6 +382,14 @@ impl Program {
             .iter()
             .map(|module| module.path.as_str())
             .collect();
+        for (index, worker) in self.workers.iter().enumerate() {
+            if worker.id != index {
+                return Err(format!("worker id {} is not canonical", worker.id));
+            }
+            if !modules.contains(worker.module.as_str()) {
+                return Err(format!("worker {index} references a missing module"));
+            }
+        }
         for (index, constant) in self.constants.iter().enumerate() {
             if constant.id != index {
                 return Err(format!("constant id {} is not canonical", constant.id));
@@ -430,7 +458,8 @@ impl Program {
             | ValueExpression::RequestHeader { .. }
             | ValueExpression::FetchStatus { .. }
             | ValueExpression::QueryParameter { .. }
-            | ValueExpression::QueryConditional { .. } => {
+            | ValueExpression::QueryConditional { .. }
+            | ValueExpression::WorkerCall { .. } => {
                 return Err(
                     "request-time expressions are only valid in handler responses".to_owned(),
                 );
@@ -590,6 +619,20 @@ impl Program {
                 self.validate_handler_expression(when_present, route_pattern)?;
                 self.validate_handler_expression(when_absent, route_pattern)
             }
+            ValueExpression::WorkerCall { worker, input, .. } => {
+                if *worker >= self.workers.len() {
+                    return Err("worker call references a missing worker".to_owned());
+                }
+                if !matches!(
+                    input.as_ref(),
+                    ValueExpression::StringLiteral { .. } | ValueExpression::QueryParameter { .. }
+                ) {
+                    return Err(
+                        "worker call input must be a string literal or query parameter".to_owned(),
+                    );
+                }
+                self.validate_handler_expression(input, route_pattern)
+            }
             _ => self.validate_expression(expression, 0),
         }
     }
@@ -641,6 +684,9 @@ impl Program {
             } => {
                 self.visit_expression_functions(when_present, state)?;
                 self.visit_expression_functions(when_absent, state)?;
+            }
+            ValueExpression::WorkerCall { input, .. } => {
+                self.visit_expression_functions(input, state)?;
             }
             _ => {}
         }

@@ -5,8 +5,8 @@ use std::{
 };
 
 use crate::abi::{
-    BAD_REQUEST, CONTENT_TYPE_TEXT, INTERNAL_ERROR, NOT_FOUND, OK, RENDER_ERROR, REQUEST_OOM,
-    RequestArena, render, request_with_headers,
+    APPLICATION_OVERLOAD, BAD_REQUEST, CONTENT_TYPE_TEXT, INTERNAL_ERROR, NOT_FOUND, OK,
+    RENDER_ERROR, REQUEST_OOM, RequestArena, render, request_with_headers,
 };
 
 use super::{
@@ -92,6 +92,17 @@ pub(super) fn handle_connection(
                     503,
                     CONTENT_TYPE_TEXT,
                     b"request memory exhausted",
+                    &[],
+                    connection,
+                )
+            }
+            APPLICATION_OVERLOAD => {
+                connection = ConnectionDirective::Close;
+                write_response(
+                    stream,
+                    503,
+                    CONTENT_TYPE_TEXT,
+                    b"application worker overloaded",
                     &[],
                     connection,
                 )

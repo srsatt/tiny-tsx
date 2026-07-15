@@ -53,6 +53,12 @@ export interface Component {
   html: HtmlOp[];
 }
 
+export interface WorkerModule {
+  id: number;
+  module: string;
+  operation: "asciiUppercase";
+}
+
 export type ValueExpression =
   | {
       kind: "stringLiteral";
@@ -108,6 +114,12 @@ export type ValueExpression =
       query: number;
       whenPresent: ValueExpression;
       whenAbsent: ValueExpression;
+      span: SourceSpan;
+    }
+  | {
+      kind: "workerCall";
+      worker: number;
+      input: ValueExpression;
       span: SourceSpan;
     };
 
@@ -203,6 +215,7 @@ export interface HirProgram {
   modules: Array<{ path: string }>;
   functions: HirFunction[];
   components: Component[];
+  workers: WorkerModule[];
   handlers: Handler[];
   staticStrings: StaticString[];
   constants: Constant[];
