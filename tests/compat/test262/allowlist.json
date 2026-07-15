@@ -38,7 +38,7 @@
     {
       "path": "test/language/expressions/typeof/bigint.js",
       "feature": "bigint-primitive",
-      "mode": "syntax"
+      "mode": "native"
     },
     {
       "path": "test/language/module-code/instn-local-bndng-fun.js",

@@ -105,15 +105,40 @@ function lowerSameValueAssertion(
 
 function stringValue(expression: ts.Expression, sourceFile: ts.SourceFile): string {
   if (ts.isTypeOfExpression(expression)) {
-    const operand = expression.expression;
-    if (
-      (ts.isIdentifier(operand) && operand.text === "undefined")
-      || (ts.isVoidExpression(operand) && ts.isNumericLiteral(operand.expression))
-    ) {
-      return "undefined";
-    }
+    const kind = closedValueKind(expression.expression);
+    if (kind !== undefined) return kind;
   }
   return stringLiteral(expression, "assert.sameValue actual value", sourceFile);
+}
+
+function closedValueKind(expression: ts.Expression): string | undefined {
+  if (ts.isIdentifier(expression) && expression.text === "undefined") {
+    return "undefined";
+  }
+  if (ts.isVoidExpression(expression) && ts.isNumericLiteral(expression.expression)) {
+    return "undefined";
+  }
+  if (ts.isBigIntLiteral(expression)) {
+    return "bigint";
+  }
+  if (ts.isNumericLiteral(expression)) {
+    return "number";
+  }
+  if (
+    ts.isCallExpression(expression)
+    && ts.isIdentifier(expression.expression)
+    && expression.arguments.length === 1
+  ) {
+    const argument = expression.arguments[0]!;
+    if (expression.expression.text === "BigInt") {
+      const kind = closedValueKind(argument);
+      return kind === "bigint" || kind === "number" ? "bigint" : undefined;
+    }
+    if (expression.expression.text === "Object") {
+      return closedValueKind(argument) === undefined ? undefined : "object";
+    }
+  }
+  return undefined;
 }
 
 function stringLiteral(
