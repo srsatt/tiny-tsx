@@ -398,7 +398,7 @@ fn preserves_hono_error_and_middleware_order_for_rejected_basic_auth() {
             status: 500,
             path: "/auth/test",
             body: "Custom Error Message",
-            content_type: Some("text/plain;charset=UTF-8"),
+            content_type: Some("text/plain; charset=UTF-8"),
             headers: &[("X-Powered-By", "Hono")],
             millisecond_headers: &[],
             request_headers: &[],
