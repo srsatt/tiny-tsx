@@ -245,6 +245,43 @@ test("lowers a Hono named parameter into a request-time text expression", () => 
   assert.equal(hir.statistics.dynamicHtmlExpressions, 1);
 });
 
+test("mounts a nested Hono application through upstream route semantics", () => {
+  const entry = path.join(repository, "tests/compat/hono/nested-route-smoke.ts");
+  const graph = loadModuleGraph(entry, {
+    aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+  });
+  const application = analyzeApplicationEntry(graph.modules[0]!.sourceFile);
+  assert.ok(application);
+
+  const result = evaluateApplicationInitialization(graph, application);
+
+  assert.deepEqual(result?.issues, []);
+  assert.deepEqual(result?.routes.map(route => ({
+    method: route.method,
+    path: route.path,
+    basePath: route.basePath,
+    body: route.response?.body,
+  })), [
+    {method: "GET", path: "/book", basePath: "/book", body: "List Books"},
+    {
+      method: "GET",
+      path: "/book/:id",
+      basePath: "/book",
+      body: [
+        {kind: "literal", value: "Get Book: "},
+        {kind: "routeParameter", name: "id"},
+      ],
+    },
+  ]);
+
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+    apiAliases: {hono: path.join(repository, "tests/compat/hono/api.d.ts")},
+  });
+  assert.deepEqual(hir.handlers.map(handler => handler.path), ["/book", "/book/:id"]);
+});
+
 test("lowers closed Response init headers from a Hono route", () => {
   const entry = path.join(repository, "tests/compat/hono/response-headers-smoke.ts");
   const hir = compileEntry(entry, {

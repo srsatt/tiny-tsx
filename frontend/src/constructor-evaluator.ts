@@ -152,6 +152,22 @@ function executeApplicationCalls(
   }
   const environment = new Map<string, Value>([[application.binding, instance]]);
   for (const statement of entry.sourceFile.statements) {
+    if (ts.isVariableStatement(statement)) {
+      for (const declaration of statement.declarationList.declarations) {
+        if (
+          !ts.isIdentifier(declaration.name)
+          || declaration.name.text === application.binding
+          || declaration.initializer === undefined
+        ) {
+          continue;
+        }
+        environment.set(
+          declaration.name.text,
+          evaluate(evaluator, declaration.initializer, entry, environment, instance),
+        );
+      }
+      continue;
+    }
     if (!ts.isExpressionStatement(statement) || !ts.isCallExpression(statement.expression)) {
       continue;
     }
@@ -159,19 +175,34 @@ function executeApplicationCalls(
     if (
       !ts.isPropertyAccessExpression(call.expression)
       || !ts.isIdentifier(call.expression.expression)
-      || call.expression.expression.text !== application.binding
     ) {
       continue;
     }
-    const callable = instance.fields.get(call.expression.name.text);
-    const arguments_ = call.arguments.map(argument =>
-      evaluate(evaluator, argument, entry, environment, instance)
-    );
-    if (callable?.kind !== "closure") {
-      issue(evaluator, call.expression, entry, "application method is not an installed closure");
+    const receiver = environment.get(call.expression.expression.text);
+    if (receiver?.kind !== "instance") {
       continue;
     }
-    invokeClosure(evaluator, callable, arguments_, instance);
+    const callable = receiver.fields.get(call.expression.name.text);
+    const arguments_ = call.arguments.map(argument =>
+      evaluate(evaluator, argument, entry, environment, receiver)
+    );
+    if (callable?.kind === "closure") {
+      invokeClosure(evaluator, callable, arguments_, receiver);
+      continue;
+    }
+    const method = findInstanceMethod(evaluator, call.expression.name.text);
+    if (method !== undefined) {
+      invokeFunctionLike(
+        evaluator,
+        method.declaration,
+        method.module,
+        new Map(),
+        arguments_,
+        receiver,
+      );
+      continue;
+    }
+    issue(evaluator, call.expression, entry, "application method is not an installed closure");
   }
 }
 
@@ -533,7 +564,7 @@ function executeForEach(
 ): boolean {
   if (
     !ts.isPropertyAccessExpression(call.expression)
-    || call.expression.name.text !== "forEach"
+    || !["forEach", "map"].includes(call.expression.name.text)
     || call.arguments.length < 1
   ) {
     return false;
@@ -543,20 +574,15 @@ function executeForEach(
   if (values.kind !== "array" || (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback))) {
     return false;
   }
-  const parameter = callback.parameters[0];
-  if (parameter === undefined || !ts.isIdentifier(parameter.name)) {
-    return false;
-  }
   for (const value of values.items) {
-    const callbackEnvironment = new Map(environment);
-    callbackEnvironment.set(parameter.name.text, value);
-    if (ts.isBlock(callback.body)) {
-      for (const statement of callback.body.statements) {
-        executeStatement(evaluator, statement, module, callbackEnvironment, instance);
-      }
-    } else {
-      evaluate(evaluator, callback.body, module, callbackEnvironment, instance);
-    }
+    invokeFunctionLike(
+      evaluator,
+      callback,
+      module,
+      new Map(environment),
+      [value],
+      instance,
+    );
   }
   return true;
 }
@@ -637,7 +663,7 @@ function executeEffectCall(
         method.module,
         new Map(),
         arguments_,
-        instance,
+        receiver,
       );
       return true;
     }
@@ -701,6 +727,17 @@ function evaluateCall(
       const callable = receiver.fields.get(name);
       if (callable?.kind === "closure") {
         return invokeClosure(evaluator, callable, arguments_, receiver);
+      }
+      const method = findInstanceMethod(evaluator, name);
+      if (method !== undefined) {
+        return invokeFunctionLike(
+          evaluator,
+          method.declaration,
+          method.module,
+          new Map(),
+          arguments_,
+          receiver,
+        );
       }
     }
     if (receiver.kind === "string") {
@@ -916,6 +953,19 @@ function evaluate(
         headers: responseHeaders(evaluator, expression, module, environment, instance),
       };
     }
+    const resolved = resolveRuntimeClass(module, expression.expression.text, evaluator.modules);
+    if (resolved !== undefined && isApplicationRuntimeClass(evaluator, resolved)) {
+      const value: Value & {kind: "instance"} = {kind: "instance", fields: new Map()};
+      executeClass(
+        evaluator,
+        resolved,
+        (expression.arguments ?? []).map(argument =>
+          evaluate(evaluator, argument, module, environment, instance)
+        ),
+        value,
+      );
+      return value;
+    }
     return {kind: "constructed", name: expression.expression.text, module: module.path};
   }
   if (
@@ -967,6 +1017,17 @@ function routeParameterNames(pattern: string): string[] {
   return pattern.split("/").flatMap(segment =>
     segment.startsWith(":") && segment.length > 1 ? [segment.slice(1)] : []
   );
+}
+
+function isApplicationRuntimeClass(evaluator: Evaluator, candidate: ResolvedRuntimeClass): boolean {
+  let current: ResolvedRuntimeClass | undefined = evaluator.root;
+  while (current !== undefined) {
+    if (current.declaration === candidate.declaration && current.module.path === candidate.module.path) {
+      return true;
+    }
+    current = resolveBaseRuntimeClass(current, evaluator.modules);
+  }
+  return false;
 }
 
 function responseStatus(

@@ -108,6 +108,9 @@ export function valuesEqual(left: Value, right: Value): boolean {
     case "number": return right.kind === "number" && left.value === right.value;
     case "bigint": return right.kind === "bigint" && left.value === right.value;
     case "string": return right.kind === "string" && left.value === right.value;
+    case "reference": return right.kind === "reference"
+      && left.name === right.name
+      && left.module === right.module;
     default: return left === right;
   }
 }
