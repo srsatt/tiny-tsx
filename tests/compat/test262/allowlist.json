@@ -44,6 +44,16 @@
       "path": "test/language/module-code/instn-local-bndng-fun.js",
       "feature": "function-declaration-direct-call",
       "mode": "syntax"
+    },
+    {
+      "path": "test/language/statements/throw/S12.13_A1.js",
+      "feature": "throw-completion",
+      "mode": "syntax"
+    },
+    {
+      "path": "test/built-ins/Error/message_property.js",
+      "feature": "error-message",
+      "mode": "syntax"
     }
   ]
 }
