@@ -193,6 +193,31 @@ HTTP/1.1 chunks; Bun 1.3.13 collects the immediately completed stream and emits
 `Content-Length: 19`. Body bytes and semantic headers still match. Raw reports
 are `2026-07-15-m5-max-hono-{dynamic-jsx,stream-text}-keepalive-w8.{json,md}`.
 
+## Logical Worker request/reply preview
+
+The first Worker workload uses one persistent logical Worker on each target.
+TinyTSX copies a decoded query message through its separate bounded application
+pool; Bun uses a real module Worker plus `postMessage`, a pending-Promise map,
+and the same pinned Hono route semantics.
+
+| Metric | TinyTSX | Bun |
+| --- | ---: | ---: |
+| Startup median | 7.22 ms | 19.78 ms |
+| Idle RSS | 6.22 MiB | 43.97 MiB |
+| Warm RSS | 6.48 MiB | 111.45 MiB |
+| RPS c1 | 19,376 | 20,814 |
+| RPS c8 | 64,650 | 87,189 |
+| RPS c32 | 72,518 | 96,883 |
+| RPS c64 | 73,085 | 95,665 |
+| p99 c64 | 36.381 ms | 1.452 ms |
+
+TinyTSX retains its startup and footprint advantage but reaches 0.74–0.76x
+Bun throughput from concurrency 8–64. This route deliberately serializes
+through one logical worker, so it measures message-copy/request-reply overhead,
+not application-worker parallel scaling. The c32/c64 tail again includes the
+known blocking HTTP connection-affinity policy. Raw evidence is retained in
+`benchmarks/results/2026-07-15-m5-max-hono-worker-keepalive-w8.{json,md}`.
+
 ## Roadmap
 
 ### P0 — make the comparison semantically and mechanically fair

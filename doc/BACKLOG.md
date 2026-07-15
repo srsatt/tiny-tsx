@@ -56,8 +56,12 @@ commit message.
 - [x] Add bounded logical-worker mailboxes with per-worker state, request/reply
       ownership, parallel workers, termination, panic recovery, and draining
       shutdown tests to the zero-dependency runtime library.
-- [ ] Connect that application pool to the bootstrap ABI and lower the first
+- [x] Connect that application pool to the bootstrap ABI and lower the first
       compile-time-known TypeScript `Worker` module.
+- [x] Benchmark one persistent logical string worker against a real Bun Worker,
+      including startup, RSS, request/reply throughput, and latency.
+- [ ] Add `postMessage`/message events, source-level termination, general
+      message shapes, and a multi-Worker load-balancing example.
 - [ ] Pin an exact AI SDK Core revision and run the Hono-style syntax/type/source
       intake against `ai`, `@ai-sdk/provider`, `@ai-sdk/provider-utils`, its
       gateway dependency, and the selected schema dependency.

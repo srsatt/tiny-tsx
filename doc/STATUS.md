@@ -352,7 +352,20 @@ produces and serves a native Mach-O executable from the example TSX source.
   the native executor pool. Tests prove per-worker FIFO ordering and isolated
   state, parallel execution across logical workers, returned ownership on
   overload, queued-message cancellation on termination, panic recovery, and
-  draining shutdown. Bootstrap/ABI and TypeScript syntax integration remain.
+  draining shutdown.
+- A compile-time-known `new Worker(new URL(...), {type: 'module'})` now lowers
+  through typed HIR into a separate bounded application pool. The first
+  `await worker.request(string)` subset compiles a default
+  `input.toUpperCase()` worker, copies messages across the pool boundary, caps
+  them at 4 KiB, and reports application saturation as HTTP 503. Native Hono
+  E2E covers fallback, `+`, and percent-decoded messages with two application
+  executors. Build reports distinguish HTTP executors, application executors,
+  and logical workers.
+- The one-logical-worker Bun comparison records 7.22 ms startup and 6.48 MiB
+  warm RSS for TinyTSX versus 19.78 ms and 111.45 MiB for Bun. TinyTSX reaches
+  0.74–0.76x Bun throughput at concurrency 8–64; c64 p99 is 36.38 ms versus
+  1.45 ms. This measures copied request/reply overhead and the existing HTTP
+  connection-affinity tail, not parallelism across several logical workers.
 
 Verification:
 
@@ -391,18 +404,17 @@ rtk npm run benchmark:hono-jsx-ssr
 
 ## Active slice
 
-The reusable native worker pool now drives bounded keep-alive HTTP with per-worker
-arenas and wire-level concurrency, isolation, overload, OOM, recovery, and
-1/2/4/8 scaling evidence. Request-time JSX and finite Hono text streaming now
-have Bun/native equivalence. The active slice is their benchmark comparison;
-connection fairness remains a measured optimization target. Keep fixed-layout
-records separate from dynamic `Map`.
+The first TypeScript Worker request/reply path is complete through Hono, native
+code, a separate application pool, and a Bun comparison. The active slice is
+pinning the exact AI SDK Core source/dependency graph and running the same
+aggregate intake used for Hono. Connection fairness remains a measured
+optimization target. Keep fixed-layout records separate from dynamic `Map`.
 
 ## Resume point
 
 Read `doc/WORKERS.md`, `doc/PERFORMANCE.md`, and `doc/BACKLOG.md`. Run
 `rtk cargo test -p tinytsx-runtime-worker` and
-`rtk cargo test -p tinytsx worker_pool_serves_in_parallel_and_recovers_after_saturation`.
-Add dynamic JSX and finite streaming workloads to the Bun/TinyTSX benchmark
-harness, then run startup, RSS, response, and load comparisons. Use that result
-before starting Worker syntax sugar and AI SDK intake.
+`rtk cargo test -p tinytsx --test e2e builds_and_serves_hono_through_a_separate_application_worker_pool`.
+Then pin the AI SDK revision recorded in `doc/AI_COMPATIBILITY.md`, preserve its
+workspace dependencies, and run a source/type/capability intake before changing
+the compiler for `generateText`.

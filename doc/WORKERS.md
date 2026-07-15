@@ -74,30 +74,38 @@ request OOM/internal failure, 100 completed requests, or five idle seconds.
 
 ## JavaScript-facing Worker subset
 
-The intended source API follows the useful part of the Web/Node/Deno model:
+The first source API keeps the Web/Node/Deno construction shape and adds one
+TinyTSX request/reply convenience method:
 
 ```ts
 const worker = new Worker(new URL('./worker.ts', import.meta.url), {
   type: 'module',
 })
 
-worker.postMessage({ kind: 'score', input })
-worker.onmessage = (event) => consume(event.data)
-worker.terminate()
+const output = await worker.request(input)
 ```
 
-The first subset is deliberately explicit:
+This slice is implemented end to end. The compiler discovers the worker as a
+runtime source dependency without creating an import binding, preserves the
+awaited call in HIR, and submits an owned message to a separate application
+pool. The bootstrap uses the HTTP `--workers` count for that pool's executor
+count, but creates one logical worker per source `Worker` object/module.
+
+The implemented subset is deliberately explicit:
 
 - the module URL and `type: 'module'` are compile-time known;
-- messages contain supported primitives, closed records, and bounded dense
-  arrays;
-- `postMessage` copies a message into the receiver's ownership domain;
-- delivery is asynchronous and ordered per sender/receiver pair;
-- `terminate()` cancels queued logical-worker work and drops its isolated
-  state after any currently executing job reaches a compiler safepoint;
+- the module default-exports `(input: string) => input.toUpperCase()`;
+- the native operation performs ASCII uppercase and preserves other bytes;
+- `request()` accepts one literal or request-query string with a closed
+  fallback and copies at most 4 KiB into the receiver's ownership domain;
+- delivery is ordered through a 64-message mailbox and replies copy into the
+  caller's request arena;
+- application queue/mailbox saturation returns HTTP 503 and closes the
+  connection;
 - object identity never crosses a worker boundary;
-- `SharedArrayBuffer`, shared mutable objects, transfer lists, ports, dynamic
-  module URLs, and synchronous receive are initially unsupported.
+- `postMessage`/events, `terminate()`, structured clone, records, arrays,
+  transfer lists, ports, dynamic module URLs, and general worker functions are
+  not yet source-level features.
 
 This is syntax sugar over the reusable pool and mailbox runtime. It is not a
 second JavaScript engine and it is not a one-thread-per-`Worker` design.
@@ -118,9 +126,10 @@ independent instances when application workers arrive:
 A later scheduler may unify them only after it proves progress under nested
 submission. No mutable application object is shared across logical workers.
 
-The logical application-pool library is implemented and tested independently.
-Bootstrap/ABI and TypeScript `Worker` lowering are the remaining integration
-steps; HTTP binaries still instantiate only the connection pool.
+The logical application-pool library and first bootstrap/compiler integration
+are implemented. Native Hono E2E covers missing, encoded, and explicit query
+messages through two independent executor pools. General messaging and several
+logical workers in one compiled application are the next semantics slice.
 
 ## Verification gates
 
