@@ -500,7 +500,7 @@ fn base64_matches_credentials(encoded: &[u8], username: &[u8], password: &[u8]) 
     if encoded[..core_len].contains(&b'=')
         || core_len % 4 == 1
         || (padding != 0
-            && (encoded.len() % 4 != 0
+            && (!encoded.len().is_multiple_of(4)
                 || (padding == 1 && core_len % 4 != 3)
                 || (padding == 2 && core_len % 4 != 2)))
     {
