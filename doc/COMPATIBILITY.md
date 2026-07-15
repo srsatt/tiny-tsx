@@ -139,6 +139,13 @@ registered routes. Native dispatch emits ordered GET and POST `/*` fallbacks,
 preserving the custom 404 status/body. Default Hono fallback synthesis remains
 separate from explicit application behavior.
 
+When source explicitly installs `onError()`, a closed thrown `Error` is carried
+as abrupt completion into that upstream closure. Closed Error stringification
+feeds `console.error`, HIR records the request-time stderr line, and native code
+logs it before returning the custom 500 response. This admits only exceptions
+fully consumed during application specialization; standalone throw and all
+try/catch syntax remain rejected.
+
 ### Type-only API overlay
 
 The compiling frontend accepts `--api <specifier>=<api.d.ts>` independently of

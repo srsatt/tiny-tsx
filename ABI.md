@@ -77,6 +77,11 @@ extern "C" fn tinytsx_html_write_static(
     len: usize,
 ) -> u32;
 
+extern "C" fn tinytsx_console_error_static(
+    bytes: *const u8,
+    len: usize,
+) -> u32;
+
 extern "C" fn tinytsx_request_path_matches(
     request: *const TinyRequest,
     pattern: *const u8,
@@ -120,6 +125,10 @@ extern "C" fn tinytsx_response_header_static(
 `tinytsx_html_write_static` retains its v1 symbol name, but the operation is a
 content-neutral byte append. It appends all bytes or appends none. Later escaped
 writer helpers use the same status convention.
+
+`tinytsx_console_error_static` writes one immutable UTF-8 line to stderr. It is
+currently used for closed `console.error` effects retained by a staged Hono
+error handler.
 
 `tinytsx_request_path_matches` currently accepts literal segments, non-empty
 named segments written as `:name`, and a terminal `*`. The terminal wildcard

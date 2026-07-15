@@ -122,6 +122,8 @@ commit message.
       post-`next()` response header.
 - [x] Lower an explicitly installed Hono `notFound()` handler into ordered GET
       and POST native fallback dispatch.
+- [x] Route a closed thrown `Error` through an explicitly installed Hono
+      `onError()` handler, including native `console.error` output.
 - [ ] Compile the remaining basic-example middleware, including `basicAuth`,
       `etag`, and the runtime response-time header.
 - [ ] Compile the required rest/spread operations.
@@ -140,6 +142,8 @@ commit message.
 - [ ] Execute selected Web Platform Tests through the native compiler/runtime;
       declaration-level and derived testing are not conformance.
 - [ ] Add exceptions, Promise, async/await, and a bounded native task executor.
+- [x] Add the pinned Test262 throw-statement and Error-message cases to the
+      syntax allowlist; native Test262 execution remains pending.
 - [x] Admit async/await handlers when application initialization fully stages
       them without creating a native Promise or suspended task.
 - [x] Reproduce the pinned basic example's selected root-route status and

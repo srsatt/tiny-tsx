@@ -25,6 +25,7 @@
   "requestHeaderSmokeEntry": "tests/compat/hono/request-header-smoke.ts",
   "customMiddlewareSmokeEntry": "tests/compat/hono/custom-middleware-smoke.ts",
   "notFoundSmokeEntry": "tests/compat/hono/not-found-smoke.ts",
+  "errorHandlerSmokeEntry": "tests/compat/hono/error-handler-smoke.ts",
   "basicSource": "https://github.com/honojs/examples/tree/main/basic",
   "behaviorContracts": {
     "textResponse": {

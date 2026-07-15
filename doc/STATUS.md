@@ -76,10 +76,10 @@ produces and serves a native Mach-O executable from the example TSX source.
   route-path test proves the overlay participates in TypeScript checking.
 - Relative ESM components now compile through multi-module HIR into the native
   server; a second real HTTP E2E test verifies the imported component output.
-- Test262 intake validates the pin, provenance metadata, and parsing of eight
-  allowlisted class, loop, RegExp, async, array-spread, primitive, and function
-  cases. These are explicitly syntax-only and are not semantic conformance
-  results.
+- Test262 intake validates the pin, provenance metadata, and parsing of ten
+  allowlisted class, loop, RegExp, async, array-spread, primitive, function,
+  throw, and Error cases. These are explicitly syntax-only and are not semantic
+  conformance results.
 - The dedicated native API suite currently covers Request method/path/query
   views and exact-fit, OOM, and invalid response-writer behavior.
 - A conservative AOT staging pass now evaluates imported closed arrays and
@@ -190,6 +190,14 @@ produces and serves a native Mach-O executable from the example TSX source.
 - Unknown property access is now conservative rather than becoming
   `undefined`. The external-fetch route is correctly left unresolved instead
   of being miscompiled as static text.
+- Closed throw completion now reaches an explicitly installed upstream
+  `onError()` closure. The basic `/error` route serves `Custom Error Message`
+  with status 500 and logs `Error: Error has occurred` to native stderr per
+  request. The complete trace now has 19 diagnostics; general try/catch and
+  runtime exceptions remain unsupported.
+- The pinned Test262 syntax allowlist now includes its throw sanity case and
+  Error message-property case. These are intake provenance, not native Test262
+  execution claims.
 - Async/await entry handlers are accepted only when application initialization
   fully stages them. Native Promise/suspension semantics remain unimplemented.
 - Static `Response` headers lower into a bounded eight-entry native writer with

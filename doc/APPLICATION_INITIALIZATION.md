@@ -139,6 +139,12 @@ with matching global middleware and lowers the result as final GET/POST
 fallback dispatch. This is derived from Hono state rather than a compiler-owned
 replacement router.
 
+An explicit `onError()` call similarly installs the upstream application error
+closure. A closed throw from a route transfers control to that closure, records
+its `console.error` effect, and lowers its response. Generated dispatch repeats
+the log and 500 response on every matching request; the exception is not erased
+at compile time.
+
 Async/await syntax is admitted only inside constructed-application handlers
 that the initialization evaluator consumes completely. This does not introduce
 native Promise objects, suspension, or a task executor.
