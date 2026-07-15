@@ -118,6 +118,11 @@ middleware reads the symbolic request query, consumes the closed JSON response,
 clones it, and replaces its body conditionally. Native dispatch selects the
 compact body when `pretty` is absent and the indented body when it is present.
 
+The upstream `Context.redirect('/')` path now follows its closed `String`
+conversion, ASCII RegExp guard, `header()` mutation, and variadic `newResponse`
+wrapper. The resulting native route has status 302, `Location: /`, an empty
+body, and no content type.
+
 Async/await syntax is admitted only inside constructed-application handlers
 that the initialization evaluator consumes completely. This does not introduce
 native Promise objects, suspension, or a task executor.

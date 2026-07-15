@@ -13,7 +13,7 @@ The current boundary is:
 | API | Type contract | Native behavior |
 | --- | --- | --- |
 | `Request` | standard DOM declaration | borrowed method, path, and raw query ABI views; exact query-name presence predicate |
-| `Response` | standard DOM declaration | bounded body writer, explicit status, HTML/text/JSON content-type IDs; closed `new Response(string, { status, headers })` AOT fast path |
+| `Response` | standard DOM declaration | bounded body writer, explicit status, optional HTML/text/JSON content-type IDs; closed `new Response(string or null, { status, headers })` AOT fast path |
 | `Headers` | standard DOM declaration | closed construction/cloning plus bounded response-header storage, validation, case-insensitive replacement, and wire emission for statically known values |
 | `URL` / `URLSearchParams` | standard DOM declaration | pending |
 | body and stream types | standard DOM declaration | pending |
@@ -37,6 +37,10 @@ and the native response writer. This preserves body, status, content type, and
 bounded static headers. It is not a general runtime `Response` or `Headers`
 implementation: dynamic bodies and header names/values, general init objects,
 general iteration, body consumption, and streams remain pending.
+
+An explicit no-content-type ABI value supports Hono's closed redirect response.
+The HTTP writer emits `302 Found`, `Location`, and `Content-Length: 0` without
+inventing `application/octet-stream` or another `Content-Type` header.
 
 Hono's closed `Context.json({ message: 'Created!' }, 201)` path now executes
 through upstream `JSON.stringify`, `setDefaultContentType`, `#newResponse`,

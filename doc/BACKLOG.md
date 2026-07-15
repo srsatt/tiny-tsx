@@ -110,6 +110,8 @@ commit message.
       post-`next()` response effects.
 - [x] Lower the request-query-dependent response branch in
       `app.get('/api/posts', prettyJSON(), handler)`.
+- [x] Compile upstream `Context.redirect('/')` with status 302, `Location`, an
+      empty body, and no content type.
 - [x] Apply closed post-handler middleware and compile upstream `poweredBy()`
       through native response-header emission.
 - [x] Evaluate multiple constructed Hono bindings and mount nested applications

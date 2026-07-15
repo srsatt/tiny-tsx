@@ -170,7 +170,11 @@ produces and serves a native Mach-O executable from the example TSX source.
 - The pinned upstream `prettyJSON()` factory and async middleware now compile
   into a request-query presence branch. Native HTTP returns compact JSON without
   `pretty` and indented JSON for a bare `?pretty`; the complete 34-module basic
-  trace retains 21 routes and now reports 20 remaining diagnostics.
+  trace retains 21 routes.
+- Closed RegExp testing, `String(...)`, nullish assignment, and closed call
+  spread now carry upstream `Context.redirect('/')` into native HTTP. The
+  response is `302 Found` with `Location: /`, an empty body, and no content type;
+  the complete basic trace now reports 19 remaining diagnostics.
 - Async/await entry handlers are accepted only when application initialization
   fully stages them. Native Promise/suspension semantics remain unimplemented.
 - Static `Response` headers lower into a bounded eight-entry native writer with

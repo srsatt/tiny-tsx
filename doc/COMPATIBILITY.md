@@ -115,6 +115,12 @@ JSON without `?pretty` and two-space JSON with a bare `?pretty` key. This is the
 default query-name/presence path only, not general URL parsing or arbitrary
 runtime JSON transformation.
 
+The basic example's `Context.redirect('/')` route also compiles from upstream
+source. Closed `String(...)`, the ASCII RegExp test, nullish assignment, and
+closed variadic spread reach Hono's response construction. Native HTTP preserves
+status 302 and `Location: /` while omitting `Content-Type` for the null body.
+This is closed compile-time RegExp evaluation, not a native RegExp backend.
+
 ### Type-only API overlay
 
 The compiling frontend accepts `--api <specifier>=<api.d.ts>` independently of
