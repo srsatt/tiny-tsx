@@ -319,8 +319,8 @@ emits a standalone `_main` that compares the lowered actual and expected bytes
 and returns a failing process status on the first mismatch. The allowlist-driven
 runner builds and executes the Mach-O file without a JavaScript runtime. This is
 semantic evidence for the two `typeof undefined`/`typeof void 0` assertions
-only; every other case remains explicitly `mode: syntax` until its entire
-assertion program is supported.
+only; other cases remain explicitly `mode: syntax` until their entire assertion
+program is supported.
 
 The complete six-assertion `language/expressions/typeof/bigint.js` case is also
 `mode: native`. Its closed semantic evaluator distinguishes a BigInt literal,
@@ -330,6 +330,15 @@ resulting `typeof` strings are checked by the generated native executable. This
 does not yet provide runtime arbitrary-precision arithmetic or a persistent
 BigInt object representation; it is the complete observable behavior required
 by this exact test.
+
+The complete `language/statements/for/S12.6.3_A1.js` case is the third native
+Test262 program. Test262 HIR v2 retains the numeric binding, empty-header
+`for (;;)` loop, pre-increment threshold, thrown numeric completion, catch-value
+guard, and post-catch counter guard. Generated Apple-arm64 code performs all 101
+iterations, transfers the thrown value into the catch check, and returns failure
+if either upstream guard would construct `Test262Error`. This is executable
+evidence for the complete closed loop/throw/catch program, not yet general
+exception objects, stack unwinding, arbitrary loop bodies, or `try/finally`.
 
 ### Typed constant materialization
 

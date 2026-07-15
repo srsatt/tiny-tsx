@@ -56,6 +56,8 @@ commit message.
       exact `typeof undefined` case as a standalone Mach-O program.
 - [x] Execute the complete six-assertion Test262 `typeof bigint` case, including
       closed `BigInt(...)` conversion and `Object(...)` boxing categories.
+- [x] Execute the complete Test262 infinite `for (;;)` case through 101 native
+      pre-increments, numeric throw/catch completion, and final counter checks.
 - [ ] Promote the remaining syntax-only Test262 cases only as their complete
       assertion programs become executable.
 - [ ] Compile function values, closures, records, arrays, and ordinary loops.
