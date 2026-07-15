@@ -48,11 +48,35 @@ computed accesses, 945 rest/spread sites, 267 Promise references, 37 Map and 51
 Set references, and 37 TransformStream references. Only six spreads are
 currently closed at AOT time; 939 remain runtime.
 
-The published package imports under Node 26, and an unchanged
+The published package imports under Node, and an unchanged
 `generateText`/`MockLanguageModelV4` test produces deterministic text with no
-network or credentials. This is JavaScript-runtime reference evidence only;
-TinyTSX does not compile that path yet. The scale difference from Hono confirms
-that export/reachability pruning must precede native implementation.
+network or credentials. The scale difference from Hono confirms that
+export/reachability pruning is required for every later AI slice.
+
+## First native evidence
+
+`tests/compat/ai/hono-generate-text-smoke.ts` is an unchanged-style consumer of
+the upstream `generateText`, `MockLanguageModelV4`, and Hono APIs. The model is
+constructed inside the `/ai` handler and returns the fixed text `Hello from
+deterministic AI`. Bun executes the same source twice as the reference.
+
+TinyTSX now type-checks the consumer against the published declarations while
+evaluating the exact pinned runtime sources. The reachable path required
+star-export resolution, imported runtime constants, dependency classes and
+getters, destructuring/defaults, optional calls, Promise/array/object helpers,
+switch and bounded `for`/`for...of`/`do...while` execution, and a minimal native
+Zod-schema boundary. `rtk npm run test:ai-intake` asserts that the produced HIR
+contains the exact `/ai` response. `rtk npm run build:ai-hono` compiles 662
+TypeScript modules into a 1,051,848-byte arm64 executable with no JavaScript
+engine and GC disabled. A real request returned HTTP 200, the expected content
+type, and the exact 27-byte body.
+
+This first target is deliberately deterministic and AOT-closed. The schema
+adapter only supplies the Zod builder/valid-result subset exercised by this
+known-valid prompt; it is not general Zod conformance. Likewise, `Math.random`
+uses a compile-time witness for SDK-internal IDs that do not escape into the
+response. Invalid schema behavior, ID escape detection, tool calls, streaming,
+and provider I/O remain separate promotion gates.
 
 ## Pin and intake contract
 
@@ -93,7 +117,7 @@ API key, DNS, provider service, or network. Bun runs the same source as the byte
 and error-semantics reference. This isolates AI SDK orchestration from provider
 transport and makes failures reproducible.
 
-Only after this passes should TinyTSX attempt, in order:
+This slice now passes. Continue in order:
 
 1. multi-step/tool-call behavior with a deterministic fake model;
 2. `streamText` and async-iterable chunk delivery;
@@ -139,7 +163,8 @@ AI SDK Core reaches a first-class experimental status only when:
 
 - the revision and dependency graph are reproducibly pinned;
 - the unchanged deterministic `generateText` consumer passes under Bun and
-  TinyTSX with equivalent result/error behavior;
+  TinyTSX with equivalent result behavior; error equivalence remains required
+  before first-class experimental status;
 - every reachable unsupported feature appears in an aggregate report;
 - native tests cover cancellation/OOM/recovery for the enabled async path;
 - RSS and latency are measured with and without the application worker pool;

@@ -70,3 +70,20 @@ make it a poor default until measurements say otherwise.
 
 No production tracing collector should be written from scratch as part of the
 worker milestone.
+
+## Current AI evidence
+
+The first executed `generateText` plus Hono target does not trigger the
+collector boundary. Its mock model, prompt, orchestration records, generated
+steps, and result object are request-local during AOT evaluation; only the
+closed 27-byte response reaches HIR and the native executable. The build still
+uses the arena-only runtime with GC disabled.
+
+The next compiler artifact must make this conclusion machine-readable rather
+than inferred from the final constant response. It should list each allocation
+site reached by the tracer, its owner/lifetime, aliases, and whether it reaches
+the response, worker state, or process state. SDK-internal generated IDs must be
+reported as non-escaping before the current compile-time randomness witness can
+be considered safe. Streaming may change the result because chunks, callbacks,
+and cancellation state can outlive one synchronous evaluation phase; that
+executed path is the next meaningful collector decision point.

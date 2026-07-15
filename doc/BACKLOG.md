@@ -67,8 +67,12 @@ commit message.
       gateway dependency, and the selected schema dependency.
 - [x] Record the exact `ai@7.0.28` candidate revision/manifest, Core-only scope,
       deterministic fake-model target, test layers, and worker/GC exit gates.
-- [ ] Compile a deterministic AI SDK Core test with a fake model and no network,
+- [x] Compile a deterministic AI SDK Core test with a fake model and no network,
       credentials, or provider package before attempting streaming/provider I/O.
+- [ ] Add deterministic invalid-prompt/schema behavior before treating the
+      native Zod boundary as more than a known-valid tracer specialization.
+- [ ] Compile deterministic multi-step/tool-call behavior, then `streamText`
+      and a Hono Web `Response` stream before local provider HTTP I/O.
 - [x] Inventory Promise, async iterator, Web Streams, AbortSignal, encoding,
       Fetch, URL, crypto, timer, and persistent-heap gaps from that exact graph.
 - [x] Define static, request, worker, message, and managed-heap lifetimes plus
@@ -77,6 +81,11 @@ commit message.
       maps, and write-barrier sites before selecting a precise collector.
 - [ ] Compare an established conservative collector and a precise per-worker
       collector/toolkit; do not implement a production GC from scratch.
+- [ ] Define an optional WASM compatibility profile: loader, imports allowlist,
+      ABI, bounded linear memory, WASI policy, AOT/interpreter choice, and worker
+      isolation. Keep it absent from zero-dependency builds until enabled.
+- [ ] Load and execute one pinned no-WASI WASM fixture with deterministic memory
+      limits before evaluating framework or plugin use cases.
 
 ## Next slice
 

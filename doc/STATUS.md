@@ -323,9 +323,13 @@ produces and serves a native Mach-O executable from the example TSX source.
   published install selecting gateway 4.0.20, provider 4.0.3, provider-utils
   5.0.10, and Zod 3.25.76. Published declarations type-check with the exact
   upstream Node/JSON-schema development types. The source audit reaches 609
-  modules and 64,774 lines with zero unresolved runtime imports. A deterministic
-  upstream `generateText`/`MockLanguageModelV4` behavior test passes under Node;
-  this is reference evidence, not native compatibility.
+  modules and 64,774 lines with zero unresolved runtime imports. The pinned
+  `generateText`/`MockLanguageModelV4` plus Hono consumer now passes under Bun
+  and compiles through 662 upstream/runtime modules into native HIR. The native
+  arm64 build is 1,051,848 bytes, reports no JavaScript engine and GC disabled,
+  and a real `/ai` request returns the exact 27-byte deterministic response.
+  The current Zod boundary is intentionally limited to the known-valid tracer;
+  invalid-schema/error equivalence is still open.
 - HTTP/1.1 connections now stay on one executor for up to 100 requests or five
   idle seconds. A 16 KiB parser preserves pipelined bytes, consumes validated
   bodies up to 1 MiB, rejects duplicate Content-Length/transfer encoding, and
@@ -398,6 +402,9 @@ rtk npm run test:hono-intake
 rtk npm run test:wpt-intake
 rtk npm run test:wpt-native
 rtk npm run test:native-api
+rtk npm run test:ai-intake
+rtk npm run test:ai-reference
+rtk npm run build:ai-hono
 rtk python3 benchmarks/scripts/run_static.py --duration 2 --runs 3 --startup-runs 5 --concurrency 1,8,32 --output-prefix benchmarks/results/2026-07-14-m5-max-static-preview
 rtk python3 benchmarks/scripts/run_static.py --workload hono-basic --duration 1 --runs 3 --startup-runs 5 --concurrency 1,8 --output-prefix benchmarks/results/2026-07-15-m5-max-hono-preview
 rtk npm run benchmark:hono-jsx-ssr
@@ -405,17 +412,17 @@ rtk npm run benchmark:hono-jsx-ssr
 
 ## Active slice
 
-The first TypeScript Worker request/reply path is complete through Hono, native
-code, a separate application pool, and a Bun comparison. The active slice is
-pinning the exact AI SDK Core source/dependency graph and running the same
-aggregate intake used for Hono. Connection fairness remains a measured
-optimization target. Keep fixed-layout records separate from dynamic `Map`.
+The deterministic `generateText` plus Hono tracer is complete through upstream
+source evaluation, HIR, native linking, and a real HTTP response. The active
+slice is an escape/lifetime report for that exact path, followed by invalid
+prompt/schema behavior, deterministic tool calls, and `streamText`. That
+evidence decides whether arenas remain sufficient; it does not justify a GC by
+itself. Connection fairness remains a measured optimization target.
 
 ## Resume point
 
-Read `doc/WORKERS.md`, `doc/PERFORMANCE.md`, and `doc/BACKLOG.md`. Run
-`rtk cargo test -p tinytsx-runtime-worker` and
-`rtk cargo test -p tinytsx --test e2e builds_and_serves_hono_through_a_separate_application_worker_pool`.
-Then pin the AI SDK revision recorded in `doc/AI_COMPATIBILITY.md`, preserve its
-workspace dependencies, and run a source/type/capability intake before changing
-the compiler for `generateText`.
+Read `doc/AI_COMPATIBILITY.md`, `doc/MEMORY_MANAGEMENT.md`, and
+`doc/BACKLOG.md`. Run `rtk npm run test:ai-intake`,
+`rtk npm run test:ai-reference`, and `rtk npm run build:ai-hono`. Add explicit
+escape classifications for the executed deterministic path, then add one
+invalid schema/prompt case before starting the streaming slice.
