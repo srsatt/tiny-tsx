@@ -16,8 +16,10 @@ export type Value =
   | {kind: "thrown"; value: Value}
   | {kind: "array"; items: Value[]}
   | {kind: "record"; fields: Map<string, Value>}
-  | {kind: "headers"; entries: Map<string, {name: string; value: string}>}
+  | {kind: "headers"; entries: Map<string, {name: string; value: ResponseHeaderValue}>}
   | {kind: "request"; routePattern: string; method: string}
+  | {kind: "clockNow"}
+  | {kind: "elapsedMilliseconds"}
   | {kind: "routeParameter"; name: string}
   | {kind: "requestHeader"; name: string}
   | {kind: "queryParameter"; name: string}
@@ -37,7 +39,7 @@ export type Value =
       body: ResponseBody;
       status: number;
       contentType: string;
-      headers: Map<string, {name: string; value: string}>;
+      headers: Map<string, {name: string; value: ResponseHeaderValue}>;
     }
   | {kind: "instance"; fields: Map<string, Value>}
   | {kind: "unknown"; reason: string};
@@ -45,7 +47,10 @@ export type Value =
 export type RuntimeStringPart =
   | {kind: "literal"; value: string}
   | {kind: "routeParameter"; name: string}
-  | {kind: "requestHeader"; name: string};
+  | {kind: "requestHeader"; name: string}
+  | {kind: "elapsedMilliseconds"};
+
+export type ResponseHeaderValue = string | RuntimeStringPart[];
 
 export type ResponseBody =
   | string
@@ -174,6 +179,7 @@ export function truthiness(value: Value): boolean | undefined {
     case "thrown":
     case "headers":
     case "request":
+    case "clockNow":
     case "closure":
     case "reference":
     case "constructed":
@@ -181,6 +187,7 @@ export function truthiness(value: Value): boolean | undefined {
     case "instance": return true;
     case "routeParameter": return true;
     case "requestHeader": return undefined;
+    case "elapsedMilliseconds": return undefined;
     case "queryParameter":
     case "queryPredicate": return undefined;
     case "runtimeString": return value.parts.length > 0;
@@ -193,6 +200,8 @@ export function typeOf(value: Value): string {
     case "undefined": return "undefined";
     case "boolean": return "boolean";
     case "number": return "number";
+    case "clockNow":
+    case "elapsedMilliseconds": return "number";
     case "bigint": return "bigint";
     case "string": return "string";
     case "routeParameter":
@@ -226,6 +235,7 @@ export function runtimeStringParts(value: Value): RuntimeStringPart[] | undefine
     case "string": return value.value === "" ? [] : [{kind: "literal", value: value.value}];
     case "routeParameter": return [{kind: "routeParameter", name: value.name}];
     case "requestHeader": return [{kind: "requestHeader", name: value.name}];
+    case "elapsedMilliseconds": return [{kind: "elapsedMilliseconds"}];
     case "runtimeString": return value.parts;
     default: return undefined;
   }

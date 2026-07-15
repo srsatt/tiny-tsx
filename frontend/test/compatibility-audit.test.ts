@@ -438,6 +438,37 @@ test("applies the upstream poweredBy middleware after the root handler", () => {
   assert.deepEqual(hir.handlers[0]?.headers, [{name: "X-Powered-By", value: "Hono"}]);
 });
 
+test("lowers the upstream response-time middleware into a native elapsed header", () => {
+  const entry = path.join(repository, "tests/compat/hono/response-time-smoke.ts");
+  const options = {
+    aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+    apiAliases: {hono: path.join(repository, "tests/compat/hono/api.d.ts")},
+  };
+  const graph = loadModuleGraph(entry, options);
+  const application = analyzeApplicationEntry(graph.modules[0]!.sourceFile);
+  assert.ok(application);
+
+  const result = evaluateApplicationInitialization(graph, application);
+
+  assert.deepEqual(result?.issues, []);
+  assert.deepEqual(result?.routes.find(route => route.method === "GET")?.response?.headers, [{
+    name: "X-Response-Time",
+    value: [
+      {kind: "elapsedMilliseconds"},
+      {kind: "literal", value: "ms"},
+    ],
+  }]);
+
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    ...options,
+  });
+  assert.deepEqual(
+    (hir.handlers[0] as unknown as {elapsedHeaders?: unknown}).elapsedHeaders,
+    [{name: "X-Response-Time", suffix: "ms"}],
+  );
+});
+
 test("lowers upstream prettyJSON into a query-conditional native response", () => {
   const entry = path.join(repository, "tests/compat/hono/pretty-json-smoke.ts");
   const options = {

@@ -132,6 +132,7 @@ export interface Handler {
   method: "GET" | "POST";
   path: string;
   headers?: StaticHeader[];
+  elapsedHeaders?: ElapsedHeader[];
   stderr?: number[];
   response: HandlerResponse;
   span: SourceSpan;
@@ -140,6 +141,11 @@ export interface Handler {
 export interface StaticHeader {
   name: string;
   value: string;
+}
+
+export interface ElapsedHeader {
+  name: string;
+  suffix: string;
 }
 
 export interface HirProgram {

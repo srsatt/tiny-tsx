@@ -9,14 +9,26 @@ import {
 import {lowerStagedConstants} from "./constant-lowering.js";
 import {CompileFailure, fromTypeScript, spanOf, tinyError} from "./diagnostics.js";
 import {FunctionLowerer} from "./function-lowering.js";
-import type {Component, Handler, HirProgram, SourceSpan, ValueExpression} from "./hir.js";
+import type {
+  Component,
+  ElapsedHeader,
+  Handler,
+  HirProgram,
+  SourceSpan,
+  StaticHeader,
+  ValueExpression,
+} from "./hir.js";
 import {StringTable} from "./hir.js";
 import {lowerComponentBody} from "./jsx-lowering.js";
 import {loadModuleGraph} from "./module-graph.js";
 import {displayRuntimeClassPlan, resolveRuntimeClassPlan} from "./runtime-class-plan.js";
 import {analyzeStaging} from "./staging.js";
 import {validateForbiddenSyntax} from "./subset-validator.js";
-import type {ResponseBody, RuntimeStringPart} from "./symbolic-value.js";
+import type {
+  ResponseBody,
+  ResponseHeaderValue,
+  RuntimeStringPart,
+} from "./symbolic-value.js";
 
 export interface CompileOptions {
   sdkPath: string;
@@ -208,6 +220,9 @@ function lowerApplicationInitialization(
         : [{method, path: "/*", response: initialization.notFoundResponse!}]
     );
   const emittedRoutes = [...routes, ...fallbackRoutes];
+  const loweredHeaders = emittedRoutes.map(route =>
+    lowerResponseHeaders(route.response?.headers)
+  );
   if (
     routes.length === 0
     || initialization.routes.some(route => !["GET", "POST", "ALL"].includes(route.method))
@@ -217,25 +232,27 @@ function lowerApplicationInitialization(
   if (emittedRoutes.some(route =>
     route.response === undefined
     || route.response.kind !== "text"
+    || !isLowerableResponseBody(route.response.body)
     || ![
       "",
       "text/plain; charset=UTF-8",
       "text/plain;charset=UTF-8",
       "application/json",
     ].includes(route.response.contentType)
-  )) {
+  ) || loweredHeaders.some(headers => headers === undefined)) {
     return undefined;
   }
   const exportNode = sourceFile.statements.find(statement => ts.isExportAssignment(statement)) ?? sourceFile;
   const span = spanOf(exportNode, sourceFile);
   const strings = new StringTable();
-  const handlers = emittedRoutes.map(route => {
+  const handlers = emittedRoutes.map((route, index) => {
     const response = route.response!;
     const value = lowerResponseBody(response.body, route.path, strings, span);
+    const responseHeaders = loweredHeaders[index]!;
     return {
       method: route.method as "GET" | "POST",
       path: route.path,
-      ...(response.headers === undefined ? {} : {headers: response.headers}),
+      ...responseHeaders,
       ...(response.stderr === undefined
         ? {}
         : {stderr: response.stderr.map(line => strings.intern(line))}),
@@ -278,6 +295,43 @@ function lowerApplicationInitialization(
   };
 }
 
+function lowerResponseHeaders(
+  headers: Array<{name: string; value: ResponseHeaderValue}> | undefined,
+): {headers?: StaticHeader[]; elapsedHeaders?: ElapsedHeader[]} | undefined {
+  if (headers === undefined) return {};
+  const staticHeaders: StaticHeader[] = [];
+  const elapsedHeaders: ElapsedHeader[] = [];
+  for (const header of headers) {
+    if (typeof header.value === "string") {
+      staticHeaders.push({name: header.name, value: header.value});
+      continue;
+    }
+    const suffix = elapsedHeaderSuffix(header.value);
+    if (suffix === undefined) return undefined;
+    elapsedHeaders.push({name: header.name, suffix});
+  }
+  return {
+    ...(staticHeaders.length === 0 ? {} : {headers: staticHeaders}),
+    ...(elapsedHeaders.length === 0 ? {} : {elapsedHeaders}),
+  };
+}
+
+function elapsedHeaderSuffix(parts: RuntimeStringPart[]): string | undefined {
+  if (parts[0]?.kind !== "elapsedMilliseconds") return undefined;
+  const suffix = parts.slice(1);
+  return suffix.every(part => part.kind === "literal")
+    ? suffix.map(part => part.kind === "literal" ? part.value : "").join("")
+    : undefined;
+}
+
+function isLowerableResponseBody(body: ResponseBody): boolean {
+  if (typeof body === "string") return true;
+  if (Array.isArray(body)) {
+    return body.every(part => part.kind !== "elapsedMilliseconds");
+  }
+  return isLowerableResponseBody(body.whenPresent) && isLowerableResponseBody(body.whenAbsent);
+}
+
 function lowerResponseBody(
   body: ResponseBody,
   routePath: string,
@@ -317,6 +371,9 @@ function lowerRuntimeString(
       }
       if (part.kind === "requestHeader") {
         return {kind: "requestHeader" as const, header: strings.intern(part.name), span};
+      }
+      if (part.kind === "elapsedMilliseconds") {
+        throw new Error("elapsed milliseconds are only lowerable in response headers");
       }
       return {
         kind: "routeParameter",

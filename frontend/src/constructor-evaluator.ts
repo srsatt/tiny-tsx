@@ -19,6 +19,7 @@ import {
   continued,
   detail,
   joinRuntimeStrings,
+  runtimeStringParts,
   type ExecutionResult,
   fromStaged,
   readProperty,
@@ -28,6 +29,7 @@ import {
   UNDEFINED,
   unknown,
   type ResponseBody,
+  type ResponseHeaderValue,
   type Value,
   type RuntimeStringPart,
   valuesEqual,
@@ -62,7 +64,7 @@ export interface EvaluatedResponse {
   body: ResponseBody;
   status: number;
   contentType: string;
-  headers?: Array<{name: string; value: string}>;
+  headers?: Array<{name: string; value: ResponseHeaderValue}>;
   stderr?: string[];
 }
 
@@ -703,9 +705,26 @@ function sameResponseMetadata(
   if (left.headers.size !== right.headers.size) return false;
   for (const [name, header] of left.headers) {
     const candidate = right.headers.get(name);
-    if (candidate?.name !== header.name || candidate.value !== header.value) return false;
+    if (
+      candidate?.name !== header.name
+      || !sameResponseHeaderValue(candidate.value, header.value)
+    ) return false;
   }
   return true;
+}
+
+function sameResponseHeaderValue(left: ResponseHeaderValue, right: ResponseHeaderValue): boolean {
+  if (typeof left === "string" || typeof right === "string") return left === right;
+  return left.length === right.length && left.every((part, index) => {
+    const candidate = right[index];
+    if (part.kind === "literal") {
+      return candidate?.kind === "literal" && candidate.value === part.value;
+    }
+    if (part.kind === "elapsedMilliseconds") {
+      return candidate?.kind === "elapsedMilliseconds";
+    }
+    return candidate?.kind === part.kind && candidate.name === part.name;
+  });
 }
 
 function executeStatements(
@@ -865,10 +884,11 @@ function executeEffectCall(
   if (receiver.kind === "headers" && name === "set") {
     const headerName = arguments_[0];
     const headerValue = arguments_[1];
-    if (headerName?.kind === "string" && headerValue?.kind === "string") {
+    const loweredValue = headerValue === undefined ? undefined : responseHeaderValue(headerValue);
+    if (headerName?.kind === "string" && loweredValue !== undefined) {
       receiver.entries.set(headerName.value.toLowerCase(), {
         name: headerName.value,
-        value: headerValue.value,
+        value: loweredValue,
       });
       return true;
     }
@@ -909,6 +929,11 @@ function executeEffectCall(
     }
   }
   return false;
+}
+
+function responseHeaderValue(value: Value): ResponseHeaderValue | undefined {
+  if (value.kind === "string") return value.value;
+  return runtimeStringParts(value);
 }
 
 function findInstanceMethod(
@@ -967,6 +992,11 @@ function evaluateCall(
   if (ts.isPropertyAccessExpression(call.expression)) {
     const receiver = evaluate(evaluator, call.expression.expression, module, environment, instance);
     const name = memberName(call.expression.name);
+    if (receiver.kind === "reference" && receiver.name === "Date" && name === "now") {
+      return arguments_.length === 0
+        ? {kind: "clockNow"}
+        : unknown("Date.now arguments are not supported");
+    }
     if (receiver.kind === "request" && name === "param") {
       const key = arguments_[0];
       if (key?.kind !== "string") {
@@ -1010,7 +1040,11 @@ function evaluateCall(
       const key = arguments_[0];
       if (key?.kind !== "string") return unknown("header name is not a closed string");
       const value = receiver.entries.get(key.value.toLowerCase())?.value;
-      return value === undefined ? UNDEFINED : {kind: "string", value};
+      return value === undefined
+        ? UNDEFINED
+        : typeof value === "string"
+          ? {kind: "string", value}
+          : {kind: "runtimeString", parts: value};
     }
     if (receiver.kind === "response" && name === "json") {
       if (typeof receiver.body !== "string") {
@@ -1303,6 +1337,15 @@ function evaluate(
         return {kind: "number", value: left.value + right.value};
       }
     }
+    if (operator === ts.SyntaxKind.MinusToken) {
+      const right = evaluate(evaluator, expression.right, module, environment, instance);
+      if (left.kind === "clockNow" && right.kind === "clockNow") {
+        return {kind: "elapsedMilliseconds"};
+      }
+      if (left.kind === "number" && right.kind === "number") {
+        return {kind: "number", value: left.value - right.value};
+      }
+    }
   }
   if (ts.isConditionalExpression(expression)) {
     const condition = evaluate(evaluator, expression.condition, module, environment, instance);
@@ -1345,7 +1388,10 @@ function evaluate(
           ? body.parts
           : undefined;
       const headers = responseHeaders(evaluator, expression, module, environment, instance);
-      const explicitContentType = headers.get("content-type")?.value;
+      const contentTypeHeader = headers.get("content-type")?.value;
+      const explicitContentType = typeof contentTypeHeader === "string"
+        ? contentTypeHeader
+        : undefined;
       return {
         kind: "response",
         body: runtimeBody ?? (body.kind === "string" ? body.value : ""),
@@ -1367,7 +1413,7 @@ function evaluate(
         return {kind: "headers", entries: new Map(init.entries)};
       }
       if (init.kind === "record") {
-        const entries = new Map<string, {name: string; value: string}>();
+        const entries = new Map<string, {name: string; value: ResponseHeaderValue}>();
         for (const [name, value] of init.fields) {
           if (value.kind !== "string") {
             return unknown("Headers record value is not a closed string");
@@ -1429,6 +1475,7 @@ function evaluate(
       const part = evaluate(evaluator, span.expression, module, environment, instance);
       if (
         part.kind === "unknown"
+        || part.kind === "clockNow"
         || part.kind === "queryParameter"
         || part.kind === "queryPredicate"
       ) {
@@ -1437,6 +1484,7 @@ function evaluate(
       values.push(
         part.kind === "routeParameter"
           || part.kind === "requestHeader"
+          || part.kind === "elapsedMilliseconds"
           || part.kind === "runtimeString"
           ? part
           : {kind: "string", value: stringValue(part)},
@@ -1541,7 +1589,7 @@ function responseHeaders(
   module: SourceModule,
   environment: Map<string, Value>,
   instance: Value & {kind: "instance"},
-): Map<string, {name: string; value: string}> {
+): Map<string, {name: string; value: ResponseHeaderValue}> {
   const init = expression.arguments?.[1] === undefined
     ? UNDEFINED
     : evaluate(evaluator, expression.arguments[1], module, environment, instance);
@@ -1555,7 +1603,7 @@ function responseHeaders(
   if (headers?.kind !== "record") {
     return new Map();
   }
-  const result = new Map<string, {name: string; value: string}>();
+  const result = new Map<string, {name: string; value: ResponseHeaderValue}>();
   for (const [name, value] of headers.fields) {
     if (value.kind === "string") {
       result.set(name.toLowerCase(), {name, value: value.value});
