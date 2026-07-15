@@ -54,6 +54,16 @@
       "path": "test/built-ins/Error/message_property.js",
       "feature": "error-message",
       "mode": "syntax"
+    },
+    {
+      "path": "test/built-ins/Date/now/15.9.4.4-0-4.js",
+      "feature": "date-now-number",
+      "mode": "syntax"
+    },
+    {
+      "path": "test/language/expressions/subtraction/S11.6.2_A2.1_T1.js",
+      "feature": "numeric-subtraction",
+      "mode": "syntax"
     }
   ]
 }
