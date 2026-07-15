@@ -169,6 +169,13 @@ pub enum ValueExpression {
         url: usize,
         span: SourceSpan,
     },
+    QueryParameter {
+        query: usize,
+        fallback: Option<usize>,
+        #[serde(rename = "escapeHtml")]
+        escape_html: bool,
+        span: SourceSpan,
+    },
     QueryConditional {
         query: usize,
         #[serde(rename = "whenPresent")]
@@ -414,6 +421,7 @@ impl Program {
             | ValueExpression::RouteParameter { .. }
             | ValueExpression::RequestHeader { .. }
             | ValueExpression::FetchStatus { .. }
+            | ValueExpression::QueryParameter { .. }
             | ValueExpression::QueryConditional { .. } => {
                 return Err(
                     "request-time expressions are only valid in handler responses".to_owned(),
@@ -513,6 +521,22 @@ impl Program {
                 };
                 if !url.value.starts_with("https://") {
                     return Err("fetch URL must use HTTPS".to_owned());
+                }
+                Ok(())
+            }
+            ValueExpression::QueryParameter {
+                query, fallback, ..
+            } => {
+                let Some(query) = self.static_strings.get(*query) else {
+                    return Err("query parameter references a missing static string".to_owned());
+                };
+                if query.value.is_empty() {
+                    return Err("query parameter name must not be empty".to_owned());
+                }
+                if fallback.is_some_and(|fallback| fallback >= self.static_strings.len()) {
+                    return Err(
+                        "query parameter fallback references a missing static string".to_owned(),
+                    );
                 }
                 Ok(())
             }

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 import app from "../../../vendor/hono-examples/jsx-ssr/src/index.tsx";
+import dynamicApp from "./dynamic-jsx-smoke.tsx";
 
 const rootFixture = readFileSync(
   new URL("./fixtures/jsx-ssr-root.html", import.meta.url),
@@ -49,6 +50,28 @@ const tests: Array<[string, () => Promise<void>]> = [
 
     assert.equal(response.status, 404);
     assert.equal(await response.text(), "404 Not Found");
+  }],
+
+  ["renders request-time JSX with the missing-query fallback", async () => {
+    const response = await dynamicApp.request("http://localhost/dynamic");
+
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("content-type"), "text/html; charset=UTF-8");
+    assert.equal(
+      await response.text(),
+      '<main data-name="World">Hello, <strong>World</strong>!</main>',
+    );
+  }],
+
+  ["escapes a decoded request value in JSX attributes and text", async () => {
+    const response = await dynamicApp.request(
+      "http://localhost/dynamic?name=%3C%3E%26%22%27+Ada",
+    );
+
+    assert.equal(
+      await response.text(),
+      '<main data-name="&lt;&gt;&amp;&quot;&#39; Ada">Hello, <strong>&lt;&gt;&amp;&quot;&#39; Ada</strong>!</main>',
+    );
   }],
 ];
 

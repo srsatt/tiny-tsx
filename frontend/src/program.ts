@@ -472,6 +472,15 @@ function lowerRuntimeString(
       if (part.kind === "fetchStatus") {
         return {kind: "fetchStatus" as const, url: strings.intern(part.url), span};
       }
+      if (part.kind === "queryParameter") {
+        return {
+          kind: "queryParameter" as const,
+          query: strings.intern(part.name),
+          ...(part.fallback === undefined ? {} : {fallback: strings.intern(part.fallback)}),
+          escapeHtml: part.escapeHtml,
+          span,
+        };
+      }
       if (part.kind === "elapsedMilliseconds") {
         throw new Error("elapsed milliseconds are only lowerable in response headers");
       }
@@ -493,6 +502,7 @@ function dynamicResponseExpressions(body: ResponseBody): number {
       part.kind === "routeParameter"
       || part.kind === "requestHeader"
       || part.kind === "fetchStatus"
+      || part.kind === "queryParameter"
     ).length;
   }
   return 1

@@ -451,6 +451,40 @@ fn emit_handler_text_expression(
             );
             writeln!(assembly, "    bl _tinytsx_html_write_fetch_status").unwrap();
         }
+        ValueExpression::QueryParameter {
+            query,
+            fallback,
+            escape_html,
+            ..
+        } => {
+            writeln!(assembly, "    ldr x0, [sp, #16]").unwrap();
+            writeln!(assembly, "    ldr x1, [sp, #24]").unwrap();
+            writeln!(assembly, "    adrp x2, Ltinytsx_string_{query}@PAGE").unwrap();
+            writeln!(assembly, "    add x2, x2, Ltinytsx_string_{query}@PAGEOFF").unwrap();
+            emit_immediate(
+                assembly,
+                "x3",
+                program.static_strings[*query].value.len() as u64,
+            );
+            if let Some(fallback) = fallback {
+                writeln!(assembly, "    adrp x4, Ltinytsx_string_{fallback}@PAGE").unwrap();
+                writeln!(
+                    assembly,
+                    "    add x4, x4, Ltinytsx_string_{fallback}@PAGEOFF"
+                )
+                .unwrap();
+                emit_immediate(
+                    assembly,
+                    "x5",
+                    program.static_strings[*fallback].value.len() as u64,
+                );
+            } else {
+                writeln!(assembly, "    mov x4, #0").unwrap();
+                writeln!(assembly, "    mov x5, #0").unwrap();
+            }
+            emit_immediate(assembly, "x6", u64::from(*escape_html));
+            writeln!(assembly, "    bl _tinytsx_html_write_query_parameter").unwrap();
+        }
         ValueExpression::QueryConditional {
             query,
             when_present,
@@ -577,6 +611,7 @@ fn emit_value_expression(
         | ValueExpression::RouteParameter { .. }
         | ValueExpression::RequestHeader { .. }
         | ValueExpression::FetchStatus { .. }
+        | ValueExpression::QueryParameter { .. }
         | ValueExpression::QueryConditional { .. } => {
             return Err("request-time expression used outside a handler response".to_owned());
         }

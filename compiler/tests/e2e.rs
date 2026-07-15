@@ -150,7 +150,10 @@ fn worker_pool_keeps_connections_alive_and_recovers_after_saturation() {
         .read_to_string(&mut bounded_response)
         .expect("read bounded keep-alive responses");
     assert_eq!(occurrences(&bounded_response, "HTTP/1.1 200 OK\r\n"), 100);
-    assert_eq!(occurrences(&bounded_response, "Connection: keep-alive\r\n"), 99);
+    assert_eq!(
+        occurrences(&bounded_response, "Connection: keep-alive\r\n"),
+        99
+    );
     assert_eq!(occurrences(&bounded_response, "Connection: close\r\n"), 1);
 
     let mut malformed = connect_with_retry(port);
@@ -174,9 +177,7 @@ fn worker_pool_keeps_connections_alive_and_recovers_after_saturation() {
         .set_read_timeout(Some(Duration::from_secs(1)))
         .expect("set oversized timeout");
     oversized
-        .write_all(
-            b"POST / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 1048577\r\n\r\n",
-        )
+        .write_all(b"POST / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 1048577\r\n\r\n")
         .expect("send oversized body declaration");
     let mut oversized_response = String::new();
     oversized
@@ -995,8 +996,53 @@ fn builds_and_serves_the_exact_pinned_hono_jsx_ssr_source() {
         ],
         &[
             (200, "/post/1", post, "text/html; charset=utf-8"),
-            (404, "/post/99", "404 Not Found", "text/plain; charset=UTF-8"),
-            (404, "/post/nope", "404 Not Found", "text/plain; charset=UTF-8"),
+            (
+                404,
+                "/post/99",
+                "404 Not Found",
+                "text/plain; charset=UTF-8",
+            ),
+            (
+                404,
+                "/post/nope",
+                "404 Not Found",
+                "text/plain; charset=UTF-8",
+            ),
+        ],
+    );
+}
+
+#[test]
+fn builds_and_serves_request_time_hono_jsx_with_exact_escaping() {
+    build_and_serve_with_options(
+        "tests/compat/hono/dynamic-jsx-smoke.tsx",
+        expected(
+            "GET",
+            200,
+            "/dynamic",
+            "<main data-name=\"World\">Hello, <strong>World</strong>!</main>",
+            "text/html; charset=utf-8",
+            &[],
+        ),
+        &[
+            "--alias",
+            "hono=vendor/hono/src/index.ts",
+            "--api",
+            "hono=tests/compat/hono/api.d.ts",
+        ],
+        &[
+            (
+                200,
+                "/dynamic?name=%3C%3E%26%22%27+Ada",
+                "<main data-name=\"&lt;&gt;&amp;&quot;&#39; Ada\">Hello, <strong>&lt;&gt;&amp;&quot;&#39; Ada</strong>!</main>",
+                "text/html; charset=utf-8",
+            ),
+            (
+                200,
+                "/dynamic?name=",
+                "<main data-name=\"\">Hello, <strong></strong>!</main>",
+                "text/html; charset=utf-8",
+            ),
         ],
     );
 }

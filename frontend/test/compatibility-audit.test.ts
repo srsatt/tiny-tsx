@@ -1032,6 +1032,35 @@ test("lowers closed JSX component props through the pinned Hono runtime", () => 
   ]);
 });
 
+test("lowers request-time Hono JSX through nested components with HTML escaping", () => {
+  const entry = path.join(repository, "tests/compat/hono/dynamic-jsx-smoke.tsx");
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+    apiAliases: {hono: path.join(repository, "tests/compat/hono/api.d.ts")},
+  });
+
+  assert.deepEqual(hir.handlers.map(handler => `${handler.method} ${handler.path}`), [
+    "GET /dynamic",
+  ]);
+  const response = hir.handlers[0]?.response;
+  assert.ok(response?.kind === "text");
+  assert.equal(response.contentType, "text/html; charset=UTF-8");
+  const value = JSON.parse(JSON.stringify(response.value, (key, candidate) =>
+    key === "span" ? undefined : candidate
+  ));
+  assert.deepEqual(value, {
+    kind: "concat",
+    values: [
+      {kind: "stringLiteral", string: 0},
+      {kind: "queryParameter", query: 1, fallback: 2, escapeHtml: true},
+      {kind: "stringLiteral", string: 3},
+      {kind: "queryParameter", query: 1, fallback: 2, escapeHtml: true},
+      {kind: "stringLiteral", string: 4},
+    ],
+  });
+});
+
 test("compiles the exact pinned Hono JSX SSR source graph", () => {
   const entry = path.join(repository, "vendor/hono-examples/jsx-ssr/src/index.tsx");
   const aliases = {

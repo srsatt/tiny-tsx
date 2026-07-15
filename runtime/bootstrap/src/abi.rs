@@ -312,6 +312,107 @@ fn form_urlencoded_name_equals(encoded: &[u8], expected: &[u8]) -> bool {
 }
 
 #[unsafe(no_mangle)]
+pub unsafe extern "C" fn tinytsx_html_write_query_parameter(
+    writer: *mut TinyResponseWriter,
+    request: *const TinyRequest,
+    expected: *const u8,
+    expected_len: usize,
+    fallback: *const u8,
+    fallback_len: usize,
+    escape_html: u32,
+) -> u32 {
+    if writer.is_null()
+        || request.is_null()
+        || (expected.is_null() && expected_len != 0)
+        || (fallback.is_null() && fallback_len != 0)
+    {
+        return INTERNAL_ERROR;
+    }
+    // SAFETY: Generated code passes request and static string views valid for this call.
+    let query = unsafe { &(*request).query };
+    if query.ptr.is_null() && query.len != 0 {
+        return INTERNAL_ERROR;
+    }
+    // SAFETY: All views remain valid for synchronous request dispatch.
+    let query = unsafe { slice::from_raw_parts(query.ptr, query.len) };
+    let expected = unsafe { slice::from_raw_parts(expected, expected_len) };
+    for part in query.split(|byte| *byte == b'&') {
+        if part.is_empty() {
+            continue;
+        }
+        let separator = part.iter().position(|byte| *byte == b'=');
+        let name = separator.map_or(part, |index| &part[..index]);
+        if form_urlencoded_name_equals(name, expected) {
+            let value = separator.map_or(&[][..], |index| &part[index + 1..]);
+            // SAFETY: The writer and request query remain valid for this synchronous copy.
+            return unsafe { write_form_urlencoded_value(writer, value, escape_html != 0) };
+        }
+    }
+    // SAFETY: The fallback view is generated static data and the writer is valid.
+    let fallback = if fallback_len == 0 {
+        &[]
+    } else {
+        // SAFETY: A non-empty fallback was validated as non-null above.
+        unsafe { slice::from_raw_parts(fallback, fallback_len) }
+    };
+    unsafe { write_html_bytes(writer, fallback, escape_html != 0) }
+}
+
+unsafe fn write_form_urlencoded_value(
+    writer: *mut TinyResponseWriter,
+    encoded: &[u8],
+    escape_html: bool,
+) -> u32 {
+    let mut cursor = 0;
+    while cursor < encoded.len() {
+        let byte = if encoded[cursor] == b'+' {
+            cursor += 1;
+            b' '
+        } else if let Some(byte) = percent_byte(encoded, cursor) {
+            cursor += 3;
+            byte
+        } else {
+            let byte = encoded[cursor];
+            cursor += 1;
+            byte
+        };
+        // SAFETY: The one-byte local is valid for this synchronous arena copy.
+        let status = unsafe { write_html_bytes(writer, slice::from_ref(&byte), escape_html) };
+        if status != OK {
+            return status;
+        }
+    }
+    OK
+}
+
+unsafe fn write_html_bytes(
+    writer: *mut TinyResponseWriter,
+    bytes: &[u8],
+    escape_html: bool,
+) -> u32 {
+    if !escape_html {
+        // SAFETY: The borrowed bytes and writer are valid for this synchronous copy.
+        return unsafe { tinytsx_html_write_static(writer, bytes.as_ptr(), bytes.len()) };
+    }
+    for byte in bytes {
+        let escaped = match byte {
+            b'&' => b"&amp;".as_slice(),
+            b'<' => b"&lt;".as_slice(),
+            b'>' => b"&gt;".as_slice(),
+            b'\"' => b"&quot;".as_slice(),
+            b'\'' => b"&#39;".as_slice(),
+            _ => slice::from_ref(byte),
+        };
+        // SAFETY: The selected bytes and writer are valid for this synchronous copy.
+        let status = unsafe { tinytsx_html_write_static(writer, escaped.as_ptr(), escaped.len()) };
+        if status != OK {
+            return status;
+        }
+    }
+    OK
+}
+
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn tinytsx_request_path_matches(
     request: *const TinyRequest,
     pattern: *const u8,

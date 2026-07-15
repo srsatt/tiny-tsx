@@ -1885,6 +1885,12 @@ function evaluate(
       }, ${right.kind}${right.kind === "unknown" ? `: ${right.reason}` : ""})`);
     }
     if (operator === ts.SyntaxKind.QuestionQuestionToken) {
+      if (left.kind === "queryParameter") {
+        const fallback = evaluate(evaluator, expression.right, module, environment, instance);
+        return fallback.kind === "string"
+          ? {...left, fallback: fallback.value}
+          : unknown("query parameter fallback is not a closed string");
+      }
       return left.kind === "undefined" || left.kind === "null"
         ? evaluate(evaluator, expression.right, module, environment, instance)
         : left;
@@ -1967,6 +1973,7 @@ function evaluate(
         body.kind !== "string"
         && body.kind !== "html"
         && body.kind !== "runtimeString"
+        && body.kind !== "runtimeHtml"
         && body.kind !== "routeParameter"
         && body.kind !== "responseBody"
         && body.kind !== "undefined"
@@ -1978,6 +1985,8 @@ function evaluate(
         ? [{kind: "routeParameter" as const, name: body.name}]
         : body.kind === "runtimeString"
           ? body.parts
+          : body.kind === "runtimeHtml"
+            ? body.parts
           : body.kind === "responseBody"
             ? body.body
           : undefined;
@@ -2162,28 +2171,49 @@ function evaluateJsx(
       : unknown(`JSX component ${opening.tagName.text} is not a compile-time callable`);
   }
 
-  let html = `<${opening.tagName.text}`;
+  const parts: RuntimeStringPart[] = [{kind: "literal", value: `<${opening.tagName.text}`}];
   for (const [sourceName, value] of attributes.fields) {
     const name = sourceName === "className" ? "class" : sourceName;
     if (value.kind === "undefined" || value.kind === "null" || value.kind === "boolean" && !value.value) {
       continue;
     }
     if (value.kind === "boolean") {
-      if (jsxBooleanAttributes.has(name.toLowerCase())) html += ` ${name}=""`;
+      if (jsxBooleanAttributes.has(name.toLowerCase())) {
+        appendRuntimePart(parts, {kind: "literal", value: ` ${name}=""`});
+      }
+      continue;
+    }
+    if (value.kind === "queryParameter") {
+      appendRuntimePart(parts, {kind: "literal", value: ` ${name}="`});
+      appendRuntimePart(parts, {
+        kind: "queryParameter",
+        name: value.name,
+        fallback: value.fallback,
+        escapeHtml: true,
+      });
+      appendRuntimePart(parts, {kind: "literal", value: '"'});
       continue;
     }
     if (value.kind !== "string" && value.kind !== "number" && value.kind !== "bigint") {
       return unknown(`JSX attribute ${sourceName} is not a closed primitive`);
     }
-    html += ` ${name}="${escapeHtmlAttribute(stringValue(value))}"`;
+    appendRuntimePart(parts, {
+      kind: "literal",
+      value: ` ${name}="${escapeHtmlAttribute(stringValue(value))}"`,
+    });
   }
   if (jsxVoidTags.has(opening.tagName.text) && renderedChildren.items.length === 0) {
-    return {kind: "html", value: `${html}/>`};
+    appendRuntimePart(parts, {kind: "literal", value: "/>"});
+    return htmlValue(parts);
   }
-  const rendered = renderHtmlValues(renderedChildren.items, true);
-  return rendered === undefined
-    ? unknown("JSX children are not closed HTML values")
-    : {kind: "html", value: `${html}>${rendered}</${opening.tagName.text}>`};
+  appendRuntimePart(parts, {kind: "literal", value: ">"});
+  const rendered = renderHtmlParts(renderedChildren.items, true);
+  if (rendered === undefined) {
+    return unknown("JSX children are not closed HTML values");
+  }
+  for (const part of rendered) appendRuntimePart(parts, part);
+  appendRuntimePart(parts, {kind: "literal", value: `</${opening.tagName.text}>`});
+  return htmlValue(parts);
 }
 
 function evaluateJsxAttributes(
@@ -2228,10 +2258,10 @@ function renderJsxChildren(
 ): Value {
   const values = renderJsxChildValues(evaluator, children, module, environment, instance);
   if (values.kind === "unknown") return values;
-  const rendered = renderHtmlValues(values.items, true);
+  const rendered = renderHtmlParts(values.items, true);
   return rendered === undefined
     ? unknown("JSX children are not closed HTML values")
-    : {kind: "html", value: rendered};
+    : htmlValue(rendered);
 }
 
 function renderJsxChildValues(
@@ -2286,34 +2316,65 @@ function evaluateTaggedTemplate(
   if (ts.isNoSubstitutionTemplateLiteral(expression.template)) {
     return {kind: "html", value: expression.template.text};
   }
-  let output = expression.template.head.text;
+  const parts: RuntimeStringPart[] = [{kind: "literal", value: expression.template.head.text}];
   for (const span of expression.template.templateSpans) {
     const value = evaluate(evaluator, span.expression, module, environment, instance);
-    const rendered = renderHtmlValues([value], true);
+    const rendered = renderHtmlParts([value], true);
     if (rendered === undefined) return unknown("html template value is not closed");
-    output += rendered + span.literal.text;
+    for (const part of rendered) appendRuntimePart(parts, part);
+    appendRuntimePart(parts, {kind: "literal", value: span.literal.text});
   }
-  return {kind: "html", value: output};
+  return htmlValue(parts);
 }
 
-function renderHtmlValues(values: readonly Value[], escapeStrings: boolean): string | undefined {
-  let output = "";
+function renderHtmlParts(
+  values: readonly Value[],
+  escapeStrings: boolean,
+): RuntimeStringPart[] | undefined {
+  const output: RuntimeStringPart[] = [];
   for (const value of values) {
     if (value.kind === "html") {
-      output += value.value;
+      appendRuntimePart(output, {kind: "literal", value: value.value});
+    } else if (value.kind === "runtimeHtml") {
+      for (const part of value.parts) appendRuntimePart(output, part);
     } else if (value.kind === "string") {
-      output += escapeStrings ? escapeHtmlText(value.value) : value.value;
+      appendRuntimePart(output, {
+        kind: "literal",
+        value: escapeStrings ? escapeHtmlText(value.value) : value.value,
+      });
     } else if (value.kind === "number" || value.kind === "bigint") {
-      output += stringValue(value);
+      appendRuntimePart(output, {kind: "literal", value: stringValue(value)});
+    } else if (value.kind === "queryParameter") {
+      appendRuntimePart(output, {
+        kind: "queryParameter",
+        name: value.name,
+        fallback: value.fallback,
+        escapeHtml: escapeStrings,
+      });
     } else if (value.kind === "array") {
-      const nested = renderHtmlValues(value.items, escapeStrings);
+      const nested = renderHtmlParts(value.items, escapeStrings);
       if (nested === undefined) return undefined;
-      output += nested;
+      for (const part of nested) appendRuntimePart(output, part);
     } else if (value.kind !== "undefined" && value.kind !== "null" && value.kind !== "boolean") {
       return undefined;
     }
   }
   return output;
+}
+
+function appendRuntimePart(parts: RuntimeStringPart[], part: RuntimeStringPart): void {
+  const previous = parts.at(-1);
+  if (part.kind === "literal" && previous?.kind === "literal") {
+    previous.value += part.value;
+  } else if (part.kind !== "literal" || part.value !== "") {
+    parts.push({...part});
+  }
+}
+
+function htmlValue(parts: RuntimeStringPart[]): Value {
+  return parts.every(part => part.kind === "literal")
+    ? {kind: "html", value: parts.map(part => part.value).join("")}
+    : {kind: "runtimeHtml", parts};
 }
 
 function escapeHtmlText(value: string): string {

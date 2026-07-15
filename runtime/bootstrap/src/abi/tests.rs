@@ -3,8 +3,8 @@ use super::{
     MAX_DYNAMIC_HEADER_BYTES, MAX_RESPONSE_HEADERS, OK, REQUEST_OOM, RequestArena, TinyHeader,
     TinyResponseWriter, TinyStringView, render, request, request_with_headers,
     tinytsx_html_write_fetch_status, tinytsx_html_write_path_segment,
-    tinytsx_html_write_request_header, tinytsx_html_write_static,
-    tinytsx_request_basic_auth_equals, tinytsx_request_if_none_match,
+    tinytsx_html_write_query_parameter, tinytsx_html_write_request_header,
+    tinytsx_html_write_static, tinytsx_request_basic_auth_equals, tinytsx_request_if_none_match,
     tinytsx_request_method_equals, tinytsx_request_path_equals, tinytsx_request_path_matches,
     tinytsx_request_query_has, tinytsx_response_begin, tinytsx_response_header_elapsed_millis,
     tinytsx_response_header_static, write_console_error,
@@ -279,6 +279,74 @@ fn response_writer_preserves_malformed_percent_encoded_utf8() {
 
     assert_eq!(status, OK);
     assert_eq!(&output, b"a%FFb%2");
+}
+
+#[test]
+fn response_writer_decodes_and_escapes_a_query_parameter() {
+    let request = request(b"GET", b"/hello?name=%3C%3E%26%22%27+Ada");
+    let expected = b"&lt;&gt;&amp;&quot;&#39; Ada";
+    let mut output = vec![0_u8; expected.len()];
+    let mut writer = writer(&mut output);
+
+    let status = unsafe {
+        tinytsx_html_write_query_parameter(
+            &mut writer,
+            &request,
+            b"name".as_ptr(),
+            4,
+            b"World".as_ptr(),
+            5,
+            1,
+        )
+    };
+
+    assert_eq!(status, OK);
+    assert_eq!(output, expected);
+}
+
+#[test]
+fn response_writer_uses_and_escapes_a_missing_query_fallback() {
+    let request = request(b"GET", b"/hello?other=value");
+    let expected = b"&lt;World&gt;";
+    let mut output = vec![0_u8; expected.len()];
+    let mut writer = writer(&mut output);
+
+    let status = unsafe {
+        tinytsx_html_write_query_parameter(
+            &mut writer,
+            &request,
+            b"name".as_ptr(),
+            4,
+            b"<World>".as_ptr(),
+            7,
+            1,
+        )
+    };
+
+    assert_eq!(status, OK);
+    assert_eq!(output, expected);
+}
+
+#[test]
+fn response_writer_preserves_an_explicitly_empty_query_parameter() {
+    let request = request(b"GET", b"/hello?name=");
+    let mut output = [0_u8; 0];
+    let mut writer = writer(&mut output);
+
+    let status = unsafe {
+        tinytsx_html_write_query_parameter(
+            &mut writer,
+            &request,
+            b"name".as_ptr(),
+            4,
+            b"World".as_ptr(),
+            5,
+            1,
+        )
+    };
+
+    assert_eq!(status, OK);
+    assert_eq!(writer.cursor, writer.start);
 }
 
 #[test]

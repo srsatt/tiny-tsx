@@ -26,9 +26,10 @@ export type Value =
   | {kind: "routeParameter"; name: string}
   | {kind: "routeChoice"; name: string; cases: Map<string, Value>; fallback: Value}
   | {kind: "requestHeader"; name: string}
-  | {kind: "queryParameter"; name: string}
+  | {kind: "queryParameter"; name: string; fallback?: string}
   | {kind: "queryPredicate"; name: string; test: "truthy" | "empty" | "present"}
   | {kind: "runtimeString"; parts: RuntimeStringPart[]}
+  | {kind: "runtimeHtml"; parts: RuntimeStringPart[]}
   | {
       kind: "closure";
       span: SourceSpan;
@@ -53,6 +54,7 @@ export type RuntimeStringPart =
   | {kind: "literal"; value: string}
   | {kind: "routeParameter"; name: string}
   | {kind: "requestHeader"; name: string}
+  | {kind: "queryParameter"; name: string; fallback: string | undefined; escapeHtml: boolean}
   | {kind: "fetchStatus"; url: string}
   | {kind: "elapsedMilliseconds"};
 
@@ -211,7 +213,8 @@ export function truthiness(value: Value): boolean | undefined {
     case "elapsedMilliseconds": return undefined;
     case "queryParameter":
     case "queryPredicate": return undefined;
-    case "runtimeString": return value.parts.length > 0;
+    case "runtimeString":
+    case "runtimeHtml": return value.parts.length > 0;
     case "unknown": return undefined;
   }
 }
@@ -227,7 +230,8 @@ export function typeOf(value: Value): string {
     case "string": return "string";
     case "html": return "string";
     case "routeParameter":
-    case "runtimeString": return "string";
+    case "runtimeString":
+    case "runtimeHtml": return "string";
     case "routeChoice": return "object";
     case "requestHeader": return "string";
     case "fetchStatus": return "number";
@@ -261,9 +265,16 @@ export function runtimeStringParts(value: Value): RuntimeStringPart[] | undefine
     case "html": return value.value === "" ? [] : [{kind: "literal", value: value.value}];
     case "routeParameter": return [{kind: "routeParameter", name: value.name}];
     case "requestHeader": return [{kind: "requestHeader", name: value.name}];
+    case "queryParameter": return [{
+      kind: "queryParameter",
+      name: value.name,
+      fallback: value.fallback,
+      escapeHtml: false,
+    }];
     case "fetchStatus": return [{kind: "fetchStatus", url: value.url}];
     case "elapsedMilliseconds": return [{kind: "elapsedMilliseconds"}];
     case "runtimeString": return value.parts;
+    case "runtimeHtml": return value.parts;
     default: return undefined;
   }
 }

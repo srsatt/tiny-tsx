@@ -97,6 +97,13 @@ export type ValueExpression =
       span: SourceSpan;
     }
   | {
+      kind: "queryParameter";
+      query: number;
+      fallback?: number;
+      escapeHtml: boolean;
+      span: SourceSpan;
+    }
+  | {
       kind: "queryConditional";
       query: number;
       whenPresent: ValueExpression;
