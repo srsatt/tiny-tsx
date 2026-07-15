@@ -44,7 +44,7 @@ fn builds_and_serves_static_tsx_as_native_macho() {
 }
 
 #[test]
-fn worker_pool_serves_in_parallel_and_recovers_after_saturation() {
+fn worker_pool_keeps_connections_alive_and_recovers_after_saturation() {
     const WORKERS: usize = 2;
     const QUEUED_CONNECTIONS: usize = WORKERS * 64;
 
@@ -88,9 +88,102 @@ fn worker_pool_serves_in_parallel_and_recovers_after_saturation() {
             .iter()
             .any(|feature| feature == "bounded-worker-pool")
     );
+    assert!(
+        report["runtimeFeatures"]
+            .as_array()
+            .expect("runtime feature list")
+            .iter()
+            .any(|feature| feature == "keep-alive")
+    );
 
     let child = Command::new(&binary).spawn().expect("start worker server");
     let _server = Server(child);
+
+    let mut persistent = connect_with_retry(port);
+    persistent
+        .set_read_timeout(Some(Duration::from_secs(1)))
+        .expect("set persistent timeout");
+    persistent
+        .write_all(
+            b"GET / HTTP/1.1\r\nHost: localhost\r\n\r\nGET /hello HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
+        )
+        .expect("send pipelined Hono requests");
+    let mut persistent_response = String::new();
+    persistent
+        .read_to_string(&mut persistent_response)
+        .expect("read pipelined Hono responses");
+    assert_eq!(occurrences(&persistent_response, "HTTP/1.1 200 OK\r\n"), 2);
+    assert!(persistent_response.contains("Connection: keep-alive\r\n"));
+    assert!(persistent_response.contains("Hono!!HTTP/1.1 200 OK\r\n"));
+    assert!(persistent_response.ends_with("This is /hello"));
+
+    let mut body_pipeline = connect_with_retry(port);
+    body_pipeline
+        .set_read_timeout(Some(Duration::from_secs(1)))
+        .expect("set body pipeline timeout");
+    body_pipeline
+        .write_all(
+            b"POST /missing HTTP/1.1\r\nHost: localhost\r\nContent-Length: 4\r\n\r\nbodyGET /hello HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
+        )
+        .expect("send body and pipelined request");
+    let mut body_pipeline_response = String::new();
+    body_pipeline
+        .read_to_string(&mut body_pipeline_response)
+        .expect("read body pipeline responses");
+    assert!(body_pipeline_response.starts_with("HTTP/1.1 404 Not Found\r\n"));
+    assert!(body_pipeline_response.contains("not foundHTTP/1.1 200 OK\r\n"));
+    assert!(body_pipeline_response.ends_with("This is /hello"));
+
+    let mut bounded = connect_with_retry(port);
+    bounded
+        .set_read_timeout(Some(Duration::from_secs(2)))
+        .expect("set bounded connection timeout");
+    let mut requests = Vec::new();
+    for _ in 0..100 {
+        requests.extend_from_slice(b"GET / HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    }
+    bounded
+        .write_all(&requests)
+        .expect("send bounded keep-alive requests");
+    let mut bounded_response = String::new();
+    bounded
+        .read_to_string(&mut bounded_response)
+        .expect("read bounded keep-alive responses");
+    assert_eq!(occurrences(&bounded_response, "HTTP/1.1 200 OK\r\n"), 100);
+    assert_eq!(occurrences(&bounded_response, "Connection: keep-alive\r\n"), 99);
+    assert_eq!(occurrences(&bounded_response, "Connection: close\r\n"), 1);
+
+    let mut malformed = connect_with_retry(port);
+    malformed
+        .set_read_timeout(Some(Duration::from_secs(1)))
+        .expect("set malformed timeout");
+    malformed
+        .write_all(
+            b"POST / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 0\r\nContent-Length: 0\r\n\r\n",
+        )
+        .expect("send ambiguous request framing");
+    let mut malformed_response = String::new();
+    malformed
+        .read_to_string(&mut malformed_response)
+        .expect("read malformed response");
+    assert!(malformed_response.starts_with("HTTP/1.1 400 Bad Request\r\n"));
+    assert!(malformed_response.contains("Connection: close\r\n"));
+
+    let mut oversized = connect_with_retry(port);
+    oversized
+        .set_read_timeout(Some(Duration::from_secs(1)))
+        .expect("set oversized timeout");
+    oversized
+        .write_all(
+            b"POST / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 1048577\r\n\r\n",
+        )
+        .expect("send oversized body declaration");
+    let mut oversized_response = String::new();
+    oversized
+        .read_to_string(&mut oversized_response)
+        .expect("read oversized response");
+    assert!(oversized_response.starts_with("HTTP/1.1 413 Payload Too Large\r\n"));
+    assert!(oversized_response.contains("Connection: close\r\n"));
 
     let mut stalled = vec![connect_with_retry(port)];
     stalled[0]
@@ -175,6 +268,68 @@ fn worker_pool_serves_in_parallel_and_recovers_after_saturation() {
     );
 
     fs::remove_dir_all(directory).expect("remove worker test artifacts");
+}
+
+#[test]
+fn request_arena_resets_and_worker_recovers_after_oom() {
+    let _build_guard = NATIVE_BUILD.lock().expect("lock native E2E build");
+    let root = repository_root();
+    build_frontend(&root);
+    let directory = temporary_directory();
+    let binary = directory.join("arena-server");
+    let port = available_port();
+    let build = Command::new(env!("CARGO_BIN_EXE_tinytsx"))
+        .current_dir(&root)
+        .args(["build", "tests/compat/hono/multi-route-smoke.ts", "--port"])
+        .arg(port.to_string())
+        .args(["--workers", "1", "--request-memory", "8", "--output"])
+        .arg(&binary)
+        .args([
+            "--alias",
+            "hono=vendor/hono/src/index.ts",
+            "--api",
+            "hono=tests/compat/hono/api.d.ts",
+        ])
+        .output()
+        .expect("build arena server");
+    assert!(
+        build.status.success(),
+        "build failed:\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&build.stdout),
+        String::from_utf8_lossy(&build.stderr),
+    );
+
+    let child = Command::new(&binary).spawn().expect("start arena server");
+    let _server = Server(child);
+    let mut stream = connect_with_retry(port);
+    stream
+        .set_read_timeout(Some(Duration::from_secs(1)))
+        .expect("set arena timeout");
+    stream
+        .write_all(
+            b"GET / HTTP/1.1\r\nHost: localhost\r\n\r\nGET /hello HTTP/1.1\r\nHost: localhost\r\n\r\n",
+        )
+        .expect("send normal then OOM requests");
+    let mut response = String::new();
+    stream
+        .read_to_string(&mut response)
+        .expect("read normal and OOM responses");
+    assert!(response.starts_with("HTTP/1.1 200 OK\r\n"));
+    assert!(response.contains("Hono!!HTTP/1.1 503 Service Unavailable\r\n"));
+    assert!(response.ends_with("request memory exhausted"));
+
+    let mut recovered = TcpStream::connect(("127.0.0.1", port)).expect("connect after OOM");
+    recovered
+        .write_all(b"GET / HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
+        .expect("send request after OOM");
+    let mut recovered_response = String::new();
+    recovered
+        .read_to_string(&mut recovered_response)
+        .expect("read response after OOM");
+    assert!(recovered_response.starts_with("HTTP/1.1 200 OK\r\n"));
+    assert!(recovered_response.ends_with("Hono!!"));
+
+    fs::remove_dir_all(directory).expect("remove arena test artifacts");
 }
 
 #[test]
@@ -1071,4 +1226,8 @@ fn with_suffix(path: &Path, suffix: &str) -> PathBuf {
     let mut value = path.as_os_str().to_owned();
     value.push(suffix);
     PathBuf::from(value)
+}
+
+fn occurrences(value: &str, pattern: &str) -> usize {
+    value.match_indices(pattern).count()
 }
