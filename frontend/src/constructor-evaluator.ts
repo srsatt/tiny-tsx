@@ -67,6 +67,7 @@ export interface EvaluatedResponse {
 
 export interface ApplicationInitializationEvaluation extends ConstructorEvaluation {
   routes: EvaluatedRoute[];
+  notFoundResponse?: EvaluatedResponse;
   routerInsertions: number;
 }
 
@@ -106,8 +107,32 @@ export function evaluateApplicationInitialization(
   return {
     ...summary,
     routes: summarizeRoutes(evaluator, instance),
+    ...(application.calls.some(call => call.method === "notFound")
+      ? evaluateInstalledNotFound(evaluator, instance)
+      : {}),
     routerInsertions: evaluator.routerInsertions,
   };
+}
+
+function evaluateInstalledNotFound(
+  evaluator: Evaluator,
+  instance: Value & {kind: "instance"},
+): {notFoundResponse?: EvaluatedResponse} {
+  const handler = instance.fields.get("#notFoundHandler");
+  const routes = instance.fields.get("routes");
+  if (handler?.kind !== "closure" || routes?.kind !== "array") return {};
+  const requestPath = "/__tinytsx_not_found__";
+  const middleware = routes.items.flatMap(candidate =>
+    matchingMiddleware(candidate, "GET", requestPath)
+  );
+  const response = evaluateRouteHandler(
+    evaluator,
+    handler,
+    middleware,
+    requestPath,
+    "GET",
+  );
+  return response === undefined ? {} : {notFoundResponse: response};
 }
 
 function initializeConstructor(
@@ -239,7 +264,7 @@ function summarizeRoutes(
       matchingMiddleware(candidate, method.value, path.value)
     );
     const response = ["GET", "POST"].includes(method.value) && handler?.kind === "closure"
-      ? evaluateRouteHandler(evaluator, handler, middleware, path.value)
+      ? evaluateRouteHandler(evaluator, handler, middleware, path.value, method.value)
       : undefined;
     return [{
       method: method.value,
@@ -260,6 +285,7 @@ function evaluateRouteHandler(
   handler: Value & {kind: "closure"},
   middleware: Array<Value & {kind: "closure"}>,
   routePattern: string,
+  requestMethod: string,
 ): EvaluatedResponse | undefined {
   const contextClass = findRuntimeClass(evaluator, "Context");
   if (contextClass === undefined) {
@@ -273,7 +299,7 @@ function evaluateRouteHandler(
     [unknown("runtime Request"), UNDEFINED],
     context,
   );
-  context.fields.set("req", {kind: "request", routePattern});
+  context.fields.set("req", {kind: "request", routePattern, method: requestMethod});
   let response = invokeClosure(evaluator, handler, [context], context);
   if (response.kind === "response") {
     for (const middlewareHandler of [...middleware].reverse()) {
@@ -285,7 +311,11 @@ function evaluateRouteHandler(
         [unknown("runtime Request"), UNDEFINED],
         middlewareContext,
       );
-      middlewareContext.fields.set("req", {kind: "request", routePattern});
+      middlewareContext.fields.set("req", {
+        kind: "request",
+        routePattern,
+        method: requestMethod,
+      });
       middlewareContext.fields.set("#res", cloneResponse(response));
       middlewareContext.fields.set("finalized", {kind: "boolean", value: true});
       const issueCount = evaluator.issues.length;

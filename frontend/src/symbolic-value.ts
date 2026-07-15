@@ -15,7 +15,7 @@ export type Value =
   | {kind: "array"; items: Value[]}
   | {kind: "record"; fields: Map<string, Value>}
   | {kind: "headers"; entries: Map<string, {name: string; value: string}>}
-  | {kind: "request"; routePattern: string}
+  | {kind: "request"; routePattern: string; method: string}
   | {kind: "routeParameter"; name: string}
   | {kind: "requestHeader"; name: string}
   | {kind: "queryParameter"; name: string}
@@ -63,6 +63,15 @@ export interface ExecutionResult {
 export const UNDEFINED: Value = {kind: "undefined"};
 
 export function readProperty(value: Value, name: string): Value {
+  if (value.kind === "unknown") return value;
+  if (value.kind === "request" && name === "method") {
+    return {kind: "string", value: value.method};
+  }
+  if (value.kind === "request" && name === "path") {
+    return value.routePattern.includes(":") || value.routePattern.includes("*")
+      ? unknown("request path is not closed for a patterned route")
+      : {kind: "string", value: value.routePattern};
+  }
   if (value.kind === "instance" && name === "res") {
     return value.fields.get("#res") ?? UNDEFINED;
   }
@@ -76,6 +85,9 @@ export function readProperty(value: Value, name: string): Value {
   }
   if (value.kind === "response" && name === "status") {
     return {kind: "number", value: value.status};
+  }
+  if (value.kind === "response" && name === "ok") {
+    return {kind: "boolean", value: value.status >= 200 && value.status <= 299};
   }
   if (value.kind === "record" || value.kind === "instance") {
     return value.fields.get(name) ?? UNDEFINED;

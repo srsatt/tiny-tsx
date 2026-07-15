@@ -200,13 +200,21 @@ function lowerApplicationInitialization(
   initialization: ApplicationInitializationEvaluation,
 ): HirProgram | undefined {
   const routes = initialization.routes.filter(route => ["GET", "POST"].includes(route.method));
+  const fallbackRoutes = initialization.notFoundResponse === undefined
+    ? []
+    : (["GET", "POST"] as const).flatMap(method =>
+      routes.some(route => route.method === method && route.path === "/*")
+        ? []
+        : [{method, path: "/*", response: initialization.notFoundResponse!}]
+    );
+  const emittedRoutes = [...routes, ...fallbackRoutes];
   if (
     routes.length === 0
     || initialization.routes.some(route => !["GET", "POST", "ALL"].includes(route.method))
   ) {
     return undefined;
   }
-  if (routes.some(route =>
+  if (emittedRoutes.some(route =>
     route.response === undefined
     || route.response.kind !== "text"
     || ![
@@ -221,7 +229,7 @@ function lowerApplicationInitialization(
   const exportNode = sourceFile.statements.find(statement => ts.isExportAssignment(statement)) ?? sourceFile;
   const span = spanOf(exportNode, sourceFile);
   const strings = new StringTable();
-  const handlers = routes.map(route => {
+  const handlers = emittedRoutes.map(route => {
     const response = route.response!;
     const value = lowerResponseBody(response.body, route.path, strings, span);
     return {
@@ -260,7 +268,7 @@ function lowerApplicationInitialization(
         (total, value) => total + Buffer.byteLength(value.value, "utf8"),
         0,
       ),
-      dynamicHtmlExpressions: routes.reduce((total, route) =>
+      dynamicHtmlExpressions: emittedRoutes.reduce((total, route) =>
         total + (route.response === undefined ? 0 : dynamicResponseExpressions(route.response.body)),
       0),
     },
