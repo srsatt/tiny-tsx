@@ -6,9 +6,8 @@ probe, not permission to embed Node, Bun, or a JavaScript fallback runtime.
 
 ## Reconnaissance snapshot
 
-On 2026-07-15, upstream tag `ai@7.0.28` resolves to commit
-`3649694271aba0a13d5f9b7090adf20c5a9c1fce`. This is the candidate pin, not yet
-a repository submodule.
+Upstream tag `ai@7.0.28` is pinned as the `vendor/ai` git submodule at commit
+`3649694271aba0a13d5f9b7090adf20c5a9c1fce`.
 
 At that exact tag, `packages/ai/package.json` records:
 
@@ -29,6 +28,31 @@ The official environment guide describes AI SDK Core as usable across JavaScript
 environments, unlike the framework-oriented UI layer. That makes Core the right
 first probe. UI hooks, React Server Components, agents, MCP, and real provider
 packages are outside the first slice.
+
+## Intake evidence
+
+The published package is installed reproducibly under `tests/compat/ai` with a
+lockfile. It selects `ai@7.0.28`, `@ai-sdk/gateway@4.0.20`,
+`@ai-sdk/provider@4.0.3`, `@ai-sdk/provider-utils@5.0.10`, and `zod@3.25.76`.
+The package and Zod tarball integrities are pinned in the compatibility
+manifest. Upstream declaration checking also needs the monorepo's exact
+`@types/node@22.19.19` and `@types/json-schema@7.0.15` development types; this
+is declaration/tooling evidence, not a decision to add Node to the native
+runtime.
+
+The root Core export graph, three workspace packages, selected Zod v3/v4
+entries, event-source parser, workflow serde, and OIDC dependency audit to 609
+modules, 2,065,807 source bytes, and 64,774 lines with zero unresolved runtime
+imports. Notable counts include 821 async/await sites, 565 exception sites, 650
+computed accesses, 945 rest/spread sites, 267 Promise references, 37 Map and 51
+Set references, and 37 TransformStream references. Only six spreads are
+currently closed at AOT time; 939 remain runtime.
+
+The published package imports under Node 26, and an unchanged
+`generateText`/`MockLanguageModelV4` test produces deterministic text with no
+network or credentials. This is JavaScript-runtime reference evidence only;
+TinyTSX does not compile that path yet. The scale difference from Hono confirms
+that export/reachability pruning must precede native implementation.
 
 ## Pin and intake contract
 
@@ -121,4 +145,3 @@ AI SDK Core reaches a first-class experimental status only when:
 - RSS and latency are measured with and without the application worker pool;
 - no embedded JS engine, dynamic code loading, or network-dependent conformance
   test is present.
-

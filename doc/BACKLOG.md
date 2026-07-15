@@ -62,14 +62,14 @@ commit message.
       including startup, RSS, request/reply throughput, and latency.
 - [ ] Add `postMessage`/message events, source-level termination, general
       message shapes, and a multi-Worker load-balancing example.
-- [ ] Pin an exact AI SDK Core revision and run the Hono-style syntax/type/source
+- [x] Pin an exact AI SDK Core revision and run the Hono-style syntax/type/source
       intake against `ai`, `@ai-sdk/provider`, `@ai-sdk/provider-utils`, its
       gateway dependency, and the selected schema dependency.
 - [x] Record the exact `ai@7.0.28` candidate revision/manifest, Core-only scope,
       deterministic fake-model target, test layers, and worker/GC exit gates.
 - [ ] Compile a deterministic AI SDK Core test with a fake model and no network,
       credentials, or provider package before attempting streaming/provider I/O.
-- [ ] Inventory Promise, async iterator, Web Streams, AbortSignal, encoding,
+- [x] Inventory Promise, async iterator, Web Streams, AbortSignal, encoding,
       Fetch, URL, crypto, timer, and persistent-heap gaps from that exact graph.
 - [x] Define static, request, worker, message, and managed-heap lifetimes plus
       the evidence threshold for starting a collector integration spike.

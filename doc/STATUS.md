@@ -319,12 +319,13 @@ produces and serves a native Mach-O executable from the example TSX source.
   31.5k/29.8k/29.2k/30.1k requests/s. More workers did not improve this
   connection-close, single-acceptor, pre-rendered workload; the combined report
   explicitly requires keep-alive and request-time rendering before conclusions.
-- AI SDK reconnaissance records `ai@7.0.28` commit `36496942` as the candidate
-  pin, including its three workspace dependencies, Zod peer, and Node >=22
-  manifest contract. The planned first native slice is Core `generateText` with
-  a deterministic fake model and Bun reference—no credentials or network—then
-  streaming, Hono integration, and provider transport in that order. No AI
-  source or dependency is pinned yet.
+- AI SDK Core is pinned at `ai@7.0.28` commit `36496942`, with a reproducible
+  published install selecting gateway 4.0.20, provider 4.0.3, provider-utils
+  5.0.10, and Zod 3.25.76. Published declarations type-check with the exact
+  upstream Node/JSON-schema development types. The source audit reaches 609
+  modules and 64,774 lines with zero unresolved runtime imports. A deterministic
+  upstream `generateText`/`MockLanguageModelV4` behavior test passes under Node;
+  this is reference evidence, not native compatibility.
 - HTTP/1.1 connections now stay on one executor for up to 100 requests or five
   idle seconds. A 16 KiB parser preserves pipelined bytes, consumes validated
   bodies up to 1 MiB, rejects duplicate Content-Length/transfer encoding, and
