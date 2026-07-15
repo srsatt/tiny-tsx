@@ -342,6 +342,12 @@ produces and serves a native Mach-O executable from the example TSX source.
   at 5.91/5.97/6.08/6.30 MiB. Eight workers reach 1.04x the paired Bun
   throughput there, but TinyTSX p99 is 26.3 ms versus Bun's 1.25 ms because
   excess persistent connections wait behind a worker's bounded turn.
+- Eight-worker request-time previews are now retained for dynamic JSX and
+  finite streaming. TinyTSX stays near 6.1 MiB warm versus Bun at 99.7/154.6
+  MiB, but reaches 0.72–0.79x Bun RPS for JSX and 0.72–0.90x for streaming at
+  concurrency 8–64. TinyTSX p99 remains 30–44 ms at c64, confirming connection
+  fairness is still the main tail problem. Bun collects the finite stream to a
+  19-byte Content-Length response while TinyTSX preserves three wire chunks.
 
 Verification:
 

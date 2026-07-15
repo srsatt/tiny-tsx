@@ -112,3 +112,11 @@ The persistent-connection rerun is retained as four
 summary. Throughput at concurrency 64 scales from 23.8k requests/s with one
 worker to 102.8k with eight for 0.39 MiB more warm RSS. The summary also records
 the remaining p99 problem caused by bounded blocking connection affinity.
+
+The first request-time previews are retained as
+`2026-07-15-m5-max-hono-{dynamic-jsx,stream-text}-keepalive-w8.{json,md}`. Both
+use eight workers, persistent connections, three one-second samples, and Bun
+response gates. Dynamic JSX reaches 0.72–0.79x Bun throughput at concurrency
+8–64; finite streaming reaches 0.72–0.90x. TinyTSX stays near 6.1 MiB warm but
+retains the measured high-concurrency p99 fairness problem. These are
+exploratory route measurements, not general AOT/JIT claims.

@@ -35,6 +35,8 @@ commit message.
 - [x] Implement the bounded native worker pool and benchmark 1/2/4/8 workers.
 - [ ] Benchmark dynamic escaping, request arenas, route parameters, JSON/query
       branches, and representative response sizes.
+- [x] Record repeated eight-worker keep-alive previews for request-time nested
+      JSX escaping and finite `streamText()` against Bun.
 - [ ] Add CPU, syscall, allocation, peak-RSS, and first-launch instrumentation.
 - [ ] Run controlled, longer-duration release comparisons before publishing claims.
 

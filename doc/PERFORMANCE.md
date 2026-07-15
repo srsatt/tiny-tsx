@@ -165,6 +165,34 @@ then be profiled before choosing a more complex socket scheduler.
 Raw reports and the combined interpretation are retained under
 `benchmarks/results/2026-07-15-m5-max-hono-jsx-ssr-keepalive-*`.
 
+## Dynamic JSX and finite-stream previews
+
+Two eight-worker keep-alive workloads now replace the closed JSX page with
+request work. Each point is the median of three one-second samples and remains
+exploratory.
+
+| Workload | Tiny warm RSS | Bun warm RSS | Tiny/Bun RPS c8 | c32 | c64 | Tiny/Bun p99 c64 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Query decode + nested JSX escaping | 6.14 MiB | 99.69 MiB | 0.72x | 0.74x | 0.79x | 30.34 / 1.13 ms |
+| Three flushed `streamText` chunks | 6.12 MiB | 154.58 MiB | 0.72x | 0.81x | 0.90x | 43.64 / 2.10 ms |
+
+At concurrency one, TinyTSX reaches 0.96x Bun on dynamic JSX but only 0.54x on
+the three-chunk stream. Flushing each native chunk has visible fixed cost. As
+concurrency increases, the stream ratio rises to 0.90x, while the dynamic JSX
+route remains 0.72–0.79x Bun. This is the first direct result showing that the
+no-JIT native path is not automatically faster once genuine request work is
+measured.
+
+Footprint remains the clear advantage: TinyTSX starts in 7.70–8.92 ms and stays
+near 6.1 MiB warm, versus Bun at 21.17–21.82 ms and 99.7–154.6 MiB warm. The
+same blocking connection-affinity tail dominates TinyTSX p99 at concurrency
+32–64, so throughput and tail results cannot yet isolate renderer cost.
+
+The stream wire contracts are intentionally visible. TinyTSX preserves three
+HTTP/1.1 chunks; Bun 1.3.13 collects the immediately completed stream and emits
+`Content-Length: 19`. Body bytes and semantic headers still match. Raw reports
+are `2026-07-15-m5-max-hono-{dynamic-jsx,stream-text}-keepalive-w8.{json,md}`.
+
 ## Roadmap
 
 ### P0 — make the comparison semantically and mechanically fair
@@ -201,6 +229,10 @@ Raw reports and the combined interpretation are retained under
    native escaping and bounded response writes instead of selecting a closed
    pre-rendered response. This is the first workload that can answer whether
    AOT code beats a warmed JIT for dynamic application work.
+
+   **Complete as an exploratory gate.** The query decode/escaping workload is
+   byte-equivalent to Bun and records repeated startup, RSS, RPS, and latency.
+   It shows 0.72–0.79x Bun throughput at concurrency 8–64 on this machine.
 6. **Capture CPU, syscalls, allocations, and peak RSS during each sample.** Use
    macOS `sample`/Instruments or equivalent counters and record warm-up phases
    separately. Exit: every throughput result names the dominant CPU path and
@@ -222,7 +254,7 @@ Raw reports and the combined interpretation are retained under
     and repeated days/machines. Publish no general performance claim before
     these gates pass.
 
-The next performance slice should be keep-alive after the response-clone
-contract test. In parallel, the compatibility slice should add request-time
-escaped JSX text/attributes so the next benchmark exercises native application
-work rather than only closed response selection.
+The next performance task is connection fairness instrumentation, followed by
+route/response-size coverage and longer controlled runs. The compatibility
+track can now move to Worker syntax sugar without pretending these previews are
+publication-grade performance claims.
