@@ -187,7 +187,7 @@ fn emit_handlers(assembly: &mut String, program: &Program) -> Result<(), String>
             writeln!(assembly, "    bl _tinytsx_response_header_static").unwrap();
             writeln!(assembly, "    cbnz w0, {return_label}").unwrap();
         }
-        emit_handler_response(assembly, &handler.response, program, return_label)?;
+        emit_handler_response(assembly, &handler.response, program, return_label, index)?;
         writeln!(assembly, "    b {return_label}").unwrap();
     }
     writeln!(assembly, "{return_label}:").unwrap();
@@ -200,6 +200,7 @@ fn emit_handler_response(
     response: &HandlerResponse,
     program: &Program,
     return_label: &str,
+    handler_index: usize,
 ) -> Result<(), String> {
     match response {
         HandlerResponse::Html { component } => {
@@ -219,7 +220,15 @@ fn emit_handler_response(
                 _ => 2,
             };
             emit_response_begin(assembly, *status, content_type_id, return_label);
-            emit_handler_text_expression(assembly, value, program, return_label)?;
+            let mut conditional_index = 0;
+            emit_handler_text_expression(
+                assembly,
+                value,
+                program,
+                return_label,
+                handler_index,
+                &mut conditional_index,
+            )?;
         }
     }
     Ok(())
@@ -230,11 +239,20 @@ fn emit_handler_text_expression(
     expression: &ValueExpression,
     program: &Program,
     return_label: &str,
+    handler_index: usize,
+    conditional_index: &mut usize,
 ) -> Result<(), String> {
     match expression {
         ValueExpression::Concat { values, .. } => {
             for value in values {
-                emit_handler_text_expression(assembly, value, program, return_label)?;
+                emit_handler_text_expression(
+                    assembly,
+                    value,
+                    program,
+                    return_label,
+                    handler_index,
+                    conditional_index,
+                )?;
                 writeln!(assembly, "    cbnz w0, {return_label}").unwrap();
             }
         }
@@ -243,6 +261,48 @@ fn emit_handler_text_expression(
             writeln!(assembly, "    ldr x1, [sp, #24]").unwrap();
             emit_immediate(assembly, "x2", *segment as u64);
             writeln!(assembly, "    bl _tinytsx_html_write_path_segment").unwrap();
+        }
+        ValueExpression::QueryConditional {
+            query,
+            when_present,
+            when_absent,
+            ..
+        } => {
+            let branch_index = *conditional_index;
+            *conditional_index += 1;
+            let absent_label =
+                format!("Ltinytsx_handler_{handler_index}_query_{branch_index}_absent");
+            let end_label = format!("Ltinytsx_handler_{handler_index}_query_{branch_index}_end");
+            writeln!(assembly, "    ldr x0, [sp, #24]").unwrap();
+            writeln!(assembly, "    adrp x1, Ltinytsx_string_{query}@PAGE").unwrap();
+            writeln!(assembly, "    add x1, x1, Ltinytsx_string_{query}@PAGEOFF").unwrap();
+            emit_immediate(
+                assembly,
+                "x2",
+                program.static_strings[*query].value.len() as u64,
+            );
+            writeln!(assembly, "    bl _tinytsx_request_query_has").unwrap();
+            writeln!(assembly, "    cbz w0, {absent_label}").unwrap();
+            emit_handler_text_expression(
+                assembly,
+                when_present,
+                program,
+                return_label,
+                handler_index,
+                conditional_index,
+            )?;
+            writeln!(assembly, "    cbnz w0, {return_label}").unwrap();
+            writeln!(assembly, "    b {end_label}").unwrap();
+            writeln!(assembly, "{absent_label}:").unwrap();
+            emit_handler_text_expression(
+                assembly,
+                when_absent,
+                program,
+                return_label,
+                handler_index,
+                conditional_index,
+            )?;
+            writeln!(assembly, "{end_label}:").unwrap();
         }
         _ => {
             emit_value_expression(assembly, expression, program, 32)?;
@@ -324,7 +384,9 @@ fn emit_value_expression(
             }
             writeln!(assembly, "    bl _tinytsx_function_{function}").unwrap();
         }
-        ValueExpression::Concat { .. } | ValueExpression::RouteParameter { .. } => {
+        ValueExpression::Concat { .. }
+        | ValueExpression::RouteParameter { .. }
+        | ValueExpression::QueryConditional { .. } => {
             return Err("request-time expression used outside a handler response".to_owned());
         }
     }
@@ -363,6 +425,11 @@ fn scratch_slots(expression: &ValueExpression) -> usize {
         ValueExpression::Concat { values, .. } => {
             values.iter().map(scratch_slots).max().unwrap_or(0)
         }
+        ValueExpression::QueryConditional {
+            when_present,
+            when_absent,
+            ..
+        } => scratch_slots(when_present).max(scratch_slots(when_absent)),
         _ => 0,
     }
 }
@@ -603,5 +670,57 @@ mod tests {
         assert!(assembly.contains("movz x1, #201"));
         assert!(assembly.contains("Ltinytsx_handler_method_0:\n    .byte 80, 79, 83, 84"));
         assert!(assembly.contains("movz x2, #1\n    bl _tinytsx_html_write_path_segment"));
+    }
+
+    #[test]
+    fn emits_query_conditional_handler_bodies() {
+        let program: Program = serde_json::from_str(
+            r#"{
+              "version": 2,
+              "target": "aarch64-apple-darwin",
+              "entry": "server.ts",
+              "modules": [{"path": "server.ts"}],
+              "functions": [],
+              "components": [],
+              "handlers": [{
+                "method": "GET",
+                "path": "/posts",
+                "response": {
+                  "kind": "text",
+                  "contentType": "application/json",
+                  "value": {
+                    "kind": "queryConditional",
+                    "query": 0,
+                    "whenPresent": {
+                      "kind": "stringLiteral",
+                      "string": 1,
+                      "span": {"file":"server.ts","line":1,"column":1,"endLine":1,"endColumn":2}
+                    },
+                    "whenAbsent": {
+                      "kind": "stringLiteral",
+                      "string": 2,
+                      "span": {"file":"server.ts","line":1,"column":1,"endLine":1,"endColumn":2}
+                    },
+                    "span": {"file":"server.ts","line":1,"column":1,"endLine":1,"endColumn":2}
+                  }
+                },
+                "span": {"file":"server.ts","line":1,"column":1,"endLine":1,"endColumn":2}
+              }],
+              "staticStrings": [
+                {"id":0,"value":"pretty"},
+                {"id":1,"value":"{\n  \"ok\": true\n}"},
+                {"id":2,"value":"{\"ok\":true}"}
+              ],
+              "constants": [],
+              "statistics": {"modules":1,"functions":0,"components":0,"constants":0,"staticHtmlBytes":35,"dynamicHtmlExpressions":1}
+            }"#,
+        )
+        .unwrap();
+
+        let assembly = emit(&program, Options::default()).unwrap();
+
+        assert!(assembly.contains("bl _tinytsx_request_query_has"));
+        assert!(assembly.contains("cbz w0, Ltinytsx_handler_0_query_0_absent"));
+        assert!(assembly.contains("Ltinytsx_handler_0_query_0_end:"));
     }
 }

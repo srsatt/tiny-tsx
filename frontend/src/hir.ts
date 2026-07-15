@@ -85,6 +85,13 @@ export type ValueExpression =
       name: string;
       segment: number;
       span: SourceSpan;
+    }
+  | {
+      kind: "queryConditional";
+      query: number;
+      whenPresent: ValueExpression;
+      whenAbsent: ValueExpression;
+      span: SourceSpan;
     };
 
 export interface FunctionParameter {

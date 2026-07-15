@@ -119,6 +119,14 @@ pub enum ValueExpression {
         segment: usize,
         span: SourceSpan,
     },
+    QueryConditional {
+        query: usize,
+        #[serde(rename = "whenPresent")]
+        when_present: Box<ValueExpression>,
+        #[serde(rename = "whenAbsent")]
+        when_absent: Box<ValueExpression>,
+        span: SourceSpan,
+    },
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -372,7 +380,9 @@ impl Program {
                     self.validate_expression(argument, parameter_count)?;
                 }
             }
-            ValueExpression::Concat { .. } | ValueExpression::RouteParameter { .. } => {
+            ValueExpression::Concat { .. }
+            | ValueExpression::RouteParameter { .. }
+            | ValueExpression::QueryConditional { .. } => {
                 return Err(
                     "request-time expressions are only valid in handler responses".to_owned(),
                 );
@@ -407,6 +417,21 @@ impl Program {
                     ));
                 }
                 Ok(())
+            }
+            ValueExpression::QueryConditional {
+                query,
+                when_present,
+                when_absent,
+                ..
+            } => {
+                let Some(query) = self.static_strings.get(*query) else {
+                    return Err("query condition references a missing static string".to_owned());
+                };
+                if query.value.is_empty() {
+                    return Err("query condition name must not be empty".to_owned());
+                }
+                self.validate_handler_expression(when_present, route_pattern)?;
+                self.validate_handler_expression(when_absent, route_pattern)
             }
             _ => self.validate_expression(expression, 0),
         }
@@ -451,6 +476,14 @@ impl Program {
                 for value in values {
                     self.visit_expression_functions(value, state)?;
                 }
+            }
+            ValueExpression::QueryConditional {
+                when_present,
+                when_absent,
+                ..
+            } => {
+                self.visit_expression_functions(when_present, state)?;
+                self.visit_expression_functions(when_absent, state)?;
             }
             _ => {}
         }

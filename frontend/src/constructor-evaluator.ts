@@ -27,6 +27,7 @@ import {
   typeOf,
   UNDEFINED,
   unknown,
+  type ResponseBody,
   type Value,
   type RuntimeStringPart,
   valuesEqual,
@@ -58,7 +59,7 @@ export interface EvaluatedRoute {
 
 export interface EvaluatedResponse {
   kind: "text";
-  body: string | RuntimeStringPart[];
+  body: ResponseBody;
   status: number;
   contentType: string;
   headers?: Array<{name: string; value: string}>;
@@ -273,7 +274,7 @@ function evaluateRouteHandler(
     context,
   );
   context.fields.set("req", {kind: "request", routePattern});
-  const response = invokeClosure(evaluator, handler, [context], context);
+  let response = invokeClosure(evaluator, handler, [context], context);
   if (response.kind === "response") {
     for (const middlewareHandler of [...middleware].reverse()) {
       const middlewareContext: Value & {kind: "instance"} = {kind: "instance", fields: new Map()};
@@ -284,6 +285,7 @@ function evaluateRouteHandler(
         [unknown("runtime Request"), UNDEFINED],
         middlewareContext,
       );
+      middlewareContext.fields.set("req", {kind: "request", routePattern});
       middlewareContext.fields.set("#res", response);
       middlewareContext.fields.set("finalized", {kind: "boolean", value: true});
       invokeClosure(
@@ -296,6 +298,10 @@ function evaluateRouteHandler(
         }],
         middlewareContext,
       );
+      const middlewareResponse = middlewareContext.fields.get("#res");
+      if (middlewareResponse?.kind === "response") {
+        response = middlewareResponse;
+      }
     }
   }
   if (response.kind !== "response") return undefined;
@@ -463,7 +469,28 @@ function executeStatement(
     const condition = evaluate(evaluator, statement.expression, module, environment, instance);
     const decision = truthiness(condition);
     if (decision === undefined) {
-      issue(evaluator, statement.expression, module, "if condition is not a closed boolean");
+      if (
+        condition.kind === "queryPredicate"
+        && condition.test === "present"
+        && statement.elseStatement === undefined
+      ) {
+        return executeQueryConditionalStatement(
+          evaluator,
+          statement,
+          condition.name,
+          module,
+          environment,
+          instance,
+        );
+      }
+      issue(
+        evaluator,
+        statement.expression,
+        module,
+        `if condition is not a closed boolean (${condition.kind}${
+          condition.kind === "unknown" ? `: ${condition.reason}` : ""
+        })`,
+      );
       return continued();
     }
     const branch = decision ? statement.thenStatement : statement.elseStatement;
@@ -536,6 +563,73 @@ function executeStatement(
   }
   issue(evaluator, expression, module, "constructor expression effect is not supported");
   return continued();
+}
+
+function executeQueryConditionalStatement(
+  evaluator: Evaluator,
+  statement: ts.IfStatement,
+  query: string,
+  module: SourceModule,
+  environment: Map<string, Value>,
+  instance: Value & {kind: "instance"},
+): ExecutionResult {
+  const current = instance.fields.get("#res");
+  if (current?.kind !== "response") {
+    issue(evaluator, statement.expression, module, "query-conditional effect has no response");
+    return continued();
+  }
+  const before: Value & {kind: "response"} = {
+    ...current,
+    headers: new Map(current.headers),
+  };
+  const result = executeStatement(
+    evaluator,
+    statement.thenStatement,
+    module,
+    environment,
+    instance,
+  );
+  const after = instance.fields.get("#res");
+  if (
+    result.returned
+    || after?.kind !== "response"
+    || !sameResponseMetadata(before, after)
+    || !isBranchResponseBody(before.body)
+    || !isBranchResponseBody(after.body)
+  ) {
+    instance.fields.set("#res", before);
+    issue(evaluator, statement, module, "query-conditional response effect is not mergeable");
+    return continued();
+  }
+  instance.fields.set("#res", {
+    ...before,
+    body: {
+      kind: "queryConditional",
+      query,
+      whenPresent: after.body,
+      whenAbsent: before.body,
+    },
+  });
+  return continued();
+}
+
+function isBranchResponseBody(
+  body: ResponseBody,
+): body is string | RuntimeStringPart[] {
+  return typeof body === "string" || Array.isArray(body);
+}
+
+function sameResponseMetadata(
+  left: Value & {kind: "response"},
+  right: Value & {kind: "response"},
+): boolean {
+  if (left.status !== right.status || left.contentType !== right.contentType) return false;
+  if (left.headers.size !== right.headers.size) return false;
+  for (const [name, header] of left.headers) {
+    const candidate = right.headers.get(name);
+    if (candidate?.name !== header.name || candidate.value !== header.value) return false;
+  }
+  return true;
 }
 
 function executeStatements(
@@ -777,6 +871,12 @@ function evaluateCall(
         ? {kind: "routeParameter", name: key.value}
         : UNDEFINED;
     }
+    if (receiver.kind === "request" && name === "query") {
+      const key = arguments_[0];
+      return key?.kind === "string"
+        ? {kind: "queryParameter", name: key.value}
+        : unknown("request query name is not a closed string");
+    }
     if (receiver.kind === "reference" && receiver.name === "Object" && name === "entries") {
       const value = arguments_[0];
       return value?.kind === "record"
@@ -791,8 +891,25 @@ function evaluateCall(
     }
     if (receiver.kind === "reference" && receiver.name === "JSON" && name === "stringify") {
       const value = arguments_[0] ?? UNDEFINED;
-      const serialized = stringifyJson(value);
+      const space = arguments_[2];
+      const serialized = stringifyJson(value, space?.kind === "number" ? space.value : undefined);
       return serialized === undefined ? UNDEFINED : {kind: "string", value: serialized};
+    }
+    if (receiver.kind === "headers" && name === "get") {
+      const key = arguments_[0];
+      if (key?.kind !== "string") return unknown("header name is not a closed string");
+      const value = receiver.entries.get(key.value.toLowerCase())?.value;
+      return value === undefined ? UNDEFINED : {kind: "string", value};
+    }
+    if (receiver.kind === "response" && name === "json") {
+      if (typeof receiver.body !== "string") {
+        return unknown("Response JSON body is not closed");
+      }
+      try {
+        return fromJsonValue(JSON.parse(receiver.body));
+      } catch {
+        return unknown("Response body is not valid JSON");
+      }
     }
     if (receiver.kind === "instance") {
       const callable = receiver.fields.get(name);
@@ -813,6 +930,12 @@ function evaluateCall(
     }
     if (receiver.kind === "string") {
       if (name === "toUpperCase") return {kind: "string", value: receiver.value.toUpperCase()};
+      if (name === "startsWith") {
+        const prefix = arguments_[0];
+        return prefix?.kind === "string"
+          ? {kind: "boolean", value: receiver.value.startsWith(prefix.value)}
+          : unknown("String.startsWith prefix is not a closed string");
+      }
       if (name === "at") {
         const index = arguments_[0];
         return index?.kind === "number"
@@ -831,6 +954,23 @@ function evaluateCall(
     }
   }
   return unknown("call expression is not a supported compile-time callable");
+}
+
+function combineQueryOr(left: Value, right: Value): Value | undefined {
+  const leftPredicate = left.kind === "queryParameter"
+    ? {kind: "queryPredicate" as const, name: left.name, test: "truthy" as const}
+    : left.kind === "queryPredicate" ? left : undefined;
+  if (leftPredicate === undefined) return undefined;
+  if (truthiness(right) === false) return leftPredicate;
+  if (
+    right.kind === "queryPredicate"
+    && right.name === leftPredicate.name
+    && ((leftPredicate.test === "truthy" && right.test === "empty")
+      || leftPredicate.test === "present")
+  ) {
+    return {kind: "queryPredicate", name: leftPredicate.name, test: "present"};
+  }
+  return undefined;
 }
 
 function evaluate(
@@ -954,11 +1094,28 @@ function evaluate(
     const left = evaluate(evaluator, expression.left, module, environment, instance);
     if (operator === ts.SyntaxKind.AmpersandAmpersandToken) {
       const decision = truthiness(left);
-      return decision === undefined
-        ? unknown("logical AND operand is not closed")
-        : decision
-          ? evaluate(evaluator, expression.right, module, environment, instance)
-          : left;
+      if (decision === false) return left;
+      const right = evaluate(evaluator, expression.right, module, environment, instance);
+      if (decision === true) return right;
+      const rightDecision = truthiness(right);
+      return rightDecision === true && left.kind === "queryPredicate"
+        ? left
+        : rightDecision === false
+          ? right
+          : unknown(`logical AND operand is not closed (${left.kind}${
+            left.kind === "unknown" ? `: ${left.reason}` : ""
+          }, ${right.kind}${
+            right.kind === "unknown" ? `: ${right.reason}` : ""
+          })`);
+    }
+    if (operator === ts.SyntaxKind.BarBarToken) {
+      const decision = truthiness(left);
+      if (decision === true) return left;
+      const right = evaluate(evaluator, expression.right, module, environment, instance);
+      if (decision === false) return right;
+      return combineQueryOr(left, right) ?? unknown(`logical OR operand is not closed (${left.kind}${
+        left.kind === "unknown" ? `: ${left.reason}` : ""
+      }, ${right.kind}${right.kind === "unknown" ? `: ${right.reason}` : ""})`);
     }
     if (operator === ts.SyntaxKind.QuestionQuestionToken) {
       return left.kind === "undefined" || left.kind === "null"
@@ -970,6 +1127,14 @@ function evaluate(
       || operator === ts.SyntaxKind.ExclamationEqualsEqualsToken
     ) {
       const right = evaluate(evaluator, expression.right, module, environment, instance);
+      if (
+        operator === ts.SyntaxKind.EqualsEqualsEqualsToken
+        && left.kind === "queryParameter"
+        && right.kind === "string"
+        && right.value === ""
+      ) {
+        return {kind: "queryPredicate", name: left.name, test: "empty"};
+      }
       const equal = valuesEqual(left, right);
       return {
         kind: "boolean",
@@ -1120,11 +1285,26 @@ function routeParameterNames(pattern: string): string[] {
 
 const UNSUPPORTED_JSON = Symbol("unsupported JSON value");
 
-function stringifyJson(value: Value): string | undefined {
+function stringifyJson(value: Value, space?: number): string | undefined {
   const converted = jsonValue(value, false);
   return converted === UNSUPPORTED_JSON || converted === undefined
     ? undefined
-    : JSON.stringify(converted);
+    : JSON.stringify(converted, null, space);
+}
+
+function fromJsonValue(value: unknown): Value {
+  if (value === null) return {kind: "null"};
+  if (typeof value === "boolean") return {kind: "boolean", value};
+  if (typeof value === "number") return {kind: "number", value};
+  if (typeof value === "string") return {kind: "string", value};
+  if (Array.isArray(value)) return {kind: "array", items: value.map(fromJsonValue)};
+  if (typeof value === "object") {
+    return {
+      kind: "record",
+      fields: new Map(Object.entries(value).map(([name, field]) => [name, fromJsonValue(field)])),
+    };
+  }
+  return UNDEFINED;
 }
 
 function jsonValue(value: Value, arrayElement: boolean): unknown | typeof UNSUPPORTED_JSON {
@@ -1179,7 +1359,9 @@ function responseStatus(
     ? UNDEFINED
     : evaluate(evaluator, expression.arguments[1], module, environment, instance);
   const status = init.kind === "record" ? init.fields.get("status") : undefined;
-  return status?.kind === "number" ? status.value : 200;
+  return init.kind === "response"
+    ? init.status
+    : status?.kind === "number" ? status.value : 200;
 }
 
 function responseHeaders(
@@ -1192,6 +1374,9 @@ function responseHeaders(
   const init = expression.arguments?.[1] === undefined
     ? UNDEFINED
     : evaluate(evaluator, expression.arguments[1], module, environment, instance);
+  if (init.kind === "response") {
+    return new Map(init.headers);
+  }
   const headers = init.kind === "record" ? init.fields.get("headers") : undefined;
   if (headers?.kind === "headers") {
     return new Map(headers.entries);
@@ -1223,7 +1408,10 @@ function assign(
   if (ts.isPropertyAccessExpression(target)) {
     const receiver = evaluate(evaluator, target.expression, module, environment, instance);
     if (receiver.kind === "instance" || receiver.kind === "record") {
-      receiver.fields.set(target.name.text, value);
+      receiver.fields.set(
+        receiver.kind === "instance" && target.name.text === "res" ? "#res" : target.name.text,
+        value,
+      );
       return;
     }
   }

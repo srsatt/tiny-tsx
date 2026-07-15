@@ -9,13 +9,14 @@ import {
 import {lowerStagedConstants} from "./constant-lowering.js";
 import {CompileFailure, fromTypeScript, spanOf, tinyError} from "./diagnostics.js";
 import {FunctionLowerer} from "./function-lowering.js";
-import type {Component, Handler, HirProgram} from "./hir.js";
+import type {Component, Handler, HirProgram, SourceSpan, ValueExpression} from "./hir.js";
 import {StringTable} from "./hir.js";
 import {lowerComponentBody} from "./jsx-lowering.js";
 import {loadModuleGraph} from "./module-graph.js";
 import {displayRuntimeClassPlan, resolveRuntimeClassPlan} from "./runtime-class-plan.js";
 import {analyzeStaging} from "./staging.js";
 import {validateForbiddenSyntax} from "./subset-validator.js";
+import type {ResponseBody, RuntimeStringPart} from "./symbolic-value.js";
 
 export interface CompileOptions {
   sdkPath: string;
@@ -221,20 +222,7 @@ function lowerApplicationInitialization(
   const strings = new StringTable();
   const handlers = routes.map(route => {
     const response = route.response!;
-    const value = typeof response.body === "string"
-      ? {kind: "stringLiteral" as const, string: strings.intern(response.body), span}
-      : {
-        kind: "concat" as const,
-        values: response.body.map(part => part.kind === "literal"
-          ? {kind: "stringLiteral" as const, string: strings.intern(part.value), span}
-          : {
-            kind: "routeParameter" as const,
-            name: part.name,
-            segment: routeParameterSegment(route.path, part.name),
-            span,
-          }),
-        span,
-      };
+    const value = lowerResponseBody(response.body, route.path, strings, span);
     return {
       method: route.method as "GET" | "POST",
       path: route.path,
@@ -271,11 +259,65 @@ function lowerApplicationInitialization(
         0,
       ),
       dynamicHtmlExpressions: routes.reduce((total, route) =>
-        total + (typeof route.response?.body === "string"
-          ? 0
-          : route.response?.body.filter(part => part.kind === "routeParameter").length ?? 0), 0),
+        total + (route.response === undefined ? 0 : dynamicResponseExpressions(route.response.body)),
+      0),
     },
   };
+}
+
+function lowerResponseBody(
+  body: ResponseBody,
+  routePath: string,
+  strings: StringTable,
+  span: SourceSpan,
+): ValueExpression {
+  if (typeof body === "string") {
+    return {kind: "stringLiteral", string: strings.intern(body), span};
+  }
+  if (Array.isArray(body)) {
+    return lowerRuntimeString(body, routePath, strings, span);
+  }
+  return {
+    kind: "queryConditional",
+    query: strings.intern(body.query),
+    whenPresent: typeof body.whenPresent === "string"
+      ? {kind: "stringLiteral", string: strings.intern(body.whenPresent), span}
+      : lowerRuntimeString(body.whenPresent, routePath, strings, span),
+    whenAbsent: typeof body.whenAbsent === "string"
+      ? {kind: "stringLiteral", string: strings.intern(body.whenAbsent), span}
+      : lowerRuntimeString(body.whenAbsent, routePath, strings, span),
+    span,
+  };
+}
+
+function lowerRuntimeString(
+  parts: RuntimeStringPart[],
+  routePath: string,
+  strings: StringTable,
+  span: SourceSpan,
+): ValueExpression {
+  return {
+    kind: "concat",
+    values: parts.map(part => part.kind === "literal"
+      ? {kind: "stringLiteral", string: strings.intern(part.value), span}
+      : {
+        kind: "routeParameter",
+        name: part.name,
+        segment: routeParameterSegment(routePath, part.name),
+        span,
+      }),
+    span,
+  };
+}
+
+function dynamicResponseExpressions(body: ResponseBody): number {
+  if (typeof body === "string") return 0;
+  if (Array.isArray(body)) {
+    return body.filter(part => part.kind === "routeParameter").length;
+  }
+  return 1
+    + dynamicResponseExpressions(body.whenPresent)
+    + dynamicResponseExpressions(body.whenAbsent);
 }
 
 function routeParameterSegment(pattern: string, name: string): number {

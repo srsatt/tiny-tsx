@@ -16,6 +16,8 @@ export type Value =
   | {kind: "headers"; entries: Map<string, {name: string; value: string}>}
   | {kind: "request"; routePattern: string}
   | {kind: "routeParameter"; name: string}
+  | {kind: "queryParameter"; name: string}
+  | {kind: "queryPredicate"; name: string; test: "truthy" | "empty" | "present"}
   | {kind: "runtimeString"; parts: RuntimeStringPart[]}
   | {
       kind: "closure";
@@ -28,7 +30,7 @@ export type Value =
   | {kind: "constructed"; name: string; module: string}
   | {
       kind: "response";
-      body: string | RuntimeStringPart[];
+      body: ResponseBody;
       status: number;
       contentType: string;
       headers: Map<string, {name: string; value: string}>;
@@ -39,6 +41,16 @@ export type Value =
 export type RuntimeStringPart =
   | {kind: "literal"; value: string}
   | {kind: "routeParameter"; name: string};
+
+export type ResponseBody =
+  | string
+  | RuntimeStringPart[]
+  | {
+      kind: "queryConditional";
+      query: string;
+      whenPresent: string | RuntimeStringPart[];
+      whenAbsent: string | RuntimeStringPart[];
+    };
 
 export interface ExecutionResult {
   returned: boolean;
@@ -133,6 +145,8 @@ export function truthiness(value: Value): boolean | undefined {
     case "response":
     case "instance": return true;
     case "routeParameter": return true;
+    case "queryParameter":
+    case "queryPredicate": return undefined;
     case "runtimeString": return value.parts.length > 0;
     case "unknown": return undefined;
   }
@@ -147,6 +161,8 @@ export function typeOf(value: Value): string {
     case "string": return "string";
     case "routeParameter":
     case "runtimeString": return "string";
+    case "queryParameter": return "string";
+    case "queryPredicate": return "boolean";
     case "closure":
     case "reference": return "function";
     default: return "object";
