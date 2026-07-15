@@ -47,6 +47,8 @@ pub struct Handler {
     pub headers: Vec<StaticHeader>,
     #[serde(default, rename = "elapsedHeaders")]
     pub elapsed_headers: Vec<ElapsedHeader>,
+    #[serde(default, rename = "basicAuthorization")]
+    pub basic_authorization: Option<BasicAuthorization>,
     #[serde(default)]
     pub stderr: Vec<usize>,
     pub response: HandlerResponse,
@@ -63,6 +65,27 @@ pub struct StaticHeader {
 pub struct ElapsedHeader {
     pub name: String,
     pub suffix: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct BasicAuthorization {
+    pub credentials: Vec<BasicCredential>,
+    pub rejected: GuardedResponse,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct BasicCredential {
+    pub username: String,
+    pub password: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct GuardedResponse {
+    #[serde(default)]
+    pub headers: Vec<StaticHeader>,
+    #[serde(default)]
+    pub stderr: Vec<usize>,
+    pub response: HandlerResponse,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -233,66 +256,16 @@ impl Program {
                     handler.method, handler.path
                 ));
             }
-            let mut header_names = HashSet::new();
-            if handler.headers.len() + handler.elapsed_headers.len() > 8 {
-                return Err("handler contains more than eight response headers".to_owned());
-            }
-            for header in &handler.headers {
-                let normalized = header.name.to_ascii_lowercase();
-                if !valid_header_name(header.name.as_bytes())
-                    || header
-                        .value
-                        .bytes()
-                        .any(|byte| matches!(byte, b'\0' | b'\r' | b'\n'))
-                    || !header_names.insert(normalized)
-                {
-                    return Err("handler contains invalid or duplicate headers".to_owned());
+            validate_response_headers(&handler.headers, &handler.elapsed_headers)?;
+            self.validate_stderr(&handler.stderr)?;
+            self.validate_handler_response(&handler.response, &handler.path)?;
+            if let Some(authorization) = &handler.basic_authorization {
+                if authorization.credentials.is_empty() {
+                    return Err("Basic Authorization guard has no credentials".to_owned());
                 }
-            }
-            for header in &handler.elapsed_headers {
-                let normalized = header.name.to_ascii_lowercase();
-                if !valid_header_name(header.name.as_bytes())
-                    || header
-                        .suffix
-                        .bytes()
-                        .any(|byte| matches!(byte, b'\0' | b'\r' | b'\n'))
-                    || !header_names.insert(normalized)
-                {
-                    return Err("handler contains invalid or duplicate headers".to_owned());
-                }
-            }
-            if handler
-                .stderr
-                .iter()
-                .any(|string| *string >= self.static_strings.len())
-            {
-                return Err("handler stderr references a missing static string".to_owned());
-            }
-            match &handler.response {
-                HandlerResponse::Html { component } if *component >= self.components.len() => {
-                    return Err("GET handler references a missing component".to_owned());
-                }
-                HandlerResponse::Text {
-                    value,
-                    status,
-                    content_type,
-                } => {
-                    if !(100..=599).contains(status) {
-                        return Err("handler response has an invalid HTTP status".to_owned());
-                    }
-                    if content_type.as_deref().is_some_and(|value| {
-                        !matches!(
-                            value,
-                            "" | "text/plain; charset=UTF-8"
-                                | "text/plain;charset=UTF-8"
-                                | "application/json"
-                        )
-                    }) {
-                        return Err("GET text response has an unsupported content type".to_owned());
-                    }
-                    self.validate_handler_expression(value, &handler.path)?;
-                }
-                _ => {}
+                validate_response_headers(&authorization.rejected.headers, &[])?;
+                self.validate_stderr(&authorization.rejected.stderr)?;
+                self.validate_handler_response(&authorization.rejected.response, &handler.path)?;
             }
         }
         for (index, component) in self.components.iter().enumerate() {
@@ -426,6 +399,49 @@ impl Program {
             }
         }
         Ok(())
+    }
+
+    fn validate_stderr(&self, stderr: &[usize]) -> Result<(), String> {
+        if stderr
+            .iter()
+            .any(|string| *string >= self.static_strings.len())
+        {
+            return Err("handler stderr references a missing static string".to_owned());
+        }
+        Ok(())
+    }
+
+    fn validate_handler_response(
+        &self,
+        response: &HandlerResponse,
+        route_pattern: &str,
+    ) -> Result<(), String> {
+        match response {
+            HandlerResponse::Html { component } if *component >= self.components.len() => {
+                Err("GET handler references a missing component".to_owned())
+            }
+            HandlerResponse::Text {
+                value,
+                status,
+                content_type,
+            } => {
+                if !(100..=599).contains(status) {
+                    return Err("handler response has an invalid HTTP status".to_owned());
+                }
+                if content_type.as_deref().is_some_and(|value| {
+                    !matches!(
+                        value,
+                        "" | "text/plain; charset=UTF-8"
+                            | "text/plain;charset=UTF-8"
+                            | "application/json"
+                    )
+                }) {
+                    return Err("GET text response has an unsupported content type".to_owned());
+                }
+                self.validate_handler_expression(value, route_pattern)
+            }
+            _ => Ok(()),
+        }
     }
 
     fn validate_handler_expression(
@@ -567,6 +583,41 @@ fn root_path() -> String {
 
 fn ok_status() -> u16 {
     200
+}
+
+fn validate_response_headers(
+    headers: &[StaticHeader],
+    elapsed_headers: &[ElapsedHeader],
+) -> Result<(), String> {
+    if headers.len() + elapsed_headers.len() > 8 {
+        return Err("handler contains more than eight response headers".to_owned());
+    }
+    let mut names = HashSet::new();
+    for header in headers {
+        let normalized = header.name.to_ascii_lowercase();
+        if !valid_header_name(header.name.as_bytes())
+            || header
+                .value
+                .bytes()
+                .any(|byte| matches!(byte, b'\0' | b'\r' | b'\n'))
+            || !names.insert(normalized)
+        {
+            return Err("handler contains invalid or duplicate headers".to_owned());
+        }
+    }
+    for header in elapsed_headers {
+        let normalized = header.name.to_ascii_lowercase();
+        if !valid_header_name(header.name.as_bytes())
+            || header
+                .suffix
+                .bytes()
+                .any(|byte| matches!(byte, b'\0' | b'\r' | b'\n'))
+            || !names.insert(normalized)
+        {
+            return Err("handler contains invalid or duplicate headers".to_owned());
+        }
+    }
+    Ok(())
 }
 
 fn valid_header_name(name: &[u8]) -> bool {

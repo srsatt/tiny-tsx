@@ -162,6 +162,82 @@ fn emit_handlers(assembly: &mut String, program: &Program) -> Result<(), String>
     writeln!(assembly, "    b {return_label}").unwrap();
     for (index, handler) in program.handlers.iter().enumerate() {
         writeln!(assembly, "Ltinytsx_handle_get_match_{index}:").unwrap();
+        if let Some(authorization) = &handler.basic_authorization {
+            let authorized_label = format!("Ltinytsx_handler_{index}_basic_auth_authorized");
+            for (credential_index, credential) in authorization.credentials.iter().enumerate() {
+                writeln!(assembly, "    ldr x0, [sp, #24]").unwrap();
+                writeln!(
+                    assembly,
+                    "    adrp x1, Ltinytsx_handler_{index}_credential_{credential_index}_username@PAGE"
+                )
+                .unwrap();
+                writeln!(
+                    assembly,
+                    "    add x1, x1, Ltinytsx_handler_{index}_credential_{credential_index}_username@PAGEOFF"
+                )
+                .unwrap();
+                emit_immediate(assembly, "x2", credential.username.len() as u64);
+                writeln!(
+                    assembly,
+                    "    adrp x3, Ltinytsx_handler_{index}_credential_{credential_index}_password@PAGE"
+                )
+                .unwrap();
+                writeln!(
+                    assembly,
+                    "    add x3, x3, Ltinytsx_handler_{index}_credential_{credential_index}_password@PAGEOFF"
+                )
+                .unwrap();
+                emit_immediate(assembly, "x4", credential.password.len() as u64);
+                writeln!(assembly, "    bl _tinytsx_request_basic_auth_equals").unwrap();
+                writeln!(assembly, "    cbnz w0, {authorized_label}").unwrap();
+            }
+            for string in &authorization.rejected.stderr {
+                writeln!(assembly, "    adrp x0, Ltinytsx_string_{string}@PAGE").unwrap();
+                writeln!(assembly, "    add x0, x0, Ltinytsx_string_{string}@PAGEOFF").unwrap();
+                emit_immediate(
+                    assembly,
+                    "x1",
+                    program.static_strings[*string].value.len() as u64,
+                );
+                writeln!(assembly, "    bl _tinytsx_console_error_static").unwrap();
+            }
+            for (header_index, header) in authorization.rejected.headers.iter().enumerate() {
+                writeln!(assembly, "    ldr x0, [sp, #16]").unwrap();
+                writeln!(
+                    assembly,
+                    "    adrp x1, Ltinytsx_handler_{index}_rejected_header_{header_index}_name@PAGE"
+                )
+                .unwrap();
+                writeln!(
+                    assembly,
+                    "    add x1, x1, Ltinytsx_handler_{index}_rejected_header_{header_index}_name@PAGEOFF"
+                )
+                .unwrap();
+                emit_immediate(assembly, "x2", header.name.len() as u64);
+                writeln!(
+                    assembly,
+                    "    adrp x3, Ltinytsx_handler_{index}_rejected_header_{header_index}_value@PAGE"
+                )
+                .unwrap();
+                writeln!(
+                    assembly,
+                    "    add x3, x3, Ltinytsx_handler_{index}_rejected_header_{header_index}_value@PAGEOFF"
+                )
+                .unwrap();
+                emit_immediate(assembly, "x4", header.value.len() as u64);
+                writeln!(assembly, "    bl _tinytsx_response_header_static").unwrap();
+                writeln!(assembly, "    cbnz w0, {return_label}").unwrap();
+            }
+            emit_handler_response(
+                assembly,
+                &authorization.rejected.response,
+                program,
+                return_label,
+                index,
+            )?;
+            writeln!(assembly, "    b {return_label}").unwrap();
+            writeln!(assembly, "{authorized_label}:").unwrap();
+        }
         if !handler.elapsed_headers.is_empty() {
             writeln!(assembly, "    bl _tinytsx_date_now_millis").unwrap();
             writeln!(assembly, "    str x0, [sp, #32]").unwrap();
@@ -538,6 +614,40 @@ fn emit_static_data(assembly: &mut String, program: &Program) -> Result<(), Stri
             )
             .unwrap();
             emit_bytes(assembly, header.suffix.as_bytes());
+        }
+        if let Some(authorization) = &handler.basic_authorization {
+            for (credential_index, credential) in authorization.credentials.iter().enumerate() {
+                writeln!(assembly, ".p2align 3").unwrap();
+                writeln!(
+                    assembly,
+                    "Ltinytsx_handler_{index}_credential_{credential_index}_username:"
+                )
+                .unwrap();
+                emit_bytes(assembly, credential.username.as_bytes());
+                writeln!(assembly, ".p2align 3").unwrap();
+                writeln!(
+                    assembly,
+                    "Ltinytsx_handler_{index}_credential_{credential_index}_password:"
+                )
+                .unwrap();
+                emit_bytes(assembly, credential.password.as_bytes());
+            }
+            for (header_index, header) in authorization.rejected.headers.iter().enumerate() {
+                writeln!(assembly, ".p2align 3").unwrap();
+                writeln!(
+                    assembly,
+                    "Ltinytsx_handler_{index}_rejected_header_{header_index}_name:"
+                )
+                .unwrap();
+                emit_bytes(assembly, header.name.as_bytes());
+                writeln!(assembly, ".p2align 3").unwrap();
+                writeln!(
+                    assembly,
+                    "Ltinytsx_handler_{index}_rejected_header_{header_index}_value:"
+                )
+                .unwrap();
+                emit_bytes(assembly, header.value.as_bytes());
+            }
         }
     }
     for string in &program.static_strings {

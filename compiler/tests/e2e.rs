@@ -310,6 +310,97 @@ fn builds_and_serves_the_upstream_response_time_middleware() {
 }
 
 #[test]
+fn rejects_an_unauthorized_upstream_basic_auth_request() {
+    build_and_serve_with_options(
+        "tests/compat/hono/basic-auth-smoke.ts",
+        ExpectedResponse {
+            method: "GET",
+            status: 401,
+            path: "/auth/test",
+            body: "Unauthorized",
+            content_type: None,
+            headers: &[("WWW-Authenticate", "Basic realm=\"Secure Area\"")],
+            millisecond_headers: &[],
+            request_headers: &[],
+            stderr: None,
+        },
+        &[
+            "--alias",
+            "hono=vendor/hono/src/index.ts",
+            "--alias",
+            "hono/basic-auth=vendor/hono/src/middleware/basic-auth/index.ts",
+            "--api",
+            "hono=tests/compat/hono/api.d.ts",
+            "--api",
+            "hono/basic-auth=tests/compat/hono/basic-auth-api.d.ts",
+        ],
+        &[],
+    );
+}
+
+#[test]
+fn serves_an_authorized_upstream_basic_auth_request() {
+    build_and_serve_with_options(
+        "tests/compat/hono/basic-auth-smoke.ts",
+        ExpectedResponse {
+            method: "GET",
+            status: 200,
+            path: "/auth/test",
+            body: "You are authorized",
+            content_type: Some("text/plain;charset=UTF-8"),
+            headers: &[],
+            millisecond_headers: &[],
+            request_headers: &[("Authorization", "Basic aG9ubzphY29vbHByb2plY3Q=")],
+            stderr: None,
+        },
+        &[
+            "--alias",
+            "hono=vendor/hono/src/index.ts",
+            "--alias",
+            "hono/basic-auth=vendor/hono/src/middleware/basic-auth/index.ts",
+            "--api",
+            "hono=tests/compat/hono/api.d.ts",
+            "--api",
+            "hono/basic-auth=tests/compat/hono/basic-auth-api.d.ts",
+        ],
+        &[],
+    );
+}
+
+#[test]
+fn preserves_hono_error_and_middleware_order_for_rejected_basic_auth() {
+    build_and_serve_with_options(
+        "tests/compat/hono/basic-auth-error-smoke.ts",
+        ExpectedResponse {
+            method: "GET",
+            status: 500,
+            path: "/auth/test",
+            body: "Custom Error Message",
+            content_type: Some("text/plain; charset=UTF-8"),
+            headers: &[("X-Powered-By", "Hono")],
+            millisecond_headers: &[],
+            request_headers: &[],
+            stderr: Some("Error"),
+        },
+        &[
+            "--alias",
+            "hono=vendor/hono/src/index.ts",
+            "--alias",
+            "hono/basic-auth=vendor/hono/src/middleware/basic-auth/index.ts",
+            "--alias",
+            "hono/powered-by=vendor/hono/src/middleware/powered-by/index.ts",
+            "--api",
+            "hono=tests/compat/hono/api.d.ts",
+            "--api",
+            "hono/basic-auth=tests/compat/hono/basic-auth-api.d.ts",
+            "--api",
+            "hono/powered-by=tests/compat/hono/powered-by-api.d.ts",
+        ],
+        &[],
+    );
+}
+
+#[test]
 fn builds_and_serves_upstream_pretty_json_by_query_presence() {
     build_and_serve_with_options(
         "tests/compat/hono/pretty-json-smoke.ts",
