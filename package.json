@@ -13,9 +13,10 @@
     "test:test262-intake": "node --test tests/compat/test262/intake.test.mjs",
     "test:test262-native": "npm run build:frontend && node --test tests/compat/test262/native.test.mjs",
     "test:hono-intake": "node --test tests/compat/hono/*.test.mjs",
-    "test:wpt-intake": "node --test tests/compat/wpt/*.test.mjs",
+    "test:wpt-intake": "node --test tests/compat/wpt/intake.test.mjs",
+    "test:wpt-native": "npm run build:frontend && node --test tests/compat/wpt/native.test.mjs",
     "try:compile:hono": "npm run build:frontend && node frontend/dist/src/cli.js tests/compat/hono/smoke.ts --alias hono/tiny=vendor/hono/src/preset/tiny.ts --api hono/tiny=tests/compat/hono/api.d.ts",
     "try:compile:hono-basic": "npm run build:frontend && node frontend/dist/src/cli.js tests/compat/hono/basic-smoke.ts --alias hono=vendor/hono/src/index.ts --api hono=tests/compat/hono/api.d.ts",
-    "test": "npm run test:frontend && npm run test:hono-intake && npm run test:test262-intake && npm run test:test262-native && npm run test:wpt-intake && npm run test:benchmarks && cargo test --workspace"
+    "test": "npm run test:frontend && npm run test:hono-intake && npm run test:test262-intake && npm run test:test262-native && npm run test:wpt-intake && npm run test:wpt-native && npm run test:benchmarks && cargo test --workspace"
   }
 }

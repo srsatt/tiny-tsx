@@ -2,6 +2,7 @@ use std::{path::PathBuf, process::Command};
 
 use crate::hir::Program;
 use crate::test262_hir::Test262Program;
+use crate::wpt_hir::WptProgram;
 
 pub struct Compilation {
     pub program: Program,
@@ -10,6 +11,10 @@ pub struct Compilation {
 
 pub struct Test262Compilation {
     pub program: Test262Program,
+}
+
+pub struct WptCompilation {
+    pub program: WptProgram,
 }
 
 pub fn compile(
@@ -85,6 +90,34 @@ pub fn compile_test262(entry: &str) -> Result<Test262Compilation, String> {
         .map_err(|error| format!("TypeScript frontend returned invalid Test262 HIR: {error}"))?;
     program.validate()?;
     Ok(Test262Compilation { program })
+}
+
+pub fn compile_wpt(entry: &str) -> Result<WptCompilation, String> {
+    let root = repository_root();
+    let script = root.join("frontend/dist/src/cli.js");
+    if !script.is_file() {
+        return Err(format!(
+            "TinyTSX frontend is not built: {}\nrun `npm install --prefix frontend && npm run build --prefix frontend`",
+            script.display(),
+        ));
+    }
+    let output = Command::new("node")
+        .arg(&script)
+        .arg("--wpt")
+        .arg(entry)
+        .output()
+        .map_err(|error| format!("failed to start the TypeScript frontend: {error}"))?;
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr)
+            .trim_end()
+            .to_owned());
+    }
+    let json = String::from_utf8(output.stdout)
+        .map_err(|_| "TypeScript frontend returned non-UTF-8 WPT HIR".to_owned())?;
+    let program: WptProgram = serde_json::from_str(&json)
+        .map_err(|error| format!("TypeScript frontend returned invalid WPT HIR: {error}"))?;
+    program.validate()?;
+    Ok(WptCompilation { program })
 }
 
 pub fn repository_root() -> PathBuf {

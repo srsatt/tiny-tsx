@@ -1,6 +1,6 @@
 use std::{ffi::OsString, path::PathBuf};
 
-use crate::{build, codegen, frontend, test262_build};
+use crate::{build, codegen, frontend, test262_build, wpt_build};
 
 const USAGE: &str = "\
 TinyTSX native TSX compiler
@@ -10,6 +10,7 @@ Usage:
   tinytsx build <entry.tsx> [options]
   tinytsx run <entry.tsx> [options]
   tinytsx test262 <case.js> [--output path]
+  tinytsx wpt <case.js> [--output path]
 ";
 
 pub fn run(arguments: impl Iterator<Item = OsString>) -> Result<(), String> {
@@ -26,12 +27,32 @@ pub fn run(arguments: impl Iterator<Item = OsString>) -> Result<(), String> {
         Some("build") => build(&arguments[1..]),
         Some("run") => run_server(&arguments[1..]),
         Some("test262") => test262(&arguments[1..]),
+        Some("wpt") => wpt(&arguments[1..]),
         Some("-h" | "--help") | None => {
             print!("{USAGE}");
             Ok(())
         }
         Some(command) => Err(format!("unknown command `{command}`\n\n{USAGE}")),
     }
+}
+
+fn wpt(arguments: &[String]) -> Result<(), String> {
+    let mut entry = None;
+    let mut output = PathBuf::from("dist/wpt");
+    let mut index = 0;
+    while index < arguments.len() {
+        match arguments[index].as_str() {
+            "--output" => output = PathBuf::from(option_value(arguments, &mut index)?),
+            option if option.starts_with('-') => {
+                return Err(format!("unknown WPT option `{option}`"));
+            }
+            value if entry.is_none() => entry = Some(value.to_owned()),
+            value => return Err(format!("unexpected argument `{value}`")),
+        }
+        index += 1;
+    }
+    let entry = entry.ok_or_else(|| format!("wpt requires a case file\n\n{USAGE}"))?;
+    wpt_build::execute(&wpt_build::Options { entry, output }).map(|_| ())
 }
 
 fn test262(arguments: &[String]) -> Result<(), String> {
