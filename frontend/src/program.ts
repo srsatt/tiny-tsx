@@ -208,7 +208,11 @@ function lowerApplicationInitialization(
   if (routes.some(route =>
     route.response === undefined
     || route.response.kind !== "text"
-    || !["text/plain;charset=UTF-8", "application/json"].includes(route.response.contentType)
+    || ![
+      "text/plain; charset=UTF-8",
+      "text/plain;charset=UTF-8",
+      "application/json",
+    ].includes(route.response.contentType)
   )) {
     return undefined;
   }
@@ -240,6 +244,7 @@ function lowerApplicationInitialization(
         value,
         ...(response.status === 200 ? {} : {status: response.status}),
         contentType: response.contentType as
+          | "text/plain; charset=UTF-8"
           | "text/plain;charset=UTF-8"
           | "application/json",
       },

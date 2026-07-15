@@ -190,6 +190,28 @@ fn builds_and_serves_a_hono_json_post_response() {
 }
 
 #[test]
+fn builds_and_serves_honos_wildcard_api_fallback() {
+    build_and_serve_with_options(
+        "tests/compat/hono/wildcard-route-smoke.ts",
+        expected(
+            "GET",
+            404,
+            "/api/missing/path",
+            "API endpoint is not found",
+            "text/plain; charset=UTF-8",
+            &[],
+        ),
+        &[
+            "--alias",
+            "hono=vendor/hono/src/index.ts",
+            "--api",
+            "hono=tests/compat/hono/api.d.ts",
+        ],
+        &[],
+    );
+}
+
+#[test]
 fn builds_and_serves_static_response_headers() {
     build_and_serve_with_options(
         "tests/compat/hono/response-headers-smoke.ts",

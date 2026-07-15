@@ -459,7 +459,14 @@ impl Program {
 }
 
 fn validate_route_pattern(pattern: &str) -> Result<(), String> {
-    for segment in pattern.split('/').filter(|part| !part.is_empty()) {
+    let segments: Vec<&str> = pattern.split('/').filter(|part| !part.is_empty()).collect();
+    for (index, segment) in segments.iter().enumerate() {
+        if *segment == "*" {
+            if index + 1 != segments.len() {
+                return Err("route wildcard must be the final segment".to_owned());
+            }
+            continue;
+        }
         if let Some(name) = segment.strip_prefix(':') {
             if name.is_empty()
                 || !name
