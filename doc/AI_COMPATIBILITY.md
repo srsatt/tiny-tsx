@@ -81,8 +81,8 @@ This first target is deliberately deterministic and AOT-closed. The schema
 adapter only supplies the Zod builder/valid-result subset exercised by this
 known-valid prompt; it is not general Zod conformance. Likewise, `Math.random`
 uses a compile-time witness for SDK-internal IDs now proven by the escape report
-not to reach the response. Invalid schema behavior, tool calls, streaming,
-and provider I/O remain separate promotion gates.
+not to reach the response. Invalid schema behavior, tool calls, general
+asynchronous streaming, and provider I/O remain separate promotion gates.
 
 A second unchanged-style Hono target deliberately supplies both `prompt` and
 `messages`. Bun and TinyTSX both route the upstream `InvalidPromptError` through
@@ -129,13 +129,21 @@ API key, DNS, provider service, or network. Bun runs the same source as the byte
 and error-semantics reference. This isolates AI SDK orchestration from provider
 transport and makes failures reproducible.
 
-This slice now passes. Continue in order:
+The deterministic generation slice now passes. The finite streaming tracer also
+passes with the pinned SDK's `streamText`, mock model, and
+`toTextStreamResponse()` consumer. It executes the configured model stream,
+accepts one completed text part plus finish event, preserves the two text deltas
+as native HTTP chunks, and emits the SDK content type
+`text/plain; charset=utf-8`. The specialization is deliberately limited to a
+closed `{model, prompt}` call; it is not evidence for arbitrary asynchronous
+tools, cancellation, or provider streams.
+
+Continue in order:
 
 1. multi-step/tool-call behavior with a deterministic fake model;
-2. `streamText` and async-iterable chunk delivery;
-3. a Hono route returning the SDK's Web `Response` stream;
-4. one OpenAI-compatible HTTP provider behind a local deterministic test server;
-5. external credentials and live providers as manual, non-conformance examples.
+2. one OpenAI-compatible HTTP provider behind a local deterministic test server;
+3. cancellation, bounded backpressure, and application-worker delivery;
+4. external credentials and live providers as manual, non-conformance examples.
 
 ## Capability audit hypotheses
 

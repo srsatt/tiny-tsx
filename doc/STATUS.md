@@ -339,6 +339,13 @@ produces and serves a native Mach-O executable from the example TSX source.
   aliases, one response escape, and no managed sites. The Rust validator
   recomputes those totals, `managedHeapRequired` is false, and focused tests
   keep AI SDK generated IDs compile-time and non-escaping.
+- A pinned deterministic `streamText` Hono consumer now passes under Bun and
+  TinyTSX. The tracer consumes the configured `MockLanguageModelV4` readable
+  stream, preserves `Hello` and ` from streaming AI` as two HIR/native chunks,
+  and returns `text/plain; charset=utf-8`. The 1,052,552-byte native binary
+  served the exact 23-byte body over chunked HTTP. Its report has 101 sites: 78
+  compile-time, 13 static, 10 request-lifetime, 34 with aliases, 23 response
+  escapes, and no managed sites; GC remains disabled.
 - HTTP/1.1 connections now stay on one executor for up to 100 requests or five
   idle seconds. A 16 KiB parser preserves pipelined bytes, consumes validated
   bodies up to 1 MiB, rejects duplicate Content-Length/transfer encoding, and
@@ -414,6 +421,7 @@ rtk npm run test:native-api
 rtk npm run test:ai-intake
 rtk npm run test:ai-reference
 rtk npm run build:ai-hono
+rtk npm run build:ai-hono-stream
 rtk python3 benchmarks/scripts/run_static.py --duration 2 --runs 3 --startup-runs 5 --concurrency 1,8,32 --output-prefix benchmarks/results/2026-07-14-m5-max-static-preview
 rtk python3 benchmarks/scripts/run_static.py --workload hono-basic --duration 1 --runs 3 --startup-runs 5 --concurrency 1,8 --output-prefix benchmarks/results/2026-07-15-m5-max-hono-preview
 rtk npm run benchmark:hono-jsx-ssr
@@ -421,19 +429,20 @@ rtk npm run benchmark:hono-jsx-ssr
 
 ## Active slice
 
-The deterministic `generateText` plus Hono tracer is complete through upstream
-source evaluation, HIR, native linking, and a real HTTP response. The active
-slice is an escape/lifetime report for that exact path, followed by invalid
-prompt/schema behavior, deterministic tool calls, and `streamText`. That
-evidence decides whether arenas remain sufficient; it does not justify a GC by
-itself. Connection fairness remains a measured optimization target.
+The deterministic `generateText` and finite `streamText` Hono tracers are
+complete through HIR, native linking, real HTTP responses, and executed escape
+reports. The active slice is deterministic multi-step/tool-call behavior,
+followed by a local OpenAI-compatible provider transport. Invalid Zod behavior
+remains an independent promotion gate. These paths decide whether arenas remain
+sufficient; the current evidence does not justify a GC. Connection fairness
+remains a measured optimization target.
 
 ## Resume point
 
 Read `doc/AI_COMPATIBILITY.md`, `doc/MEMORY_MANAGEMENT.md`, and
 `doc/BACKLOG.md`. Run `rtk npm run test:ai-intake`,
-`rtk npm run test:ai-reference`, and `rtk npm run build:ai-hono`. Start the
-deterministic `streamText` tracer and use its emitted lifetime/escape report as
-the next collector decision point. Keep invalid-Zod behavior as a separate open
-promotion gate rather than expanding the known-valid schema specialization
-inside the streaming slice.
+`rtk npm run test:ai-reference`, `rtk npm run build:ai-hono`, and
+`rtk npm run build:ai-hono-stream`. Add deterministic multi-step/tool-call
+behavior next, followed by a local OpenAI-compatible provider transport. Keep
+invalid-Zod behavior as a separate open promotion gate, and do not start a
+collector spike unless one of those executed paths reports a managed escape.

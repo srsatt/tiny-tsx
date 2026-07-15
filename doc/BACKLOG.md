@@ -73,8 +73,11 @@ commit message.
       error class and installed Hono error handler, matched against Bun.
 - [ ] Add deterministic invalid-schema behavior before treating the native Zod
       boundary as more than a known-valid tracer specialization.
-- [ ] Compile deterministic multi-step/tool-call behavior, then `streamText`
-      and a Hono Web `Response` stream before local provider HTTP I/O.
+- [ ] Compile deterministic multi-step/tool-call behavior.
+- [x] Compile a finite deterministic `streamText` model and return the SDK text
+      stream as a Hono Web `Response`, preserving chunks and content type.
+- [ ] Add local OpenAI-compatible provider HTTP I/O after the deterministic
+      orchestration slices are stable.
 - [x] Inventory Promise, async iterator, Web Streams, AbortSignal, encoding,
       Fetch, URL, crypto, timer, and persistent-heap gaps from that exact graph.
 - [x] Define static, request, worker, message, and managed-heap lifetimes plus

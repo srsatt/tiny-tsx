@@ -93,6 +93,10 @@ reached SDK `generate-id.ts` sites to remain compile-time and non-escaping.
 These counts describe executed tracer evidence, not runtime allocation bytes or
 peak heap use.
 
-Streaming may change the result because chunks, callbacks, and cancellation
-state can outlive one synchronous evaluation phase; that executed path is the
-next meaningful collector decision point.
+The first finite `streamText` path changes the ownership mix but still does not
+trigger a collector. It reports 101 reached sites: 78 compile-time, 13 static,
+10 request-lifetime, and zero worker/message/managed sites. Its 23 response
+escapes include the provider stream parts and chunks, while
+`managedHeapRequired` remains false. This is evidence for a finite closed mock
+stream only; cancellation, backpressure, live provider I/O, and callbacks that
+outlive a request remain separate escape-analysis gates.
