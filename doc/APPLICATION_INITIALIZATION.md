@@ -123,6 +123,12 @@ conversion, ASCII RegExp guard, `header()` mutation, and variadic `newResponse`
 wrapper. The resulting native route has status 302, `Location: /`, an empty
 body, and no content type.
 
+The `/user-agent` handler retains a symbolic request-header part in its response
+body. Native code performs case-insensitive lookup against the borrowed request
+head and streams the value. Middleware evaluation uses a cloned response and
+commits it only when the effect is fully supported, preventing an unresolved
+runtime response-time header from erasing this otherwise valid body.
+
 Async/await syntax is admitted only inside constructed-application handlers
 that the initialization evaluator consumes completely. This does not introduce
 native Promise objects, suspension, or a task executor.

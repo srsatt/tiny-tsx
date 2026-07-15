@@ -121,6 +121,12 @@ closed variadic spread reach Hono's response construction. Native HTTP preserves
 status 302 and `Location: /` while omitting `Content-Type` for the null body.
 This is closed compile-time RegExp evaluation, not a native RegExp backend.
 
+The basic example's `/user-agent` route now lowers `c.req.header('User-Agent')`
+to a request-time expression. The bootstrap parses at most 64 borrowed header
+views, matching names case-insensitively, and generated code streams the value
+directly into the response writer. Missing headers preserve template-literal
+`undefined`; general mutable Request/Headers objects are not claimed.
+
 ### Type-only API overlay
 
 The compiling frontend accepts `--api <specifier>=<api.d.ts>` independently of

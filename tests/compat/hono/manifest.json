@@ -22,6 +22,7 @@
   "poweredBySmokeEntry": "tests/compat/hono/powered-by-smoke.ts",
   "prettyJsonSmokeEntry": "tests/compat/hono/pretty-json-smoke.ts",
   "redirectSmokeEntry": "tests/compat/hono/redirect-smoke.ts",
+  "requestHeaderSmokeEntry": "tests/compat/hono/request-header-smoke.ts",
   "basicSource": "https://github.com/honojs/examples/tree/main/basic",
   "behaviorContracts": {
     "textResponse": {

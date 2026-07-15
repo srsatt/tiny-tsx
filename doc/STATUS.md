@@ -173,8 +173,12 @@ produces and serves a native Mach-O executable from the example TSX source.
   trace retains 21 routes.
 - Closed RegExp testing, `String(...)`, nullish assignment, and closed call
   spread now carry upstream `Context.redirect('/')` into native HTTP. The
-  response is `302 Found` with `Location: /`, an empty body, and no content type;
-  the complete basic trace now reports 19 remaining diagnostics.
+  response is `302 Found` with `Location: /`, an empty body, and no content type.
+- Request heads now expose at most 64 borrowed name/value views. Generated code
+  performs case-insensitive lookup and streams the basic example's `User-Agent`
+  value; missing headers format as JavaScript `undefined`. Unsupported dynamic
+  middleware effects are transactional, so they cannot corrupt an otherwise
+  lowerable response. The complete trace has 21 routes and 20 diagnostics.
 - Async/await entry handlers are accepted only when application initialization
   fully stages them. Native Promise/suspension semantics remain unimplemented.
 - Static `Response` headers lower into a bounded eight-entry native writer with
@@ -219,7 +223,7 @@ rtk python3 benchmarks/scripts/run_static.py --workload hono-basic --duration 1 
 ## Active slice
 
 Compatibility substrate: compile the next complete-basic-example frontier:
-request headers, redirects, and the
+authentication, ETags, and the
 remaining middleware and request-dependent handlers. Extend the executable
 function slice with locals,
 record property access, branches, and closures. Type-layout specialization should

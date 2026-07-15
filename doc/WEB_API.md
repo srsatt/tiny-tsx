@@ -14,7 +14,7 @@ The current boundary is:
 | --- | --- | --- |
 | `Request` | standard DOM declaration | borrowed method, path, and raw query ABI views; exact query-name presence predicate |
 | `Response` | standard DOM declaration | bounded body writer, explicit status, optional HTML/text/JSON content-type IDs; closed `new Response(string or null, { status, headers })` AOT fast path |
-| `Headers` | standard DOM declaration | closed construction/cloning plus bounded response-header storage, validation, case-insensitive replacement, and wire emission for statically known values |
+| `Headers` | standard DOM declaration | closed construction/cloning; bounded request-header borrowing and response-header storage with case-insensitive lookup/replacement |
 | `URL` / `URLSearchParams` | standard DOM declaration | pending |
 | body and stream types | standard DOM declaration | pending |
 | encoding types | standard DOM declaration | pending |
@@ -29,6 +29,12 @@ TypeScript errors.
 Hono's application-facing types remain in `tests/compat/hono/api.d.ts`. That
 overlay narrows the imported package surface for application type checking but
 does not replace upstream runtime source or Web-standard declarations.
+
+The focused Hono overlay now exposes `HonoRequest.header(name)`. The runtime
+request is not a JavaScript `Headers` object: it is a bounded table of views into
+the request head, valid only during dispatch. The supported response expression
+performs case-insensitive lookup and writes the found bytes, or `undefined` when
+the header is absent.
 
 The executable Hono route evaluates the upstream `Context.text()` condition and
 reaches `new Response(text)` with a closed string at compile time. A closed

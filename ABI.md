@@ -20,6 +20,8 @@ pub struct TinyRequest {
     pub method: TinyStringView,
     pub path: TinyStringView,
     pub query: TinyStringView,
+    pub headers: *const TinyHeader,
+    pub header_count: usize,
     pub arena: *mut TinyArena,
 }
 
@@ -87,10 +89,23 @@ extern "C" fn tinytsx_request_method_equals(
     expected_len: usize,
 ) -> u32;
 
+extern "C" fn tinytsx_request_query_has(
+    request: *const TinyRequest,
+    expected: *const u8,
+    expected_len: usize,
+) -> u32;
+
 extern "C" fn tinytsx_html_write_path_segment(
     writer: *mut TinyResponseWriter,
     request: *const TinyRequest,
     segment: usize,
+) -> u32;
+
+extern "C" fn tinytsx_html_write_request_header(
+    writer: *mut TinyResponseWriter,
+    request: *const TinyRequest,
+    name: *const u8,
+    name_len: usize,
 ) -> u32;
 
 extern "C" fn tinytsx_response_header_static(
@@ -119,6 +134,11 @@ allocating a dynamic route map.
 dispatch currently emits GET and POST handlers; the bootstrap returns 405 for
 other methods before entering application code.
 
+`tinytsx_request_query_has` matches an exact raw query name in bare, empty, or
+valued form. `tinytsx_html_write_request_header` searches the bounded borrowed
+request-header table case-insensitively and writes either the value or the
+JavaScript template fallback `undefined`.
+
 `tinytsx_response_header_static` validates HTTP token names and values, replaces
 existing names case-insensitively, and stores at most eight custom headers.
 
@@ -126,6 +146,7 @@ existing names case-insensitively, and stores at most eight custom headers.
 
 | Value | Response header |
 | ---: | --- |
+| 0 | omitted |
 | 1 | `text/html; charset=utf-8` |
 | 2 | `text/plain; charset=UTF-8` |
 | 3 | `application/json` |
