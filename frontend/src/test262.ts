@@ -5,17 +5,29 @@ import {CompileFailure, fromTypeScript, spanOf, tinyError} from "./diagnostics.j
 import type {SourceSpan} from "./hir.js";
 
 export interface Test262Program {
-  version: 1;
+  version: 2;
   target: "aarch64-apple-darwin";
   entry: string;
-  assertions: SameValueStringAssertion[];
+  assertions: Test262Assertion[];
 }
+
+export type Test262Assertion = SameValueStringAssertion | ForThrowCounterAssertion;
 
 export interface SameValueStringAssertion {
   kind: "sameValueString";
   actual: string;
   expected: string;
   message?: string;
+  span: SourceSpan;
+}
+
+export interface ForThrowCounterAssertion {
+  kind: "forThrowCounter";
+  initial: number;
+  threshold: number;
+  thrown: number;
+  catchExpected: number;
+  finalExpected: number;
   span: SourceSpan;
 }
 
@@ -47,18 +59,209 @@ export function compileTest262Entry(entryPath: string): Test262Program {
     throw tinyError("TINY2601", "Test262 metadata block is required", sourceFile, undefined, sourceFile);
   }
 
-  const assertions = sourceFile.statements.map(statement =>
-    lowerSameValueAssertion(statement, sourceFile)
-  );
+  const assertions = sourceFile.statements.every(isSameValueStatement)
+    ? sourceFile.statements.map(statement => lowerSameValueAssertion(statement, sourceFile))
+    : [lowerForThrowCounter(sourceFile)];
   if (assertions.length === 0) {
     throw tinyError("TINY2602", "Test262 case must contain an assertion", sourceFile, undefined, sourceFile);
   }
   return {
-    version: 1,
+    version: 2,
     target: "aarch64-apple-darwin",
     entry,
     assertions,
   };
+}
+
+function isSameValueStatement(statement: ts.Statement): boolean {
+  return ts.isExpressionStatement(statement)
+    && ts.isCallExpression(statement.expression)
+    && ts.isPropertyAccessExpression(statement.expression.expression)
+    && ts.isIdentifier(statement.expression.expression.expression)
+    && statement.expression.expression.expression.text === "assert"
+    && statement.expression.expression.name.text === "sameValue";
+}
+
+function lowerForThrowCounter(sourceFile: ts.SourceFile): ForThrowCounterAssertion {
+  const [declaration, tryStatement, finalCheck, ...extra] = sourceFile.statements;
+  if (
+    declaration === undefined
+    || tryStatement === undefined
+    || finalCheck === undefined
+    || extra.length > 0
+  ) {
+    throw unsupportedControlFlow(sourceFile, sourceFile);
+  }
+  const binding = numericVariable(declaration, sourceFile);
+  if (!ts.isTryStatement(tryStatement) || tryStatement.finallyBlock !== undefined) {
+    throw unsupportedControlFlow(tryStatement, sourceFile);
+  }
+  const [loop, ...tryExtra] = tryStatement.tryBlock.statements;
+  if (
+    loop === undefined
+    || tryExtra.length > 0
+    || !ts.isForStatement(loop)
+    || loop.initializer !== undefined
+    || loop.condition !== undefined
+    || loop.incrementor !== undefined
+  ) {
+    throw unsupportedControlFlow(tryStatement.tryBlock, sourceFile);
+  }
+  const loopCheck = onlyStatement(loop.statement, sourceFile);
+  if (!ts.isIfStatement(loopCheck) || loopCheck.elseStatement !== undefined) {
+    throw unsupportedControlFlow(loopCheck, sourceFile);
+  }
+  const {name: incremented, right: thresholdExpression} = binaryWithIdentifier(
+    loopCheck.expression,
+    ts.SyntaxKind.GreaterThanToken,
+    sourceFile,
+    true,
+  );
+  if (incremented !== binding.name) {
+    throw unsupportedControlFlow(loopCheck.expression, sourceFile);
+  }
+  const thrown = numericThrow(loopCheck.thenStatement, sourceFile);
+
+  const catchClause = tryStatement.catchClause;
+  if (
+    catchClause === undefined
+    || catchClause.variableDeclaration === undefined
+    || !ts.isIdentifier(catchClause.variableDeclaration.name)
+  ) {
+    throw unsupportedControlFlow(tryStatement, sourceFile);
+  }
+  const catchCheck = onlyStatement(catchClause.block, sourceFile);
+  if (!ts.isIfStatement(catchCheck) || catchCheck.elseStatement !== undefined) {
+    throw unsupportedControlFlow(catchCheck, sourceFile);
+  }
+  const {name: caught, right: catchExpectedExpression} = binaryWithIdentifier(
+    catchCheck.expression,
+    ts.SyntaxKind.ExclamationEqualsEqualsToken,
+    sourceFile,
+  );
+  if (caught !== catchClause.variableDeclaration.name.text || !isTest262ErrorThrow(catchCheck.thenStatement)) {
+    throw unsupportedControlFlow(catchCheck, sourceFile);
+  }
+
+  if (!ts.isIfStatement(finalCheck) || finalCheck.elseStatement !== undefined) {
+    throw unsupportedControlFlow(finalCheck, sourceFile);
+  }
+  const {name: finalName, right: finalExpectedExpression} = binaryWithIdentifier(
+    finalCheck.expression,
+    ts.SyntaxKind.ExclamationEqualsEqualsToken,
+    sourceFile,
+  );
+  if (finalName !== binding.name || !isTest262ErrorThrow(finalCheck.thenStatement)) {
+    throw unsupportedControlFlow(finalCheck, sourceFile);
+  }
+
+  return {
+    kind: "forThrowCounter",
+    initial: binding.initial,
+    threshold: integerLiteral(thresholdExpression, sourceFile),
+    thrown,
+    catchExpected: integerLiteral(catchExpectedExpression, sourceFile),
+    finalExpected: integerLiteral(finalExpectedExpression, sourceFile),
+    span: spanOf(tryStatement, sourceFile),
+  };
+}
+
+function numericVariable(
+  statement: ts.Statement,
+  sourceFile: ts.SourceFile,
+): {name: string; initial: number} {
+  if (
+    !ts.isVariableStatement(statement)
+    || statement.declarationList.declarations.length !== 1
+  ) {
+    throw unsupportedControlFlow(statement, sourceFile);
+  }
+  const declaration = statement.declarationList.declarations[0]!;
+  if (!ts.isIdentifier(declaration.name) || declaration.initializer === undefined) {
+    throw unsupportedControlFlow(declaration, sourceFile);
+  }
+  return {
+    name: declaration.name.text,
+    initial: integerLiteral(declaration.initializer, sourceFile),
+  };
+}
+
+function onlyStatement(statement: ts.Statement, sourceFile: ts.SourceFile): ts.Statement {
+  if (!ts.isBlock(statement) || statement.statements.length !== 1) {
+    throw unsupportedControlFlow(statement, sourceFile);
+  }
+  return statement.statements[0]!;
+}
+
+function binaryWithIdentifier(
+  expression: ts.Expression,
+  operator: ts.SyntaxKind,
+  sourceFile: ts.SourceFile,
+  preIncrement = false,
+): {name: string; right: ts.Expression} {
+  if (!ts.isBinaryExpression(expression) || expression.operatorToken.kind !== operator) {
+    throw unsupportedControlFlow(expression, sourceFile);
+  }
+  const left = preIncrement && ts.isPrefixUnaryExpression(expression.left)
+    && expression.left.operator === ts.SyntaxKind.PlusPlusToken
+    ? expression.left.operand
+    : expression.left;
+  if (!ts.isIdentifier(left)) {
+    throw unsupportedControlFlow(expression.left, sourceFile);
+  }
+  return {name: left.text, right: expression.right};
+}
+
+function numericThrow(statement: ts.Statement, sourceFile: ts.SourceFile): number {
+  if (!ts.isThrowStatement(statement) || statement.expression === undefined) {
+    throw unsupportedControlFlow(statement, sourceFile);
+  }
+  return integerLiteral(statement.expression, sourceFile);
+}
+
+function isTest262ErrorThrow(statement: ts.Statement): boolean {
+  const candidate = ts.isBlock(statement) && statement.statements.length === 1
+    ? statement.statements[0]
+    : statement;
+  return candidate !== undefined
+    && ts.isThrowStatement(candidate)
+    && candidate.expression !== undefined
+    && ts.isNewExpression(candidate.expression)
+    && ts.isIdentifier(candidate.expression.expression)
+    && candidate.expression.expression.text === "Test262Error";
+}
+
+function integerLiteral(expression: ts.Expression, sourceFile: ts.SourceFile): number {
+  let value: number | undefined;
+  if (ts.isNumericLiteral(expression)) {
+    value = Number(expression.text);
+  } else if (
+    ts.isPrefixUnaryExpression(expression)
+    && expression.operator === ts.SyntaxKind.MinusToken
+    && ts.isNumericLiteral(expression.operand)
+  ) {
+    value = -Number(expression.operand.text);
+  }
+  if (value === undefined || !Number.isSafeInteger(value)) {
+    throw tinyError(
+      "TINY2607",
+      "native Test262 control flow requires a safe integer literal",
+      expression,
+      undefined,
+      sourceFile,
+    );
+  }
+  return value;
+}
+
+function unsupportedControlFlow(node: ts.Node, sourceFile: ts.SourceFile): CompileFailure {
+  return tinyError(
+    "TINY2606",
+    "native Test262 control flow currently supports a closed for/throw/catch counter program",
+    node,
+    undefined,
+    sourceFile,
+  );
 }
 
 function lowerSameValueAssertion(

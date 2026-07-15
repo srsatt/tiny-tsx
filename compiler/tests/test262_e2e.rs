@@ -8,17 +8,30 @@ use std::{
 };
 
 #[test]
-fn compiles_and_runs_the_allowlisted_typeof_undefined_case() {
+fn compiles_and_runs_native_test262_programs() {
     let root = repository_root();
     build_frontend(&root);
     let directory = temporary_directory();
-    let binary = directory.join("typeof-undefined");
-    let case = "vendor/test262/test/language/expressions/typeof/undefined.js";
+    for (name, case) in [
+        (
+            "typeof-undefined",
+            "vendor/test262/test/language/expressions/typeof/undefined.js",
+        ),
+        (
+            "for-throw-counter",
+            "vendor/test262/test/language/statements/for/S12.6.3_A1.js",
+        ),
+    ] {
+        compile_and_run(&root, &directory.join(name), case);
+    }
+    fs::remove_dir_all(directory).expect("remove Test262 artifacts");
+}
 
+fn compile_and_run(root: &Path, binary: &Path, case: &str) {
     let compilation = Command::new(env!("CARGO_BIN_EXE_tinytsx"))
-        .current_dir(&root)
+        .current_dir(root)
         .args(["test262", case, "--output"])
-        .arg(&binary)
+        .arg(binary)
         .output()
         .expect("start Test262 compilation");
 
@@ -28,15 +41,13 @@ fn compiles_and_runs_the_allowlisted_typeof_undefined_case() {
         String::from_utf8_lossy(&compilation.stdout),
         String::from_utf8_lossy(&compilation.stderr),
     );
-    let bytes = fs::read(&binary).expect("read native Test262 executable");
+    let bytes = fs::read(binary).expect("read native Test262 executable");
     assert_eq!(&bytes[..4], &[0xcf, 0xfa, 0xed, 0xfe], "Mach-O 64 magic");
 
-    let execution = Command::new(&binary)
+    let execution = Command::new(binary)
         .status()
         .expect("run native Test262 executable");
     assert!(execution.success(), "native Test262 assertion failed");
-
-    fs::remove_dir_all(directory).expect("remove Test262 artifacts");
 }
 
 fn repository_root() -> PathBuf {
