@@ -23,8 +23,17 @@ commit message.
 - [x] Add an idiomatic Bun static server with equivalent response semantics.
 - [x] Add repeated startup, RSS, throughput, and latency measurement via `oha`.
 - [x] Retain machine-readable samples and a readable static preview report.
-- [ ] Add the exact-source Bun compatibility runtime after dynamic TSX lands.
-- [ ] Benchmark dynamic escaping, request arenas, and the native worker pool.
+- [x] Run the complete pinned 34-module Hono application through TinyTSX and
+      the real Bun/Hono runtime with response-contract validation.
+- [x] Record repeated complete-app startup, idle/post-warm-up RSS, throughput,
+      and latency samples through concurrency 128.
+- [ ] Resolve the Hono response-clone Content-Type difference with direct
+      Web-platform evidence and an explicit compatibility decision.
+- [ ] Implement HTTP/1.1 keep-alive and rerun equivalent transport tests.
+- [ ] Implement the bounded native worker pool and benchmark 1/2/4/8 workers.
+- [ ] Benchmark dynamic escaping, request arenas, route parameters, JSON/query
+      branches, and representative response sizes.
+- [ ] Add CPU, syscall, allocation, peak-RSS, and first-launch instrumentation.
 - [ ] Run controlled, longer-duration release comparisons before publishing claims.
 
 ## Next slice

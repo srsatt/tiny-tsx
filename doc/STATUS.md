@@ -44,11 +44,13 @@ produces and serves a native Mach-O executable from the example TSX source.
   material difference was footprint: TinyTSX measured 5.64 ms startup and
   1.78 MiB idle RSS versus Bun at 12.87 ms and 31.53 MiB. This is exploratory
   evidence only; it does not cover dynamic rendering or keep-alive HTTP.
-- An exact-source Hono preview runs the pinned `basic-smoke.ts` through both
-  runtimes. Across three one-second samples, TinyTSX measured 0.96x Bun request
-  throughput at concurrency 1 and 0.99x at 8. Median startup was 6.65 ms versus
-  17.50 ms, and idle RSS was 1.77 MiB versus 49.61 MiB. This remains a closed
-  six-byte response with connection-close HTTP, not a general Hono benchmark.
+- The complete pinned 34-module Hono application now runs through both TinyTSX
+  and the real Bun/Hono runtime. Five 5-second samples at concurrency
+  1/8/32/64/128 show TinyTSX at 0.97–0.99x Bun throughput. Median startup is
+  9.77 ms versus 19.91 ms; idle RSS is 5.84 MiB versus 41.73 MiB; post-warm-up
+  RSS is 6.09 MiB versus 70.41 MiB. Both plateau near 31k requests/second under
+  connection-close HTTP. The response Content-Type difference and ordered next
+  experiments are recorded in `doc/PERFORMANCE.md`.
 - Hono and Test262 are shallow Git submodules pinned respectively to Hono
   `v4.12.30` (`b2ae3a22`) and Test262 `f2d14356`.
 - The complete upstream Hono basic example is pinned as a third shallow
