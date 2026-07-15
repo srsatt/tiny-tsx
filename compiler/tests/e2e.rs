@@ -24,7 +24,7 @@ struct ExpectedResponse<'a> {
     headers: &'a [(&'a str, &'a str)],
     millisecond_headers: &'a [&'a str],
     request_headers: &'a [(&'a str, &'a str)],
-    stderr: Option<&'a str>,
+    stderr: &'a [&'a str],
 }
 
 impl Drop for Server {
@@ -319,7 +319,7 @@ fn builds_and_serves_the_upstream_response_time_middleware() {
             headers: &[],
             millisecond_headers: &["X-Response-Time"],
             request_headers: &[],
-            stderr: None,
+            stderr: &[],
         },
         &[
             "--alias",
@@ -344,7 +344,7 @@ fn rejects_an_unauthorized_upstream_basic_auth_request() {
             headers: &[("WWW-Authenticate", "Basic realm=\"Secure Area\"")],
             millisecond_headers: &[],
             request_headers: &[],
-            stderr: None,
+            stderr: &[],
         },
         &[
             "--alias",
@@ -373,7 +373,7 @@ fn serves_an_authorized_upstream_basic_auth_request() {
             headers: &[],
             millisecond_headers: &[],
             request_headers: &[("Authorization", "Basic aG9ubzphY29vbHByb2plY3Q=")],
-            stderr: None,
+            stderr: &[],
         },
         &[
             "--alias",
@@ -402,7 +402,7 @@ fn preserves_hono_error_and_middleware_order_for_rejected_basic_auth() {
             headers: &[("X-Powered-By", "Hono")],
             millisecond_headers: &[],
             request_headers: &[],
-            stderr: Some("Error"),
+            stderr: &["Error"],
         },
         &[
             "--alias",
@@ -435,7 +435,7 @@ fn builds_and_serves_the_upstream_etag_middleware() {
             headers: &[("ETag", "\"90ea638841fff3c326fc22cbd156f1146ac0ac02\"")],
             millisecond_headers: &[],
             request_headers: &[],
-            stderr: None,
+            stderr: &[],
         },
         &[
             "--alias",
@@ -467,7 +467,7 @@ fn serves_not_modified_for_a_matching_upstream_etag() {
                 "If-None-Match",
                 "\"90ea638841fff3c326fc22cbd156f1146ac0ac02\"",
             )],
-            stderr: None,
+            stderr: &[],
         },
         &[
             "--alias",
@@ -526,7 +526,7 @@ fn builds_and_serves_upstream_hono_redirect() {
             headers: &[("Location", "/")],
             millisecond_headers: &[],
             request_headers: &[],
-            stderr: None,
+            stderr: &[],
         },
         &[
             "--alias",
@@ -551,7 +551,7 @@ fn builds_and_serves_an_upstream_hono_request_header() {
             headers: &[],
             millisecond_headers: &[],
             request_headers: &[("User-Agent", "tiny-client/1.0")],
-            stderr: None,
+            stderr: &[],
         },
         &[
             "--alias",
@@ -620,13 +620,58 @@ fn builds_and_serves_upstream_custom_error_handler() {
             headers: &[],
             millisecond_headers: &[],
             request_headers: &[],
-            stderr: Some("Error: Error has occurred"),
+            stderr: &["Error: Error has occurred"],
         },
         &[
             "--alias",
             "hono=vendor/hono/src/index.ts",
             "--api",
             "hono=tests/compat/hono/api.d.ts",
+        ],
+        &[],
+    );
+}
+
+#[test]
+fn builds_and_serves_the_complete_pinned_hono_basic_source() {
+    build_and_serve_with_options(
+        "vendor/hono-examples/basic/src/index.ts",
+        ExpectedResponse {
+            method: "GET",
+            status: 500,
+            path: "/type-error",
+            body: "Custom Error Message",
+            content_type: Some("text/plain; charset=UTF-8"),
+            headers: &[],
+            millisecond_headers: &[],
+            request_headers: &[],
+            stderr: &[
+                "TypeError [ERR_INVALID_ARG_TYPE]: Failed to construct 'Response': The provided body value is not of type 'ResponseInit'",
+                "TypeError: undefined is not an object (evaluating 'this.#res.headers.entries')",
+                "TypeError: undefined is not an object (evaluating 'this.#res.headers.entries')",
+            ],
+        },
+        &[
+            "--alias",
+            "hono=vendor/hono/src/index.ts",
+            "--alias",
+            "hono/basic-auth=vendor/hono/src/middleware/basic-auth/index.ts",
+            "--alias",
+            "hono/etag=vendor/hono/src/middleware/etag/index.ts",
+            "--alias",
+            "hono/powered-by=vendor/hono/src/middleware/powered-by/index.ts",
+            "--alias",
+            "hono/pretty-json=vendor/hono/src/middleware/pretty-json/index.ts",
+            "--api",
+            "hono=tests/compat/hono/api.d.ts",
+            "--api",
+            "hono/basic-auth=tests/compat/hono/basic-auth-api.d.ts",
+            "--api",
+            "hono/etag=tests/compat/hono/etag-api.d.ts",
+            "--api",
+            "hono/powered-by=tests/compat/hono/powered-by-api.d.ts",
+            "--api",
+            "hono/pretty-json=tests/compat/hono/pretty-json-api.d.ts",
         ],
         &[],
     );
@@ -658,7 +703,7 @@ fn expected<'a>(
         headers,
         millisecond_headers: &[],
         request_headers: &[],
-        stderr: None,
+        stderr: &[],
     }
 }
 
@@ -696,7 +741,7 @@ fn build_and_serve_with_options(
     assert!(with_suffix(&binary, ".build.json").is_file());
 
     let mut server_command = Command::new(&binary);
-    if expected.stderr.is_some() {
+    if !expected.stderr.is_empty() {
         server_command.stderr(Stdio::piped());
     }
     let child = server_command.spawn().expect("start generated server");
@@ -752,13 +797,14 @@ fn build_and_serve_with_options(
             "{name} is not a numeric millisecond duration: {value}"
         );
     }
-    if let Some(expected_stderr) = expected.stderr {
+    if !expected.stderr.is_empty() {
         let stderr = server.0.stderr.take().expect("captured server stderr");
-        let mut line = String::new();
-        BufReader::new(stderr)
-            .read_line(&mut line)
-            .expect("read server stderr");
-        assert_eq!(line.trim_end(), expected_stderr);
+        let mut stderr = BufReader::new(stderr);
+        for expected_line in expected.stderr {
+            let mut line = String::new();
+            stderr.read_line(&mut line).expect("read server stderr");
+            assert_eq!(line.trim_end(), *expected_line);
+        }
     }
 
     for (path, body, content_type) in additional_routes {
@@ -798,7 +844,8 @@ fn build_and_serve_with_options(
             "{missing_response}"
         );
         assert!(
-            missing_response.ends_with("not found"),
+            missing_response.ends_with("not found")
+                || missing_response.ends_with("Custom 404 Not Found"),
             "{missing_response}"
         );
     }
