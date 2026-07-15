@@ -3,9 +3,10 @@ use super::{
     MAX_DYNAMIC_HEADER_BYTES, MAX_RESPONSE_HEADERS, OK, REQUEST_OOM, TinyHeader,
     TinyResponseWriter, TinyStringView, request, request_with_headers,
     tinytsx_html_write_path_segment, tinytsx_html_write_request_header, tinytsx_html_write_static,
-    tinytsx_request_basic_auth_equals, tinytsx_request_method_equals, tinytsx_request_path_equals,
-    tinytsx_request_path_matches, tinytsx_request_query_has, tinytsx_response_begin,
-    tinytsx_response_header_elapsed_millis, tinytsx_response_header_static, write_console_error,
+    tinytsx_request_basic_auth_equals, tinytsx_request_if_none_match,
+    tinytsx_request_method_equals, tinytsx_request_path_equals, tinytsx_request_path_matches,
+    tinytsx_request_query_has, tinytsx_response_begin, tinytsx_response_header_elapsed_millis,
+    tinytsx_response_header_static, write_console_error,
 };
 
 #[test]
@@ -78,6 +79,24 @@ fn request_basic_auth_matches_the_configured_credentials() {
         unsafe {
             tinytsx_request_basic_auth_equals(&request, b"hono".as_ptr(), 4, b"wrong".as_ptr(), 5)
         },
+        0
+    );
+}
+
+#[test]
+fn request_if_none_match_accepts_weak_tags_and_lists() {
+    let header = TinyHeader {
+        name: TinyStringView::from_bytes(b"If-None-Match"),
+        value: TinyStringView::from_bytes(b"\"miss\", W/\"tag\""),
+    };
+    let request = request_with_headers(b"GET", b"/etag/cached", &[header]);
+
+    assert_eq!(
+        unsafe { tinytsx_request_if_none_match(&request, b"\"tag\"".as_ptr(), 5) },
+        1
+    );
+    assert_eq!(
+        unsafe { tinytsx_request_if_none_match(&request, b"\"other\"".as_ptr(), 7) },
         0
     );
 }

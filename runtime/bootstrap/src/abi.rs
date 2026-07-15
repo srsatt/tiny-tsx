@@ -439,6 +439,43 @@ pub unsafe extern "C" fn tinytsx_request_basic_auth_equals(
     u32::from(base64_matches_credentials(encoded, username, password))
 }
 
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tinytsx_request_if_none_match(
+    request: *const TinyRequest,
+    entity_tag: *const u8,
+    entity_tag_len: usize,
+) -> u32 {
+    if request.is_null() || entity_tag.is_null() || entity_tag_len == 0 {
+        return 0;
+    }
+    // SAFETY: Generated code passes request-lifetime and static byte ranges.
+    let request = unsafe { &*request };
+    let entity_tag = unsafe { slice::from_raw_parts(entity_tag, entity_tag_len) };
+    // SAFETY: Header views borrow the request head for dispatch.
+    let Some(value) = (unsafe { request_header_value(request, b"If-None-Match") }) else {
+        return 0;
+    };
+    let expected = strip_weak_entity_tag(entity_tag);
+    u32::from(value.split(|byte| *byte == b',').any(|candidate| {
+        let candidate = trim_ascii_whitespace(candidate);
+        candidate == b"*" || strip_weak_entity_tag(candidate) == expected
+    }))
+}
+
+fn strip_weak_entity_tag(value: &[u8]) -> &[u8] {
+    value.strip_prefix(b"W/").unwrap_or(value)
+}
+
+fn trim_ascii_whitespace(mut value: &[u8]) -> &[u8] {
+    while value.first().is_some_and(u8::is_ascii_whitespace) {
+        value = &value[1..];
+    }
+    while value.last().is_some_and(u8::is_ascii_whitespace) {
+        value = &value[..value.len() - 1];
+    }
+    value
+}
+
 unsafe fn request_header_value<'a>(request: &'a TinyRequest, expected: &[u8]) -> Option<&'a [u8]> {
     if request.headers.is_null() && request.header_count != 0 {
         return None;
