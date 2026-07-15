@@ -4,9 +4,9 @@ use std::{
 };
 
 use crate::abi::{
-    BAD_REQUEST, CONTENT_TYPE_HTML, CONTENT_TYPE_JSON, CONTENT_TYPE_RESPONSE_TEXT,
-    CONTENT_TYPE_TEXT, INTERNAL_ERROR, NOT_FOUND, OK, RENDER_ERROR, REQUEST_OOM, configured_port,
-    configured_request_memory, render, request,
+    BAD_REQUEST, CONTENT_TYPE_HTML, CONTENT_TYPE_JSON, CONTENT_TYPE_NONE,
+    CONTENT_TYPE_RESPONSE_TEXT, CONTENT_TYPE_TEXT, INTERNAL_ERROR, NOT_FOUND, OK, RENDER_ERROR,
+    REQUEST_OOM, configured_port, configured_request_memory, render, request,
 };
 
 const MAX_REQUEST_HEAD: usize = 16 * 1024;
@@ -116,7 +116,7 @@ fn parse_request_line(request: &[u8]) -> Option<(&[u8], &[u8])> {
 }
 
 fn write_response(
-    stream: &mut TcpStream,
+    stream: &mut impl Write,
     status: u16,
     content_type: u16,
     body: &[u8],
@@ -125,6 +125,10 @@ fn write_response(
     let reason = match status {
         200 => "OK",
         201 => "Created",
+        301 => "Moved Permanently",
+        302 => "Found",
+        307 => "Temporary Redirect",
+        308 => "Permanent Redirect",
         400 => "Bad Request",
         404 => "Not Found",
         405 => "Method Not Allowed",
@@ -132,17 +136,17 @@ fn write_response(
         503 => "Service Unavailable",
         _ => "Unknown",
     };
-    let content_type = match content_type {
-        CONTENT_TYPE_HTML => "text/html; charset=utf-8",
-        CONTENT_TYPE_TEXT => "text/plain; charset=UTF-8",
-        CONTENT_TYPE_JSON => "application/json",
-        CONTENT_TYPE_RESPONSE_TEXT => "text/plain;charset=UTF-8",
-        _ => "application/octet-stream",
-    };
-    write!(
-        stream,
-        "HTTP/1.1 {status} {reason}\r\nContent-Type: {content_type}\r\n",
-    )?;
+    write!(stream, "HTTP/1.1 {status} {reason}\r\n")?;
+    if content_type != CONTENT_TYPE_NONE {
+        let content_type = match content_type {
+            CONTENT_TYPE_HTML => "text/html; charset=utf-8",
+            CONTENT_TYPE_TEXT => "text/plain; charset=UTF-8",
+            CONTENT_TYPE_JSON => "application/json",
+            CONTENT_TYPE_RESPONSE_TEXT => "text/plain;charset=UTF-8",
+            _ => "application/octet-stream",
+        };
+        write!(stream, "Content-Type: {content_type}\r\n")?;
+    }
     for (name, value) in headers {
         stream.write_all(name)?;
         stream.write_all(b": ")?;
@@ -159,7 +163,8 @@ fn write_response(
 
 #[cfg(test)]
 mod tests {
-    use super::parse_request_line;
+    use super::{parse_request_line, write_response};
+    use crate::abi::CONTENT_TYPE_NONE;
 
     #[test]
     fn parses_get_request_line() {
@@ -180,5 +185,23 @@ mod tests {
     #[test]
     fn rejects_extra_request_line_fields() {
         assert!(parse_request_line(b"GET / HTTP/1.1 extra\r\n").is_none());
+    }
+
+    #[test]
+    fn response_without_content_type_omits_the_header() {
+        let mut response = Vec::new();
+
+        write_response(
+            &mut response,
+            302,
+            CONTENT_TYPE_NONE,
+            b"",
+            &[(b"Location".to_vec(), b"/".to_vec())],
+        )
+        .expect("write response");
+
+        let response = String::from_utf8(response).expect("UTF-8 response");
+        assert!(response.starts_with("HTTP/1.1 302 Found\r\nLocation: /\r\n"));
+        assert!(!response.contains("Content-Type:"));
     }
 }

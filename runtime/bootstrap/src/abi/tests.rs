@@ -1,6 +1,6 @@
 use super::{
-    BAD_REQUEST, CONTENT_TYPE_HTML, CONTENT_TYPE_TEXT, INTERNAL_ERROR, MAX_RESPONSE_HEADERS, OK,
-    REQUEST_OOM, TinyHeader, TinyResponseWriter, TinyStringView, request,
+    BAD_REQUEST, CONTENT_TYPE_HTML, CONTENT_TYPE_NONE, CONTENT_TYPE_TEXT, INTERNAL_ERROR,
+    MAX_RESPONSE_HEADERS, OK, REQUEST_OOM, TinyHeader, TinyResponseWriter, TinyStringView, request,
     tinytsx_html_write_path_segment, tinytsx_html_write_static, tinytsx_request_method_equals,
     tinytsx_request_path_equals, tinytsx_request_path_matches, tinytsx_request_query_has,
     tinytsx_response_begin, tinytsx_response_header_static,
@@ -199,6 +199,18 @@ fn response_begin_sets_valid_http_metadata() {
     assert_eq!(status, OK);
     assert_eq!(writer.http_status, 201);
     assert_eq!(writer.content_type, CONTENT_TYPE_TEXT);
+}
+
+#[test]
+fn response_begin_accepts_an_absent_content_type() {
+    let mut output = [];
+    let mut writer = writer(&mut output);
+
+    let status = unsafe { tinytsx_response_begin(&mut writer, 302, CONTENT_TYPE_NONE) };
+
+    assert_eq!(status, OK);
+    assert_eq!(writer.http_status, 302);
+    assert_eq!(writer.content_type, CONTENT_TYPE_NONE);
 }
 
 #[test]

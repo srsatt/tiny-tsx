@@ -7,6 +7,7 @@ pub const RENDER_ERROR: u32 = 3;
 pub const INTERNAL_ERROR: u32 = 4;
 pub const NOT_FOUND: u32 = 5;
 
+pub const CONTENT_TYPE_NONE: u16 = 0;
 pub const CONTENT_TYPE_HTML: u16 = 1;
 pub const CONTENT_TYPE_TEXT: u16 = 2;
 pub const CONTENT_TYPE_JSON: u16 = 3;
@@ -140,7 +141,11 @@ pub unsafe extern "C" fn tinytsx_response_begin(
     if !(100..=599).contains(&http_status)
         || !matches!(
             content_type,
-            CONTENT_TYPE_HTML | CONTENT_TYPE_TEXT | CONTENT_TYPE_JSON | CONTENT_TYPE_RESPONSE_TEXT
+            CONTENT_TYPE_NONE
+                | CONTENT_TYPE_HTML
+                | CONTENT_TYPE_TEXT
+                | CONTENT_TYPE_JSON
+                | CONTENT_TYPE_RESPONSE_TEXT
         )
     {
         writer.status = INTERNAL_ERROR;
