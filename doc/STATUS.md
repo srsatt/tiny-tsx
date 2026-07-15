@@ -82,7 +82,9 @@ produces and serves a native Mach-O executable from the example TSX source.
   cases. Evidence mode is explicit per case. The exact `typeof undefined` case
   lowers both upstream assertions into Test262 HIR, builds as a standalone
   native Mach-O executable, and exits successfully after native comparisons.
-  The other thirteen cases remain syntax-only and are not conformance results.
+  The complete six-assertion `typeof bigint` case now does the same while
+  covering BigInt conversion and Object boxing categories. The other twelve
+  cases remain syntax-only and are not conformance results.
 - The dedicated native API suite currently covers Request method/path/query
   views, elapsed-header formatting, and exact-fit, OOM, and invalid
   response-writer behavior.

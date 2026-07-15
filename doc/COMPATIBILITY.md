@@ -320,6 +320,15 @@ semantic evidence for the two `typeof undefined`/`typeof void 0` assertions
 only; every other case remains explicitly `mode: syntax` until its entire
 assertion program is supported.
 
+The complete six-assertion `language/expressions/typeof/bigint.js` case is also
+`mode: native`. Its closed semantic evaluator distinguishes a BigInt literal,
+`BigInt(0n)`, and `BigInt(0)` as primitive `bigint` values, then classifies
+`Object(BigInt(...))` and `Object(0n)` as boxed `object` values. All six
+resulting `typeof` strings are checked by the generated native executable. This
+does not yet provide runtime arbitrary-precision arithmetic or a persistent
+BigInt object representation; it is the complete observable behavior required
+by this exact test.
+
 ### Typed constant materialization
 
 Closed staged bindings now enter HIR v2 as source-located, tagged constants.

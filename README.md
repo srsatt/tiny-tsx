@@ -155,10 +155,11 @@ npm run test:test262-native
 npm run test:native-api
 ```
 
-Test262 evidence is recorded per case. The `typeof undefined` case now compiles
-to and executes as a standalone native Mach-O assertion program; the remaining
-allowlisted cases are syntax-only and are not reported as semantic conformance.
-See `doc/COMPATIBILITY.md` for pins, test layers, and completion criteria.
+Test262 evidence is recorded per case. The `typeof undefined` and `typeof
+bigint` cases now compile to and execute as standalone native Mach-O assertion
+programs; the remaining allowlisted cases are syntax-only and are not reported
+as semantic conformance. See `doc/COMPATIBILITY.md` for pins, test layers, and
+completion criteria.
 
 An exploratory static performance comparison against an equivalent idiomatic Bun
 server is available separately:

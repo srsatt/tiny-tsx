@@ -54,6 +54,8 @@ commit message.
       source and behavior test rather than only the first route.
 - [x] Add an allowlist-driven native Test262 compiler/runner and execute the
       exact `typeof undefined` case as a standalone Mach-O program.
+- [x] Execute the complete six-assertion Test262 `typeof bigint` case, including
+      closed `BigInt(...)` conversion and `Object(...)` boxing categories.
 - [ ] Promote the remaining syntax-only Test262 cases only as their complete
       assertion programs become executable.
 - [ ] Compile function values, closures, records, arrays, and ordinary loops.
