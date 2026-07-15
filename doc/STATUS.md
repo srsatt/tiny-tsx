@@ -190,8 +190,8 @@ produces and serves a native Mach-O executable from the example TSX source.
   `Custom 404 Not Found` body and status; the global closed `poweredBy()` effect
   is retained in the complete symbolic response.
 - Unknown property access is now conservative rather than becoming
-  `undefined`. The external-fetch route is correctly left unresolved instead
-  of being miscompiled as static text.
+  `undefined`, preventing unsupported runtime values from being miscompiled as
+  static text.
 - Closed throw completion now reaches an explicitly installed upstream
   `onError()` closure. The basic `/error` route serves `Custom Error Message`
   with status 500 and logs `Error: Error has occurred` to native stderr per
@@ -210,11 +210,16 @@ produces and serves a native Mach-O executable from the example TSX source.
   runtime parses Base64 credentials from borrowed headers. Native E2Es cover 401
   rejection, successful protected routing, and the complete example's custom
   error/middleware order. The 34-module initialization trace now has zero
-  diagnostics. The external-fetch and deliberate type-error routes still block
-  full-file lowering.
+  diagnostics.
 - The exact closed ETag route now receives its upstream SHA-1 tag at AOT time.
   Native dispatch returns the tagged 200 response or an empty tagged 304 for a
   matching `If-None-Match`; weak and list matching have focused ABI coverage.
+- The exact `/fetch-url` route now retains a request-time
+  `fetch('https://example.com/').status` expression through upstream async Hono
+  handling. The Apple runtime uses system libcurl without a Cargo/npm package,
+  and native HTTP verifies `https://example.com/ is 200`. The complete
+  34-module trace now closes 15 route responses with timing; the deliberate
+  `/type-error` handler is the only unresolved concrete GET/POST handler.
 - Async/await entry handlers are accepted only when application initialization
   fully stages them. Native Promise/suspension semantics remain unimplemented.
 - Static `Response` headers lower into a bounded eight-entry native writer with
@@ -259,11 +264,10 @@ rtk python3 benchmarks/scripts/run_static.py --workload hono-basic --duration 1 
 ## Active slice
 
 Compatibility substrate: compile the next complete-basic-example frontier: the
-external-fetch and deliberately invalid return-value handlers. Extend the
-executable function slice with locals,
-record property access, branches, and closures. Type-layout specialization should
-handle closed request-time records without pretending their values are
-compile-time constants.
+deliberately invalid return-value handler through Hono's installed error path.
+Then extend the executable function slice with locals, record property access,
+branches, and closures. Type-layout specialization should handle closed request-
+time records without pretending their values are compile-time constants.
 Test262 cases move from syntax intake to native execution only when their
 complete semantics are implemented.
 

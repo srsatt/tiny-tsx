@@ -67,6 +67,8 @@ commit message.
       read-only data blobs.
 - [x] Preserve `undefined` and arbitrary-precision bigint staged constants and
       add their allowlisted Test262 syntax cases.
+- [ ] Add constant `symbol` values and preserve signed zero, `NaN`, and
+      infinities before claiming complete ECMAScript primitive constants.
 - [x] Lower reachable named functions with up to four required string
       parameters, imported direct calls, and staged string constants through
       native code generation.
@@ -131,9 +133,15 @@ commit message.
       request guard, including authorized, rejected, and custom-error behavior.
 - [x] Compile the basic example's closed `etag` response into an AOT SHA-1 tag
       and native `If-None-Match` 200/304 dispatch.
+- [x] Compile the exact `await fetch('https://example.com/').status` route into
+      a request-time native fetch expression, with focused ABI and HTTP E2E
+      coverage.
+- [ ] Generalize Fetch to Request/init inputs, response bodies and headers,
+      abort/timeout semantics, and portable non-macOS host transports.
 - [ ] Compile the required rest/spread operations.
 - [ ] Add a native RegExp backend and allowlisted Test262 cases.
-- [ ] Add the general Request, Response, Headers, URL, and encoding native APIs.
+- [ ] Add the general Request, Response, Headers, Fetch, URL, and encoding
+      native APIs.
 - [x] Add bounded static response headers with HTTP validation,
       case-insensitive replacement, and wire emission.
 - [x] Lower closed `JSON.stringify`, `Headers`, `Object.entries`, array binding,

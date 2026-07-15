@@ -46,3 +46,12 @@ rejection are reported separately; a parsed case is never called conformant.
 Web API behavior and Hono behavior use their own suites. An exact-source Hono
 fixture must run under both Bun and TinyTSX before response equivalence is
 claimed.
+
+## D-007: Closed records are not dynamic maps
+
+Closed object literals and type-proven fixed shapes use record layouts with
+compiler-known fields. Explicit `Map` values, unknown index signatures, and
+runtime property-set mutation require separate bounded dynamic storage. An AOT
+specialization may replace a fixed-key map use with slots only when whole-
+program analysis proves the observable semantics; staging must never relabel a
+general map as a record.

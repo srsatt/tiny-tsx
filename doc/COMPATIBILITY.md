@@ -159,6 +159,16 @@ and comma-list matching. Native HTTP reproduces the upstream tag
 `"90ea638841fff3c326fc22cbd156f1146ac0ac02"` and an empty 304 response for a
 matching `If-None-Match`. This is not general Web Crypto or streaming digest.
 
+The exact async `/fetch-url` handler now remains staged through `await` while
+`fetch('https://example.com/')` becomes a request-time native operation. Reading
+`.status` and interpolating it emits the actual upstream HTTP status, and the
+native E2E reproduces `https://example.com/ is 200`. On the current Apple target,
+the bootstrap uses the OS-provided libcurl boundary, follows redirects, discards
+the response body, and applies a ten-second timeout. This adds no Cargo or npm
+package dependency, but the generated executable does dynamically depend on the
+macOS system libcurl. It is not general Fetch, Promise scheduling, Response body
+access, cancellation, or a portable transport implementation.
+
 When source explicitly calls `app.notFound(handler)`, the evaluator reads the
 installed upstream `#notFoundHandler` closure and lowers its response after all
 registered routes. Native dispatch emits ordered GET and POST `/*` fallbacks,
@@ -185,6 +195,12 @@ This separation is a compile-time contract only. It does not authorize replacing
 Hono methods or Web APIs with different behavior. The initial overlay exposes
 only the route/context surface used by the current tracers and grows with tested
 native semantics.
+
+Package-entry overlays may intentionally narrow or refine selected Hono method
+declarations when the compiler has evidence for that surface. They remain
+type-only: each method call must still execute the pinned upstream source and
+reach a tested HIR/native behavior. An overlay is never a license to substitute
+a compiler-owned Hono implementation.
 
 The runtime graph itself is type-checked against the pinned TypeScript
 `lib.dom.d.ts` and `lib.dom.iterable.d.ts`. TinyTSX no longer declares competing
@@ -234,11 +250,16 @@ the program rather than silently treating it as static.
 ### Implemented staging boundary
 
 The frontend now has a conservative closed-value evaluator for strings,
-numbers, bigint, booleans, undefined, null, arrays, and records. It resolves
+finite numbers, bigint, booleans, undefined, null, arrays, and records. It resolves
 imported top-level constants, folds constant array/object spread, and
 materializes object/array rest when the source is a compile-time closed value.
 Each spread or rest site is classified as `constant` or `runtime` in the Hono
 compatibility report.
+
+These constants cover every ECMAScript primitive category except `symbol`, but
+number constants still exclude signed-zero identity, `NaN`, and infinities.
+Those cases need explicit HIR encodings and Test262 evidence rather than being
+silently normalized by JSON.
 
 For pinned Hono `v4.12.30`, the current audit finds 19 constant bindings. It
 folds the array spread at `src/hono-base.ts:128` into:

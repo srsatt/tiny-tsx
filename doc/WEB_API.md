@@ -15,6 +15,7 @@ The current boundary is:
 | `Request` | standard DOM declaration | borrowed method, path, and raw query ABI views; exact query-name presence predicate |
 | `Response` | standard DOM declaration | bounded body writer, explicit status, optional HTML/text/JSON content-type IDs; closed `new Response(string or null, { status, headers })` AOT fast path |
 | `Headers` | standard DOM declaration | closed construction/cloning; bounded request-header borrowing and response-header storage with case-insensitive lookup/replacement |
+| `fetch` | standard DOM declaration | one closed URL string; request-time GET; `.status` only; Apple system libcurl transport |
 | `URL` / `URLSearchParams` | standard DOM declaration | pending |
 | body and stream types | standard DOM declaration | pending |
 | encoding types | standard DOM declaration | pending |
@@ -29,6 +30,15 @@ TypeScript errors.
 Hono's application-facing types remain in `tests/compat/hono/api.d.ts`. That
 overlay narrows the imported package surface for application type checking but
 does not replace upstream runtime source or Web-standard declarations.
+
+The exact basic-example `fetch('https://example.com/')` call is retained as a
+request-time expression. The runtime follows redirects, discards all response
+bytes, and exposes only the numeric status used by the handler. Focused ABI
+coverage uses an offline local HTTP peer; the native Hono E2E exercises the
+actual HTTPS URL and expects status 200. The Apple executable dynamically links
+the OS-provided libcurl while adding no Cargo/npm package. Request/init objects,
+methods other than GET, body/header access, rejection values, cancellation, and
+portable transports remain pending.
 
 The focused Hono overlay now exposes `HonoRequest.header(name)`. The runtime
 request is not a JavaScript `Headers` object: it is a bounded table of views into

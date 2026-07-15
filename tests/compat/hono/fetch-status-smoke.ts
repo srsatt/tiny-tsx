@@ -4,9 +4,8 @@ import {Hono} from "hono";
 const app = new Hono();
 
 app.get("/fetch-url", async context => {
-  const url = "https://example.com/";
-  const response = await fetch(url);
-  return context.text(`${url} is ${response.status}`);
+  const response = await fetch("https://example.com/");
+  return context.text(`https://example.com/ is ${response.status}`);
 });
 
 export default app;

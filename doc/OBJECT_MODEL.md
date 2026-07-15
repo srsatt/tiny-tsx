@@ -14,6 +14,11 @@ Records do not permit adding or deleting fields at runtime. A computed access is
 valid only when the key can be reduced to a known field. Prototype mutation and
 property descriptors are outside this representation.
 
+The constant pool currently represents `undefined`, `null`, booleans, finite
+numbers, bigint, strings, arrays, and records. `symbol`, signed-zero identity,
+`NaN`, and infinities need explicit encodings before they can be admitted as
+constants; they must not be approximated through JSON numbers or strings.
+
 ## Maps
 
 A map has runtime keys, runtime membership, and object identity. Explicit
@@ -42,3 +47,6 @@ never replace Hono routing, context, middleware, or Web API behavior.
 Middleware overlays are split by package entrypoint. The focused
 `pretty-json-api.d.ts` declaration exposes only the tested options and handler
 shape while runtime resolution still loads Hono's pinned middleware source.
+The same rule permits selected Hono methods to receive narrower custom
+declarations: the override describes a supported type surface but cannot bypass
+execution of the upstream method implementation.

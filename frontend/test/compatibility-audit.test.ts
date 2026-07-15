@@ -979,6 +979,38 @@ test("lowers a closed fetch response status as a native runtime expression", () 
   ]);
 });
 
+test("retains the exact upstream basic fetch route as a runtime fetch", () => {
+  const entry = path.join(repository, "vendor/hono-examples/basic/src/index.ts");
+  const aliases = {
+    hono: path.join(repository, "vendor/hono/src/index.ts"),
+    "hono/basic-auth": path.join(repository, "vendor/hono/src/middleware/basic-auth/index.ts"),
+    "hono/etag": path.join(repository, "vendor/hono/src/middleware/etag/index.ts"),
+    "hono/powered-by": path.join(repository, "vendor/hono/src/middleware/powered-by/index.ts"),
+    "hono/pretty-json": path.join(
+      repository,
+      "vendor/hono/src/middleware/pretty-json/index.ts",
+    ),
+  };
+  const graph = loadModuleGraph(entry, {aliases});
+  const application = analyzeApplicationEntry(graph.modules[0]!.sourceFile);
+  assert.ok(application);
+
+  const result = evaluateApplicationInitialization(graph, application);
+
+  assert.deepEqual(result?.issues, []);
+  assert.deepEqual(
+    result?.routes.find(route => route.path === "/fetch-url")?.response?.body,
+    [
+      {kind: "literal", value: "https://example.com/ is "},
+      {kind: "fetchStatus", url: "https://example.com/"},
+    ],
+  );
+  assert.equal(
+    result?.routes.find(route => route.path === "/type-error")?.response,
+    undefined,
+  );
+});
+
 test("pins the native text response to the upstream Hono contract", () => {
   const manifest = JSON.parse(readFileSync(
     path.join(repository, "tests/compat/hono/manifest.json"),
