@@ -398,7 +398,7 @@ fn preserves_hono_error_and_middleware_order_for_rejected_basic_auth() {
             status: 500,
             path: "/auth/test",
             body: "Custom Error Message",
-            content_type: Some("text/plain; charset=UTF-8"),
+            content_type: Some("text/plain;charset=UTF-8"),
             headers: &[("X-Powered-By", "Hono")],
             millisecond_headers: &[],
             request_headers: &[],
@@ -645,18 +645,14 @@ fn builds_and_serves_the_complete_pinned_hono_basic_source() {
         "vendor/hono-examples/basic/src/index.ts",
         ExpectedResponse {
             method: "GET",
-            status: 500,
-            path: "/type-error",
-            body: "Custom Error Message",
-            content_type: Some("text/plain; charset=UTF-8"),
-            headers: &[],
-            millisecond_headers: &[],
+            status: 200,
+            path: "/",
+            body: "Hono!!",
+            content_type: Some("text/plain;charset=UTF-8"),
+            headers: &[("X-Powered-By", "Hono")],
+            millisecond_headers: &["X-Response-Time"],
             request_headers: &[],
-            stderr: &[
-                "TypeError [ERR_INVALID_ARG_TYPE]: Failed to construct 'Response': The provided body value is not of type 'ResponseInit'",
-                "TypeError: undefined is not an object (evaluating 'this.#res.headers.entries')",
-                "TypeError: undefined is not an object (evaluating 'this.#res.headers.entries')",
-            ],
+            stderr: &[],
         },
         &[
             "--alias",
@@ -680,7 +676,7 @@ fn builds_and_serves_the_complete_pinned_hono_basic_source() {
             "--api",
             "hono/pretty-json=tests/compat/hono/pretty-json-api.d.ts",
         ],
-        &[],
+        &[("/hello", "This is /hello", "text/plain;charset=UTF-8")],
     );
 }
 
