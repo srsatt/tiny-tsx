@@ -434,6 +434,17 @@ fn emit_handler_text_expression(
             );
             writeln!(assembly, "    bl _tinytsx_html_write_request_header").unwrap();
         }
+        ValueExpression::FetchStatus { url, .. } => {
+            writeln!(assembly, "    ldr x0, [sp, #16]").unwrap();
+            writeln!(assembly, "    adrp x1, Ltinytsx_string_{url}@PAGE").unwrap();
+            writeln!(assembly, "    add x1, x1, Ltinytsx_string_{url}@PAGEOFF").unwrap();
+            emit_immediate(
+                assembly,
+                "x2",
+                program.static_strings[*url].value.len() as u64,
+            );
+            writeln!(assembly, "    bl _tinytsx_html_write_fetch_status").unwrap();
+        }
         ValueExpression::QueryConditional {
             query,
             when_present,
@@ -559,6 +570,7 @@ fn emit_value_expression(
         ValueExpression::Concat { .. }
         | ValueExpression::RouteParameter { .. }
         | ValueExpression::RequestHeader { .. }
+        | ValueExpression::FetchStatus { .. }
         | ValueExpression::QueryConditional { .. } => {
             return Err("request-time expression used outside a handler response".to_owned());
         }
@@ -899,15 +911,22 @@ mod tests {
                       "name": "id",
                       "segment": 1,
                       "span": {"file":"server.ts","line":1,"column":1,"endLine":1,"endColumn":2}
+                    }, {
+                      "kind": "fetchStatus",
+                      "url": 1,
+                      "span": {"file":"server.ts","line":1,"column":1,"endLine":1,"endColumn":2}
                     }],
                     "span": {"file":"server.ts","line":1,"column":1,"endLine":1,"endColumn":2}
                   }
                 },
                 "span": {"file":"server.ts","line":1,"column":1,"endLine":1,"endColumn":2}
               }],
-              "staticStrings": [{"id":0,"value":"Your ID is "}],
+              "staticStrings": [
+                {"id":0,"value":"Your ID is "},
+                {"id":1,"value":"https://example.com/"}
+              ],
               "constants": [],
-              "statistics": {"modules":1,"functions":0,"components":0,"constants":0,"staticHtmlBytes":11,"dynamicHtmlExpressions":1}
+              "statistics": {"modules":1,"functions":0,"components":0,"constants":0,"staticHtmlBytes":11,"dynamicHtmlExpressions":2}
             }"#,
         )
         .unwrap();
@@ -919,6 +938,7 @@ mod tests {
         assert!(assembly.contains("movz x1, #201"));
         assert!(assembly.contains("Ltinytsx_handler_method_0:\n    .byte 80, 79, 83, 84"));
         assert!(assembly.contains("movz x2, #1\n    bl _tinytsx_html_write_path_segment"));
+        assert!(assembly.contains("bl _tinytsx_html_write_fetch_status"));
     }
 
     #[test]

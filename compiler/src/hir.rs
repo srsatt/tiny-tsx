@@ -165,6 +165,10 @@ pub enum ValueExpression {
         header: usize,
         span: SourceSpan,
     },
+    FetchStatus {
+        url: usize,
+        span: SourceSpan,
+    },
     QueryConditional {
         query: usize,
         #[serde(rename = "whenPresent")]
@@ -409,6 +413,7 @@ impl Program {
             ValueExpression::Concat { .. }
             | ValueExpression::RouteParameter { .. }
             | ValueExpression::RequestHeader { .. }
+            | ValueExpression::FetchStatus { .. }
             | ValueExpression::QueryConditional { .. } => {
                 return Err(
                     "request-time expressions are only valid in handler responses".to_owned(),
@@ -494,6 +499,15 @@ impl Program {
                 };
                 if header.value.is_empty() {
                     return Err("request header name must not be empty".to_owned());
+                }
+                Ok(())
+            }
+            ValueExpression::FetchStatus { url, .. } => {
+                let Some(url) = self.static_strings.get(*url) else {
+                    return Err("fetch URL references a missing static string".to_owned());
+                };
+                if !url.value.starts_with("https://") {
+                    return Err("fetch URL must use HTTPS".to_owned());
                 }
                 Ok(())
             }
