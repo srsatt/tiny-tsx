@@ -165,8 +165,13 @@ commit message.
 - [x] Promote the complete pinned `URLSearchParams.has()` source by adding
       false assertions, ordered append/delete mutation, Web IDL string
       coercion, and the two-argument `has`/`delete` semantics it exercises.
-- [ ] Extend URL form decoding with percent escapes and `+` translation before
-      exposing the WPT query-pair implementation as an application Web API.
+- [x] Execute the complete pinned `URLSearchParams` stringifier WPT with form
+      `+`/percent decoding, UTF-8 percent serialization, malformed escape
+      preservation, and live mutation of the selected linked URL cases.
+- [ ] Add invalid UTF-8 replacement semantics and direct upstream parser
+      evidence before claiming the complete form-urlencoded parser.
+- [ ] Share the native form decoder with application Request/URL query lookup,
+      then cover encoded query names through the Hono HTTP path.
 - [ ] Add exceptions, Promise, async/await, and a bounded native task executor.
 - [x] Add the pinned Test262 throw-statement and Error-message cases to the
       syntax allowlist; native Test262 execution remains pending.

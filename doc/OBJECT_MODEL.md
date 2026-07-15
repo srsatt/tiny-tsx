@@ -46,6 +46,13 @@ also lacks the arbitrary key/value types and identity contract of a generic
 that boundary explicit prevents standards-test specialization from silently
 changing the compiler's object model.
 
+The stringifier WPT deepens this representation without changing that boundary.
+Each pair now owns bounded decoded bytes, and serialization is derived from the
+current ordered state. A linked WPT URL slot points to the same pair collection,
+so append/delete can invalidate and regenerate its query. This is explicit
+native object linkage for the selected test lifetime, not permission to treat
+ordinary records as mutable objects or to claim a general `URL` identity model.
+
 ## Declaration overlays
 
 An `api.d.ts` overlay may expose a narrower, compiler-supported type surface to

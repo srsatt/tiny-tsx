@@ -409,9 +409,13 @@ string into a compile-time record or introduce a generic dynamic map.
 
 The native WPT runner adds a second, deliberately isolated representation: a
 bounded ordered runtime pair collection used by the complete pinned
-`urlsearchparams-get.any.js` and `urlsearchparams-has.any.js`. Sequential WPT
-HIR constructs and resets callback-local slots, preserves duplicates and first-
-value lookup, appends ordered pairs, and deletes by name or name/value pair.
+`urlsearchparams-get.any.js`, `urlsearchparams-has.any.js`, and
+`urlsearchparams-stringifier.any.js`. Sequential WPT HIR constructs and resets
+callback-local slots, preserves duplicates and first-value lookup, appends
+ordered pairs, deletes by name or name/value pair, decodes form input, and
+serializes current state. The selected URL-linked cases keep a distinct URL
+slot pointing at the same parameter collection so native mutation updates its
+query serialization.
 That is dynamic collection behavior rather than record field semantics. It is
 not a generic `Map`, and it is not yet wired into application-generated
 `URLSearchParams` objects. The distinction prevents successful closed WPT

@@ -16,7 +16,7 @@ The current boundary is:
 | `Response` | standard DOM declaration | bounded body writer, explicit status, optional HTML/text/JSON content-type IDs; closed `new Response(string or null, { status, headers })` AOT fast path |
 | `Headers` | standard DOM declaration | closed construction/cloning; bounded request-header borrowing and response-header storage with case-insensitive lookup/replacement |
 | `fetch` | standard DOM declaration | one closed URL string; request-time GET; `.status` only; Apple system libcurl transport |
-| `URL` / `URLSearchParams` | standard DOM declaration | native WPT-only bounded ordered pair construction, append/delete mutation, `get(name)`, and one-/two-argument `has`; application API pending |
+| `URL` / `URLSearchParams` | standard DOM declaration | native WPT-only bounded ordered pairs, form decoding/serialization, mutation, lookup, and live query linkage for selected URL cases; application API pending |
 | body and stream types | standard DOM declaration | pending |
 | encoding types | standard DOM declaration | pending |
 
@@ -94,27 +94,36 @@ the same WPT revision. Only its status-propagation idea for the closed 201 case
 is marked native-derived. The wider status/statusText/default/SameObject cases
 in that file are not executed or claimed.
 
-The complete pinned `url/urlsearchparams-get.any.js` and
-`url/urlsearchparams-has.any.js` sources are classified as `native`.
+The complete pinned `url/urlsearchparams-get.any.js`,
+`url/urlsearchparams-has.any.js`, and
+`url/urlsearchparams-stringifier.any.js` sources are classified as `native`.
 `tinytsx wpt <case> --output <binary>` parses the untouched upstream JavaScript
-and lowers all six `test(...)` bodies and 33 assertions into typed sequential
-WPT HIR. Each callback receives fresh bounded storage for 64 ordered name/value
-pairs. Native operations construct, append, delete, retrieve, and test presence
+and lowers all 20 `test(...)` bodies and 70 assertions into typed sequential WPT
+HIR v3. Each callback receives fresh bounded storage for 64 ordered name/value
+pairs, 256 bytes per name or value, and a 16 KiB serialization buffer. Native
+operations construct, append, delete, retrieve, test presence, and stringify
 without a JavaScript runtime; reassignment resets the same callback-local slot.
 
 The executed behavior includes source-order preservation, empty names and
 values, missing names, first-value lookup for duplicates, deletion by name or
 name/value pair, and Web IDL string conversion for the closed `null`, numeric,
 and `undefined` arguments in the upstream sources. An explicit `undefined`
-optional second argument is treated as omitted. The allowlist-driven
-`test:wpt-native` command builds both Mach-O executables and treats any failed
-assertion as a non-zero process result.
+optional second argument is treated as omitted. Form parsing converts `+` to
+space, decodes valid percent triplets, and preserves malformed escapes for
+reserialization. Form serialization uses uppercase UTF-8 percent bytes and
+covers spaces, plus, percent, NUL, newlines, and a non-BMP character. The live
+`URL.searchParams` cases retain the original untouched URL and reserialize its
+complete query after linked mutation. The allowlist-driven `test:wpt-native`
+command builds all three Mach-O executables and treats any failed assertion as
+a non-zero process result.
 
-This runner is semantic evidence for those two complete source files, not yet
+This runner is semantic evidence for those three complete source files, not yet
 the application-facing `URLSearchParams` class. It does not currently
-percent-decode names or values, translate `+`, stringify the collection, accept
-dynamic inputs, or expose object identity and iteration. Application-generated
-Request/URL objects continue to use their separate borrowed query view.
+replace malformed UTF-8 with U+FFFD, accept dynamic inputs, expose object
+identity/iteration, or implement general URL parsing and normalization.
+Application-generated Request/URL objects continue to use their separate
+borrowed query view; the next production step is to share the proven form
+decoder with that request path and cover it through Hono HTTP tests.
 
 The pinned Hono `poweredBy()` middleware now executes symbolically from upstream
 source. Its post-handler `res.headers.set('X-Powered-By', 'Hono')` effect lowers
