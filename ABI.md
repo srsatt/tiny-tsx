@@ -123,6 +123,12 @@ extern "C" fn tinytsx_request_basic_auth_equals(
     password_len: usize,
 ) -> u32;
 
+extern "C" fn tinytsx_request_if_none_match(
+    request: *const TinyRequest,
+    entity_tag: *const u8,
+    entity_tag_len: usize,
+) -> u32;
+
 extern "C" fn tinytsx_response_header_static(
     writer: *mut TinyResponseWriter,
     name: *const u8,
@@ -175,6 +181,10 @@ parses Hono's supported case-insensitive Basic scheme and spacing, decodes
 standard Base64 without allocation, and compares the decoded username/password
 bytes against generated static credentials. It returns a boolean in `w0`;
 malformed, missing, and mismatched credentials return zero.
+
+`tinytsx_request_if_none_match` compares a borrowed `If-None-Match` header with
+a generated static entity tag. It implements Hono's weak comparison, wildcard,
+and comma-separated candidate behavior for the compiled GET response.
 
 `tinytsx_response_header_static` validates HTTP token names and values, replaces
 existing names case-insensitively, and stores at most eight custom headers.

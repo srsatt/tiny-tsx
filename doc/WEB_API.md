@@ -41,6 +41,12 @@ dedicated ABI predicate. It implements the exact closed credentials required by
 the pinned Hono example without claiming general runtime `Request.headers`,
 `TextDecoder`, Base64, RegExp, Promise, or Web Crypto objects.
 
+Closed ETag middleware uses a second dedicated request predicate. SHA-1 is
+computed by the AOT frontend for immutable response bytes; the native runtime
+only compares borrowed `If-None-Match` values and selects the precompiled 304
+response. Streaming bodies, arbitrary digest functions, and runtime Web Crypto
+remain pending.
+
 The executable Hono route evaluates the upstream `Context.text()` condition and
 reaches `new Response(text)` with a closed string at compile time. A closed
 `new Response(body, { headers: { ... } })` also carries static headers into HIR

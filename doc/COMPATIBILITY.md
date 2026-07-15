@@ -152,6 +152,13 @@ example's custom-error ordering: rejected auth logs `Error`, returns the custom
 500 response, retains outer `X-Powered-By`, and correctly omits downstream
 `X-Response-Time`.
 
+The exact `/etag/cached` middleware now specializes the closed response bytes
+to Hono's default SHA-1 entity tag. HIR retains both the normal response and its
+304 branch; the native borrowed-header predicate implements wildcard, weak-tag,
+and comma-list matching. Native HTTP reproduces the upstream tag
+`"90ea638841fff3c326fc22cbd156f1146ac0ac02"` and an empty 304 response for a
+matching `If-None-Match`. This is not general Web Crypto or streaming digest.
+
 When source explicitly calls `app.notFound(handler)`, the evaluator reads the
 installed upstream `#notFoundHandler` closure and lowers its response after all
 registered routes. Native dispatch emits ordered GET and POST `/*` fallbacks,

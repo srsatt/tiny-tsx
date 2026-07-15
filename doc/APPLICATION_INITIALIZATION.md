@@ -144,6 +144,12 @@ borrowed Authorization header and selects either the protected response or the
 rejected response. The latter is evaluated through the installed Hono error
 handler and only receives middleware that actually surrounds the auth guard.
 
+The exact `etag()` closure is retained as request-dependent metadata when the
+response body is closed. The frontend computes the default SHA-1 digest once,
+HIR carries the entity tag and not-modified response, and native dispatch
+matches `If-None-Match`. The 304 branch keeps ETag and outer powered-by metadata
+while omitting downstream timing.
+
 An explicit `notFound()` application call is also retained. After route
 registration completes, the evaluator invokes Hono's installed private closure
 with matching global middleware and lowers the result as final GET/POST

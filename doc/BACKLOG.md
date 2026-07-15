@@ -129,7 +129,8 @@ commit message.
       `prettyJSON()` response clones.
 - [x] Compile the basic example's closed `basicAuth` configuration into a native
       request guard, including authorized, rejected, and custom-error behavior.
-- [ ] Compile the remaining basic-example `etag` middleware.
+- [x] Compile the basic example's closed `etag` response into an AOT SHA-1 tag
+      and native `If-None-Match` 200/304 dispatch.
 - [ ] Compile the required rest/spread operations.
 - [ ] Add a native RegExp backend and allowlisted Test262 cases.
 - [ ] Add the general Request, Response, Headers, URL, and encoding native APIs.

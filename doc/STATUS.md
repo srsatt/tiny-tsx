@@ -211,7 +211,10 @@ produces and serves a native Mach-O executable from the example TSX source.
   rejection, successful protected routing, and the complete example's custom
   error/middleware order. The 34-module initialization trace now has zero
   diagnostics. The external-fetch and deliberate type-error routes still block
-  full-file lowering, and the ETag route does not yet retain ETag semantics.
+  full-file lowering.
+- The exact closed ETag route now receives its upstream SHA-1 tag at AOT time.
+  Native dispatch returns the tagged 200 response or an empty tagged 304 for a
+  matching `If-None-Match`; weak and list matching have focused ABI coverage.
 - Async/await entry handlers are accepted only when application initialization
   fully stages them. Native Promise/suspension semantics remain unimplemented.
 - Static `Response` headers lower into a bounded eight-entry native writer with
@@ -255,8 +258,8 @@ rtk python3 benchmarks/scripts/run_static.py --workload hono-basic --duration 1 
 
 ## Active slice
 
-Compatibility substrate: compile the next complete-basic-example frontier:
-ETags and the remaining request-dependent handlers. Extend the
+Compatibility substrate: compile the next complete-basic-example frontier: the
+external-fetch and deliberately invalid return-value handlers. Extend the
 executable function slice with locals,
 record property access, branches, and closures. Type-layout specialization should
 handle closed request-time records without pretending their values are
