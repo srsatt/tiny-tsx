@@ -132,6 +132,13 @@ export function compileEntry(entryPath: string, options: CompileOptions): HirPro
           sourceFile.statements.find(statement => ts.isExportAssignment(statement)) ?? sourceFile,
         );
       }
+      if (initialization !== undefined && initialization.issues.length > 0) {
+        throw new CompileFailure(initialization.issues.map(issue => ({
+          code: "TINY1403",
+          message: issue.reason,
+          span: issue.span,
+        })));
+      }
       const evaluation = evaluateApplicationConstructor(graph, application);
       if (evaluation !== undefined && evaluation.issues.length === 0) {
         throw tinyError(
