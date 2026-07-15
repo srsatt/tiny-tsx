@@ -13,7 +13,7 @@ function upstream(name: string): string {
 test("lowers the complete pinned URLSearchParams get WPT as sequential operations", () => {
   const program = compileWptEntry(upstream("urlsearchparams-get.any.js"));
 
-  assert.equal(program.version, 2);
+  assert.equal(program.version, 3);
   assert.deepEqual(program.tests.map(wptTest => [wptTest.name, wptTest.slots, wptTest.operations.length]), [
     ["Get basics", 1, 10],
     ["More get() basics", 1, 6],
@@ -32,6 +32,32 @@ test("lowers the complete pinned URLSearchParams get WPT as sequential operation
     message: "Search params object has no \"fourth\" name and value.",
     span: program.tests[1]?.operations.at(-1)?.span,
   });
+});
+
+test("lowers the complete pinned URLSearchParams stringifier WPT", () => {
+  const program = compileWptEntry(upstream("urlsearchparams-stringifier.any.js"));
+
+  assert.equal(program.tests.length, 14);
+  assert.deepEqual(program.tests.slice(-2).map(wptTest => [
+    wptTest.name,
+    wptTest.slots,
+    wptTest.urlSlots,
+  ]), [
+    ["URLSearchParams connected to URL", 1, 1],
+    ["URLSearchParams must not do newline normalization", 1, 1],
+  ]);
+  assert.ok(program.tests.some(wptTest => wptTest.operations.some(operation =>
+    operation.kind === "urlSearchParamsAssertStringified"
+    && operation.expected === "a=b%F0%9F%92%A9c"
+  )));
+  assert.deepEqual(program.tests.at(-2)?.operations.map(operation => operation.kind), [
+    "urlConstruct",
+    "urlAssertStringified",
+    "urlSearchParamsAssertStringified",
+    "urlSearchParamsAppend",
+    "urlAssertStringified",
+    "urlSearchParamsAssertStringified",
+  ]);
 });
 
 test("lowers the complete pinned URLSearchParams has WPT with mutation and coercion", () => {
