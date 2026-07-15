@@ -3,6 +3,11 @@ type u32 = number;
 type i64 = number;
 type u64 = number;
 
+interface Worker {
+  /** TinyTSX request/reply sugar over a separate bounded application pool. */
+  request(message: string): Promise<string>;
+}
+
 declare namespace JSX {
   interface Element {
     readonly __tinytsxElement: unique symbol;

@@ -82,7 +82,9 @@ export function loadModuleGraph(entryPath: string, options: ModuleGraphOptions =
         continue;
       }
       sourceModule.dependencies.push(dependency);
-      sourceModule.runtimeImports.push({specifier: moduleReference.specifier, path: dependency});
+      if (moduleReference.kind === "import") {
+        sourceModule.runtimeImports.push({specifier: moduleReference.specifier, path: dependency});
+      }
       visit(dependency);
     }
   }
@@ -94,6 +96,7 @@ export function loadModuleGraph(entryPath: string, options: ModuleGraphOptions =
 interface ModuleReference {
   specifier: string;
   node: ts.StringLiteralLike;
+  kind: "import" | "worker";
 }
 
 function runtimeModuleReferences(sourceFile: ts.SourceFile): ModuleReference[] {
@@ -101,7 +104,11 @@ function runtimeModuleReferences(sourceFile: ts.SourceFile): ModuleReference[] {
   for (const statement of sourceFile.statements) {
     if (ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier)) {
       if (!isTypeOnlyImport(statement.importClause)) {
-        references.push({specifier: statement.moduleSpecifier.text, node: statement.moduleSpecifier});
+        references.push({
+          specifier: statement.moduleSpecifier.text,
+          node: statement.moduleSpecifier,
+          kind: "import",
+        });
       }
       continue;
     }
@@ -111,10 +118,41 @@ function runtimeModuleReferences(sourceFile: ts.SourceFile): ModuleReference[] {
       && statement.moduleSpecifier !== undefined
       && ts.isStringLiteral(statement.moduleSpecifier)
     ) {
-      references.push({specifier: statement.moduleSpecifier.text, node: statement.moduleSpecifier});
+      references.push({
+        specifier: statement.moduleSpecifier.text,
+        node: statement.moduleSpecifier,
+        kind: "import",
+      });
     }
   }
+  const visit = (node: ts.Node): void => {
+    const specifier = workerModuleSpecifier(node);
+    if (specifier !== undefined) {
+      references.push({specifier: specifier.text, node: specifier, kind: "worker"});
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
   return references;
+}
+
+function workerModuleSpecifier(node: ts.Node): ts.StringLiteralLike | undefined {
+  if (
+    !ts.isNewExpression(node)
+    || !ts.isIdentifier(node.expression)
+    || node.expression.text !== "Worker"
+  ) return undefined;
+  const url = node.arguments?.[0];
+  if (
+    url === undefined
+    || !ts.isNewExpression(url)
+    || !ts.isIdentifier(url.expression)
+    || url.expression.text !== "URL"
+  ) return undefined;
+  const specifier = url.arguments?.[0];
+  return specifier !== undefined && ts.isStringLiteralLike(specifier)
+    ? specifier
+    : undefined;
 }
 
 function isTypeOnlyImport(importClause: ts.ImportClause | undefined): boolean {

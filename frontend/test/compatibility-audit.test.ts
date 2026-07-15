@@ -47,6 +47,19 @@ test("reports unresolved runtime imports without discarding the graph", () => {
   assert.match(graph.diagnostics[0]?.message ?? "", /not-installed/);
 });
 
+test("loads a compile-time-known Worker module without treating it as an import binding", () => {
+  const entry = path.join(repository, "tests/compat/workers/hono-worker-smoke.ts");
+  const graph = loadModuleGraph(entry, {
+    aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+  });
+  const worker = path.join(repository, "tests/compat/workers/uppercase.worker.ts");
+
+  assert.deepEqual(graph.diagnostics, []);
+  assert.ok(graph.modules.some(module => module.path === worker));
+  assert.ok(graph.modules[0]?.dependencies.includes(worker));
+  assert.ok(!graph.modules[0]?.runtimeImports.some(binding => binding.path === worker));
+});
+
 test("audits the pinned hono/tiny runtime graph", () => {
   const report = auditCompatibility(path.join(repository, "tests/compat/hono/smoke.ts"), {
     root: repository,
