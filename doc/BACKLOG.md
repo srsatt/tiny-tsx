@@ -32,7 +32,7 @@ commit message.
 - [ ] Resolve the Hono response-clone Content-Type difference with direct
       Web-platform evidence and an explicit compatibility decision.
 - [ ] Implement HTTP/1.1 keep-alive and rerun equivalent transport tests.
-- [ ] Implement the bounded native worker pool and benchmark 1/2/4/8 workers.
+- [x] Implement the bounded native worker pool and benchmark 1/2/4/8 workers.
 - [ ] Benchmark dynamic escaping, request arenas, route parameters, JSON/query
       branches, and representative response sizes.
 - [ ] Add CPU, syscall, allocation, peak-RSS, and first-launch instrumentation.
@@ -47,7 +47,7 @@ commit message.
 - [x] Make the HTTP bootstrap consume the shared pool and enable `--workers N`.
 - [x] Prove concurrent request execution, deterministic saturation 503, response
       isolation, and recovery after overload.
-- [ ] Benchmark equivalent Hono workloads with 1/2/4/8 workers, reporting RSS,
+- [x] Benchmark equivalent Hono workloads with 1/2/4/8 workers, reporting RSS,
       throughput, median/p99 latency, and queue saturation behavior.
 - [ ] Implement compile-time-known module Workers as syntax sugar over isolated
       mailboxes and a separate application task pool.

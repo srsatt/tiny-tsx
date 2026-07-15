@@ -89,3 +89,9 @@ second at the maximum requested concurrency.
 
 For credible comparative runs, connect the Mac to power, disable Low Power Mode,
 close unnecessary applications, and avoid indexing or builds while measuring.
+
+The first fixed-worker connection-close matrix is retained as four raw reports
+and `2026-07-15-m5-max-hono-jsx-ssr-workers-summary.md`. It found no throughput
+gain from 2/4/8 workers on the closed JSX root, while warm RSS rose from 6.05 MiB
+at one worker to 6.41 MiB at eight. This is the baseline that keep-alive and a
+request-time workload must replace before scheduler conclusions.

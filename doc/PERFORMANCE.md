@@ -111,6 +111,32 @@ TinyTSX throughput falls 8.9% and Bun falls 7.5%, while p99 rises to roughly
 is transport-bound and cannot establish how AOT code compares on dynamic JSON,
 escaping, parsing, or allocation-heavy handlers.
 
+## Fixed-worker connection-close baseline
+
+After making `--workers` real, the exact pinned JSX SSR workload was repeated
+with 1, 2, 4, and 8 TinyTSX workers. Each variant passed the Bun-derived
+881-byte response gate before three one-second load samples per point.
+
+| Workers | Idle RSS | Warm RSS | RPS c8 | RPS c32 | RPS c64 | p99 c64 |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 5.89 MiB | 6.05 MiB | 32,155 | 31,330 | 31,522 | 2.373 ms |
+| 2 | 5.91 MiB | 6.08 MiB | 30,562 | 29,772 | 29,772 | 4.076 ms |
+| 4 | 5.94 MiB | 6.20 MiB | 29,539 | 30,538 | 29,217 | 4.271 ms |
+| 8 | 6.03 MiB | 6.41 MiB | 30,786 | 28,450 | 30,122 | 3.806 ms |
+
+Eight workers cost only 0.36 MiB more warm RSS than one, but no worker count
+improved throughput or p99. At concurrency 64, 2/4/8 workers reached
+0.94x/0.93x/0.96x the one-worker RPS. The result is consistent with the single
+acceptor and TCP connect/close path being the bottleneck while the application
+returns a closed pre-rendered body. It is not evidence against worker
+parallelism: the focused native E2E proves progress on a second executor while
+the first is blocked on a partial request.
+
+The raw source reports and combined interpretation are in
+`benchmarks/results/2026-07-15-m5-max-hono-jsx-ssr-workers-*`. Keep-alive plus a
+request-time rendering workload are required before the matrix can say whether
+application execution scales.
+
 ## Roadmap
 
 ### P0 — make the comparison semantically and mechanically fair

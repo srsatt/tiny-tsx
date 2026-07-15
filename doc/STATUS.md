@@ -304,6 +304,12 @@ produces and serves a native Mach-O executable from the example TSX source.
   `--workers` count, emits it into a distinct release executable, records it in
   JSON/Markdown, and labels the connection-close limitation explicitly. A unit
   test pins forwarding of the selected count into the native build command.
+- The pinned 31-module Hono JSX SSR root has a 1/2/4/8-worker baseline with
+  byte-equivalence gates and three samples at concurrency 1/8/32/64. Warm RSS
+  moved from 6.05 to 6.41 MiB, while concurrency-64 throughput was
+  31.5k/29.8k/29.2k/30.1k requests/s. More workers did not improve this
+  connection-close, single-acceptor, pre-rendered workload; the combined report
+  explicitly requires keep-alive and request-time rendering before conclusions.
 
 Verification:
 
@@ -343,17 +349,17 @@ rtk npm run benchmark:hono-jsx-ssr
 ## Active slice
 
 The reusable native worker pool now drives HTTP and has wire-level concurrency,
-isolation, overload, and recovery proof. The benchmark harness can build an
-explicit worker count. The active slice is to record the 1/2/4/8-worker Hono JSX
-connection-close baseline, then add keep-alive before interpreting scheduler
-scaling. Keep fixed-layout records separate from dynamic `Map`.
+isolation, overload, recovery, RSS, and 1/2/4/8 load evidence. The next runtime
+slice is HTTP/1.1 keep-alive; the next compatibility slice is request-time Hono
+JSX. Only then should the worker matrix be interpreted. Keep fixed-layout
+records separate from dynamic `Map`.
 
 ## Resume point
 
 Read `doc/WORKERS.md`, `doc/PERFORMANCE.md`, and `doc/BACKLOG.md`. Run
 `rtk cargo test -p tinytsx-runtime-worker` and
 `rtk cargo test -p tinytsx worker_pool_serves_in_parallel_and_recovers_after_saturation`.
-Run the existing benchmark harness with `--workload hono-jsx-ssr` and worker
-counts 1, 2, 4, and 8, using unique output prefixes, then combine the results in
-`doc/PERFORMANCE.md`. Preserve `Connection: close` as an explicit baseline;
-keep-alive follows before publication-grade worker scaling claims.
+Implement bounded HTTP/1.1 keep-alive without moving a live connection between
+workers. Reset request parsing and request memory for every message, close on
+malformed/oversized input, and keep the Hono response matrix green. Then rerun
+the retained worker matrix before moving to request-time JSX and AI SDK intake.
