@@ -1,4 +1,5 @@
 mod build;
+mod builtins;
 mod cli;
 mod codegen;
 mod frontend;

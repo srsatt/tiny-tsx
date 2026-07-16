@@ -1,6 +1,6 @@
 use std::{ffi::OsString, path::PathBuf};
 
-use crate::{build, codegen, frontend, target::Target, test262_build, wpt_build};
+use crate::{build, builtins, codegen, frontend, target::Target, test262_build, wpt_build};
 
 const USAGE: &str = "\
 TinyTSX native TSX compiler
@@ -11,6 +11,7 @@ Usage:
   tinytsx run <entry.tsx> [options]
   tinytsx test262 <case.js> [--output path]
   tinytsx wpt <case.js> [--output path]
+  tinytsx --list-builtins
 ";
 
 pub fn run(arguments: impl Iterator<Item = OsString>) -> Result<(), String> {
@@ -28,6 +29,10 @@ pub fn run(arguments: impl Iterator<Item = OsString>) -> Result<(), String> {
         Some("run") => run_server(&arguments[1..]),
         Some("test262") => test262(&arguments[1..]),
         Some("wpt") => wpt(&arguments[1..]),
+        Some("--list-builtins") if arguments.len() == 1 => {
+            println!("{}", builtins::json()?);
+            Ok(())
+        }
         Some("-h" | "--help") | None => {
             print!("{USAGE}");
             Ok(())
