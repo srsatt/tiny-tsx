@@ -13,6 +13,7 @@
     "@ai-sdk/gateway": {"version": "4.0.20"},
     "@ai-sdk/provider": {"version": "4.0.3"},
     "@ai-sdk/provider-utils": {"version": "5.0.10"},
+    "@ai-sdk/openai-compatible": {"version": "3.0.10"},
     "zod": {
       "version": "3.25.76",
       "integrity": "sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ=="
@@ -23,6 +24,7 @@
     "@ai-sdk/gateway": "vendor/ai/packages/gateway/src/index.ts",
     "@ai-sdk/provider": "vendor/ai/packages/provider/src/index.ts",
     "@ai-sdk/provider-utils": "vendor/ai/packages/provider-utils/src/index.ts",
+    "@ai-sdk/openai-compatible": "vendor/ai/packages/openai-compatible/src/index.ts",
     "zod/v4": "tests/compat/ai/node_modules/zod/v4/index.js",
     "zod/v3": "tests/compat/ai/node_modules/zod/v3/index.js",
     "eventsource-parser/stream": "tests/compat/ai/node_modules/eventsource-parser/stream.js",
@@ -30,6 +32,7 @@
     "@vercel/oidc": "tests/compat/ai/node_modules/@vercel/oidc/dist/index.js"
   },
   "smokeEntry": "tests/compat/ai/generate-text-smoke.ts",
+  "providerEntry": "tests/compat/ai/hono-local-provider-smoke.ts",
   "audit": {
     "modules": 609,
     "sourceBytes": 2065807,
@@ -61,6 +64,39 @@
       "runtimeSpreads": 939,
       "closedComputedAccesses": 0,
       "runtimeComputedAccesses": 650
+    }
+  },
+  "providerAudit": {
+    "modules": 656,
+    "sourceBytes": 2264407,
+    "sourceLines": 71709,
+    "requirements": {
+      "functions-as-values": 1711,
+      "classes": 156,
+      "async-await": 895,
+      "exceptions": 615,
+      "computed-access": 959,
+      "loops": 318,
+      "rest-spread": 1020,
+      "regular-expressions": 128,
+      "generators": 4
+    },
+    "builtins": {
+      "Promise": 330,
+      "Map": 40,
+      "Set": 55,
+      "Response": 66,
+      "TransformStream": 39,
+      "URL": 55,
+      "TextEncoder": 5,
+      "TextDecoder": 7
+    },
+    "staging": {
+      "constantBindings": 350,
+      "constantSpreads": 7,
+      "runtimeSpreads": 1012,
+      "closedComputedAccesses": 1,
+      "runtimeComputedAccesses": 958
     }
   }
 }

@@ -42,11 +42,23 @@ test("imports the installed AI SDK Core package", async () => {
 test("audits the exact source graph with no unresolved runtime imports", () => {
   const report = auditCompatibility(path.join(repository, manifest.smokeEntry), {
     root: repository,
-    aliases: Object.fromEntries(Object.entries(manifest.runtimeAliases).map(([name, target]) => [
-      name,
-      path.join(repository, target),
-    ])),
+    aliases: runtimeAliases(),
   });
+  assertAudit(report, manifest.audit);
+});
+
+test("audits the pinned OpenAI-compatible provider graph", () => {
+  const report = auditCompatibility(path.join(repository, manifest.providerEntry), {
+    root: repository,
+    aliases: {
+      ...runtimeAliases(),
+      hono: path.join(repository, "vendor/hono/src/index.ts"),
+    },
+  });
+  assertAudit(report, manifest.providerAudit);
+});
+
+function assertAudit(report, expected) {
   const requirements = Object.fromEntries(report.requirements.map(requirement => [
     requirement.feature,
     requirement.occurrences,
@@ -58,14 +70,14 @@ test("audits the exact source graph with no unresolved runtime imports", () => {
 
   assert.deepEqual(report.diagnostics, []);
   assert.deepEqual(report.statistics, {
-    modules: manifest.audit.modules,
-    sourceBytes: manifest.audit.sourceBytes,
-    sourceLines: manifest.audit.sourceLines,
+    modules: expected.modules,
+    sourceBytes: expected.sourceBytes,
+    sourceLines: expected.sourceLines,
   });
-  for (const [feature, occurrences] of Object.entries(manifest.audit.requirements)) {
+  for (const [feature, occurrences] of Object.entries(expected.requirements)) {
     assert.equal(requirements[feature], occurrences, feature);
   }
-  for (const [name, occurrences] of Object.entries(manifest.audit.builtins)) {
+  for (const [name, occurrences] of Object.entries(expected.builtins)) {
     assert.equal(builtins[name], occurrences, name);
   }
   assert.deepEqual({
@@ -74,5 +86,12 @@ test("audits the exact source graph with no unresolved runtime imports", () => {
     runtimeSpreads: report.staging.runtimeSpreads,
     closedComputedAccesses: report.staging.closedComputedAccesses,
     runtimeComputedAccesses: report.staging.runtimeComputedAccesses,
-  }, manifest.audit.staging);
-});
+  }, expected.staging);
+}
+
+function runtimeAliases() {
+  return Object.fromEntries(Object.entries(manifest.runtimeAliases).map(([name, target]) => [
+    name,
+    path.join(repository, target),
+  ]));
+}

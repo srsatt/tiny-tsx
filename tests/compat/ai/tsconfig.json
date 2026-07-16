@@ -13,6 +13,7 @@
     "generate-text-smoke.ts",
     "hono-generate-text-smoke.ts",
     "hono-invalid-prompt-smoke.ts",
+    "hono-local-provider-smoke.ts",
     "hono-stream-text-smoke.ts"
   ]
 }
