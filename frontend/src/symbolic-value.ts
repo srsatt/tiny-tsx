@@ -42,6 +42,8 @@ export type Value =
   | {kind: "actor"; state: ActorState}
   | {kind: "actorCall"; actor: ActorState; message: number}
   | {kind: "database"; state: DatabaseState}
+  | {kind: "statement"; state: StatementState}
+  | {kind: "sqliteQuery"; statement: StatementState; mode: "all" | "first"}
   | {kind: "queryParameter"; name: string; fallback?: string}
   | {kind: "queryPredicate"; name: string; test: "truthy" | "empty" | "present"}
   | {kind: "runtimeString"; parts: RuntimeStringPart[]}
@@ -83,6 +85,7 @@ export type RuntimeStringPart =
   | {kind: "environmentVariable"; name: string; required: boolean; fallback: string | undefined}
   | {kind: "fileText"; path: string; maxBytes: number}
   | {kind: "actorCall"; actor: ActorState; message: number}
+  | {kind: "sqliteQuery"; statement: StatementState; mode: "all" | "first"}
   | {kind: "queryParameter"; name: string; fallback: string | undefined; escapeHtml: boolean}
   | {kind: "fetchStatus"; url: string}
   | {kind: "elapsedMilliseconds"}
@@ -110,6 +113,11 @@ export interface DatabaseState {
   id: number;
   key: string;
   path: ":memory:";
+}
+
+export interface StatementState {
+  database: DatabaseState;
+  sql: string;
 }
 
 export type ResponseHeaderValue = string | RuntimeStringPart[];
@@ -288,8 +296,10 @@ export function truthiness(value: Value): boolean | undefined {
     case "worker": return true;
     case "actor": return true;
     case "database": return true;
+    case "statement": return true;
     case "workerCall": return undefined;
     case "actorCall": return undefined;
+    case "sqliteQuery": return undefined;
     case "openAiProvider":
     case "openAiModel": return true;
     case "openAiChatText": return undefined;
@@ -334,8 +344,10 @@ export function typeOf(value: Value): string {
     case "worker": return "object";
     case "actor": return "object";
     case "database": return "object";
+    case "statement": return "object";
     case "workerCall": return "string";
     case "actorCall": return "string";
+    case "sqliteQuery": return "object";
     case "openAiProvider": return "function";
     case "openAiModel": return "object";
     case "openAiChatText": return "string";
@@ -376,6 +388,7 @@ export function runtimeStringParts(value: Value): RuntimeStringPart[] | undefine
     }];
     case "fileText": return [{kind: "fileText", path: value.path, maxBytes: value.maxBytes}];
     case "actorCall": return [{kind: "actorCall", actor: value.actor, message: value.message}];
+    case "sqliteQuery": return [{kind: "sqliteQuery", statement: value.statement, mode: value.mode}];
     case "queryParameter": return [{
       kind: "queryParameter",
       name: value.name,

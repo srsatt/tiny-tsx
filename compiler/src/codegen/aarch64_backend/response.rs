@@ -1,4 +1,4 @@
-use crate::hir::{HandlerResponse, Program, ValueExpression};
+use crate::hir::{HandlerResponse, Program, SqliteQueryMode, ValueExpression};
 
 use super::super::{
     aarch64::{Emitter, HANDLER_SCRATCH_BASE, emit_immediate},
@@ -180,6 +180,27 @@ fn emit_handler_text_expression(
             emit_immediate(assembly, "x1", *actor as u64);
             emit_immediate(assembly, "x2", *message as u64);
             assembly.call(format_args!("tinytsx_actor_ask_counter"));
+        }
+        ValueExpression::SqliteQuery {
+            database,
+            sql,
+            mode,
+            ..
+        } => {
+            asm_line!(assembly, "    ldr x0, [sp, #16]");
+            emit_immediate(assembly, "x1", *database as u64);
+            assembly.address("x2", format_args!("Ltinytsx_string_{sql}"));
+            emit_immediate(
+                assembly,
+                "x3",
+                program.static_strings[*sql].value.len() as u64,
+            );
+            emit_immediate(
+                assembly,
+                "x4",
+                u64::from(matches!(mode, SqliteQueryMode::First)),
+            );
+            assembly.call(format_args!("tinytsx_sqlite_query_json"));
         }
         ValueExpression::FetchStatus { url, .. } => {
             asm_line!(assembly, "    ldr x0, [sp, #16]");

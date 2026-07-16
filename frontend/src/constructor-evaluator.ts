@@ -1470,6 +1470,12 @@ function sameResponseHeaderValue(left: ResponseHeaderValue, right: ResponseHeade
         && candidate.actor.key === part.actor.key
         && candidate.message === part.message;
     }
+    if (part.kind === "sqliteQuery") {
+      return candidate?.kind === "sqliteQuery"
+        && candidate.statement.database.key === part.statement.database.key
+        && candidate.statement.sql === part.statement.sql
+        && candidate.mode === part.mode;
+    }
     return candidate?.kind === part.kind && candidate.name === part.name;
   });
 }
@@ -2050,10 +2056,37 @@ function evaluateCall(
       });
       return UNDEFINED;
     }
+    if (receiver.kind === "database" && name === "prepare") {
+      const sql = arguments_[0];
+      return arguments_.length === 1
+        && sql?.kind === "string"
+        && Buffer.byteLength(sql.value, "utf8") <= 65_536
+        ? {kind: "statement", state: {database: receiver.state, sql: sql.value}}
+        : unknown("Database.prepare requires one closed SQL string up to 65536 bytes");
+    }
     if (receiver.kind === "database" && (name === "close" || name === "dispose")) {
       if (arguments_.length !== 0) return unknown(`Database.${name} does not accept arguments`);
       appendDatabaseAction(evaluator, instance, {kind: "close", database: receiver.state});
       return UNDEFINED;
+    }
+    if (receiver.kind === "statement" && (name === "all" || name === "get")) {
+      return arguments_.length === 0
+        ? {kind: "sqliteQuery", statement: receiver.state, mode: name === "all" ? "all" : "first"}
+        : unknown(`Statement.${name} parameters are not native yet`);
+    }
+    if (receiver.kind === "statement" && name === "run") {
+      if (arguments_.length !== 0) return unknown("Statement.run parameters are not native yet");
+      appendDatabaseAction(evaluator, instance, {
+        kind: "exec",
+        database: receiver.state.database,
+        sql: receiver.state.sql,
+      });
+      return UNDEFINED;
+    }
+    if (receiver.kind === "statement" && (name === "close" || name === "dispose")) {
+      return arguments_.length === 0
+        ? UNDEFINED
+        : unknown(`Statement.${name} does not accept arguments`);
     }
     if (receiver.kind === "actor" && name === "ask") {
       const message = arguments_[0];
@@ -3525,6 +3558,7 @@ function evaluateExpression(
         && body.kind !== "environmentVariable"
         && body.kind !== "fileText"
         && body.kind !== "actorCall"
+        && body.kind !== "sqliteQuery"
         && body.kind !== "routeParameter"
         && body.kind !== "responseBody"
         && body.kind !== "undefined"
@@ -3536,7 +3570,7 @@ function evaluateExpression(
       }
       const runtimeBody = body.kind === "routeParameter"
         ? [{kind: "routeParameter" as const, name: body.name}]
-        : body.kind === "workerCall" || body.kind === "openAiChatText" || body.kind === "environmentVariable" || body.kind === "fileText" || body.kind === "actorCall"
+        : body.kind === "workerCall" || body.kind === "openAiChatText" || body.kind === "environmentVariable" || body.kind === "fileText" || body.kind === "actorCall" || body.kind === "sqliteQuery"
           ? runtimeStringParts(body)
         : body.kind === "runtimeString"
           ? body.parts
@@ -4204,6 +4238,14 @@ function appendRuntimeJsonValue(
   value: Value,
   arrayElement: boolean,
 ): boolean {
+  if (value.kind === "sqliteQuery") {
+    appendRuntimePart(parts, {
+      kind: "sqliteQuery",
+      statement: value.statement,
+      mode: value.mode,
+    });
+    return true;
+  }
   if (value.kind === "routeParameter") {
     appendRuntimePart(parts, {kind: "literal", value: "\""});
     appendRuntimePart(parts, {kind: "routeParameter", name: value.name});

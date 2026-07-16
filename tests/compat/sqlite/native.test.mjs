@@ -26,7 +26,11 @@ test("serializes an in-memory SQLite owner and recovers from SQL errors", async 
   await waitForServer(port, server);
 
   await assertResponse(port, "/schema", 200, "ready");
+  await assertGet(port, "/posts", 200, '{"posts":[]}');
+  await assertGet(port, "/first", 200, '{"post":null}');
   await assertResponse(port, "/seed", 201, "created");
+  await assertGet(port, "/posts", 200, '{"posts":[{"title":"Morning"}]}');
+  await assertGet(port, "/first", 200, '{"post":{"title":"Morning"}}');
   await assertResponse(port, "/seed", 500, "internal server error");
   await assertResponse(port, "/schema", 200, "ready");
   await assertResponse(port, "/close", 200, "closed");
@@ -61,6 +65,12 @@ function build(binary, port) {
 
 async function assertResponse(port, pathname, status, body) {
   const response = await fetch(`http://127.0.0.1:${port}${pathname}`, {method: "POST"});
+  assert.equal(response.status, status);
+  assert.equal(await response.text(), body);
+}
+
+async function assertGet(port, pathname, status, body) {
+  const response = await fetch(`http://127.0.0.1:${port}${pathname}`);
   assert.equal(response.status, status);
   assert.equal(await response.text(), body);
 }

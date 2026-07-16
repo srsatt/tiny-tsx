@@ -64,6 +64,7 @@ pub(super) fn emit_value_expression(
         | ValueExpression::EnvironmentVariable { .. }
         | ValueExpression::FileText { .. }
         | ValueExpression::ActorCall { .. }
+        | ValueExpression::SqliteQuery { .. }
         | ValueExpression::FetchStatus { .. }
         | ValueExpression::QueryParameter { .. }
         | ValueExpression::QueryConditional { .. }

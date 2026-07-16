@@ -397,6 +397,29 @@ pub extern "C" fn tinytsx_sqlite_close(database: usize) -> u32 {
     crate::application::sqlite_close(database)
 }
 
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tinytsx_sqlite_query_json(
+    writer: *mut TinyResponseWriter,
+    database: usize,
+    sql: *const u8,
+    sql_len: usize,
+    first: u32,
+) -> u32 {
+    if writer.is_null() || (sql.is_null() && sql_len != 0) {
+        return INTERNAL_ERROR;
+    }
+    // SAFETY: Generated code supplies a static SQL view for the duration of the call.
+    let sql = unsafe { slice::from_raw_parts(sql, sql_len) };
+    match crate::application::sqlite_query_json(database, sql, first != 0) {
+        Ok(output) => unsafe { tinytsx_html_write_static(writer, output.as_ptr(), output.len()) },
+        Err(status) => {
+            // SAFETY: The writer was validated above.
+            unsafe { (*writer).status = status };
+            status
+        }
+    }
+}
+
 fn write_worker_reply(writer: *mut TinyResponseWriter, worker: usize, input: &[u8]) -> u32 {
     match crate::application::call(worker, input) {
         Ok(output) => {

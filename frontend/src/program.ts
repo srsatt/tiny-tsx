@@ -690,6 +690,15 @@ function lowerRuntimeString(
           span,
         };
       }
+      if (part.kind === "sqliteQuery") {
+        return {
+          kind: "sqliteQuery" as const,
+          database: part.statement.database.id,
+          sql: strings.intern(part.statement.sql),
+          mode: part.mode,
+          span,
+        };
+      }
       if (part.kind === "fetchStatus") {
         return {kind: "fetchStatus" as const, url: strings.intern(part.url), span};
       }
@@ -742,6 +751,7 @@ function dynamicResponseExpressions(body: ResponseBody): number {
       || part.kind === "environmentVariable"
       || part.kind === "fileText"
       || part.kind === "actorCall"
+      || part.kind === "sqliteQuery"
       || part.kind === "fetchStatus"
       || part.kind === "queryParameter"
       || part.kind === "workerCall"

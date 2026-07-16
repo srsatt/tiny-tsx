@@ -130,6 +130,7 @@ test("lowers a bounded in-memory SQLite owner and effects", () => {
     import {serve} from "tinytsx:serve";
     import {Hono} from "hono";
     const database = new Database(":memory:");
+    const posts = database.prepare("SELECT title FROM posts");
     const app = new Hono();
     app.post("/schema", async context => {
       await database.exec("CREATE TABLE posts (id INTEGER PRIMARY KEY, title TEXT)");
@@ -139,6 +140,7 @@ test("lowers a bounded in-memory SQLite owner and effects", () => {
       database.close();
       return context.text("closed");
     });
+    app.get("/posts", async context => context.json({posts: await posts.all()}));
     serve({fetch: app.fetch});
   `);
 
@@ -152,6 +154,18 @@ test("lowers a bounded in-memory SQLite owner and effects", () => {
   assert.deepEqual(hir.handlers[0]?.sqliteActions, [{kind: "exec", database: 0, sql: 1}]);
   assert.equal(hir.staticStrings[1]?.value, "CREATE TABLE posts (id INTEGER PRIMARY KEY, title TEXT)");
   assert.deepEqual(hir.handlers[1]?.sqliteActions, [{kind: "close", database: 0}]);
+  assert.deepEqual(
+    hir.handlers[2]?.response.kind === "text" ? hir.handlers[2].response.value : undefined,
+    {
+      kind: "concat",
+      values: [
+        {kind: "stringLiteral", string: 3, span: hir.handlers[2]?.span},
+        {kind: "sqliteQuery", database: 0, sql: 4, mode: "all", span: hir.handlers[2]?.span},
+        {kind: "stringLiteral", string: 5, span: hir.handlers[2]?.span},
+      ],
+      span: hir.handlers[2]?.span,
+    },
+  );
 });
 
 test("requires an explicit read root for filesystem access", () => {

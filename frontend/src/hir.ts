@@ -137,6 +137,13 @@ export type ValueExpression =
       span: SourceSpan;
     }
   | {
+      kind: "sqliteQuery";
+      database: number;
+      sql: number;
+      mode: "all" | "first";
+      span: SourceSpan;
+    }
+  | {
       kind: "fetchStatus";
       url: number;
       span: SourceSpan;

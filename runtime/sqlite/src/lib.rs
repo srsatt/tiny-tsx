@@ -45,6 +45,12 @@ pub struct QueryResult {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum QueryMode {
+    All,
+    First,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ErrorKind {
     Open,
     Sql,
@@ -169,6 +175,54 @@ pub fn query(
     })
 }
 
+pub fn query_json(
+    connection: &Connection,
+    sql: &str,
+    parameters: &[SqlValue],
+    mode: QueryMode,
+) -> Result<Vec<u8>, Error> {
+    let max_rows = if mode == QueryMode::First {
+        1
+    } else {
+        MAX_ROWS
+    };
+    let result = query(connection, sql, parameters, max_rows, MAX_RESULT_BYTES)?;
+    let mut output = Vec::new();
+    if mode == QueryMode::All {
+        output.push(b'[');
+    }
+    let rows = if mode == QueryMode::First {
+        result.rows.into_iter().take(1).collect::<Vec<_>>()
+    } else {
+        result.rows
+    };
+    if mode == QueryMode::First && rows.is_empty() {
+        output.extend_from_slice(b"null");
+    }
+    for (row_index, row) in rows.iter().enumerate() {
+        if row_index != 0 {
+            output.push(b',');
+        }
+        output.push(b'{');
+        for (column_index, (column, value)) in result.columns.iter().zip(row).enumerate() {
+            if column_index != 0 {
+                output.push(b',');
+            }
+            write_json_string(&mut output, column);
+            output.push(b':');
+            write_json_value(&mut output, value);
+            if output.len() > MAX_RESULT_BYTES {
+                return Err(Error::bounded(ErrorKind::ResultTooLarge));
+            }
+        }
+        output.push(b'}');
+    }
+    if mode == QueryMode::All {
+        output.push(b']');
+    }
+    Ok(output)
+}
+
 fn validate_input(sql: &str, parameters: &[SqlValue]) -> Result<(), Error> {
     if sql.len() > MAX_SQL_BYTES {
         return Err(Error::bounded(ErrorKind::SqlTooLong));
@@ -203,6 +257,46 @@ fn value_bytes(value: &SqlValue) -> usize {
         SqlValue::Text(value) => value.len(),
         SqlValue::Blob(value) => value.len(),
     }
+}
+
+fn write_json_value(output: &mut Vec<u8>, value: &SqlValue) {
+    match value {
+        SqlValue::Null => output.extend_from_slice(b"null"),
+        SqlValue::Integer(value) => output.extend_from_slice(value.to_string().as_bytes()),
+        SqlValue::Real(value) => output.extend_from_slice(value.to_string().as_bytes()),
+        SqlValue::Text(value) => write_json_string(output, value),
+        SqlValue::Blob(value) => {
+            output.push(b'[');
+            for (index, byte) in value.iter().enumerate() {
+                if index != 0 {
+                    output.push(b',');
+                }
+                output.extend_from_slice(byte.to_string().as_bytes());
+            }
+            output.push(b']');
+        }
+    }
+}
+
+fn write_json_string(output: &mut Vec<u8>, value: &str) {
+    output.push(b'"');
+    for byte in value.bytes() {
+        match byte {
+            b'"' => output.extend_from_slice(br#"\""#),
+            b'\\' => output.extend_from_slice(br#"\\"#),
+            b'\n' => output.extend_from_slice(br#"\n"#),
+            b'\r' => output.extend_from_slice(br#"\r"#),
+            b'\t' => output.extend_from_slice(br#"\t"#),
+            0x00..=0x1f => {
+                const HEX: &[u8; 16] = b"0123456789abcdef";
+                output.extend_from_slice(b"\\u00");
+                output.push(HEX[usize::from(byte >> 4)]);
+                output.push(HEX[usize::from(byte & 0x0f)]);
+            }
+            _ => output.push(byte),
+        }
+    }
+    output.push(b'"');
 }
 
 #[cfg(test)]
@@ -304,5 +398,49 @@ mod tests {
             ErrorKind::Sql
         );
         assert!(execute(&connection, "INSERT INTO posts (title) VALUES ('ok')", &[]).is_ok());
+    }
+
+    #[test]
+    fn serializes_all_and_first_rows_as_bounded_json() {
+        let connection = database();
+        execute(
+            &connection,
+            "INSERT INTO posts (title, body) VALUES (?1, ?2)",
+            &[
+                SqlValue::Text("quote \" and newline\n".to_owned()),
+                SqlValue::Blob(vec![0, 255]),
+            ],
+        )
+        .expect("insert row");
+        assert_eq!(
+            query_json(
+                &connection,
+                "SELECT id, title, body FROM posts",
+                &[],
+                QueryMode::All,
+            )
+            .expect("all rows"),
+            br#"[{"id":1,"title":"quote \" and newline\n","body":[0,255]}]"#
+        );
+        assert_eq!(
+            query_json(
+                &connection,
+                "SELECT title FROM posts WHERE id = ?1",
+                &[SqlValue::Integer(1)],
+                QueryMode::First,
+            )
+            .expect("first row"),
+            br#"{"title":"quote \" and newline\n"}"#
+        );
+        assert_eq!(
+            query_json(
+                &connection,
+                "SELECT title FROM posts WHERE id = 99",
+                &[],
+                QueryMode::First,
+            )
+            .expect("missing row"),
+            b"null"
+        );
     }
 }

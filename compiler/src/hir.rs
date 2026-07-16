@@ -264,6 +264,13 @@ pub struct FunctionParameter {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SqliteQueryMode {
+    All,
+    First,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum ValueExpression {
     StringLiteral {
@@ -311,6 +318,12 @@ pub enum ValueExpression {
     ActorCall {
         actor: usize,
         message: i64,
+        span: SourceSpan,
+    },
+    SqliteQuery {
+        database: usize,
+        sql: usize,
+        mode: SqliteQueryMode,
         span: SourceSpan,
     },
     FetchStatus {
@@ -726,6 +739,7 @@ impl Program {
             | ValueExpression::EnvironmentVariable { .. }
             | ValueExpression::FileText { .. }
             | ValueExpression::ActorCall { .. }
+            | ValueExpression::SqliteQuery { .. }
             | ValueExpression::FetchStatus { .. }
             | ValueExpression::QueryParameter { .. }
             | ValueExpression::QueryConditional { .. }
@@ -907,6 +921,18 @@ impl Program {
             ValueExpression::ActorCall { actor, .. } => {
                 if *actor >= self.actors.len() {
                     return Err("actor call references a missing actor".to_owned());
+                }
+                Ok(())
+            }
+            ValueExpression::SqliteQuery { database, sql, .. } => {
+                if *database >= self.sqlite_databases.len() {
+                    return Err("SQLite query references a missing database".to_owned());
+                }
+                let Some(sql) = self.static_strings.get(*sql) else {
+                    return Err("SQLite query references a missing SQL string".to_owned());
+                };
+                if sql.value.len() > 65_536 {
+                    return Err("SQLite query exceeds the native SQL limit".to_owned());
                 }
                 Ok(())
             }
