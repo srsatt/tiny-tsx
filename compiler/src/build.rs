@@ -18,6 +18,7 @@ pub struct Options {
     pub entry: String,
     pub output: PathBuf,
     pub port: u16,
+    pub port_explicit: bool,
     pub workers: usize,
     pub request_memory: usize,
     pub release: bool,
@@ -57,11 +58,16 @@ pub fn execute(options: &Options) -> Result<PathBuf, String> {
     let mut compilation =
         frontend::compile(&options.entry, &options.aliases, &options.api_aliases)?;
     compilation.retarget(options.target)?;
+    let port = if options.port_explicit {
+        options.port
+    } else {
+        compilation.program.server.port.unwrap_or(options.port)
+    };
     let assembly = codegen::emit(
         &compilation.program,
         options.target,
         CodegenOptions {
-            port: options.port,
+            port,
             workers: options.workers,
             request_memory: options.request_memory,
         },
@@ -102,13 +108,13 @@ pub fn execute(options: &Options) -> Result<PathBuf, String> {
             .map_err(|error| format!("could not preserve emitted assembly: {error}"))?;
     }
 
-    write_report(&output, &compilation, options)?;
+    write_report(&output, &compilation, options, port)?;
     if !options.keep_temps {
         fs::remove_dir_all(&temporary)
             .map_err(|error| format!("could not remove {}: {error}", temporary.display()))?;
     }
 
-    print_summary(&output, &compilation, options)?;
+    print_summary(&output, &compilation, options, port)?;
     Ok(output)
 }
 
@@ -216,7 +222,12 @@ fn with_suffix(path: &Path, suffix: &str) -> PathBuf {
     PathBuf::from(value)
 }
 
-fn write_report(output: &Path, compilation: &Compilation, options: &Options) -> Result<(), String> {
+fn write_report(
+    output: &Path,
+    compilation: &Compilation,
+    options: &Options,
+    port: u16,
+) -> Result<(), String> {
     let binary_bytes = fs::metadata(output)
         .map_err(|error| format!("could not inspect {}: {error}", output.display()))?
         .len();
@@ -237,7 +248,7 @@ fn write_report(output: &Path, compilation: &Compilation, options: &Options) -> 
         target: options.target.triple(),
         runtime: "bootstrap",
         binary_bytes,
-        port: options.port,
+        port,
         workers: options.workers,
         application_workers: usize::from(application_pool) * options.workers,
         logical_workers: compilation.program.workers.len(),
@@ -263,6 +274,7 @@ fn print_summary(
     output: &Path,
     compilation: &Compilation,
     options: &Options,
+    port: u16,
 ) -> Result<(), String> {
     let binary_bytes = fs::metadata(output)
         .map_err(|error| format!("could not inspect {}: {error}", output.display()))?
@@ -271,6 +283,7 @@ fn print_summary(
     println!("Entry:               {}", compilation.program.entry);
     println!("Target:              {}", options.target);
     println!("Runtime:             bootstrap");
+    println!("Port:                {port}");
     println!("Workers:             {}", options.workers);
     let provider_transport = compilation.program.uses_openai_transport();
     println!(

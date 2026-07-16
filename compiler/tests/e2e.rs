@@ -44,6 +44,79 @@ fn builds_and_serves_static_tsx_as_native_macho() {
 }
 
 #[test]
+fn builds_and_serves_hono_through_source_level_serve() {
+    let _build_guard = NATIVE_BUILD.lock().expect("lock native E2E build");
+    let root = repository_root();
+    build_frontend(&root);
+    let directory = temporary_directory();
+    let entry = directory.join("server.ts");
+    let binary = directory.join("server");
+    let port = available_port();
+    fs::write(
+        &entry,
+        format!(
+            r#"
+import {{ serve }} from '@hono/node-server'
+import {{ Hono }} from 'hono'
+
+const app = new Hono()
+app.get('/', (context) => context.text('served from source config'))
+serve({{ fetch: app.fetch, port: {port} }})
+"#,
+        ),
+    )
+    .expect("write served application");
+
+    let build = Command::new(env!("CARGO_BIN_EXE_tinytsx"))
+        .current_dir(&root)
+        .arg("build")
+        .arg(&entry)
+        .arg("--output")
+        .arg(&binary)
+        .args([
+            "--alias",
+            "hono=vendor/hono/src/index.ts",
+            "--api",
+            "hono=tests/compat/hono/api.d.ts",
+        ])
+        .output()
+        .expect("build source-configured server");
+    assert!(
+        build.status.success(),
+        "build failed:\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&build.stdout),
+        String::from_utf8_lossy(&build.stderr),
+    );
+    let report: serde_json::Value = serde_json::from_slice(
+        &fs::read(with_suffix(&binary, ".build.json")).expect("read build report"),
+    )
+    .expect("parse build report");
+    assert_eq!(report["port"], port);
+
+    let server = Server(
+        Command::new(&binary)
+            .spawn()
+            .expect("start served application"),
+    );
+    let mut stream = connect_with_retry(port);
+    stream
+        .write_all(b"GET / HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
+        .expect("send served request");
+    let mut response = String::new();
+    stream
+        .read_to_string(&mut response)
+        .expect("read served response");
+    assert!(response.starts_with("HTTP/1.1 200 OK\r\n"), "{response}");
+    assert!(
+        response.ends_with("served from source config"),
+        "{response}"
+    );
+
+    drop(server);
+    fs::remove_dir_all(directory).expect("remove served application artifacts");
+}
+
+#[test]
 fn worker_pool_keeps_connections_alive_and_recovers_after_saturation() {
     const WORKERS: usize = 2;
     const QUEUED_CONNECTIONS: usize = WORKERS * 64;

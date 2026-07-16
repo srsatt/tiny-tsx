@@ -48,7 +48,11 @@ export interface CompileOptions {
 export function compileEntry(entryPath: string, options: CompileOptions): HirProgram {
   const entry = path.resolve(entryPath);
   const sdk = path.resolve(options.sdkPath);
-  const graph = loadModuleGraph(entry, options.aliases === undefined ? {} : {aliases: options.aliases});
+  const builtins = builtinRuntimeAliases(sdk);
+  const graph = loadModuleGraph(entry, {
+    ...(options.aliases === undefined ? {} : {aliases: options.aliases}),
+    builtins,
+  });
   if (graph.diagnostics.length > 0) {
     throw new CompileFailure(graph.diagnostics);
   }
@@ -69,7 +73,7 @@ export function compileEntry(entryPath: string, options: CompileOptions): HirPro
   if (apiTypeRoots.length > 0) {
     compilerOptions.typeRoots = apiTypeRoots;
   }
-  const typeAliases = {...options.aliases, ...options.apiAliases};
+  const typeAliases = {...options.aliases, ...options.apiAliases, ...builtins};
   if (Object.keys(typeAliases).length > 0) {
     compilerOptions.paths = Object.fromEntries(Object.entries(typeAliases).map(([specifier, target]) => [
       specifier,
@@ -123,7 +127,12 @@ export function compileEntry(entryPath: string, options: CompileOptions): HirPro
         : displayRuntimeClassPlan(classPlan, process.cwd());
       const initialization = evaluateApplicationInitialization(graph, application);
       if (initialization !== undefined && initialization.issues.length === 0) {
-        const lowered = lowerApplicationInitialization(graph, sourceFile, initialization);
+        const lowered = lowerApplicationInitialization(
+          graph,
+          sourceFile,
+          initialization,
+          application.server,
+        );
         if (lowered !== undefined) {
           return lowered;
         }
@@ -231,6 +240,14 @@ export function compileEntry(entryPath: string, options: CompileOptions): HirPro
   };
 }
 
+function builtinRuntimeAliases(sdk: string): Record<string, string> {
+  const serve = path.join(path.dirname(sdk), "builtins/serve.ts");
+  return {
+    "tinytsx:serve": serve,
+    "@hono/node-server": serve,
+  };
+}
+
 function apiBackedRuntimeRoots(options: CompileOptions): string[] {
   return Object.keys(options.apiAliases ?? {}).flatMap(specifier => {
     const runtime = options.aliases?.[specifier];
@@ -279,6 +296,7 @@ function lowerApplicationInitialization(
   graph: ReturnType<typeof loadModuleGraph>,
   sourceFile: ts.SourceFile,
   initialization: ApplicationInitializationEvaluation,
+  server: {port?: number} | undefined,
 ): HirProgram | undefined {
   const routes = initialization.routes.filter(route => ["GET", "POST"].includes(route.method));
   const fallbackRoutes = initialization.notFoundResponse === undefined
@@ -372,6 +390,7 @@ function lowerApplicationInitialization(
   return {
     version: 2,
     target: "aarch64-apple-darwin",
+    ...(server === undefined ? {} : {server}),
     entry: graph.entry,
     modules: graph.modules.map(module => ({path: module.path})),
     functions: [],

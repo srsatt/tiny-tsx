@@ -8,6 +8,30 @@ interface Worker {
   request(message: string): Promise<string>;
 }
 
+declare module "tinytsx:serve" {
+  export interface ServeOptions {
+    fetch: (request: Request) => Response | Promise<Response>;
+    port?: number;
+  }
+
+  export interface Server {
+    close(): void;
+  }
+
+  export type FetchApplication = {
+    fetch: (request: Request) => Response | Promise<Response>;
+  };
+
+  export function serve(
+    application: FetchApplication | ServeOptions,
+    onListening?: (info: {port: number}) => void,
+  ): Server;
+}
+
+declare module "@hono/node-server" {
+  export {serve, type FetchApplication, type ServeOptions, type Server} from "tinytsx:serve";
+}
+
 declare namespace JSX {
   interface Element {
     readonly __tinytsxElement: unique symbol;

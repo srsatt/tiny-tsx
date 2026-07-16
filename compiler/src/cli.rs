@@ -100,6 +100,7 @@ fn parse_build_options(
         entry: String::new(),
         output: default_output,
         port: 3000,
+        port_explicit: false,
         workers: 1,
         request_memory: 262_144,
         release: false,
@@ -120,7 +121,10 @@ fn parse_build_options(
             "--keep-temps" => options.keep_temps = true,
             "--print-size" => {}
             "--output" => options.output = PathBuf::from(option_value(arguments, &mut index)?),
-            "--port" => options.port = parse_number(option_value(arguments, &mut index)?, "port")?,
+            "--port" => {
+                options.port = parse_number(option_value(arguments, &mut index)?, "port")?;
+                options.port_explicit = true;
+            }
             "--workers" => {
                 options.workers = parse_number(option_value(arguments, &mut index)?, "workers")?
             }
@@ -227,10 +231,11 @@ fn check(arguments: &[String]) -> Result<(), String> {
     if emit_hir {
         println!("{}", compilation.json);
     } else if emit_asm {
-        print!(
-            "{}",
-            codegen::emit(&compilation.program, target, codegen::Options::default())?
-        );
+        let mut options = codegen::Options::default();
+        if let Some(port) = compilation.program.server.port {
+            options.port = port;
+        }
+        print!("{}", codegen::emit(&compilation.program, target, options)?);
     } else {
         println!(
             "checked {}: {} module(s), {} component(s), {} static HTML byte(s)",

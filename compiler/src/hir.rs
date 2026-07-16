@@ -6,6 +6,8 @@ use std::collections::HashSet;
 pub struct Program {
     pub version: u32,
     pub target: String,
+    #[serde(default, skip_serializing_if = "ServerOptions::is_default")]
+    pub server: ServerOptions,
     pub entry: String,
     pub modules: Vec<Module>,
     #[serde(default)]
@@ -20,6 +22,19 @@ pub struct Program {
     #[serde(default)]
     pub memory: MemoryReport,
     pub statistics: Statistics,
+}
+
+#[derive(Debug, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ServerOptions {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub port: Option<u16>,
+}
+
+impl ServerOptions {
+    fn is_default(&self) -> bool {
+        self.port.is_none()
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize)]

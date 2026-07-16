@@ -204,6 +204,50 @@ test("traces the pinned Hono basic application initialization root", () => {
   })), [{method: "get", arguments: [["string", "/"], ["function"]]}]);
 });
 
+test("traces a TinyTSX serve call as the application root and source port", () => {
+  const file = write("served-application.ts", `
+    import {serve as start} from "tinytsx:serve";
+    import {Hono} from "hono";
+    const app = new Hono();
+    app.get("/", context => context.text("served"));
+    start({fetch: app.fetch, port: 8787});
+  `);
+  const sourceFile = ts.createSourceFile(
+    file,
+    readFileSync(file, "utf8"),
+    ts.ScriptTarget.ESNext,
+    true,
+    ts.ScriptKind.TS,
+  );
+
+  const application = analyzeApplicationEntry(sourceFile);
+
+  assert.equal(application?.binding, "app");
+  assert.deepEqual(application?.server, {port: 8787});
+  assert.deepEqual(application?.calls.map(call => call.method), ["get"]);
+});
+
+test("lowers @hono/node-server serve without a default export", () => {
+  const entry = write("hono-node-server.ts", `
+    import {serve} from "@hono/node-server";
+    import {Hono} from "hono";
+    const app = new Hono();
+    app.get("/", context => context.text("Hello Node-style Hono"));
+    serve({fetch: app.fetch, port: 8788});
+  `);
+
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+    apiAliases: {hono: path.join(repository, "tests/compat/hono/api.d.ts")},
+  });
+
+  assert.deepEqual(hir.server, {port: 8788});
+  assert.equal(hir.handlers[0]?.path, "/");
+  assert.equal(hir.handlers[0]?.response.kind, "text");
+  assert.ok(hir.modules.some(module => module.path.endsWith("sdk/builtins/serve.ts")));
+});
+
 test("resolves the pinned Hono constructor and base-class runtime sources", () => {
   const entry = path.join(repository, "tests/compat/hono/basic-smoke.ts");
   const graph = loadModuleGraph(entry, {

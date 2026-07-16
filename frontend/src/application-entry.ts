@@ -19,6 +19,9 @@ export interface ApplicationEntry {
   constructorName: string;
   constructorArguments: ApplicationArgument[];
   calls: ApplicationCall[];
+  server?: {
+    port?: number;
+  };
   span: SourceSpan;
 }
 
@@ -28,10 +31,12 @@ export function analyzeApplicationEntry(sourceFile: ts.SourceFile): ApplicationE
     && !statement.isExportEquals
     && ts.isIdentifier(statement.expression)
   );
-  if (exported === undefined || !ts.isIdentifier(exported.expression)) {
-    return undefined;
-  }
-  const binding = exported.expression.text;
+  const served = analyzeServeCall(sourceFile);
+  const exportedBinding = exported !== undefined && ts.isIdentifier(exported.expression)
+    ? exported.expression.text
+    : undefined;
+  const binding = exportedBinding ?? served?.binding;
+  if (binding === undefined) return undefined;
   const declaration = sourceFile.statements
     .filter(ts.isVariableStatement)
     .flatMap(statement => [...statement.declarationList.declarations])
@@ -74,8 +79,79 @@ export function analyzeApplicationEntry(sourceFile: ts.SourceFile): ApplicationE
       applicationArgument(argument, sourceFile)
     ),
     calls,
-    span: spanOf(exported, sourceFile),
+    ...(served?.server === undefined ? {} : {server: served.server}),
+    span: spanOf(exported ?? served!.call, sourceFile),
   };
+}
+
+function analyzeServeCall(sourceFile: ts.SourceFile): {
+  binding: string;
+  server: {port?: number};
+  call: ts.CallExpression;
+} | undefined {
+  const serveBindings = new Set<string>();
+  for (const statement of sourceFile.statements) {
+    if (
+      !ts.isImportDeclaration(statement)
+      || !ts.isStringLiteral(statement.moduleSpecifier)
+      || !["tinytsx:serve", "@hono/node-server"].includes(statement.moduleSpecifier.text)
+      || statement.importClause?.namedBindings === undefined
+      || !ts.isNamedImports(statement.importClause.namedBindings)
+    ) continue;
+    for (const element of statement.importClause.namedBindings.elements) {
+      if ((element.propertyName?.text ?? element.name.text) === "serve") {
+        serveBindings.add(element.name.text);
+      }
+    }
+  }
+  if (serveBindings.size === 0) return undefined;
+
+  for (const statement of sourceFile.statements) {
+    if (!ts.isExpressionStatement(statement) || !ts.isCallExpression(statement.expression)) {
+      continue;
+    }
+    const call = statement.expression;
+    if (!ts.isIdentifier(call.expression) || !serveBindings.has(call.expression.text)) continue;
+    const target = serveTarget(call.arguments[0]);
+    if (target !== undefined) return {...target, call};
+  }
+  return undefined;
+}
+
+function serveTarget(expression: ts.Expression | undefined): {
+  binding: string;
+  server: {port?: number};
+} | undefined {
+  if (expression === undefined) return undefined;
+  if (ts.isIdentifier(expression)) return {binding: expression.text, server: {}};
+  if (!ts.isObjectLiteralExpression(expression)) return undefined;
+
+  const fetch = property(expression, "fetch");
+  if (
+    fetch === undefined
+    || !ts.isPropertyAccessExpression(fetch.initializer)
+    || !ts.isIdentifier(fetch.initializer.expression)
+    || fetch.initializer.name.text !== "fetch"
+  ) return undefined;
+  const portProperty = property(expression, "port");
+  if (portProperty === undefined) {
+    return {binding: fetch.initializer.expression.text, server: {}};
+  }
+  if (!ts.isNumericLiteral(portProperty.initializer)) return undefined;
+  const port = Number(portProperty.initializer.text);
+  if (!Number.isInteger(port) || port < 1 || port > 65_535) return undefined;
+  return {binding: fetch.initializer.expression.text, server: {port}};
+}
+
+function property(
+  object: ts.ObjectLiteralExpression,
+  name: string,
+): ts.PropertyAssignment | undefined {
+  return object.properties.find((candidate): candidate is ts.PropertyAssignment =>
+    ts.isPropertyAssignment(candidate)
+    && ((ts.isIdentifier(candidate.name) || ts.isStringLiteral(candidate.name))
+      && candidate.name.text === name)
+  );
 }
 
 function applicationArgument(

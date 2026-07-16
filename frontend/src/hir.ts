@@ -247,6 +247,9 @@ export interface MemoryReport {
 export interface HirProgram {
   version: 2;
   target: "aarch64-apple-darwin";
+  server?: {
+    port?: number;
+  };
   entry: string;
   modules: Array<{ path: string }>;
   functions: HirFunction[];
