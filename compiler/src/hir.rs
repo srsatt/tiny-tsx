@@ -120,10 +120,21 @@ pub struct Handler {
     pub basic_authorization: Option<BasicAuthorization>,
     #[serde(default, rename = "entityTag")]
     pub entity_tag: Option<EntityTag>,
+    #[serde(default, rename = "parameterValidations")]
+    pub parameter_validations: Vec<ParameterValidation>,
     #[serde(default)]
     pub stderr: Vec<usize>,
     pub response: HandlerResponse,
     pub span: SourceSpan,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ParameterValidation {
+    pub name: String,
+    pub segment: usize,
+    pub min_length: usize,
+    pub rejected: GuardedResponse,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -343,6 +354,10 @@ impl Program {
                     .entity_tag
                     .as_ref()
                     .is_some_and(|guard| response_uses_openai(&guard.not_modified.response))
+                || handler
+                    .parameter_validations
+                    .iter()
+                    .any(|guard| response_uses_openai(&guard.rejected.response))
         })
     }
 
@@ -399,6 +414,31 @@ impl Program {
                 validate_response_headers(&entity_tag.not_modified.headers, &[])?;
                 self.validate_stderr(&entity_tag.not_modified.stderr)?;
                 self.validate_handler_response(&entity_tag.not_modified.response, &handler.path)?;
+            }
+            for validation in &handler.parameter_validations {
+                if validation.min_length == 0 {
+                    return Err(
+                        "path parameter minimum length must be greater than zero".to_owned()
+                    );
+                }
+                let segments: Vec<&str> = handler
+                    .path
+                    .split('/')
+                    .filter(|part| !part.is_empty())
+                    .collect();
+                if segments
+                    .get(validation.segment)
+                    .and_then(|segment| route_parameter_name(segment))
+                    != Some(validation.name.as_str())
+                {
+                    return Err(format!(
+                        "validated route parameter `{}` does not match segment {} of `{}`",
+                        validation.name, validation.segment, handler.path
+                    ));
+                }
+                validate_response_headers(&validation.rejected.headers, &[])?;
+                self.validate_stderr(&validation.rejected.stderr)?;
+                self.validate_handler_response(&validation.rejected.response, &handler.path)?;
             }
         }
         for (index, component) in self.components.iter().enumerate() {

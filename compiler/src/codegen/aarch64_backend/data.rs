@@ -92,6 +92,22 @@ pub(super) fn emit_static_data(assembly: &mut Emitter, program: &Program) -> Res
                 emit_bytes(assembly, header.value.as_bytes());
             }
         }
+        for (validation_index, validation) in handler.parameter_validations.iter().enumerate() {
+            for (header_index, header) in validation.rejected.headers.iter().enumerate() {
+                asm_line!(assembly, ".p2align 3");
+                asm_line!(
+                    assembly,
+                    "Ltinytsx_handler_{index}_validation_{validation_index}_header_{header_index}_name:"
+                );
+                emit_bytes(assembly, header.name.as_bytes());
+                asm_line!(assembly, ".p2align 3");
+                asm_line!(
+                    assembly,
+                    "Ltinytsx_handler_{index}_validation_{validation_index}_header_{header_index}_value:"
+                );
+                emit_bytes(assembly, header.value.as_bytes());
+            }
+        }
     }
     for string in &program.static_strings {
         asm_line!(assembly, ".p2align 3");

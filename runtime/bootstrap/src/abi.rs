@@ -691,6 +691,38 @@ fn route_parameter_matches(pattern: &[u8], actual: &[u8]) -> bool {
 }
 
 #[unsafe(no_mangle)]
+pub unsafe extern "C" fn tinytsx_request_path_segment_min_length(
+    request: *const TinyRequest,
+    segment: usize,
+    minimum: usize,
+) -> u32 {
+    if request.is_null() {
+        return 0;
+    }
+    // SAFETY: Generated code passes the request supplied by this runtime.
+    let path = unsafe { &(*request).path };
+    if path.ptr.is_null() && path.len != 0 {
+        return 0;
+    }
+    // SAFETY: The request path remains valid for the duration of dispatch.
+    let path = unsafe { slice::from_raw_parts(path.ptr, path.len) };
+    let Some(value) = route_segments(path).nth(segment) else {
+        return 0;
+    };
+    let mut length = 0;
+    let mut cursor = 0;
+    while cursor < value.len() {
+        cursor += if percent_byte(value, cursor).is_some() {
+            3
+        } else {
+            1
+        };
+        length += 1;
+    }
+    u32::from(length >= minimum)
+}
+
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn tinytsx_html_write_path_segment(
     writer: *mut TinyResponseWriter,
     request: *const TinyRequest,

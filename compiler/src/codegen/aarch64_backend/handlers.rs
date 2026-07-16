@@ -47,6 +47,52 @@ pub(super) fn emit_handlers(assembly: &mut Emitter, program: &Program) -> Result
     asm_line!(assembly, "    b {return_label}");
     for (index, handler) in program.handlers.iter().enumerate() {
         asm_line!(assembly, "Ltinytsx_handle_get_match_{index}:");
+        for (validation_index, validation) in handler.parameter_validations.iter().enumerate() {
+            let valid_label =
+                format!("Ltinytsx_handler_{index}_validation_{validation_index}_valid");
+            asm_line!(assembly, "    ldr x0, [sp, #24]");
+            emit_immediate(assembly, "x1", validation.segment as u64);
+            emit_immediate(assembly, "x2", validation.min_length as u64);
+            assembly.call(format_args!("tinytsx_request_path_segment_min_length"));
+            asm_line!(assembly, "    cbnz w0, {valid_label}");
+            for string in &validation.rejected.stderr {
+                assembly.address("x0", format_args!("Ltinytsx_string_{string}"));
+                emit_immediate(
+                    assembly,
+                    "x1",
+                    program.static_strings[*string].value.len() as u64,
+                );
+                assembly.call(format_args!("tinytsx_console_error_static"));
+            }
+            for (header_index, header) in validation.rejected.headers.iter().enumerate() {
+                asm_line!(assembly, "    ldr x0, [sp, #16]");
+                assembly.address(
+                    "x1",
+                    format_args!(
+                        "Ltinytsx_handler_{index}_validation_{validation_index}_header_{header_index}_name"
+                    ),
+                );
+                emit_immediate(assembly, "x2", header.name.len() as u64);
+                assembly.address(
+                    "x3",
+                    format_args!(
+                        "Ltinytsx_handler_{index}_validation_{validation_index}_header_{header_index}_value"
+                    ),
+                );
+                emit_immediate(assembly, "x4", header.value.len() as u64);
+                assembly.call(format_args!("tinytsx_response_header_static"));
+                asm_line!(assembly, "    cbnz w0, {return_label}");
+            }
+            emit_handler_response(
+                assembly,
+                &validation.rejected.response,
+                program,
+                return_label,
+                index,
+            )?;
+            asm_line!(assembly, "    b {return_label}");
+            asm_line!(assembly, "{valid_label}:");
+        }
         if let Some(entity_tag) = &handler.entity_tag {
             let normal_label = format!("Ltinytsx_handler_{index}_etag_normal");
             asm_line!(assembly, "    ldr x0, [sp, #24]");

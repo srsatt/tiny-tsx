@@ -6,10 +6,10 @@ use super::{
     tinytsx_html_write_query_parameter, tinytsx_html_write_request_header,
     tinytsx_html_write_static, tinytsx_request_basic_auth_equals, tinytsx_request_if_none_match,
     tinytsx_request_method_equals, tinytsx_request_path_equals, tinytsx_request_path_matches,
-    tinytsx_request_query_has, tinytsx_response_begin, tinytsx_response_header_elapsed_millis,
-    tinytsx_response_header_static, tinytsx_response_stream_begin,
-    tinytsx_response_stream_chunk_begin, tinytsx_response_stream_chunk_end,
-    tinytsx_response_stream_chunk_static, write_console_error,
+    tinytsx_request_path_segment_min_length, tinytsx_request_query_has, tinytsx_response_begin,
+    tinytsx_response_header_elapsed_millis, tinytsx_response_header_static,
+    tinytsx_response_stream_begin, tinytsx_response_stream_chunk_begin,
+    tinytsx_response_stream_chunk_end, tinytsx_response_stream_chunk_static, write_console_error,
 };
 use std::{
     io::{Read, Write},
@@ -205,6 +205,24 @@ fn request_path_patterns_match_nonempty_named_segments() {
         },
         0
     );
+}
+
+#[test]
+fn request_path_segment_minimum_length_counts_percent_decoded_bytes() {
+    for (target, minimum, expected) in [
+        (b"/users/abc".as_slice(), 3, 1),
+        (b"/users/ab".as_slice(), 3, 0),
+        (b"/users/a%62c".as_slice(), 3, 1),
+        (b"/users/a%62".as_slice(), 3, 0),
+    ] {
+        let request = request(b"GET", target);
+        assert_eq!(
+            unsafe { tinytsx_request_path_segment_min_length(&request, 1, minimum) },
+            expected,
+            "{}",
+            String::from_utf8_lossy(target)
+        );
+    }
 }
 
 #[test]

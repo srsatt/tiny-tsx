@@ -1,6 +1,7 @@
 /target/
 /node_modules/
 /tests/compat/ai/node_modules/
+/tests/compat/zod-openapi/node_modules/
 /frontend/node_modules/
 /frontend/dist/
 /dist/

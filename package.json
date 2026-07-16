@@ -30,6 +30,7 @@
     "test:hono-intake": "node --test tests/compat/hono/*.test.mjs",
     "test:ai-intake": "npm ci --prefix tests/compat/ai && npm run build:frontend && frontend/node_modules/.bin/tsc -p tests/compat/ai/tsconfig.json && node --test tests/compat/ai/intake.test.mjs tests/compat/ai/generate-text.behavior.test.mjs tests/compat/ai/native-compile.test.mjs",
     "test:ai-reference": "bun test tests/compat/ai/*.behavior.test.ts",
+    "test:zod-openapi": "npm ci --prefix tests/compat/zod-openapi && npm run build:frontend && node frontend/node_modules/typescript/bin/tsc -p tests/compat/zod-openapi/tsconfig.json && node --test tests/compat/zod-openapi/native.test.mjs",
     "test:zod-openapi-reference": "npm ci --prefix tests/compat/zod-openapi && bun test tests/compat/zod-openapi/reference.behavior.test.ts",
     "test:ai-provider-native": "npm run build:ai-hono-provider && node --test tests/compat/ai/local-provider-native.test.mjs",
     "test:hono-jsx-reference": "bun run --jsx-import-source hono/jsx --tsconfig-override tests/compat/hono/jsx-ssr-bun-tsconfig.json tests/compat/hono/jsx-ssr.behavior.test.ts",
