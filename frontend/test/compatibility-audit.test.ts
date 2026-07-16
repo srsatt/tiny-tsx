@@ -124,6 +124,22 @@ test("resolves every backend standard-library module from the shipped SDK", () =
   );
 });
 
+test("rejects declaration-only built-in operations with a stable diagnostic", () => {
+  const entry = write("unavailable-builtin.ts", `
+    import {get} from "tinytsx:env";
+    export function GET(_request: Request): Response {
+      return Response.text(get("APP_NAME") ?? "missing");
+    }
+  `);
+
+  assert.throws(
+    () => compileEntry(entry, {sdkPath: path.join(repository, "sdk/index.d.ts")}),
+    (error: unknown) => error instanceof CompileFailure
+      && error.diagnostics[0]?.code === "TINY1500"
+      && error.diagnostics[0]?.message.includes("tinytsx:env.get"),
+  );
+});
+
 test("loads a compile-time-known Worker module without treating it as an import binding", () => {
   const entry = path.join(repository, "tests/compat/workers/hono-worker-smoke.ts");
   const graph = loadModuleGraph(entry, {

@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import ts from "typescript";
 import {analyzeApplicationEntry} from "./application-entry.js";
+import {validateUnavailableBuiltinOperations} from "./builtin-validation.js";
 import {
   evaluateApplicationConstructor,
   evaluateApplicationInitialization,
@@ -117,6 +118,7 @@ export function compileEntry(entryPath: string, options: CompileOptions): HirPro
   if (typeScriptDiagnostics.length > 0) {
     throw new CompileFailure(typeScriptDiagnostics.map(fromTypeScript));
   }
+  validateUnavailableBuiltinOperations(graph);
   const getDeclarations = sourceFile.statements.filter(isGetDeclaration);
   if (getDeclarations.length === 0) {
     if (application !== undefined) {
