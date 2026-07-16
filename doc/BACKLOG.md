@@ -91,10 +91,10 @@ commit message.
       sites before selecting a precise collector.
 - [ ] Compare an established conservative collector and a precise per-worker
       collector/toolkit; do not implement a production GC from scratch.
-- [ ] Define an optional WASM compatibility profile: loader, imports allowlist,
+- [x] Define an optional WASM compatibility profile: loader, imports allowlist,
       ABI, bounded linear memory, WASI policy, AOT/interpreter choice, and worker
       isolation. Keep it absent from zero-dependency builds until enabled.
-- [ ] Load and execute one pinned no-WASI WASM fixture with deterministic memory
+- [x] Load and execute one pinned no-WASI WASM fixture with deterministic memory
       limits before evaluating framework or plugin use cases.
 
 ## Next slice

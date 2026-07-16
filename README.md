@@ -193,6 +193,7 @@ npm run test:test262-native
 npm run test:wpt-intake
 npm run test:wpt-native
 npm run test:native-api
+npm run test:wasm
 ```
 
 Test262 evidence is recorded per case. Four complete cases currently execute as
@@ -202,6 +203,11 @@ bigint`, the bounded `for`/throw/catch counter, and the bounded dense-array
 reported as semantic conformance. Three complete selected URLSearchParams WPT
 files execute natively. See `doc/COMPATIBILITY.md` for pins, test layers, and
 the deliberately narrower boundaries of each result.
+
+`npm run test:wasm` exercises a separate optional no-WASI interpreter profile.
+It is not a compiler target and is not linked into normal bootstrap servers;
+the native TypeScript/TSX backend still emits Apple-arm64 assembly directly.
+See `doc/WASM.md` for its limits and promotion gates.
 
 An exploratory static performance comparison against an equivalent idiomatic Bun
 server is available separately:

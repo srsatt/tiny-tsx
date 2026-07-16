@@ -404,6 +404,16 @@ produces and serves a native Mach-O executable from the example TSX source.
   reach 43.4–46.1k requests/s at concurrency 8–64, or 2.37–2.87x the paired Bun
   result; one worker saturates near 12.3k and retains the known tail problem.
   The provider performs no inference, so these are transport/framework results.
+- `tinytsx-runtime-wasm` defines a separate optional interpreter profile without
+  changing default bootstrap dependencies. Exact `wasmi@1.1.0` execution is
+  feature-gated, admits no imports or WASI, caps module bytes, linear memory,
+  instances, memories, tables, and fuel, and exposes only a typed `i32 -> i32`
+  invocation ABI.
+- The pinned 59-byte no-WASI fixture executes `add_one(41) == 42`. Tests also
+  reject imports and oversized modules, fail one-page memory instantiation
+  below 64 KiB, stop an infinite loop at its fuel bound, and prove the default
+  profile reports `BackendDisabled`. The profile is not yet exposed through
+  TypeScript `WebAssembly` syntax or linked into generated applications.
 
 Verification:
 
@@ -440,6 +450,7 @@ rtk npm run test:ai-reference
 rtk npm run build:ai-hono
 rtk npm run build:ai-hono-stream
 rtk npm run test:ai-provider-native
+rtk npm run test:wasm
 rtk npm run benchmark:hono-ai-provider
 rtk python3 benchmarks/scripts/run_static.py --duration 2 --runs 3 --startup-runs 5 --concurrency 1,8,32 --output-prefix benchmarks/results/2026-07-14-m5-max-static-preview
 rtk python3 benchmarks/scripts/run_static.py --workload hono-basic --duration 1 --runs 3 --startup-runs 5 --concurrency 1,8 --output-prefix benchmarks/results/2026-07-15-m5-max-hono-preview
@@ -448,19 +459,19 @@ rtk npm run benchmark:hono-jsx-ssr
 
 ## Active slice
 
-Deterministic `generateText`, finite `streamText`, and the first real local
+Deterministic `generateText`, finite `streamText`, the first real local
 OpenAI-compatible provider path are complete through HIR, native linking, real
-HTTP responses, sustained load, and executed escape reports. The active AI
-slice is deterministic multi-step/tool-call behavior; invalid Zod behavior is
-an independent promotion gate. Neither current path justifies a GC. The next
-platform slice defines the optional WASM profile and loads one bounded no-WASI
-fixture. Connection fairness remains a measured optimization target.
+HTTP responses, sustained load, and executed escape reports. The optional WASM
+profile and bounded no-WASI fixture are also complete at the crate boundary.
+The active AI slice is deterministic multi-step/tool-call behavior; invalid Zod
+behavior is an independent promotion gate. Neither current path justifies a GC.
+Connection fairness remains a measured optimization target.
 
 ## Resume point
 
 Read `doc/AI_COMPATIBILITY.md`, `doc/MEMORY_MANAGEMENT.md`, and
-`doc/BACKLOG.md`. Run `rtk npm run test:ai-intake`,
-`rtk npm run test:ai-reference`, and `rtk npm run test:ai-provider-native`.
-Define the optional WASM profile and execute one bounded no-WASI fixture next;
-then return to deterministic multi-step/tool-call and invalid-Zod promotion
-gates. Do not start a collector spike without an executed managed escape.
+`doc/WASM.md`. Run `rtk npm run test:ai-intake`,
+`rtk npm run test:ai-reference`, `rtk npm run test:ai-provider-native`, and
+`rtk npm run test:wasm`. Add deterministic multi-step/tool-call behavior next,
+keeping invalid-Zod behavior separate. Do not start a collector spike without
+an executed managed escape.
