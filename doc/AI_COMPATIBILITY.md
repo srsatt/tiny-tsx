@@ -138,11 +138,44 @@ as native HTTP chunks, and emits the SDK content type
 closed `{model, prompt}` call; it is not evidence for arbitrary asynchronous
 tools, cancellation, or provider streams.
 
+## Local OpenAI-compatible provider evidence
+
+The published `@ai-sdk/openai-compatible@3.0.10` package is now locked beside
+AI SDK Core. Its exact source graph, with the pinned Hono and Core aliases,
+contains 656 modules, 2,264,407 source bytes, and 71,709 lines. The aggregate
+audit records 895 async/await sites, 615 exception sites, 1,020 rest/spread
+sites, 959 computed accesses, 318 loops, 156 classes, and zero unresolved
+runtime imports.
+
+`tests/compat/ai/hono-local-provider-smoke.ts` is executed unchanged by Bun and
+compiled from the upstream Hono, AI SDK Core, and OpenAI-compatible sources.
+Its closed provider configuration and `{model, prompt}` generation call lower
+to one bounded native POST. The runtime sends the exact authorization header
+and JSON body, accepts only a 2xx response, bounds the response to 256 KiB, and
+decodes `choices[0].message.content`, including JSON escapes and Unicode.
+
+Provider I/O runs on the separate application pool, never on the HTTP executor.
+Each provider logical worker owns and reuses one libcurl easy handle and its
+HTTP connection cache. This is necessary correctness behavior as well as an
+optimization: the first load probe exhausted macOS ephemeral ports when a new
+handle was created per request. A focused native test now requires two provider
+calls to reuse one HTTP/1.1 connection, and the original sustained-load repro
+completes without non-200 responses.
+
+The release benchmark binary is 519,688 bytes. Its executed report contains 66
+allocation sites: 65 compile-time and one request-lifetime response value, with
+zero worker, message, or managed sites. `managedHeapRequired` remains false.
+The supported provider slice is intentionally narrow: compile-time-known
+`name`, `baseURL`, API key, model name, and prompt; one non-streaming chat
+completion; loopback HTTP or HTTPS; no redirects; and bounded request/response
+sizes. Arbitrary provider options, tools, retries, streaming events, aborts,
+telemetry, and dynamic credentials remain promotion gates.
+
 Continue in order:
 
 1. multi-step/tool-call behavior with a deterministic fake model;
-2. one OpenAI-compatible HTTP provider behind a local deterministic test server;
-3. cancellation, bounded backpressure, and application-worker delivery;
+2. cancellation, bounded backpressure, and streamed application-worker delivery;
+3. provider errors, retries, aborts, and dynamic credentials;
 4. external credentials and live providers as manual, non-conformance examples.
 
 ## Capability audit hypotheses

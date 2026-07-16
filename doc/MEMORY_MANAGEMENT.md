@@ -100,3 +100,20 @@ escapes include the provider stream parts and chunks, while
 `managedHeapRequired` remains false. This is evidence for a finite closed mock
 stream only; cancellation, backpressure, live provider I/O, and callbacks that
 outlive a request remain separate escape-analysis gates.
+
+The first real provider-I/O path also stays below the collector threshold. Its
+656-module OpenAI-compatible build reports 66 reached sites: 65 compile-time,
+one request-lifetime response allocation, 22 aliased sites, one response escape,
+and zero worker, message, or managed sites. Provider requests and replies cross
+the application-pool boundary as bounded owned byte buffers; the decoded reply
+is copied into the caller's request arena. Each provider worker persistently
+owns one native curl handle and connection cache, but that opaque acyclic native
+resource has deterministic worker/process destruction and is not a JavaScript
+object graph.
+
+Measured eight-worker load raises TinyTSX warm RSS from 8.34 MiB with one
+provider executor to 10.03 MiB with eight while increasing concurrency-64
+throughput from 12.3k to 46.1k requests/s. No retained JS graph or unbounded RSS
+growth appears in this executed path. The collector spike therefore remains
+deferred; invalid schemas, multi-step tools, dynamic callbacks, and streamed
+provider state are the next evidence-bearing escape gates.

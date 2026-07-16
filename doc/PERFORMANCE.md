@@ -218,6 +218,35 @@ not application-worker parallel scaling. The c32/c64 tail again includes the
 known blocking HTTP connection-affinity policy. Raw evidence is retained in
 `benchmarks/results/2026-07-15-m5-max-hono-worker-keepalive-w8.{json,md}`.
 
+## Local AI provider and application-pool scaling
+
+The provider workload runs the pinned 656-module Hono + AI SDK Core +
+OpenAI-compatible graph against one shared zero-delay loopback provider. Both
+targets send the same model/prompt request and must return the same 25-byte
+assistant text. The support provider is excluded from both RSS measurements.
+It performs no inference, token generation, retry, or streaming, so this is a
+framework/transport benchmark rather than an AI-model benchmark.
+
+| Workers | Tiny startup | Bun startup | Tiny warm RSS | Bun warm RSS | Tiny RPS c1 | c8 | c32 | c64 |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 12.64 ms | 48.98 ms | 8.34 MiB | 255.27 MiB | 12,077 | 12,241 | 12,274 | 12,259 |
+| 8 | 14.08 ms | 48.57 ms | 10.03 MiB | 251.80 MiB | 12,171 | 43,445 | 45,460 | 46,075 |
+
+One provider executor is the bottleneck near 12.3k requests/s. Eight executors
+raise concurrency-64 throughput 3.76x for 1.69 MiB more warm RSS. Against the
+paired Bun runs, the eight-worker native binary reaches 1.53x Bun at concurrency
+1 and 2.37–2.87x at concurrency 8–64. This advantage comes from specializing
+the closed provider call into bounded native transport rather than executing
+the full SDK graph per request.
+
+Tail fairness remains open: eight-worker TinyTSX p99 reaches 62.54 ms at
+concurrency 64 versus Bun's 7.93 ms, even though aggregate throughput is higher.
+The first implementation also created one curl handle per call and exhausted
+macOS ephemeral ports during the warmup. Provider workers now reuse their easy
+handle and connection cache; a focused regression test and the repeated load
+run both cover that correction. Raw reports are
+`benchmarks/results/2026-07-16-m5-max-hono-ai-provider-keepalive-w{1,8}.{json,md}`.
+
 ## Roadmap
 
 ### P0 — make the comparison semantically and mechanically fair

@@ -110,6 +110,20 @@ The implemented subset is deliberately explicit:
 This is syntax sugar over the reusable pool and mailbox runtime. It is not a
 second JavaScript engine and it is not a one-thread-per-`Worker` design.
 
+## Provider jobs
+
+Native OpenAI-compatible calls reuse the same application-pool abstraction.
+When provider transport is present, the bootstrap creates one provider logical
+worker per application executor and distributes calls round-robin. HTTP
+executors synchronously wait only across the separate-pool boundary; libcurl
+never runs on an HTTP executor.
+
+Each provider logical worker owns one reusable curl easy handle and connection
+cache plus bounded request/reply messages. Reusing the handle prevents
+ephemeral-port exhaustion under sustained local load. Provider state remains
+isolated by the logical-worker mutex, messages copy ownership, and the selected
+`--workers N` count bounds both parallel provider calls and native threads.
+
 ## Isolation and deadlock rules
 
 HTTP execution state and application logical-worker state are separate. A

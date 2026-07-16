@@ -76,8 +76,11 @@ commit message.
 - [ ] Compile deterministic multi-step/tool-call behavior.
 - [x] Compile a finite deterministic `streamText` model and return the SDK text
       stream as a Hono Web `Response`, preserving chunks and content type.
-- [ ] Add local OpenAI-compatible provider HTTP I/O after the deterministic
-      orchestration slices are stable.
+- [x] Add bounded local OpenAI-compatible provider HTTP I/O on the separate
+      application pool, with exact request/response behavior and reusable
+      per-worker connections.
+- [x] Benchmark the pinned 656-module provider path against Bun with one and
+      eight workers, including startup, RSS, throughput, and latency.
 - [x] Inventory Promise, async iterator, Web Streams, AbortSignal, encoding,
       Fetch, URL, crypto, timer, and persistent-heap gaps from that exact graph.
 - [x] Define static, request, worker, message, and managed-heap lifetimes plus

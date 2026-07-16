@@ -1,6 +1,6 @@
 # Implementation status
 
-Last updated: 2026-07-15
+Last updated: 2026-07-16
 
 ## Current state
 
@@ -387,6 +387,23 @@ produces and serves a native Mach-O executable from the example TSX source.
   0.74–0.76x Bun throughput at concurrency 8–64; c64 p99 is 36.38 ms versus
   1.45 ms. This measures copied request/reply overhead and the existing HTTP
   connection-affinity tail, not parallelism across several logical workers.
+- `@ai-sdk/openai-compatible@3.0.10` is locked and audited with the pinned Hono
+  and Core graph: 656 modules, 2,264,407 bytes, 71,709 lines, and zero unresolved
+  runtime imports. Bun and TinyTSX both execute the unchanged local-provider
+  consumer and send the exact bearer token, model, messages, and prompt.
+- The native provider transport runs on one logical provider per application
+  executor, uses bounded owned messages, reuses a curl handle/HTTP connection,
+  and copies decoded assistant text into the request arena. A regression test
+  pins connection reuse after sustained load exposed ephemeral-port exhaustion.
+- The provider build reports 66 allocation sites: 65 compile-time, one request,
+  22 aliased, one response escape, and zero managed sites. It keeps GC disabled
+  and confirms that this real I/O path still does not justify a collector.
+- Repeated zero-delay provider benchmarks record TinyTSX/Bun startup at
+  12.64/48.98 ms with one worker and 14.08/48.57 ms with eight. TinyTSX warm RSS
+  is 8.34/10.03 MiB versus Bun at 255.27/251.80 MiB. Eight provider workers
+  reach 43.4–46.1k requests/s at concurrency 8–64, or 2.37–2.87x the paired Bun
+  result; one worker saturates near 12.3k and retains the known tail problem.
+  The provider performs no inference, so these are transport/framework results.
 
 Verification:
 
@@ -422,6 +439,8 @@ rtk npm run test:ai-intake
 rtk npm run test:ai-reference
 rtk npm run build:ai-hono
 rtk npm run build:ai-hono-stream
+rtk npm run test:ai-provider-native
+rtk npm run benchmark:hono-ai-provider
 rtk python3 benchmarks/scripts/run_static.py --duration 2 --runs 3 --startup-runs 5 --concurrency 1,8,32 --output-prefix benchmarks/results/2026-07-14-m5-max-static-preview
 rtk python3 benchmarks/scripts/run_static.py --workload hono-basic --duration 1 --runs 3 --startup-runs 5 --concurrency 1,8 --output-prefix benchmarks/results/2026-07-15-m5-max-hono-preview
 rtk npm run benchmark:hono-jsx-ssr
@@ -429,20 +448,19 @@ rtk npm run benchmark:hono-jsx-ssr
 
 ## Active slice
 
-The deterministic `generateText` and finite `streamText` Hono tracers are
-complete through HIR, native linking, real HTTP responses, and executed escape
-reports. The active slice is deterministic multi-step/tool-call behavior,
-followed by a local OpenAI-compatible provider transport. Invalid Zod behavior
-remains an independent promotion gate. These paths decide whether arenas remain
-sufficient; the current evidence does not justify a GC. Connection fairness
-remains a measured optimization target.
+Deterministic `generateText`, finite `streamText`, and the first real local
+OpenAI-compatible provider path are complete through HIR, native linking, real
+HTTP responses, sustained load, and executed escape reports. The active AI
+slice is deterministic multi-step/tool-call behavior; invalid Zod behavior is
+an independent promotion gate. Neither current path justifies a GC. The next
+platform slice defines the optional WASM profile and loads one bounded no-WASI
+fixture. Connection fairness remains a measured optimization target.
 
 ## Resume point
 
 Read `doc/AI_COMPATIBILITY.md`, `doc/MEMORY_MANAGEMENT.md`, and
 `doc/BACKLOG.md`. Run `rtk npm run test:ai-intake`,
-`rtk npm run test:ai-reference`, `rtk npm run build:ai-hono`, and
-`rtk npm run build:ai-hono-stream`. Add deterministic multi-step/tool-call
-behavior next, followed by a local OpenAI-compatible provider transport. Keep
-invalid-Zod behavior as a separate open promotion gate, and do not start a
-collector spike unless one of those executed paths reports a managed escape.
+`rtk npm run test:ai-reference`, and `rtk npm run test:ai-provider-native`.
+Define the optional WASM profile and execute one bounded no-WASI fixture next;
+then return to deterministic multi-step/tool-call and invalid-Zod promotion
+gates. Do not start a collector spike without an executed managed escape.
