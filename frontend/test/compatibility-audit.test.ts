@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import {mkdtempSync, readFileSync, rmSync, writeFileSync} from "node:fs";
+import {mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import path from "node:path";
 import {after, test} from "node:test";
@@ -45,6 +45,59 @@ test("reports unresolved runtime imports without discarding the graph", () => {
   assert.equal(graph.modules.length, 1);
   assert.equal(graph.diagnostics[0]?.code, "TINY2002");
   assert.match(graph.diagnostics[0]?.message ?? "", /not-installed/);
+});
+
+test("resolves scoped bare packages, export conditions, and wildcard subpaths", () => {
+  const project = path.join(directory, crypto.randomUUID());
+  const packageRoot = path.join(project, "node_modules/@example/runtime");
+  mkdirSync(path.join(packageRoot, "src/features"), {recursive: true});
+  writeFileSync(path.join(packageRoot, "package.json"), JSON.stringify({
+    name: "@example/runtime",
+    exports: {
+      ".": {types: "./src/index.d.ts", import: "./src/index.js"},
+      "./features/*": {import: "./src/features/*.js"},
+    },
+  }));
+  const runtime = path.join(packageRoot, "src/index.ts");
+  const feature = path.join(packageRoot, "src/features/hello.ts");
+  writeFileSync(runtime, 'export const runtime = "package";');
+  writeFileSync(feature, 'export const feature = "hello";');
+  const entry = path.join(project, "entry.ts");
+  writeFileSync(entry, `
+    import {runtime} from "@example/runtime";
+    import {feature} from "@example/runtime/features/hello";
+    export const result = runtime + feature;
+  `);
+
+  const graph = loadModuleGraph(entry);
+
+  assert.deepEqual(graph.diagnostics, []);
+  assert.deepEqual(graph.modules.map(module => module.path), [entry, runtime, feature]);
+});
+
+test("resolves protected built-ins before aliases and node_modules packages", () => {
+  const project = path.join(directory, crypto.randomUUID());
+  const packageRoot = path.join(project, "node_modules/@hono/node-server");
+  mkdirSync(packageRoot, {recursive: true});
+  writeFileSync(path.join(packageRoot, "package.json"), JSON.stringify({
+    name: "@hono/node-server",
+    exports: "./index.js",
+  }));
+  writeFileSync(path.join(packageRoot, "index.js"), 'export const serve = "package";');
+  const alias = path.join(project, "alias.ts");
+  const builtin = path.join(project, "builtin.ts");
+  writeFileSync(alias, 'export const serve = "alias";');
+  writeFileSync(builtin, 'export const serve = "builtin";');
+  const entry = path.join(project, "entry.ts");
+  writeFileSync(entry, 'import {serve} from "@hono/node-server"; export {serve};');
+
+  const graph = loadModuleGraph(entry, {
+    aliases: {"@hono/node-server": alias},
+    builtins: {"@hono/node-server": builtin},
+  });
+
+  assert.deepEqual(graph.diagnostics, []);
+  assert.deepEqual(graph.modules.map(module => module.path), [entry, builtin]);
 });
 
 test("loads a compile-time-known Worker module without treating it as an import binding", () => {
