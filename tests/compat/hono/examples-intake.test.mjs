@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import {readFileSync} from "node:fs";
+import {readFileSync, statSync} from "node:fs";
 import path from "node:path";
 import {execFileSync} from "node:child_process";
 import {test} from "node:test";
@@ -19,6 +19,42 @@ test("uses the pinned Hono examples revision", () => {
   ).trim();
 
   assert.equal(revision, manifest.upstream.commit);
+});
+
+test("records the alpha example matrix with executable evidence and boundaries", () => {
+  const required = [
+    "upstream-basic",
+    "upstream-jsx-ssr",
+    "published-zod-openapi",
+    "hono-node-server-entry",
+    "tinytsx-serve-entry",
+    "upstream-serve-static",
+    "upstream-blog",
+    "upstream-durable-objects-counter",
+  ];
+  assert.deepEqual(manifest.matrix.map(row => row.id), required);
+  for (const row of manifest.matrix) {
+    assert.ok(["unchanged-upstream", "official-doc-derived-published-packages", "official-doc-derived-local-tracer", "tinytsx-local", "unchanged-upstream-tracer", "upstream-contract-with-tinytsx-adapter"].includes(row.provenance));
+    assert.ok(row.entry.length > 0);
+    assert.ok(row.imports.length > 0);
+    assert.ok(row.apis.length > 0);
+    assert.ok(row.firstUnsupportedBoundary.length > 0);
+    for (const layer of [row.intake, row.nativeCompile, row.httpBehavior, row.referenceBehavior]) {
+      assert.ok(layer.status !== undefined || layer.appleArm64 !== undefined);
+      if (typeof layer.evidence === "string") {
+        assert.ok(statSync(path.join(repository, layer.evidence)), layer.evidence);
+      }
+    }
+  }
+});
+
+test("pins the explicit upstream Hono behavior allowlist", () => {
+  for (const item of manifest.behaviorAllowlist) {
+    assert.equal(item.evidenceMode, "native-derived");
+    const upstream = readFileSync(path.join(repository, item.source), "utf8");
+    for (const selector of item.selectors) assert.ok(upstream.includes(selector), selector);
+    statSync(path.join(repository, item.nativeEvidence));
+  }
 });
 
 test("pins the complete basic source and its upstream behavior test", () => {

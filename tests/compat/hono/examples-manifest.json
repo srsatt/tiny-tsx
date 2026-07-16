@@ -5,6 +5,112 @@
     "path": "vendor/hono-examples",
     "commit": "3b0b62875a0e1265763fea1c6388866d5697ef81"
   },
+  "matrix": [
+    {
+      "id": "upstream-basic",
+      "provenance": "unchanged-upstream",
+      "entry": "vendor/hono-examples/basic/src/index.ts",
+      "imports": ["hono", "hono/basic-auth", "hono/etag", "hono/powered-by", "hono/pretty-json"],
+      "apis": ["Hono", "get", "post", "use", "route", "notFound", "onError", "Context.text", "Context.json", "Context.redirect", "Request.header", "fetch"],
+      "intake": {"status": "pass", "evidence": "tests/compat/hono/examples-intake.test.mjs"},
+      "nativeCompile": {"appleArm64": "pass", "linuxArm64Assembly": "pass", "evidence": "compiler/tests/e2e.rs"},
+      "httpBehavior": {"status": "pass", "evidence": "compiler/tests/e2e.rs"},
+      "referenceBehavior": {"runtime": "Bun/Hono", "status": "pass", "evidence": "vendor/hono-examples/basic/src/index.test.ts"},
+      "firstUnsupportedBoundary": "Only the pinned closed registrations and specialized middleware behavior are admitted; arbitrary request bodies and middleware remain unsupported."
+    },
+    {
+      "id": "upstream-jsx-ssr",
+      "provenance": "unchanged-upstream",
+      "entry": "vendor/hono-examples/jsx-ssr/src/index.tsx",
+      "imports": ["hono", "hono/html", "hono/jsx"],
+      "apis": ["Hono", "get", "Context.html", "Context.notFound", "html", "JSX"],
+      "intake": {"status": "pass", "evidence": "tests/compat/hono/examples-intake.test.mjs"},
+      "nativeCompile": {"appleArm64": "pass", "linuxArm64Assembly": "pass", "evidence": "compiler/tests/e2e.rs"},
+      "httpBehavior": {"status": "pass", "evidence": "compiler/tests/e2e.rs"},
+      "referenceBehavior": {"runtime": "Bun/Hono", "status": "pass", "evidence": "tests/compat/hono/jsx-ssr.behavior.test.ts"},
+      "firstUnsupportedBoundary": "The post collection is closed at compile time; general runtime arrays, JSX state, and arbitrary route regular expressions are unsupported."
+    },
+    {
+      "id": "published-zod-openapi",
+      "provenance": "official-doc-derived-published-packages",
+      "entry": "tests/compat/zod-openapi/server.ts",
+      "imports": ["@hono/zod-openapi", "hono", "zod"],
+      "apis": ["OpenAPIHono", "createRoute", "z.object", "z.string", "z.number", "Schema.min", "Schema.openapi", "Context.req.valid", "Context.json", "app.doc"],
+      "intake": {"status": "pass", "evidence": "tests/compat/zod-openapi/package-lock.json"},
+      "nativeCompile": {"appleArm64": "pass", "linuxArm64Assembly": "pending", "evidence": "tests/compat/zod-openapi/native.test.mjs"},
+      "httpBehavior": {"status": "pass", "evidence": "tests/compat/zod-openapi/native.test.mjs"},
+      "referenceBehavior": {"runtime": "Bun/Hono", "status": "pass", "evidence": "tests/compat/zod-openapi/reference.behavior.test.ts"},
+      "firstUnsupportedBoundary": "Only the documented closed schema/path subset and ASCII minimum-length guard are supported; general Zod and OpenAPI are not."
+    },
+    {
+      "id": "hono-node-server-entry",
+      "provenance": "official-doc-derived-local-tracer",
+      "entry": "examples/hono-node-server/server.ts",
+      "imports": ["hono", "@hono/node-server"],
+      "apis": ["Hono", "get", "serve"],
+      "intake": {"status": "pass", "evidence": "frontend/test/compatibility-audit.test.ts"},
+      "nativeCompile": {"appleArm64": "pass", "linuxArm64Assembly": "pending", "evidence": "compiler/tests/e2e.rs"},
+      "httpBehavior": {"status": "pass", "evidence": "compiler/tests/e2e.rs"},
+      "referenceBehavior": {"runtime": "Node/Hono", "status": "pending", "evidence": null},
+      "firstUnsupportedBoundary": "The compile-time serve entry shape is supported; node-server lifecycle, TLS, and event APIs are not."
+    },
+    {
+      "id": "tinytsx-serve-entry",
+      "provenance": "tinytsx-local",
+      "entry": "examples/tiny-serve/server.ts",
+      "imports": ["hono", "tinytsx:serve"],
+      "apis": ["Hono", "get", "serve"],
+      "intake": {"status": "pass", "evidence": "frontend/test/compatibility-audit.test.ts"},
+      "nativeCompile": {"appleArm64": "pass", "linuxArm64Assembly": "pending", "evidence": "frontend/test/compatibility-audit.test.ts"},
+      "httpBehavior": {"status": "pending", "evidence": null},
+      "referenceBehavior": {"runtime": "not-applicable", "status": "not-applicable", "evidence": null},
+      "firstUnsupportedBoundary": "Only compile-time-known constructed fetch applications and a closed port are accepted."
+    },
+    {
+      "id": "upstream-serve-static",
+      "provenance": "unchanged-upstream-tracer",
+      "entry": "vendor/hono-examples/serve-static/src/index.ts",
+      "imports": ["hono", "hono/cloudflare-workers"],
+      "apis": ["Hono", "get", "serveStatic", "Context.env"],
+      "intake": {"status": "pinned", "evidence": "vendor/hono-examples/serve-static"},
+      "nativeCompile": {"appleArm64": "pending", "linuxArm64Assembly": "pending", "evidence": null},
+      "httpBehavior": {"status": "pending", "evidence": null},
+      "referenceBehavior": {"runtime": "Cloudflare reference", "status": "pending", "evidence": null},
+      "firstUnsupportedBoundary": "Cloudflare asset bindings are unavailable; the alpha tracer must use the public bounded tinytsx:fs capability."
+    },
+    {
+      "id": "upstream-blog",
+      "provenance": "upstream-contract-with-tinytsx-adapter",
+      "entry": "vendor/hono-examples/blog/src/index.ts",
+      "imports": ["hono", "hono/cors"],
+      "apis": ["Hono", "get", "post", "Context.req.json", "cors", "crypto.randomUUID", "D1Database"],
+      "intake": {"status": "pinned", "evidence": "vendor/hono-examples/blog"},
+      "nativeCompile": {"appleArm64": "pending", "linuxArm64Assembly": "pending", "evidence": null},
+      "httpBehavior": {"status": "pending", "evidence": null},
+      "referenceBehavior": {"runtime": "upstream tests", "status": "pinned", "evidence": "vendor/hono-examples/blog/src/api.test.ts"},
+      "firstUnsupportedBoundary": "Bounded JSON bodies, CORS, randomUUID, bindings, and tinytsx:sqlite are not implemented."
+    },
+    {
+      "id": "upstream-durable-objects-counter",
+      "provenance": "upstream-contract-with-tinytsx-adapter",
+      "entry": "vendor/hono-examples/durable-objects/src/index.ts",
+      "imports": ["hono", "hono/factory"],
+      "apis": ["Hono", "get", "createMiddleware", "DurableObjectNamespace", "DurableObjectState"],
+      "intake": {"status": "pinned", "evidence": "vendor/hono-examples/durable-objects"},
+      "nativeCompile": {"appleArm64": "pending", "linuxArm64Assembly": "pending", "evidence": null},
+      "httpBehavior": {"status": "pending", "evidence": null},
+      "referenceBehavior": {"runtime": "Cloudflare reference", "status": "pending", "evidence": null},
+      "firstUnsupportedBoundary": "Cloudflare Durable Objects are out of scope; a local tinytsx:actors behavior adapter has not been implemented."
+    }
+  ],
+  "behaviorAllowlist": [
+    {"source":"vendor/hono-examples/basic/src/index.test.ts","selectors":["expect(res.status).toBe(200)","expect(res.headers.get('x-powered-by')).toBe('Hono')"],"evidenceMode":"native-derived","nativeEvidence":"compiler/tests/e2e.rs"},
+    {"source":"vendor/hono/src/middleware/powered-by/index.test.ts","selectors":["Should return with X-Powered-By header"],"evidenceMode":"native-derived","nativeEvidence":"tests/compat/hono/powered-by-smoke.ts"},
+    {"source":"vendor/hono/src/middleware/pretty-json/index.test.ts","selectors":["Should return pretty JSON output"],"evidenceMode":"native-derived","nativeEvidence":"tests/compat/hono/pretty-json-smoke.ts"},
+    {"source":"vendor/hono/src/middleware/basic-auth/index.test.ts","selectors":["Should not authorize","Should authorize"],"evidenceMode":"native-derived","nativeEvidence":"tests/compat/hono/basic-auth-smoke.ts"},
+    {"source":"vendor/hono/src/middleware/etag/index.test.ts","selectors":["Should return etag header","Should handle conditional GETs"],"evidenceMode":"native-derived","nativeEvidence":"tests/compat/hono/etag-smoke.ts"},
+    {"source":"vendor/hono/src/helper/streaming/text.test.ts","selectors":["Check streamText Response"],"evidenceMode":"native-derived","nativeEvidence":"tests/compat/hono/stream-text-smoke.ts"}
+  ],
   "basic": {
     "entry": "vendor/hono-examples/basic/src/index.ts",
     "test": "vendor/hono-examples/basic/src/index.test.ts",
