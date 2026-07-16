@@ -1,4 +1,4 @@
-use super::{Assembly, asm_line, asm_write};
+use super::Assembly;
 
 #[test]
 fn macros_append_formatted_assembly_without_exposing_fmt_errors() {
