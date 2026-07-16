@@ -1,20 +1,19 @@
 use crate::hir::{ConstantValue, Program, ValueExpression};
 
 use super::super::{
-    aarch64::emit_immediate,
-    assembly::{Assembly, asm_line},
+    aarch64::{Emitter, emit_immediate},
+    assembly::asm_line,
 };
 
 pub(super) fn emit_value_expression(
-    assembly: &mut Assembly,
+    assembly: &mut Emitter,
     expression: &ValueExpression,
     program: &Program,
     scratch_base: usize,
 ) -> Result<(), String> {
     match expression {
         ValueExpression::StringLiteral { string, .. } => {
-            asm_line!(assembly, "    adrp x0, Ltinytsx_string_{string}@PAGE");
-            asm_line!(assembly, "    add x0, x0, Ltinytsx_string_{string}@PAGEOFF");
+            assembly.address("x0", format_args!("Ltinytsx_string_{string}"));
             emit_immediate(
                 assembly,
                 "x1",
@@ -25,11 +24,7 @@ pub(super) fn emit_value_expression(
             let ConstantValue::String { value } = &program.constants[*constant].value else {
                 return Err("string expression references a non-string constant".to_owned());
             };
-            asm_line!(assembly, "    adrp x0, Ltinytsx_constant_{constant}@PAGE");
-            asm_line!(
-                assembly,
-                "    add x0, x0, Ltinytsx_constant_{constant}@PAGEOFF"
-            );
+            assembly.address("x0", format_args!("Ltinytsx_constant_{constant}"));
             asm_line!(assembly, "    add x0, x0, #5");
             emit_immediate(assembly, "x1", value.len() as u64);
         }
@@ -61,7 +56,7 @@ pub(super) fn emit_value_expression(
                     scratch_base + index * 16
                 );
             }
-            asm_line!(assembly, "    bl _tinytsx_function_{function}");
+            assembly.call(format_args!("tinytsx_function_{function}"));
         }
         ValueExpression::Concat { .. }
         | ValueExpression::RouteParameter { .. }

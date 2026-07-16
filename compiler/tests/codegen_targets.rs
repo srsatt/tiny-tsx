@@ -1,0 +1,110 @@
+use std::{
+    fs,
+    path::PathBuf,
+    process::Command,
+    time::{SystemTime, UNIX_EPOCH},
+};
+
+#[test]
+fn emits_assemblable_static_linux_arm64_elf() {
+    let assembly = compile_linux("examples/static-page/server.tsx", &[]);
+
+    assert!(assembly.starts_with(".text\n.p2align 2\n"));
+    assert!(assembly.contains(".globl tinytsx_handle_get"));
+    assert!(assembly.contains("bl tinytsx_response_begin"));
+    assert!(assembly.contains(":lo12:Ltinytsx_string_0"));
+    assert!(!assembly.contains("@PAGE"));
+    assert!(!assembly.contains("_tinytsx_handle_get"));
+    assert_assembles_as_elf(&assembly, "static");
+}
+
+#[test]
+fn emits_assemblable_dynamic_hono_linux_arm64_elf() {
+    let assembly = compile_linux(
+        "tests/compat/hono/dynamic-jsx-smoke.tsx",
+        &[
+            "--alias",
+            "hono=vendor/hono/src/index.ts",
+            "--api",
+            "hono=tests/compat/hono/api.d.ts",
+        ],
+    );
+
+    assert!(assembly.contains("bl tinytsx_html_write_query_parameter"));
+    assert!(assembly.contains(":lo12:Ltinytsx_string_"));
+    assert_assembles_as_elf(&assembly, "dynamic-hono");
+}
+
+#[test]
+fn emits_linux_target_in_retargeted_hir() {
+    let compiler = env!("CARGO_BIN_EXE_tinytsx");
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..");
+    let output = Command::new(compiler)
+        .current_dir(&root)
+        .args([
+            "check",
+            "examples/static-page/server.tsx",
+            "--target",
+            "aarch64-unknown-linux-gnu",
+            "--emit-hir",
+        ])
+        .output()
+        .expect("run TinyTSX compiler");
+    assert!(output.status.success());
+    let hir: serde_json::Value = serde_json::from_slice(&output.stdout).expect("valid HIR JSON");
+    assert_eq!(hir["target"], "aarch64-unknown-linux-gnu");
+}
+
+fn compile_linux(entry: &str, extra_arguments: &[&str]) -> String {
+    let compiler = env!("CARGO_BIN_EXE_tinytsx");
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..");
+    let output = Command::new(compiler)
+        .current_dir(&root)
+        .arg("check")
+        .arg(entry)
+        .args(extra_arguments)
+        .args(["--target", "aarch64-unknown-linux-gnu", "--emit-asm"])
+        .output()
+        .expect("run TinyTSX compiler");
+    assert!(
+        output.status.success(),
+        "compiler failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8(output.stdout).expect("assembly is UTF-8")
+}
+
+fn assert_assembles_as_elf(assembly: &str, name: &str) {
+    let temporary = temporary_directory(name);
+    let assembly_path = temporary.join("generated.s");
+    let object_path = temporary.join("generated.o");
+    fs::write(&assembly_path, assembly).expect("write generated assembly");
+
+    let clang = Command::new("clang")
+        .arg("--target=aarch64-unknown-linux-gnu")
+        .arg("-c")
+        .arg(&assembly_path)
+        .arg("-o")
+        .arg(&object_path)
+        .output()
+        .expect("start clang");
+    assert!(
+        clang.status.success(),
+        "clang failed: {}",
+        String::from_utf8_lossy(&clang.stderr)
+    );
+    let object = fs::read(&object_path).expect("read ELF object");
+    assert_eq!(&object[..4], b"\x7fELF");
+
+    fs::remove_dir_all(temporary).expect("remove temporary directory");
+}
+
+fn temporary_directory(name: &str) -> PathBuf {
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock after epoch")
+        .as_nanos();
+    let path = std::env::temp_dir().join(format!("tinytsx-linux-codegen-{name}-{unique}"));
+    fs::create_dir_all(&path).expect("create temporary directory");
+    path
+}

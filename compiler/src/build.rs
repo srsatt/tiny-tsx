@@ -11,6 +11,7 @@ use crate::{
     codegen::{self, Options as CodegenOptions},
     frontend::{self, Compilation},
     hir::MemoryReport,
+    target::Target,
 };
 
 pub struct Options {
@@ -25,6 +26,7 @@ pub struct Options {
     pub keep_temps: bool,
     pub aliases: Vec<String>,
     pub api_aliases: Vec<String>,
+    pub target: Target,
 }
 
 #[derive(Serialize)]
@@ -51,10 +53,13 @@ struct BuildReport<'a> {
 }
 
 pub fn execute(options: &Options) -> Result<PathBuf, String> {
-    ensure_supported_host()?;
-    let compilation = frontend::compile(&options.entry, &options.aliases, &options.api_aliases)?;
-    let assembly = codegen::emit_macos_arm64(
+    options.target.ensure_native()?;
+    let mut compilation =
+        frontend::compile(&options.entry, &options.aliases, &options.api_aliases)?;
+    compilation.retarget(options.target)?;
+    let assembly = codegen::emit(
         &compilation.program,
+        options.target,
         CodegenOptions {
             port: options.port,
             workers: options.workers,
@@ -69,8 +74,14 @@ pub fn execute(options: &Options) -> Result<PathBuf, String> {
     fs::write(&assembly_path, &assembly)
         .map_err(|error| format!("could not write {}: {error}", assembly_path.display()))?;
 
-    assemble(&assembly_path, &object_path)?;
-    let runtime_binary = link_runtime(&root, &temporary, &object_path, options.release)?;
+    assemble(&assembly_path, &object_path, options.target)?;
+    let runtime_binary = link_runtime(
+        &root,
+        &temporary,
+        &object_path,
+        options.release,
+        options.target,
+    )?;
     let output = absolute_output(&options.output)?;
     if let Some(parent) = output.parent() {
         fs::create_dir_all(parent)
@@ -79,7 +90,7 @@ pub fn execute(options: &Options) -> Result<PathBuf, String> {
     fs::copy(&runtime_binary, &output)
         .map_err(|error| format!("could not create {}: {error}", output.display()))?;
     if options.release {
-        strip_binary(&output)?;
+        strip_binary(&output, options.target)?;
     }
 
     if options.emit_hir {
@@ -101,14 +112,6 @@ pub fn execute(options: &Options) -> Result<PathBuf, String> {
     Ok(output)
 }
 
-fn ensure_supported_host() -> Result<(), String> {
-    if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
-        Ok(())
-    } else {
-        Err("native builds currently require Apple Silicon macOS".to_owned())
-    }
-}
-
 fn temporary_directory(root: &Path) -> Result<PathBuf, String> {
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -122,8 +125,9 @@ fn temporary_directory(root: &Path) -> Result<PathBuf, String> {
     Ok(path)
 }
 
-fn assemble(assembly: &Path, object: &Path) -> Result<(), String> {
+fn assemble(assembly: &Path, object: &Path, target: Target) -> Result<(), String> {
     let output = Command::new("clang")
+        .arg(format!("--target={}", target.triple()))
         .args(["-c"])
         .arg(assembly)
         .arg("-o")
@@ -138,6 +142,7 @@ fn link_runtime(
     temporary: &Path,
     object: &Path,
     release: bool,
+    target: Target,
 ) -> Result<PathBuf, String> {
     let target_directory = temporary.join("target");
     let mut command = Command::new("cargo");
@@ -154,7 +159,9 @@ fn link_runtime(
             "generated",
         ])
         .arg("--target-dir")
-        .arg(&target_directory);
+        .arg(&target_directory)
+        .arg("--target")
+        .arg(target.triple());
     if release {
         command.arg("--release");
     }
@@ -168,13 +175,17 @@ fn link_runtime(
     command_result("bootstrap runtime link", output)?;
 
     Ok(target_directory
+        .join(target.triple())
         .join(if release { "release" } else { "debug" })
         .join("tinytsx-runtime-bootstrap"))
 }
 
-fn strip_binary(binary: &Path) -> Result<(), String> {
-    let output = Command::new("strip")
-        .arg("-x")
+fn strip_binary(binary: &Path, target: Target) -> Result<(), String> {
+    let mut command = Command::new("strip");
+    if target == Target::MacosArm64 {
+        command.arg("-x");
+    }
+    let output = command
         .arg(binary)
         .output()
         .map_err(|error| format!("failed to start strip: {error}"))?;
@@ -223,7 +234,7 @@ fn write_report(output: &Path, compilation: &Compilation, options: &Options) -> 
         runtime_features.push("bounded-provider-transport");
     }
     let report = BuildReport {
-        target: "aarch64-apple-darwin",
+        target: options.target.triple(),
         runtime: "bootstrap",
         binary_bytes,
         port: options.port,
@@ -258,7 +269,7 @@ fn print_summary(
         .len();
     println!("TinyTSX build\n");
     println!("Entry:               {}", compilation.program.entry);
-    println!("Target:              aarch64-apple-darwin");
+    println!("Target:              {}", options.target);
     println!("Runtime:             bootstrap");
     println!("Workers:             {}", options.workers);
     let provider_transport = compilation.program.uses_openai_transport();

@@ -338,7 +338,10 @@ impl Program {
                 self.version
             ));
         }
-        if self.target != "aarch64-apple-darwin" {
+        if !matches!(
+            self.target.as_str(),
+            "aarch64-apple-darwin" | "aarch64-unknown-linux-gnu"
+        ) {
             return Err(format!("unsupported HIR target `{}`", self.target));
         }
         if self.handlers.is_empty()

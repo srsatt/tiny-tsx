@@ -1,13 +1,13 @@
 use crate::hir::{HandlerResponse, Program, ValueExpression};
 
 use super::super::{
-    aarch64::{HANDLER_SCRATCH_BASE, emit_immediate},
-    assembly::{Assembly, asm_line},
+    aarch64::{Emitter, HANDLER_SCRATCH_BASE, emit_immediate},
+    assembly::asm_line,
 };
 use super::values::emit_value_expression;
 
 pub(super) fn emit_handler_response(
-    assembly: &mut Assembly,
+    assembly: &mut Emitter,
     response: &HandlerResponse,
     program: &Program,
     return_label: &str,
@@ -18,7 +18,7 @@ pub(super) fn emit_handler_response(
             emit_response_begin(assembly, 200, 1, return_label);
             asm_line!(assembly, "    ldr x0, [sp, #24]");
             asm_line!(assembly, "    ldr x1, [sp, #16]");
-            asm_line!(assembly, "    bl _tinytsx_component_{component}");
+            assembly.call(format_args!("tinytsx_component_{component}"));
         }
         HandlerResponse::Text {
             value,
@@ -59,25 +59,24 @@ pub(super) fn emit_handler_response(
             };
             emit_response_begin(assembly, *status, content_type_id, return_label);
             asm_line!(assembly, "    ldr x0, [sp, #16]");
-            asm_line!(assembly, "    bl _tinytsx_response_stream_begin");
+            assembly.call(format_args!("tinytsx_response_stream_begin"));
             asm_line!(assembly, "    cbnz w0, {return_label}");
             let mut conditional_index = 0;
             for chunk in chunks {
                 if let ValueExpression::StringLiteral { string, .. } = chunk {
                     asm_line!(assembly, "    ldr x0, [sp, #16]");
-                    asm_line!(assembly, "    adrp x1, Ltinytsx_string_{string}@PAGE");
-                    asm_line!(assembly, "    add x1, x1, Ltinytsx_string_{string}@PAGEOFF");
+                    assembly.address("x1", format_args!("Ltinytsx_string_{string}"));
                     emit_immediate(
                         assembly,
                         "x2",
                         program.static_strings[*string].value.len() as u64,
                     );
-                    asm_line!(assembly, "    bl _tinytsx_response_stream_chunk_static");
+                    assembly.call(format_args!("tinytsx_response_stream_chunk_static"));
                     asm_line!(assembly, "    cbnz w0, {return_label}");
                     continue;
                 }
                 asm_line!(assembly, "    ldr x0, [sp, #16]");
-                asm_line!(assembly, "    bl _tinytsx_response_stream_chunk_begin");
+                assembly.call(format_args!("tinytsx_response_stream_chunk_begin"));
                 asm_line!(assembly, "    cbnz w0, {return_label}");
                 emit_handler_text_expression(
                     assembly,
@@ -89,7 +88,7 @@ pub(super) fn emit_handler_response(
                 )?;
                 asm_line!(assembly, "    cbnz w0, {return_label}");
                 asm_line!(assembly, "    ldr x0, [sp, #16]");
-                asm_line!(assembly, "    bl _tinytsx_response_stream_chunk_end");
+                assembly.call(format_args!("tinytsx_response_stream_chunk_end"));
                 asm_line!(assembly, "    cbnz w0, {return_label}");
             }
         }
@@ -98,7 +97,7 @@ pub(super) fn emit_handler_response(
 }
 
 fn emit_handler_text_expression(
-    assembly: &mut Assembly,
+    assembly: &mut Emitter,
     expression: &ValueExpression,
     program: &Program,
     return_label: &str,
@@ -123,30 +122,28 @@ fn emit_handler_text_expression(
             asm_line!(assembly, "    ldr x0, [sp, #16]");
             asm_line!(assembly, "    ldr x1, [sp, #24]");
             emit_immediate(assembly, "x2", *segment as u64);
-            asm_line!(assembly, "    bl _tinytsx_html_write_path_segment");
+            assembly.call(format_args!("tinytsx_html_write_path_segment"));
         }
         ValueExpression::RequestHeader { header, .. } => {
             asm_line!(assembly, "    ldr x0, [sp, #16]");
             asm_line!(assembly, "    ldr x1, [sp, #24]");
-            asm_line!(assembly, "    adrp x2, Ltinytsx_string_{header}@PAGE");
-            asm_line!(assembly, "    add x2, x2, Ltinytsx_string_{header}@PAGEOFF");
+            assembly.address("x2", format_args!("Ltinytsx_string_{header}"));
             emit_immediate(
                 assembly,
                 "x3",
                 program.static_strings[*header].value.len() as u64,
             );
-            asm_line!(assembly, "    bl _tinytsx_html_write_request_header");
+            assembly.call(format_args!("tinytsx_html_write_request_header"));
         }
         ValueExpression::FetchStatus { url, .. } => {
             asm_line!(assembly, "    ldr x0, [sp, #16]");
-            asm_line!(assembly, "    adrp x1, Ltinytsx_string_{url}@PAGE");
-            asm_line!(assembly, "    add x1, x1, Ltinytsx_string_{url}@PAGEOFF");
+            assembly.address("x1", format_args!("Ltinytsx_string_{url}"));
             emit_immediate(
                 assembly,
                 "x2",
                 program.static_strings[*url].value.len() as u64,
             );
-            asm_line!(assembly, "    bl _tinytsx_html_write_fetch_status");
+            assembly.call(format_args!("tinytsx_html_write_fetch_status"));
         }
         ValueExpression::QueryParameter {
             query,
@@ -156,19 +153,14 @@ fn emit_handler_text_expression(
         } => {
             asm_line!(assembly, "    ldr x0, [sp, #16]");
             asm_line!(assembly, "    ldr x1, [sp, #24]");
-            asm_line!(assembly, "    adrp x2, Ltinytsx_string_{query}@PAGE");
-            asm_line!(assembly, "    add x2, x2, Ltinytsx_string_{query}@PAGEOFF");
+            assembly.address("x2", format_args!("Ltinytsx_string_{query}"));
             emit_immediate(
                 assembly,
                 "x3",
                 program.static_strings[*query].value.len() as u64,
             );
             if let Some(fallback) = fallback {
-                asm_line!(assembly, "    adrp x4, Ltinytsx_string_{fallback}@PAGE");
-                asm_line!(
-                    assembly,
-                    "    add x4, x4, Ltinytsx_string_{fallback}@PAGEOFF"
-                );
+                assembly.address("x4", format_args!("Ltinytsx_string_{fallback}"));
                 emit_immediate(
                     assembly,
                     "x5",
@@ -179,7 +171,7 @@ fn emit_handler_text_expression(
                 asm_line!(assembly, "    mov x5, #0");
             }
             emit_immediate(assembly, "x6", u64::from(*escape_html));
-            asm_line!(assembly, "    bl _tinytsx_html_write_query_parameter");
+            assembly.call(format_args!("tinytsx_html_write_query_parameter"));
         }
         ValueExpression::QueryConditional {
             query,
@@ -193,14 +185,13 @@ fn emit_handler_text_expression(
                 format!("Ltinytsx_handler_{handler_index}_query_{branch_index}_absent");
             let end_label = format!("Ltinytsx_handler_{handler_index}_query_{branch_index}_end");
             asm_line!(assembly, "    ldr x0, [sp, #24]");
-            asm_line!(assembly, "    adrp x1, Ltinytsx_string_{query}@PAGE");
-            asm_line!(assembly, "    add x1, x1, Ltinytsx_string_{query}@PAGEOFF");
+            assembly.address("x1", format_args!("Ltinytsx_string_{query}"));
             emit_immediate(
                 assembly,
                 "x2",
                 program.static_strings[*query].value.len() as u64,
             );
-            asm_line!(assembly, "    bl _tinytsx_request_query_has");
+            assembly.call(format_args!("tinytsx_request_query_has"));
             asm_line!(assembly, "    cbz w0, {absent_label}");
             emit_handler_text_expression(
                 assembly,
@@ -227,14 +218,13 @@ fn emit_handler_text_expression(
             ValueExpression::StringLiteral { string, .. } => {
                 asm_line!(assembly, "    ldr x0, [sp, #16]");
                 emit_immediate(assembly, "x1", *worker as u64);
-                asm_line!(assembly, "    adrp x2, Ltinytsx_string_{string}@PAGE");
-                asm_line!(assembly, "    add x2, x2, Ltinytsx_string_{string}@PAGEOFF");
+                assembly.address("x2", format_args!("Ltinytsx_string_{string}"));
                 emit_immediate(
                     assembly,
                     "x3",
                     program.static_strings[*string].value.len() as u64,
                 );
-                asm_line!(assembly, "    bl _tinytsx_worker_call_static");
+                assembly.call(format_args!("tinytsx_worker_call_static"));
             }
             ValueExpression::QueryParameter {
                 query, fallback, ..
@@ -242,19 +232,14 @@ fn emit_handler_text_expression(
                 asm_line!(assembly, "    ldr x0, [sp, #16]");
                 asm_line!(assembly, "    ldr x1, [sp, #24]");
                 emit_immediate(assembly, "x2", *worker as u64);
-                asm_line!(assembly, "    adrp x3, Ltinytsx_string_{query}@PAGE");
-                asm_line!(assembly, "    add x3, x3, Ltinytsx_string_{query}@PAGEOFF");
+                assembly.address("x3", format_args!("Ltinytsx_string_{query}"));
                 emit_immediate(
                     assembly,
                     "x4",
                     program.static_strings[*query].value.len() as u64,
                 );
                 if let Some(fallback) = fallback {
-                    asm_line!(assembly, "    adrp x5, Ltinytsx_string_{fallback}@PAGE");
-                    asm_line!(
-                        assembly,
-                        "    add x5, x5, Ltinytsx_string_{fallback}@PAGEOFF"
-                    );
+                    assembly.address("x5", format_args!("Ltinytsx_string_{fallback}"));
                     emit_immediate(
                         assembly,
                         "x6",
@@ -264,7 +249,7 @@ fn emit_handler_text_expression(
                     asm_line!(assembly, "    mov x5, #0");
                     asm_line!(assembly, "    mov x6, #0");
                 }
-                asm_line!(assembly, "    bl _tinytsx_worker_call_query");
+                assembly.call(format_args!("tinytsx_worker_call_query"));
             }
             _ => return Err("unsupported worker call input".to_owned()),
         },
@@ -275,55 +260,41 @@ fn emit_handler_text_expression(
             ..
         } => {
             asm_line!(assembly, "    ldr x0, [sp, #16]");
-            asm_line!(assembly, "    adrp x1, Ltinytsx_string_{url}@PAGE");
-            asm_line!(assembly, "    add x1, x1, Ltinytsx_string_{url}@PAGEOFF");
+            assembly.address("x1", format_args!("Ltinytsx_string_{url}"));
             emit_immediate(
                 assembly,
                 "x2",
                 program.static_strings[*url].value.len() as u64,
             );
-            asm_line!(
-                assembly,
-                "    adrp x3, Ltinytsx_string_{authorization}@PAGE"
-            );
-            asm_line!(
-                assembly,
-                "    add x3, x3, Ltinytsx_string_{authorization}@PAGEOFF"
-            );
+            assembly.address("x3", format_args!("Ltinytsx_string_{authorization}"));
             emit_immediate(
                 assembly,
                 "x4",
                 program.static_strings[*authorization].value.len() as u64,
             );
-            asm_line!(assembly, "    adrp x5, Ltinytsx_string_{body}@PAGE");
-            asm_line!(assembly, "    add x5, x5, Ltinytsx_string_{body}@PAGEOFF");
+            assembly.address("x5", format_args!("Ltinytsx_string_{body}"));
             emit_immediate(
                 assembly,
                 "x6",
                 program.static_strings[*body].value.len() as u64,
             );
-            asm_line!(assembly, "    bl _tinytsx_html_write_openai_chat_text");
+            assembly.call(format_args!("tinytsx_html_write_openai_chat_text"));
         }
         _ => {
             emit_value_expression(assembly, expression, program, HANDLER_SCRATCH_BASE)?;
             asm_line!(assembly, "    mov x2, x1");
             asm_line!(assembly, "    mov x1, x0");
             asm_line!(assembly, "    ldr x0, [sp, #16]");
-            asm_line!(assembly, "    bl _tinytsx_html_write_static");
+            assembly.call(format_args!("tinytsx_html_write_static"));
         }
     }
     Ok(())
 }
 
-fn emit_response_begin(
-    assembly: &mut Assembly,
-    status: u16,
-    content_type: u16,
-    return_label: &str,
-) {
+fn emit_response_begin(assembly: &mut Emitter, status: u16, content_type: u16, return_label: &str) {
     asm_line!(assembly, "    ldr x0, [sp, #16]");
     emit_immediate(assembly, "x1", u64::from(status));
     emit_immediate(assembly, "x2", u64::from(content_type));
-    asm_line!(assembly, "    bl _tinytsx_response_begin");
+    assembly.call(format_args!("tinytsx_response_begin"));
     asm_line!(assembly, "    cbnz w0, {return_label}");
 }

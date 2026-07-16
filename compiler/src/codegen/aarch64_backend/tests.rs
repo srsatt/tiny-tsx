@@ -2,7 +2,12 @@ use crate::hir::Program;
 
 use crate::codegen::Options;
 
-use super::emit;
+use super::emit as emit_for_dialect;
+use crate::codegen::aarch64::Dialect;
+
+fn emit(program: &Program, options: Options) -> Result<String, String> {
+    emit_for_dialect(program, options, Dialect::Apple)
+}
 
 #[test]
 fn emits_deterministic_handler_and_static_data() {

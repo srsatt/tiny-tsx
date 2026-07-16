@@ -1,12 +1,13 @@
 use crate::hir::Program;
 
 use super::super::{
-    assembly::{Assembly, asm_line, asm_write},
+    aarch64::Emitter,
+    assembly::{asm_line, asm_write},
     constant_data,
 };
 
-pub(super) fn emit_static_data(assembly: &mut Assembly, program: &Program) -> Result<(), String> {
-    asm_line!(assembly, "\n.section __TEXT,__const");
+pub(super) fn emit_static_data(assembly: &mut Emitter, program: &Program) -> Result<(), String> {
+    assembly.const_section();
     for (index, handler) in program.handlers.iter().enumerate() {
         asm_line!(assembly, ".p2align 3");
         asm_line!(assembly, "Ltinytsx_handler_method_{index}:");
@@ -105,7 +106,7 @@ pub(super) fn emit_static_data(assembly: &mut Assembly, program: &Program) -> Re
     Ok(())
 }
 
-fn emit_bytes(assembly: &mut Assembly, bytes: &[u8]) {
+fn emit_bytes(assembly: &mut Emitter, bytes: &[u8]) {
     if bytes.is_empty() {
         asm_line!(assembly, "    .byte 0");
         return;

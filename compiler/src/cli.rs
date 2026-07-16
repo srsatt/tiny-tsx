@@ -1,12 +1,12 @@
 use std::{ffi::OsString, path::PathBuf};
 
-use crate::{build, codegen, frontend, test262_build, wpt_build};
+use crate::{build, codegen, frontend, target::Target, test262_build, wpt_build};
 
 const USAGE: &str = "\
 TinyTSX native TSX compiler
 
 Usage:
-  tinytsx check <entry.tsx> [--emit-hir | --emit-asm] [--alias specifier=path] [--api specifier=path]
+  tinytsx check <entry.tsx> [--emit-hir | --emit-asm] [--target triple] [--alias specifier=path] [--api specifier=path]
   tinytsx build <entry.tsx> [options]
   tinytsx run <entry.tsx> [options]
   tinytsx test262 <case.js> [--output path]
@@ -108,6 +108,7 @@ fn parse_build_options(
         keep_temps: false,
         aliases: Vec::new(),
         api_aliases: Vec::new(),
+        target: Target::default_for_host(),
     };
     let mut index = 0;
     while index < arguments.len() {
@@ -133,6 +134,9 @@ fn parse_build_options(
             "--api" => options
                 .api_aliases
                 .push(option_value(arguments, &mut index)?.to_owned()),
+            "--target" => {
+                options.target = option_value(arguments, &mut index)?.parse()?;
+            }
             "--runtime" => {
                 let runtime = option_value(arguments, &mut index)?;
                 if runtime != "bootstrap" {
@@ -194,6 +198,7 @@ fn check(arguments: &[String]) -> Result<(), String> {
     let mut emit_asm = false;
     let mut aliases = Vec::new();
     let mut api_aliases = Vec::new();
+    let mut target = Target::default_for_host();
 
     let mut index = 0;
     while index < arguments.len() {
@@ -202,6 +207,7 @@ fn check(arguments: &[String]) -> Result<(), String> {
             "--emit-asm" => emit_asm = true,
             "--alias" => aliases.push(option_value(arguments, &mut index)?.to_owned()),
             "--api" => api_aliases.push(option_value(arguments, &mut index)?.to_owned()),
+            "--target" => target = option_value(arguments, &mut index)?.parse()?,
             option if option.starts_with('-') => {
                 return Err(format!("unknown check option `{option}`"));
             }
@@ -215,14 +221,15 @@ fn check(arguments: &[String]) -> Result<(), String> {
         return Err("--emit-hir and --emit-asm cannot be used together".to_owned());
     }
     let entry = entry.ok_or_else(|| format!("check requires an entry module\n\n{USAGE}"))?;
-    let compilation = frontend::compile(entry, &aliases, &api_aliases)?;
+    let mut compilation = frontend::compile(entry, &aliases, &api_aliases)?;
+    compilation.retarget(target)?;
 
     if emit_hir {
         println!("{}", compilation.json);
     } else if emit_asm {
         print!(
             "{}",
-            codegen::emit_macos_arm64(&compilation.program, codegen::Options::default())?
+            codegen::emit(&compilation.program, target, codegen::Options::default())?
         );
     } else {
         println!(
@@ -237,21 +244,5 @@ fn check(arguments: &[String]) -> Result<(), String> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::run;
-
-    #[test]
-    fn rejects_unknown_commands() {
-        let error = run(["wat"].into_iter().map(Into::into)).unwrap_err();
-        assert!(error.contains("unknown command `wat`"));
-    }
-
-    #[test]
-    fn rejects_conflicting_output_flags() {
-        let error = run(["check", "app.tsx", "--emit-hir", "--emit-asm"]
-            .into_iter()
-            .map(Into::into))
-        .unwrap_err();
-        assert_eq!(error, "--emit-hir and --emit-asm cannot be used together");
-    }
-}
+#[path = "cli_tests.rs"]
+mod tests;

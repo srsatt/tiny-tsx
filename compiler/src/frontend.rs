@@ -1,6 +1,7 @@
 use std::{path::PathBuf, process::Command};
 
 use crate::hir::Program;
+use crate::target::Target;
 use crate::test262_hir::Test262Program;
 use crate::wpt_hir::WptProgram;
 
@@ -15,6 +16,19 @@ pub struct Test262Compilation {
 
 pub struct WptCompilation {
     pub program: WptProgram,
+}
+
+impl Compilation {
+    pub fn retarget(&mut self, target: Target) -> Result<(), String> {
+        if self.program.target == target.triple() {
+            return Ok(());
+        }
+        self.program.target = target.triple().to_owned();
+        self.program.validate()?;
+        self.json = serde_json::to_string_pretty(&self.program)
+            .map_err(|error| format!("could not serialize retargeted HIR: {error}"))?;
+        Ok(())
+    }
 }
 
 pub fn compile(

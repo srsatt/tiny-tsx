@@ -1,9 +1,12 @@
 mod aarch64;
+mod aarch64_backend;
 mod assembly;
 mod constant_data;
+mod linux_arm64;
 mod macos_arm64;
 
 use crate::hir::Program;
+use crate::target::Target;
 
 #[derive(Clone, Copy)]
 pub struct Options {
@@ -24,4 +27,21 @@ impl Default for Options {
 
 pub fn emit_macos_arm64(program: &Program, options: Options) -> Result<String, String> {
     macos_arm64::emit(program, options)
+}
+
+pub fn emit_linux_arm64(program: &Program, options: Options) -> Result<String, String> {
+    linux_arm64::emit(program, options)
+}
+
+pub fn emit(program: &Program, target: Target, options: Options) -> Result<String, String> {
+    if program.target != target.triple() {
+        return Err(format!(
+            "HIR target `{}` does not match codegen target `{target}`",
+            program.target
+        ));
+    }
+    match target {
+        Target::MacosArm64 => emit_macos_arm64(program, options),
+        Target::LinuxArm64 => emit_linux_arm64(program, options),
+    }
 }

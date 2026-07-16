@@ -3,6 +3,7 @@ mod cli;
 mod codegen;
 mod frontend;
 mod hir;
+mod target;
 mod test262_build;
 mod test262_codegen;
 mod test262_hir;
