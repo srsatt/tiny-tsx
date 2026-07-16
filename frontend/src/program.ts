@@ -241,10 +241,15 @@ export function compileEntry(entryPath: string, options: CompileOptions): HirPro
 }
 
 function builtinRuntimeAliases(sdk: string): Record<string, string> {
-  const serve = path.join(path.dirname(sdk), "builtins/serve.ts");
+  const builtins = path.join(path.dirname(sdk), "builtins");
+  const serve = path.join(builtins, "serve.ts");
   return {
     "tinytsx:serve": serve,
     "@hono/node-server": serve,
+    "tinytsx:env": path.join(builtins, "env.ts"),
+    "tinytsx:fs": path.join(builtins, "fs.ts"),
+    "tinytsx:sqlite": path.join(builtins, "sqlite.ts"),
+    "tinytsx:actors": path.join(builtins, "actors.ts"),
   };
 }
 

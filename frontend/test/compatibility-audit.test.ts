@@ -100,6 +100,30 @@ test("resolves protected built-ins before aliases and node_modules packages", ()
   assert.deepEqual(graph.modules.map(module => module.path), [entry, builtin]);
 });
 
+test("resolves every backend standard-library module from the shipped SDK", () => {
+  const entry = write("builtins-entry.ts", `
+    import {get} from "tinytsx:env";
+    import {readTextFile} from "tinytsx:fs";
+    import {Database} from "tinytsx:sqlite";
+    import {spawn} from "tinytsx:actors";
+    export function GET(_request: Request): Response { return Response.text("builtins"); }
+  `);
+
+  const hir = compileEntry(entry, {sdkPath: path.join(repository, "sdk/index.d.ts")});
+
+  assert.deepEqual(
+    hir.modules
+      .map(module => path.relative(repository, module.path))
+      .filter(module => module.startsWith("sdk/builtins/")),
+    [
+      "sdk/builtins/env.ts",
+      "sdk/builtins/fs.ts",
+      "sdk/builtins/sqlite.ts",
+      "sdk/builtins/actors.ts",
+    ],
+  );
+});
+
 test("loads a compile-time-known Worker module without treating it as an import binding", () => {
   const entry = path.join(repository, "tests/compat/workers/hono-worker-smoke.ts");
   const graph = loadModuleGraph(entry, {
