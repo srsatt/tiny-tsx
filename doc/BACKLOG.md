@@ -142,20 +142,21 @@ The alpha profiles are:
 
 ### A4 — Promote logical workers into lightweight actors
 
-- [ ] Add `doc/ACTORS.md` defining actor identity, state ownership, mailbox
+- [x] Add `doc/ACTORS.md` defining actor identity, state ownership, mailbox
       ordering, ask/reply, tell, stop, failure, restart, supervision boundary,
       fairness, and shutdown. State explicitly that actors are local and are not
       one operating-system thread each.
-- [ ] Specify and declare `tinytsx:actors` around compile-time-known actor
-      behaviors and typed `ActorRef` handles. The alpha API must provide bounded
-      `ask`, bounded fire-and-forget `tell`, and idempotent `stop`.
-- [ ] Reuse the existing fixed application executor and logical-worker mailbox;
+- [x] Specify, declare, and implement the first `tinytsx:actors` surface as a
+      compile-time-known signed-integer counter with a typed `CounterActorRef`,
+      bounded `ask`, bounded fire-and-forget `tell`, and idempotent `stop`.
+      General typed behaviors remain gated by structured message copying below.
+- [x] Reuse the existing fixed application executor and logical-worker mailbox;
       spawning or stopping an actor must not create or destroy a native thread.
 - [ ] Extend message copying from strings to an explicit structured subset of
       primitives, closed records, and bounded arrays. Preserve isolation and
       reject unsupported identity/transfer semantics.
-- [ ] Define actor-local state storage without a managed heap; reject state that
-      escapes the supported worker arena/lifetime contract.
+- [x] Define actor-local counter state without a managed heap and reject
+      behavior/state that escapes the supported native `i64` lifetime contract.
 - [ ] Add deterministic mailbox-full, stopped, handler-failure, timeout, and
       caller-cancellation behavior. Automatic restart/supervision is optional for
       the first alpha but its absence must be explicit.
@@ -164,8 +165,9 @@ The alpha profiles are:
 - [ ] Prove per-actor FIFO ordering, parallelism across actors, fairness under a
       hot mailbox, isolation, stop/drain behavior, panic recovery, and no native
       thread growth proportional to actor count.
-- [ ] Run the Hono counter tracer through the public actor API and persist one
-      actor variant through `tinytsx:sqlite` after A5 is complete.
+- [x] Run the Hono counter tracer through the public actor API as an explicit
+      local adapter to the pinned durable-objects behavior.
+- [ ] Persist one actor variant through `tinytsx:sqlite` after A5 is complete.
 
 ### A5 — Add bounded SQLite persistence
 

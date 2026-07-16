@@ -106,14 +106,15 @@
     {
       "id": "upstream-durable-objects-counter",
       "provenance": "upstream-contract-with-tinytsx-adapter",
-      "entry": "vendor/hono-examples/durable-objects/src/index.ts",
-      "imports": ["hono", "hono/factory"],
-      "apis": ["Hono", "get", "createMiddleware", "DurableObjectNamespace", "DurableObjectState"],
-      "intake": {"status": "pinned", "evidence": "vendor/hono-examples/durable-objects"},
-      "nativeCompile": {"appleArm64": "pending", "linuxArm64Assembly": "pending", "evidence": null},
-      "httpBehavior": {"status": "pending", "evidence": null},
+      "entry": "examples/hono-actors/server.ts",
+      "upstreamEntry": "vendor/hono-examples/durable-objects/src/index.ts",
+      "imports": ["hono", "@hono/node-server", "tinytsx:actors"],
+      "apis": ["Hono", "get", "serve", "spawn", "ActorRef.ask", "ActorRef.tell", "ActorRef.stop"],
+      "intake": {"status": "pass", "evidence": "frontend/test/compatibility-audit.test.ts"},
+      "nativeCompile": {"appleArm64": "pass", "linuxArm64Assembly": "pass", "evidence": "tests/compat/actors/native.test.mjs"},
+      "httpBehavior": {"status": "pass", "evidence": "tests/compat/actors/native.test.mjs"},
       "referenceBehavior": {"runtime": "Cloudflare reference", "status": "pending", "evidence": null},
-      "firstUnsupportedBoundary": "Cloudflare Durable Objects are out of scope; a local tinytsx:actors behavior adapter has not been implemented."
+      "firstUnsupportedBoundary": "The adapter proves a local signed-integer counter only; Cloudflare bindings, persistence, alarms, remote identity, arbitrary actor behaviors, and structured messages are out of scope."
     }
   ],
   "behaviorAllowlist": [

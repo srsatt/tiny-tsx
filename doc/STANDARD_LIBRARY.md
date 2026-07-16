@@ -103,9 +103,13 @@ read and write roots.
 
 ### `tinytsx:actors`
 
-Compile-time-known behavior, bounded structured messages, `ask`, non-blocking
-bounded `tell`, and idempotent `stop`/`dispose` on the fixed application pool.
-Actors are local logical workers, not one native thread each.
+The native alpha slice is the compile-time-known signed-integer counter
+documented in `doc/ACTORS.md`. It provides typed `ask`, bounded fire-and-forget
+`tell`, and idempotent `stop`/`dispose` on the fixed application pool. Each
+actor owns one native `i64`, returns decimal text, and has a compile-time mailbox
+capacity from 1 through 64. Actors are local logical workers, not one native
+thread each. Structured messages, arbitrary behaviors, supervision, and
+persistence are not yet native.
 
 Post-alpha candidates are path utilities, signals, subprocesses, raw sockets,
 binary filesystem APIs, remote actors, and actor supervision trees.

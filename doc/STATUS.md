@@ -88,7 +88,15 @@ produces and serves a native Mach-O executable from the example TSX source.
   separation, recoverable errors, blocking/executor rules, bounded ownership,
   close/dispose semantics, and post-alpha OS modules. `declared` intentionally
   does not yet mean a native implementation.
-- Verification: `npm run test:frontend` (76/76),
+- `tinytsx:actors` now has a deliberately narrow native counter surface. One
+  compile-time `spawn` site owns an `i64` on the fixed application executor;
+  `ask`, FIFO `tell`, and idempotent `stop`/`dispose` use a mailbox bounded to
+  1–64 messages without creating one native thread per actor. The Hono tracer
+  covers increment/decrement, tell-before-ask ordering, repeated stop, a
+  recoverable post-stop request, Apple-arm64 execution, and Linux-arm64
+  assembly. `doc/ACTORS.md` records the local-only boundary and missing
+  structured-message, timeout, supervision, scale, and persistence work.
+- Verification: `npm run test:frontend` (82/82),
   `npm run test:zod-openapi-reference` (1/1),
   `npm run test:zod-openapi` (2/2),
   `npm run test:hono-intake` (7/7),
@@ -96,6 +104,7 @@ produces and serves a native Mach-O executable from the example TSX source.
   request_path_segment_minimum_length_counts_percent_decoded_bytes` (1/1),
   `cargo test -p tinytsx` (53/53),
   `cargo test -p tinytsx builtins` (1/1), and
+  `npm run test:actors-native` (2/2),
   `cargo clippy --workspace --all-targets -- -D warnings`.
 
 ## Verified capabilities
