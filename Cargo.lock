@@ -233,6 +233,7 @@ dependencies = [
 name = "tinytsx-runtime-bootstrap"
 version = "0.1.0"
 dependencies = [
+ "tinytsx-runtime-sqlite",
  "tinytsx-runtime-worker",
 ]
 

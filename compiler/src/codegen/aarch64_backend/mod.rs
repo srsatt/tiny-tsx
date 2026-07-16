@@ -169,4 +169,8 @@ fn emit_config(assembly: &mut Emitter, options: &Options, program: &Program) {
             asm_line!(assembly, "    ret");
         }
     }
+
+    assembly.global_function(format_args!("tinytsx_config_sqlite_databases"));
+    emit_immediate(assembly, "x0", program.sqlite_databases.len() as u64);
+    asm_line!(assembly, "    ret");
 }

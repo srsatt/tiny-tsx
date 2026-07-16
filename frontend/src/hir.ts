@@ -66,9 +66,18 @@ export interface ActorModule {
   mailboxCapacity: number;
 }
 
+export interface SqliteDatabase {
+  id: number;
+  path: ":memory:";
+}
+
 export type ActorAction =
   | {kind: "tell"; actor: number; message: number}
   | {kind: "stop"; actor: number};
+
+export type SqliteAction =
+  | {kind: "exec"; database: number; sql: number}
+  | {kind: "close"; database: number};
 
 export type ValueExpression =
   | {
@@ -213,6 +222,7 @@ export interface Handler {
   entityTag?: EntityTag;
   parameterValidations?: ParameterValidation[];
   actorActions?: ActorAction[];
+  sqliteActions?: SqliteAction[];
   response: HandlerResponse;
   span: SourceSpan;
 }
@@ -295,6 +305,7 @@ export interface HirProgram {
   components: Component[];
   workers: WorkerModule[];
   actors: ActorModule[];
+  sqliteDatabases: SqliteDatabase[];
   handlers: Handler[];
   staticStrings: StaticString[];
   constants: Constant[];

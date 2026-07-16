@@ -17,6 +17,8 @@ pub struct Program {
     pub workers: Vec<WorkerModule>,
     #[serde(default)]
     pub actors: Vec<ActorModule>,
+    #[serde(default, rename = "sqliteDatabases")]
+    pub sqlite_databases: Vec<SqliteDatabase>,
     pub handlers: Vec<Handler>,
     pub static_strings: Vec<StaticString>,
     #[serde(default)]
@@ -125,6 +127,19 @@ pub enum ActorAction {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
+pub struct SqliteDatabase {
+    pub id: usize,
+    pub path: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum SqliteAction {
+    Exec { database: usize, sql: usize },
+    Close { database: usize },
+}
+
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum HtmlOp {
     WriteStatic { string: usize, span: SourceSpan },
@@ -148,6 +163,8 @@ pub struct Handler {
     pub parameter_validations: Vec<ParameterValidation>,
     #[serde(default, rename = "actorActions")]
     pub actor_actions: Vec<ActorAction>,
+    #[serde(default, rename = "sqliteActions")]
+    pub sqlite_actions: Vec<SqliteAction>,
     #[serde(default)]
     pub stderr: Vec<usize>,
     pub response: HandlerResponse,
@@ -390,6 +407,10 @@ impl Program {
         !self.actors.is_empty()
     }
 
+    pub fn uses_sqlite(&self) -> bool {
+        !self.sqlite_databases.is_empty()
+    }
+
     pub fn uses_filesystem(&self) -> bool {
         self.handlers.iter().any(|handler| {
             response_uses_filesystem(&handler.response)
@@ -490,6 +511,20 @@ impl Program {
                 };
                 if *actor >= self.actors.len() {
                     return Err("handler actor action references a missing actor".to_owned());
+                }
+            }
+            for action in &handler.sqlite_actions {
+                let database = match action {
+                    SqliteAction::Exec { database, sql } => {
+                        if *sql >= self.static_strings.len() {
+                            return Err("SQLite action references a missing SQL string".to_owned());
+                        }
+                        database
+                    }
+                    SqliteAction::Close { database } => database,
+                };
+                if *database >= self.sqlite_databases.len() {
+                    return Err("handler SQLite action references a missing database".to_owned());
                 }
             }
             if let Some(authorization) = &handler.basic_authorization {
@@ -607,6 +642,19 @@ impl Program {
             }
             if actor.mailbox_capacity == 0 || actor.mailbox_capacity > 64 {
                 return Err(format!("actor {index} mailbox capacity is outside 1..=64"));
+            }
+        }
+        for (index, database) in self.sqlite_databases.iter().enumerate() {
+            if database.id != index {
+                return Err(format!(
+                    "SQLite database id {} is not canonical",
+                    database.id
+                ));
+            }
+            if database.path != ":memory:" {
+                return Err(format!(
+                    "SQLite database {index} requires the capability-free :memory: path"
+                ));
             }
         }
         for (index, constant) in self.constants.iter().enumerate() {

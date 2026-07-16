@@ -68,7 +68,7 @@ fn manifest() -> Manifest {
             },
             Builtin {
                 specifier: "tinytsx:sqlite",
-                status: "declared",
+                status: "native-partial",
                 targets: TARGETS,
                 permissions: &["allow-read", "allow-write"],
                 limits: Limits {

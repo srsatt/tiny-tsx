@@ -1,4 +1,4 @@
-use crate::hir::{ActorAction, HandlerResponse, Program};
+use crate::hir::{ActorAction, HandlerResponse, Program, SqliteAction};
 
 use super::super::{
     aarch64::{
@@ -203,6 +203,25 @@ pub(super) fn emit_handlers(assembly: &mut Emitter, program: &Program) -> Result
                 ActorAction::Stop { actor } => {
                     emit_immediate(assembly, "x0", *actor as u64);
                     assembly.call(format_args!("tinytsx_actor_stop"));
+                }
+            }
+            asm_line!(assembly, "    cbnz w0, {return_label}");
+        }
+        for action in &handler.sqlite_actions {
+            match action {
+                SqliteAction::Exec { database, sql } => {
+                    emit_immediate(assembly, "x0", *database as u64);
+                    assembly.address("x1", format_args!("Ltinytsx_string_{sql}"));
+                    emit_immediate(
+                        assembly,
+                        "x2",
+                        program.static_strings[*sql].value.len() as u64,
+                    );
+                    assembly.call(format_args!("tinytsx_sqlite_execute_batch"));
+                }
+                SqliteAction::Close { database } => {
+                    emit_immediate(assembly, "x0", *database as u64);
+                    assembly.call(format_args!("tinytsx_sqlite_close"));
                 }
             }
             asm_line!(assembly, "    cbnz w0, {return_label}");

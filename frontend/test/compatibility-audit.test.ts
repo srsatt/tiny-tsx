@@ -124,21 +124,34 @@ test("resolves every backend standard-library module from the shipped SDK", () =
   );
 });
 
-test("rejects declaration-only built-in operations with a stable diagnostic", () => {
-  const entry = write("unavailable-builtin.ts", `
+test("lowers a bounded in-memory SQLite owner and effects", () => {
+  const entry = write("sqlite-effects.ts", `
     import {Database} from "tinytsx:sqlite";
+    import {serve} from "tinytsx:serve";
+    import {Hono} from "hono";
     const database = new Database(":memory:");
-    export function GET(_request: Request): Response {
-      return Response.text("database");
-    }
+    const app = new Hono();
+    app.post("/schema", async context => {
+      await database.exec("CREATE TABLE posts (id INTEGER PRIMARY KEY, title TEXT)");
+      return context.text("ready");
+    });
+    app.post("/close", context => {
+      database.close();
+      return context.text("closed");
+    });
+    serve({fetch: app.fetch});
   `);
 
-  assert.throws(
-    () => compileEntry(entry, {sdkPath: path.join(repository, "sdk/index.d.ts")}),
-    (error: unknown) => error instanceof CompileFailure
-      && error.diagnostics[0]?.code === "TINY1500"
-      && error.diagnostics[0]?.message.includes("tinytsx:sqlite.Database"),
-  );
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+    apiAliases: {hono: path.join(repository, "tests/compat/hono/api.d.ts")},
+  });
+
+  assert.deepEqual(hir.sqliteDatabases, [{id: 0, path: ":memory:"}]);
+  assert.deepEqual(hir.handlers[0]?.sqliteActions, [{kind: "exec", database: 0, sql: 1}]);
+  assert.equal(hir.staticStrings[1]?.value, "CREATE TABLE posts (id INTEGER PRIMARY KEY, title TEXT)");
+  assert.deepEqual(hir.handlers[1]?.sqliteActions, [{kind: "close", database: 0}]);
 });
 
 test("requires an explicit read root for filesystem access", () => {

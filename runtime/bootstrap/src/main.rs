@@ -27,11 +27,13 @@ fn main() {
             if logical_workers > 0
                 || provider_transport
                 || filesystem
-                || abi::configured_actors() > 0 =>
+                || abi::configured_actors() > 0
+                || abi::configured_sqlite_databases() > 0 =>
         {
             println!(
-                "Application workers: {workers}; logical workers: {logical_workers}; actors: {}; provider transport: {}; filesystem: {}",
+                "Application workers: {workers}; logical workers: {logical_workers}; actors: {}; SQLite databases: {}; provider transport: {}; filesystem: {}",
                 abi::configured_actors(),
+                abi::configured_sqlite_databases(),
                 if provider_transport {
                     "enabled"
                 } else {

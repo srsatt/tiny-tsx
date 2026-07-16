@@ -41,6 +41,7 @@ export type Value =
   | {kind: "fileText"; path: string; maxBytes: number}
   | {kind: "actor"; state: ActorState}
   | {kind: "actorCall"; actor: ActorState; message: number}
+  | {kind: "database"; state: DatabaseState}
   | {kind: "queryParameter"; name: string; fallback?: string}
   | {kind: "queryPredicate"; name: string; test: "truthy" | "empty" | "present"}
   | {kind: "runtimeString"; parts: RuntimeStringPart[]}
@@ -103,6 +104,12 @@ export interface ActorState {
   operation: "counter";
   initialState: number;
   mailboxCapacity: number;
+}
+
+export interface DatabaseState {
+  id: number;
+  key: string;
+  path: ":memory:";
 }
 
 export type ResponseHeaderValue = string | RuntimeStringPart[];
@@ -280,6 +287,7 @@ export function truthiness(value: Value): boolean | undefined {
     case "streamReader": return true;
     case "worker": return true;
     case "actor": return true;
+    case "database": return true;
     case "workerCall": return undefined;
     case "actorCall": return undefined;
     case "openAiProvider":
@@ -325,6 +333,7 @@ export function typeOf(value: Value): string {
     case "streamReader": return "object";
     case "worker": return "object";
     case "actor": return "object";
+    case "database": return "object";
     case "workerCall": return "string";
     case "actorCall": return "string";
     case "openAiProvider": return "function";

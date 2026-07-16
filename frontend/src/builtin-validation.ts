@@ -3,9 +3,7 @@ import path from "node:path";
 import {CompileFailure, spanOf, type Diagnostic} from "./diagnostics.js";
 import type {ModuleGraph} from "./module-graph.js";
 
-const unavailableBuiltins = new Set([
-  "tinytsx:sqlite",
-]);
+const unavailableBuiltins = new Set<string>();
 
 const ENVIRONMENT_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const MAX_ENVIRONMENT_NAME_BYTES = 128;
@@ -29,7 +27,7 @@ export function validateBuiltinOperations(
       if (
         !ts.isImportDeclaration(statement)
         || !ts.isStringLiteral(statement.moduleSpecifier)
-        || (!["tinytsx:env", "tinytsx:fs", "tinytsx:actors"].includes(statement.moduleSpecifier.text)
+        || (!["tinytsx:env", "tinytsx:fs", "tinytsx:sqlite", "tinytsx:actors"].includes(statement.moduleSpecifier.text)
           && !unavailableBuiltins.has(statement.moduleSpecifier.text))
       ) continue;
       const bindings = statement.importClause?.namedBindings;

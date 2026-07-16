@@ -234,6 +234,7 @@ export function compileEntry(entryPath: string, options: CompileOptions): HirPro
     components,
     workers: [],
     actors: [],
+    sqliteDatabases: [],
     handlers: [handler],
     staticStrings: strings.values,
     constants,
@@ -421,6 +422,11 @@ function lowerApplicationInitialization(
         : {actorActions: response.actorActions.map(action => action.kind === "tell"
           ? {kind: "tell" as const, actor: action.actor.id, message: action.message!}
           : {kind: "stop" as const, actor: action.actor.id})}),
+      ...(response.databaseActions === undefined || response.databaseActions.length === 0
+        ? {}
+        : {sqliteActions: response.databaseActions.map(action => action.kind === "exec"
+          ? {kind: "exec" as const, database: action.database.id, sql: strings.intern(action.sql!)}
+          : {kind: "close" as const, database: action.database.id})}),
       ...(response.stderr === undefined
         ? {}
         : {stderr: response.stderr.map(line => strings.intern(line))}),
@@ -442,6 +448,10 @@ function lowerApplicationInitialization(
       operation: actor.operation,
       initialState: actor.initialState,
       mailboxCapacity: actor.mailboxCapacity,
+    })),
+    sqliteDatabases: initialization.databases.map(database => ({
+      id: database.id,
+      path: database.path,
     })),
     handlers,
     staticStrings: strings.values,

@@ -173,6 +173,7 @@ unsafe extern "C" {
         length: *mut usize,
     ) -> u32;
     pub fn tinytsx_config_actors() -> usize;
+    pub fn tinytsx_config_sqlite_databases() -> usize;
     pub fn tinytsx_actor_operation(actor: usize) -> u32;
     pub fn tinytsx_actor_initial_state(actor: usize) -> i64;
     pub fn tinytsx_actor_mailbox_capacity(actor: usize) -> usize;
@@ -242,6 +243,11 @@ unsafe extern "C" fn tinytsx_config_read_root(
 
 #[cfg(not(feature = "generated"))]
 unsafe extern "C" fn tinytsx_config_actors() -> usize {
+    0
+}
+
+#[cfg(not(feature = "generated"))]
+unsafe extern "C" fn tinytsx_config_sqlite_databases() -> usize {
     0
 }
 
@@ -370,6 +376,25 @@ pub extern "C" fn tinytsx_actor_tell_counter(actor: usize, message: i64) -> u32 
 #[unsafe(no_mangle)]
 pub extern "C" fn tinytsx_actor_stop(actor: usize) -> u32 {
     crate::application::stop_actor(actor)
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tinytsx_sqlite_execute_batch(
+    database: usize,
+    sql: *const u8,
+    sql_len: usize,
+) -> u32 {
+    if sql.is_null() && sql_len != 0 {
+        return INTERNAL_ERROR;
+    }
+    // SAFETY: Generated code supplies a static SQL view for the duration of the call.
+    let sql = unsafe { slice::from_raw_parts(sql, sql_len) };
+    crate::application::sqlite_execute_batch(database, sql)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn tinytsx_sqlite_close(database: usize) -> u32 {
+    crate::application::sqlite_close(database)
 }
 
 fn write_worker_reply(writer: *mut TinyResponseWriter, worker: usize, input: &[u8]) -> u32 {
@@ -1961,6 +1986,11 @@ pub fn configured_read_root(index: usize) -> Result<Vec<u8>, u32> {
 pub fn configured_actors() -> usize {
     // SAFETY: The generated object always provides the configuration function.
     unsafe { tinytsx_config_actors() }
+}
+
+pub fn configured_sqlite_databases() -> usize {
+    // SAFETY: The generated object always provides the configuration function.
+    unsafe { tinytsx_config_sqlite_databases() }
 }
 
 pub fn actor_operation(actor: usize) -> u32 {

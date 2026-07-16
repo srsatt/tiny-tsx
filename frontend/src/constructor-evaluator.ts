@@ -36,6 +36,7 @@ import {
   type Value,
   type RuntimeStringPart,
   type ActorState,
+  type DatabaseState,
   type StreamState,
   valuesEqual,
 } from "./symbolic-value.js";
@@ -106,12 +107,19 @@ export interface EvaluatedResponse {
   basicAuthorization?: EvaluatedBasicAuthorization;
   entityTag?: EvaluatedEntityTag;
   actorActions?: EvaluatedActorAction[];
+  databaseActions?: EvaluatedDatabaseAction[];
 }
 
 export interface EvaluatedActorAction {
   kind: "tell" | "stop";
   actor: ActorState;
   message?: number;
+}
+
+export interface EvaluatedDatabaseAction {
+  kind: "exec" | "close";
+  database: DatabaseState;
+  sql?: string;
 }
 
 interface EvaluatedRouteChoice {
@@ -136,6 +144,7 @@ export interface ApplicationInitializationEvaluation extends ConstructorEvaluati
   notFoundResponse?: EvaluatedResponse;
   routerInsertions: number;
   actors: ActorState[];
+  databases: DatabaseState[];
 }
 
 interface Evaluator {
@@ -152,6 +161,8 @@ interface Evaluator {
   memory: MemoryTracker;
   actorActions: WeakMap<Value & {kind: "instance"}, EvaluatedActorAction[]>;
   actors: Map<string, ActorState>;
+  databaseActions: WeakMap<Value & {kind: "instance"}, EvaluatedDatabaseAction[]>;
+  databases: Map<string, DatabaseState>;
 }
 
 interface MemorySiteState {
@@ -217,6 +228,7 @@ export function evaluateApplicationInitialization(
     ...installedNotFound,
     routerInsertions: evaluator.routerInsertions,
     actors: [...evaluator.actors.values()],
+    databases: [...evaluator.databases.values()],
   };
 }
 
@@ -264,6 +276,8 @@ function initializeConstructor(
     memory: {sites: new Map(), values: new WeakMap()},
     actorActions: new WeakMap(),
     actors: new Map(),
+    databaseActions: new WeakMap(),
+    databases: new Map(),
   };
   const instance: Value & {kind: "instance"} = {kind: "instance", fields: new Map()};
   evaluator.instanceClasses.set(instance, resolved);
@@ -676,6 +690,7 @@ function evaluateRouteHandler(
     ? stderr.items.flatMap(value => value.kind === "string" ? [value.value] : [])
     : [];
   const actorActions = evaluator.actorActions.get(context) ?? [];
+  const databaseActions = evaluator.databaseActions.get(context) ?? [];
   return {
     kind: "text",
     body: response.body,
@@ -684,6 +699,7 @@ function evaluateRouteHandler(
     ...(headers.length === 0 ? {} : {headers}),
     ...(stderrLines.length === 0 ? {} : {stderr: stderrLines}),
     ...(actorActions.length === 0 ? {} : {actorActions}),
+    ...(databaseActions.length === 0 ? {} : {databaseActions}),
     ...(basicAuthorization === undefined
       ? {}
       : {
@@ -2022,6 +2038,23 @@ function evaluateCall(
   if (ts.isPropertyAccessExpression(call.expression)) {
     const receiver = evaluate(evaluator, call.expression.expression, module, environment, instance);
     const name = memberName(call.expression.name);
+    if (receiver.kind === "database" && name === "exec") {
+      const sql = arguments_[0];
+      if (arguments_.length !== 1 || sql?.kind !== "string" || Buffer.byteLength(sql.value, "utf8") > 65_536) {
+        return unknown("Database.exec requires one closed SQL string up to 65536 bytes");
+      }
+      appendDatabaseAction(evaluator, instance, {
+        kind: "exec",
+        database: receiver.state,
+        sql: sql.value,
+      });
+      return UNDEFINED;
+    }
+    if (receiver.kind === "database" && (name === "close" || name === "dispose")) {
+      if (arguments_.length !== 0) return unknown(`Database.${name} does not accept arguments`);
+      appendDatabaseAction(evaluator, instance, {kind: "close", database: receiver.state});
+      return UNDEFINED;
+    }
     if (receiver.kind === "actor" && name === "ask") {
       const message = arguments_[0];
       return arguments_.length === 1
@@ -2660,6 +2693,11 @@ function isActorSpawnBuiltin(value: Value & {kind: "reference"}): boolean {
     && value.callable?.module.path.replaceAll("\\", "/").endsWith("/sdk/builtins/actors.ts") === true;
 }
 
+function isSqliteDatabaseBuiltin(value: ResolvedRuntimeClass): boolean {
+  return value.declaration.name?.text === "Database"
+    && value.module.path.replaceAll("\\", "/").endsWith("/sdk/builtins/sqlite.ts");
+}
+
 function isCounterActorBehavior(value: Value & {kind: "closure"}): boolean {
   const expression = value.expression;
   const body = expression.body;
@@ -2704,6 +2742,16 @@ function appendActorAction(
   const actions = evaluator.actorActions.get(instance) ?? [];
   actions.push(action);
   evaluator.actorActions.set(instance, actions);
+}
+
+function appendDatabaseAction(
+  evaluator: Evaluator,
+  instance: Value & {kind: "instance"},
+  action: EvaluatedDatabaseAction,
+): void {
+  const actions = evaluator.databaseActions.get(instance) ?? [];
+  actions.push(action);
+  evaluator.databaseActions.set(instance, actions);
 }
 
 function environmentBuiltinOperation(
@@ -3404,6 +3452,23 @@ function evaluateExpression(
       : unknown("conditional test is not a closed boolean");
   }
   if (ts.isNewExpression(expression) && ts.isIdentifier(expression.expression)) {
+    const sqliteClass = resolveRuntimeClass(module, expression.expression.text, evaluator.modules);
+    if (sqliteClass !== undefined && isSqliteDatabaseBuiltin(sqliteClass)) {
+      const arguments_ = expression.arguments ?? [];
+      const databasePath = arguments_[0] === undefined
+        ? UNDEFINED
+        : evaluate(evaluator, arguments_[0], module, environment, instance);
+      if (arguments_.length !== 1 || databasePath.kind !== "string" || databasePath.value !== ":memory:") {
+        return unknown("Database currently requires the capability-free :memory: path");
+      }
+      const key = `${module.path}:${expression.getStart(module.sourceFile)}`;
+      let state = evaluator.databases.get(key);
+      if (state === undefined) {
+        state = {id: evaluator.databases.size, key, path: ":memory:"};
+        evaluator.databases.set(key, state);
+      }
+      return {kind: "database", state};
+    }
     if (expression.expression.text === "Worker") {
       return evaluateWorkerConstruction(evaluator, expression, module, environment, instance);
     }

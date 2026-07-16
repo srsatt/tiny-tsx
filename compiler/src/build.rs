@@ -43,6 +43,7 @@ struct BuildReport<'a> {
     application_workers: usize,
     logical_workers: usize,
     actors: usize,
+    sqlite_databases: usize,
     provider_workers: usize,
     provider_transport: bool,
     filesystem: bool,
@@ -251,8 +252,12 @@ fn write_report(
     let provider_transport = compilation.program.uses_openai_transport();
     let filesystem = compilation.program.uses_filesystem();
     let actors = compilation.program.uses_actors();
-    let application_pool =
-        !compilation.program.workers.is_empty() || provider_transport || filesystem || actors;
+    let sqlite = compilation.program.uses_sqlite();
+    let application_pool = !compilation.program.workers.is_empty()
+        || provider_transport
+        || filesystem
+        || actors
+        || sqlite;
     let mut runtime_features = vec![
         "http1",
         "bounded-writer",
@@ -270,6 +275,9 @@ fn write_report(
     if actors {
         runtime_features.push("bounded-local-actors");
     }
+    if sqlite {
+        runtime_features.push("bounded-sqlite");
+    }
     let report = BuildReport {
         target: options.target.triple(),
         runtime: "bootstrap",
@@ -279,6 +287,7 @@ fn write_report(
         application_workers: usize::from(application_pool) * options.workers,
         logical_workers: compilation.program.workers.len(),
         actors: compilation.program.actors.len(),
+        sqlite_databases: compilation.program.sqlite_databases.len(),
         provider_workers: usize::from(provider_transport) * options.workers,
         provider_transport,
         filesystem,
@@ -320,10 +329,15 @@ fn print_summary(
     let provider_transport = compilation.program.uses_openai_transport();
     let filesystem = compilation.program.uses_filesystem();
     let actors = compilation.program.uses_actors();
+    let sqlite = compilation.program.uses_sqlite();
     println!(
         "Application workers: {} executors; {} logical workers; provider transport {}",
         usize::from(
-            !compilation.program.workers.is_empty() || provider_transport || filesystem || actors
+            !compilation.program.workers.is_empty()
+                || provider_transport
+                || filesystem
+                || actors
+                || sqlite
         ) * options.workers,
         compilation.program.workers.len(),
         if provider_transport {
@@ -335,6 +349,10 @@ fn print_summary(
     println!(
         "Actors:              {} local actor(s)",
         compilation.program.actors.len()
+    );
+    println!(
+        "SQLite:              {} database owner(s)",
+        compilation.program.sqlite_databases.len()
     );
     println!(
         "Filesystem:          {} read root(s); request-time reads {}",

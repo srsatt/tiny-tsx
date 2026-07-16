@@ -1,6 +1,8 @@
 use std::{fmt, time::Duration};
 
-use rusqlite::{Connection, params_from_iter, types::ValueRef};
+use rusqlite::{params_from_iter, types::ValueRef};
+
+pub use rusqlite::Connection;
 
 pub const MAX_SQL_BYTES: usize = 65_536;
 pub const MAX_PARAMETERS: usize = 64;
