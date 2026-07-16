@@ -8,11 +8,12 @@ mod macos_arm64;
 use crate::hir::Program;
 use crate::target::Target;
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct Options {
     pub port: u16,
     pub workers: usize,
     pub request_memory: usize,
+    pub read_roots: Vec<String>,
 }
 
 impl Default for Options {
@@ -21,6 +22,7 @@ impl Default for Options {
             port: 3000,
             workers: 1,
             request_memory: 262_144,
+            read_roots: Vec::new(),
         }
     }
 }

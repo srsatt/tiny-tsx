@@ -64,7 +64,9 @@ function compileTest262(args: string[]): void {
 function compile(args: string[]): void {
   const entry = args[0]!;
   const defaultSdk = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../sdk/index.d.ts");
-  const options = parseOptions(args.slice(1), new Set(["--sdk", "--alias", "--api", "--allow-env"]));
+  const options = parseOptions(args.slice(1), new Set([
+    "--sdk", "--alias", "--api", "--allow-env", "--allow-read",
+  ]));
   if (options === undefined) {
     return;
   }
@@ -84,6 +86,7 @@ function compile(args: string[]): void {
         aliases,
         apiAliases,
         allowedEnvironment: new Set(options.values.get("--allow-env") ?? []),
+        allowedReadRoots: options.values.get("--allow-read") ?? [],
       });
       process.stdout.write(`${JSON.stringify(hir, null, 2)}\n`);
     } catch (error) {
@@ -158,7 +161,7 @@ function parseOptions(
 function usage(): void {
   process.stderr.write(
     "usage: tinytsx-frontend <entry.tsx> [--sdk <index.d.ts>] [--alias <specifier>=<path>]..."
-    + " [--api <specifier>=<api.d.ts>]... [--allow-env <name>]...\n"
+    + " [--api <specifier>=<api.d.ts>]... [--allow-env <name>]... [--allow-read <root>]...\n"
     + "       tinytsx-frontend --audit-compat <entry> [--alias <specifier>=<path>]...\n"
     + "       tinytsx-frontend --test262 <entry.js>\n"
     + "       tinytsx-frontend --wpt <entry.js>\n",

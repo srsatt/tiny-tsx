@@ -6,7 +6,7 @@ const USAGE: &str = "\
 TinyTSX native TSX compiler
 
 Usage:
-  tinytsx check <entry.tsx> [--emit-hir | --emit-asm] [--target triple] [--alias specifier=path] [--api specifier=path] [--allow-env name]...
+  tinytsx check <entry.tsx> [--emit-hir | --emit-asm] [--target triple] [--alias specifier=path] [--api specifier=path] [--allow-env name]... [--allow-read root]...
   tinytsx build <entry.tsx> [options]
   tinytsx run <entry.tsx> [options]
   tinytsx test262 <case.js> [--output path]
@@ -115,6 +115,7 @@ fn parse_build_options(
         aliases: Vec::new(),
         api_aliases: Vec::new(),
         allowed_environment: Vec::new(),
+        allowed_read_roots: Vec::new(),
         target: Target::default_for_host(),
     };
     let mut index = 0;
@@ -146,6 +147,9 @@ fn parse_build_options(
                 .push(option_value(arguments, &mut index)?.to_owned()),
             "--allow-env" => options
                 .allowed_environment
+                .push(option_value(arguments, &mut index)?.to_owned()),
+            "--allow-read" => options
+                .allowed_read_roots
                 .push(option_value(arguments, &mut index)?.to_owned()),
             "--target" => {
                 options.target = option_value(arguments, &mut index)?.parse()?;
@@ -186,6 +190,7 @@ fn parse_build_options(
         return Err("request memory must be greater than zero".to_owned());
     }
     validate_environment_capabilities(&mut options.allowed_environment)?;
+    validate_read_capabilities(&mut options.allowed_read_roots)?;
     Ok(options)
 }
 
@@ -213,6 +218,7 @@ fn check(arguments: &[String]) -> Result<(), String> {
     let mut aliases = Vec::new();
     let mut api_aliases = Vec::new();
     let mut allowed_environment = Vec::new();
+    let mut allowed_read_roots = Vec::new();
     let mut target = Target::default_for_host();
 
     let mut index = 0;
@@ -224,6 +230,9 @@ fn check(arguments: &[String]) -> Result<(), String> {
             "--api" => api_aliases.push(option_value(arguments, &mut index)?.to_owned()),
             "--allow-env" => {
                 allowed_environment.push(option_value(arguments, &mut index)?.to_owned())
+            }
+            "--allow-read" => {
+                allowed_read_roots.push(option_value(arguments, &mut index)?.to_owned())
             }
             "--target" => target = option_value(arguments, &mut index)?.parse()?,
             option if option.starts_with('-') => {
@@ -240,8 +249,14 @@ fn check(arguments: &[String]) -> Result<(), String> {
     }
     let entry = entry.ok_or_else(|| format!("check requires an entry module\n\n{USAGE}"))?;
     validate_environment_capabilities(&mut allowed_environment)?;
-    let mut compilation =
-        frontend::compile(entry, &aliases, &api_aliases, &allowed_environment)?;
+    validate_read_capabilities(&mut allowed_read_roots)?;
+    let mut compilation = frontend::compile(
+        entry,
+        &aliases,
+        &api_aliases,
+        &allowed_environment,
+        &allowed_read_roots,
+    )?;
     compilation.retarget(target)?;
 
     if emit_hir {
@@ -251,6 +266,7 @@ fn check(arguments: &[String]) -> Result<(), String> {
         if let Some(port) = compilation.program.server.port {
             options.port = port;
         }
+        options.read_roots = allowed_read_roots;
         print!("{}", codegen::emit(&compilation.program, target, options)?);
     } else {
         println!(
@@ -284,6 +300,26 @@ fn validate_environment_capabilities(names: &mut Vec<String>) -> Result<(), Stri
             ));
         }
     }
+    Ok(())
+}
+
+fn validate_read_capabilities(roots: &mut Vec<String>) -> Result<(), String> {
+    if roots.len() > 16 {
+        return Err("at most 16 filesystem read roots may be granted".to_owned());
+    }
+    for root in roots.iter_mut() {
+        let canonical = std::fs::canonicalize(&*root)
+            .map_err(|error| format!("TINY1502: cannot grant read root `{root}`: {error}"))?;
+        if !canonical.is_dir() {
+            return Err(format!("TINY1502: read root `{root}` is not a directory"));
+        }
+        *root = canonical
+            .into_os_string()
+            .into_string()
+            .map_err(|_| "TINY1502: read roots must be valid UTF-8".to_owned())?;
+    }
+    roots.sort();
+    roots.dedup();
     Ok(())
 }
 

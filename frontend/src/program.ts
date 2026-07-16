@@ -45,6 +45,7 @@ export interface CompileOptions {
   aliases?: Readonly<Record<string, string>>;
   apiAliases?: Readonly<Record<string, string>>;
   allowedEnvironment?: ReadonlySet<string>;
+  allowedReadRoots?: readonly string[];
 }
 
 export function compileEntry(entryPath: string, options: CompileOptions): HirProgram {
@@ -119,7 +120,11 @@ export function compileEntry(entryPath: string, options: CompileOptions): HirPro
   if (typeScriptDiagnostics.length > 0) {
     throw new CompileFailure(typeScriptDiagnostics.map(fromTypeScript));
   }
-  validateBuiltinOperations(graph, options.allowedEnvironment ?? new Set());
+  validateBuiltinOperations(
+    graph,
+    options.allowedEnvironment ?? new Set(),
+    options.allowedReadRoots ?? [],
+  );
   const getDeclarations = sourceFile.statements.filter(isGetDeclaration);
   if (getDeclarations.length === 0) {
     if (application !== undefined) {
@@ -647,6 +652,14 @@ function lowerRuntimeString(
           span,
         };
       }
+      if (part.kind === "fileText") {
+        return {
+          kind: "fileText" as const,
+          path: strings.intern(part.path),
+          maxBytes: part.maxBytes,
+          span,
+        };
+      }
       if (part.kind === "fetchStatus") {
         return {kind: "fetchStatus" as const, url: strings.intern(part.url), span};
       }
@@ -697,6 +710,7 @@ function dynamicResponseExpressions(body: ResponseBody): number {
       part.kind === "routeParameter"
       || part.kind === "requestHeader"
       || part.kind === "environmentVariable"
+      || part.kind === "fileText"
       || part.kind === "fetchStatus"
       || part.kind === "queryParameter"
       || part.kind === "workerCall"

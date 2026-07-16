@@ -126,9 +126,10 @@ test("resolves every backend standard-library module from the shipped SDK", () =
 
 test("rejects declaration-only built-in operations with a stable diagnostic", () => {
   const entry = write("unavailable-builtin.ts", `
-    import {readTextFile} from "tinytsx:fs";
+    import {Database} from "tinytsx:sqlite";
+    const database = new Database(":memory:");
     export function GET(_request: Request): Response {
-      return Response.text(readTextFile("index.html"));
+      return Response.text("database");
     }
   `);
 
@@ -136,8 +137,57 @@ test("rejects declaration-only built-in operations with a stable diagnostic", ()
     () => compileEntry(entry, {sdkPath: path.join(repository, "sdk/index.d.ts")}),
     (error: unknown) => error instanceof CompileFailure
       && error.diagnostics[0]?.code === "TINY1500"
-      && error.diagnostics[0]?.message.includes("tinytsx:fs.readTextFile"),
+      && error.diagnostics[0]?.message.includes("tinytsx:sqlite.Database"),
   );
+});
+
+test("requires an explicit read root for filesystem access", () => {
+  const entry = write("fs-capability.ts", `
+    import {readTextFile} from "tinytsx:fs";
+    import {serve} from "tinytsx:serve";
+    import {Hono} from "hono";
+    const app = new Hono();
+    app.get("/", async context => context.text(await readTextFile("asset.txt")));
+    serve({fetch: app.fetch});
+  `);
+  assert.throws(
+    () => compileEntry(entry, {
+      sdkPath: path.join(repository, "sdk/index.d.ts"),
+      aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+      apiAliases: {hono: path.join(repository, "tests/compat/hono/api.d.ts")},
+    }),
+    (error: unknown) => error instanceof CompileFailure
+      && error.diagnostics.some(diagnostic => diagnostic.code === "TINY1502"
+        && diagnostic.message.includes("asset.txt")),
+  );
+});
+
+test("lowers a permitted bounded file read through Hono", () => {
+  const entry = write("fs-lowering.ts", `
+    import {readTextFile} from "tinytsx:fs";
+    import {serve} from "tinytsx:serve";
+    import {Hono} from "hono";
+    const app = new Hono();
+    app.get("/asset", async context => context.text(
+      await readTextFile("asset.txt", {maxBytes: 32})
+    ));
+    serve({fetch: app.fetch});
+  `);
+
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    allowedReadRoots: [directory],
+    aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+    apiAliases: {hono: path.join(repository, "tests/compat/hono/api.d.ts")},
+  });
+  assert.deepEqual(hir.handlers[0]?.response.kind === "text"
+    ? hir.handlers[0].response.value
+    : undefined, {
+    kind: "concat",
+    values: [{kind: "fileText", path: 0, maxBytes: 32, span: hir.handlers[0]?.span}],
+    span: hir.handlers[0]?.span,
+  });
+  assert.equal(hir.staticStrings[0]?.value, "asset.txt");
 });
 
 test("requires explicit environment capabilities before lowering", () => {

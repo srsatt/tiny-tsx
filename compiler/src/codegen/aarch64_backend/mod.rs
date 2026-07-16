@@ -41,12 +41,12 @@ pub(super) fn emit(
     }
 
     emit_handlers(&mut assembly, program)?;
-    emit_config(&mut assembly, options, program);
-    emit_static_data(&mut assembly, program)?;
+    emit_config(&mut assembly, &options, program);
+    emit_static_data(&mut assembly, program, &options)?;
     Ok(assembly.finish())
 }
 
-fn emit_config(assembly: &mut Emitter, options: Options, program: &Program) {
+fn emit_config(assembly: &mut Emitter, options: &Options, program: &Program) {
     assembly.global_function(format_args!("tinytsx_config_port"));
     emit_immediate(assembly, "x0", u64::from(options.port));
     asm_line!(assembly, "    ret");
@@ -73,8 +73,14 @@ fn emit_config(assembly: &mut Emitter, options: Options, program: &Program) {
     asm_line!(assembly, "    ret");
 
     assembly.global_function(format_args!("tinytsx_config_environment_variable"));
-    asm_line!(assembly, "    cbz x1, Ltinytsx_environment_variable_invalid");
-    asm_line!(assembly, "    cbz x2, Ltinytsx_environment_variable_invalid");
+    asm_line!(
+        assembly,
+        "    cbz x1, Ltinytsx_environment_variable_invalid"
+    );
+    asm_line!(
+        assembly,
+        "    cbz x2, Ltinytsx_environment_variable_invalid"
+    );
     for (index, _) in environment.iter().enumerate() {
         asm_line!(assembly, "    cmp x0, #{index}");
         asm_line!(assembly, "    b.eq Ltinytsx_environment_variable_{index}");
@@ -91,6 +97,35 @@ fn emit_config(assembly: &mut Emitter, options: Options, program: &Program) {
             "x3",
             program.static_strings[*string].value.len() as u64,
         );
+        asm_line!(assembly, "    str x3, [x2]");
+        asm_line!(assembly, "    mov x0, #0");
+        asm_line!(assembly, "    ret");
+    }
+
+    let read_roots = if program.uses_filesystem() {
+        options.read_roots.as_slice()
+    } else {
+        &[]
+    };
+    assembly.global_function(format_args!("tinytsx_config_read_roots"));
+    emit_immediate(assembly, "x0", read_roots.len() as u64);
+    asm_line!(assembly, "    ret");
+
+    assembly.global_function(format_args!("tinytsx_config_read_root"));
+    asm_line!(assembly, "    cbz x1, Ltinytsx_read_root_invalid");
+    asm_line!(assembly, "    cbz x2, Ltinytsx_read_root_invalid");
+    for (index, _) in read_roots.iter().enumerate() {
+        asm_line!(assembly, "    cmp x0, #{index}");
+        asm_line!(assembly, "    b.eq Ltinytsx_read_root_{index}");
+    }
+    asm_line!(assembly, "Ltinytsx_read_root_invalid:");
+    emit_immediate(assembly, "x0", 4);
+    asm_line!(assembly, "    ret");
+    for (index, root) in read_roots.iter().enumerate() {
+        asm_line!(assembly, "Ltinytsx_read_root_{index}:");
+        assembly.address("x3", format_args!("Ltinytsx_read_root_data_{index}"));
+        asm_line!(assembly, "    str x3, [x1]");
+        emit_immediate(assembly, "x3", root.len() as u64);
         asm_line!(assembly, "    str x3, [x2]");
         asm_line!(assembly, "    mov x0, #0");
         asm_line!(assembly, "    ret");

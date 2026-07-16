@@ -24,12 +24,18 @@ type Worker = LogicalWorker<WorkerState, ApplicationMessage, WorkerReply>;
 enum ApplicationMessage {
     Worker(Vec<u8>),
     OpenAi(OpenAiRequest),
+    ReadFile(ReadFileRequest),
 }
 
 pub struct OpenAiRequest {
     pub url: Vec<u8>,
     pub authorization: Vec<u8>,
     pub body: Vec<u8>,
+}
+
+struct ReadFileRequest {
+    path: Vec<u8>,
+    max_bytes: usize,
 }
 
 struct WorkerState {
@@ -41,16 +47,19 @@ struct ApplicationRuntime {
     _pool: Pool,
     workers: Vec<Worker>,
     providers: Vec<Worker>,
+    files: Vec<Worker>,
     next_provider: AtomicUsize,
+    next_file: AtomicUsize,
 }
 
 static APPLICATION: OnceLock<ApplicationRuntime> = OnceLock::new();
 
-pub fn initialize(executor_count: usize) -> io::Result<(usize, bool)> {
+pub fn initialize(executor_count: usize) -> io::Result<(usize, bool, bool)> {
     let worker_count = configured_worker_modules();
     let provider_enabled = configured_provider_transport();
-    if worker_count == 0 && !provider_enabled {
-        return Ok((0, false));
+    let filesystem_enabled = crate::filesystem::enabled();
+    if worker_count == 0 && !provider_enabled && !filesystem_enabled {
+        return Ok((0, false, false));
     }
     let queue_capacity = executor_count
         .checked_mul(APPLICATION_QUEUE_PER_EXECUTOR)
@@ -78,10 +87,18 @@ pub fn initialize(executor_count: usize) -> io::Result<(usize, bool)> {
                     .provider
                     .perform(&request.url, &request.authorization, &request.body)
             }
+            ApplicationMessage::ReadFile(request) => {
+                crate::filesystem::read_text(&request.path, request.max_bytes)
+            }
         },
     )?;
     let workers = (0..worker_count).map(|_| pool.spawn()).collect();
     let providers = if provider_enabled {
+        (0..executor_count).map(|_| pool.spawn()).collect()
+    } else {
+        Vec::new()
+    };
+    let files = if filesystem_enabled {
         (0..executor_count).map(|_| pool.spawn()).collect()
     } else {
         Vec::new()
@@ -91,10 +108,12 @@ pub fn initialize(executor_count: usize) -> io::Result<(usize, bool)> {
             _pool: pool,
             workers,
             providers,
+            files,
             next_provider: AtomicUsize::new(0),
+            next_file: AtomicUsize::new(0),
         })
         .map_err(|_| io::Error::other("application pool was already initialized"))?;
-    Ok((worker_count, provider_enabled))
+    Ok((worker_count, provider_enabled, filesystem_enabled))
 }
 
 pub fn call(worker: usize, input: &[u8]) -> Result<Vec<u8>, u32> {
@@ -116,5 +135,19 @@ pub fn call_openai(request: OpenAiRequest) -> Result<Vec<u8>, u32> {
     let index = runtime.next_provider.fetch_add(1, Ordering::Relaxed) % runtime.providers.len();
     runtime.providers[index]
         .call(ApplicationMessage::OpenAi(request))
+        .map_err(|_| APPLICATION_OVERLOAD)?
+}
+
+pub fn read_file(path: &[u8], max_bytes: usize) -> Result<Vec<u8>, u32> {
+    let runtime = APPLICATION.get().ok_or(INTERNAL_ERROR)?;
+    if runtime.files.is_empty() {
+        return Err(INTERNAL_ERROR);
+    }
+    let index = runtime.next_file.fetch_add(1, Ordering::Relaxed) % runtime.files.len();
+    runtime.files[index]
+        .call(ApplicationMessage::ReadFile(ReadFileRequest {
+            path: path.to_vec(),
+            max_bytes,
+        }))
         .map_err(|_| APPLICATION_OVERLOAD)?
 }

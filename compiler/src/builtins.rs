@@ -57,7 +57,7 @@ fn manifest() -> Manifest {
             },
             Builtin {
                 specifier: "tinytsx:fs",
-                status: "declared",
+                status: "native",
                 targets: TARGETS,
                 permissions: &["allow-read"],
                 limits: Limits {
@@ -123,5 +123,6 @@ mod tests {
             ]
         );
         assert_eq!(manifest().builtins[1].status, "native");
+        assert_eq!(manifest().builtins[2].status, "native");
     }
 }

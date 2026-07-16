@@ -90,7 +90,7 @@ fn emits_deterministic_handler_and_static_data() {
         .unwrap();
 
     let options = Options::default();
-    let first = emit(&program, options).unwrap();
+    let first = emit(&program, options.clone()).unwrap();
     let second = emit(&program, options).unwrap();
     assert_eq!(first, second);
     assert!(first.contains(".globl _tinytsx_handle_get"));

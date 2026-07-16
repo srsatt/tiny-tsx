@@ -61,7 +61,9 @@ mod tests {
             SnapshotValue::Present(value) if value == b"tiny"
         ));
         assert!(matches!(
-            snapshot_value(Some(OsString::from("x".repeat(MAX_ENVIRONMENT_VALUE_BYTES + 1)))),
+            snapshot_value(Some(OsString::from(
+                "x".repeat(MAX_ENVIRONMENT_VALUE_BYTES + 1)
+            ))),
             SnapshotValue::TooLarge
         ));
     }

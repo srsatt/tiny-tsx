@@ -105,6 +105,12 @@ export type ValueExpression =
       span: SourceSpan;
     }
   | {
+      kind: "fileText";
+      path: number;
+      maxBytes: number;
+      span: SourceSpan;
+    }
+  | {
       kind: "fetchStatus";
       url: number;
       span: SourceSpan;

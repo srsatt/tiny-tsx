@@ -1,6 +1,7 @@
 mod abi;
 mod application;
 mod environment;
+mod filesystem;
 mod http;
 
 fn main() {
@@ -12,16 +13,27 @@ fn main() {
             std::process::exit(1);
         }
     }
+    match filesystem::initialize() {
+        Ok(count) if count > 0 => println!("Filesystem read roots: {count}"),
+        Ok(_) => {}
+        Err(error) => {
+            eprintln!("TinyTSX filesystem error: {error}");
+            std::process::exit(1);
+        }
+    }
     let workers = abi::configured_workers();
     match application::initialize(workers) {
-        Ok((logical_workers, provider_transport)) if logical_workers > 0 || provider_transport => {
+        Ok((logical_workers, provider_transport, filesystem))
+            if logical_workers > 0 || provider_transport || filesystem =>
+        {
             println!(
-                "Application workers: {workers}; logical workers: {logical_workers}; provider transport: {}",
+                "Application workers: {workers}; logical workers: {logical_workers}; provider transport: {}; filesystem: {}",
                 if provider_transport {
                     "enabled"
                 } else {
                     "disabled"
                 },
+                if filesystem { "enabled" } else { "disabled" },
             );
         }
         Ok(_) => {}

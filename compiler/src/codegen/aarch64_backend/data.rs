@@ -1,4 +1,4 @@
-use crate::hir::Program;
+use crate::{codegen::Options, hir::Program};
 
 use super::super::{
     aarch64::Emitter,
@@ -6,7 +6,11 @@ use super::super::{
     constant_data,
 };
 
-pub(super) fn emit_static_data(assembly: &mut Emitter, program: &Program) -> Result<(), String> {
+pub(super) fn emit_static_data(
+    assembly: &mut Emitter,
+    program: &Program,
+    options: &Options,
+) -> Result<(), String> {
     assembly.const_section();
     for (index, handler) in program.handlers.iter().enumerate() {
         asm_line!(assembly, ".p2align 3");
@@ -118,6 +122,13 @@ pub(super) fn emit_static_data(assembly: &mut Emitter, program: &Program) -> Res
         asm_line!(assembly, ".p2align 3");
         asm_line!(assembly, "Ltinytsx_constant_{}:", constant.id);
         emit_bytes(assembly, &constant_data::encode(&constant.value)?);
+    }
+    if program.uses_filesystem() {
+        for (index, root) in options.read_roots.iter().enumerate() {
+            asm_line!(assembly, ".p2align 3");
+            asm_line!(assembly, "Ltinytsx_read_root_data_{index}:");
+            emit_bytes(assembly, root.as_bytes());
+        }
     }
     Ok(())
 }

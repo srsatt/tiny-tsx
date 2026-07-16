@@ -1422,6 +1422,17 @@ function sameResponseHeaderValue(left: ResponseHeaderValue, right: ResponseHeade
         && candidate.authorization === part.authorization
         && candidate.body === part.body;
     }
+    if (part.kind === "environmentVariable") {
+      return candidate?.kind === "environmentVariable"
+        && candidate.name === part.name
+        && candidate.required === part.required
+        && candidate.fallback === part.fallback;
+    }
+    if (part.kind === "fileText") {
+      return candidate?.kind === "fileText"
+        && candidate.path === part.path
+        && candidate.maxBytes === part.maxBytes;
+    }
     return candidate?.kind === part.kind && candidate.name === part.name;
   });
 }
@@ -1909,6 +1920,28 @@ function evaluateCall(
         && (operation === "get" || operation === "require")
         ? {kind: "environmentVariable", name: name.value, required: operation === "require"}
         : unknown("environment access requires one closed name string");
+    }
+    if (callable.kind === "reference" && isFilesystemBuiltin(callable)) {
+      const file = arguments_[0];
+      const options = arguments_[1];
+      const maxBytes = options === undefined
+        ? 1_048_576
+        : options.kind === "record" && options.fields.size === 0
+          ? 1_048_576
+          : options.kind === "record" && options.fields.size === 1
+            ? options.fields.get("maxBytes")
+          : undefined;
+      return arguments_.length >= 1
+        && arguments_.length <= 2
+        && file?.kind === "string"
+        && (typeof maxBytes === "number"
+          || maxBytes?.kind === "number" && Number.isSafeInteger(maxBytes.value))
+        ? {
+          kind: "fileText",
+          path: file.value,
+          maxBytes: typeof maxBytes === "number" ? maxBytes : maxBytes.value,
+        }
+        : unknown("filesystem read requires a closed path and maxBytes");
     }
     if (callable.kind === "reference" && callable.callable !== undefined) {
       return invokeFunctionLike(
@@ -2519,6 +2552,14 @@ function evaluateCall(
 function isEnvironmentBuiltin(value: Value & {kind: "reference"}): boolean {
   return environmentBuiltinOperation(value) !== undefined
     && value.callable?.module.path.replaceAll("\\", "/").endsWith("/sdk/builtins/env.ts") === true;
+}
+
+function isFilesystemBuiltin(value: Value & {kind: "reference"}): boolean {
+  const declaration = value.callable?.declaration;
+  return declaration !== undefined
+    && ts.isFunctionDeclaration(declaration)
+    && declaration.name?.text === "readTextFile"
+    && value.callable?.module.path.replaceAll("\\", "/").endsWith("/sdk/builtins/fs.ts") === true;
 }
 
 function environmentBuiltinOperation(
@@ -3273,6 +3314,7 @@ function evaluateExpression(
         && body.kind !== "workerCall"
         && body.kind !== "openAiChatText"
         && body.kind !== "environmentVariable"
+        && body.kind !== "fileText"
         && body.kind !== "routeParameter"
         && body.kind !== "responseBody"
         && body.kind !== "undefined"
@@ -3284,7 +3326,7 @@ function evaluateExpression(
       }
       const runtimeBody = body.kind === "routeParameter"
         ? [{kind: "routeParameter" as const, name: body.name}]
-        : body.kind === "workerCall" || body.kind === "openAiChatText" || body.kind === "environmentVariable"
+        : body.kind === "workerCall" || body.kind === "openAiChatText" || body.kind === "environmentVariable" || body.kind === "fileText"
           ? runtimeStringParts(body)
         : body.kind === "runtimeString"
           ? body.parts
@@ -4296,6 +4338,7 @@ function isTrackedAllocation(expression: ts.Expression, value: Value): boolean {
     || value.kind === "routeParameter"
     || value.kind === "requestHeader"
     || value.kind === "environmentVariable"
+    || value.kind === "fileText"
     || value.kind === "queryParameter"
     || value.kind === "queryPredicate"
     || value.kind === "fetchStatus"

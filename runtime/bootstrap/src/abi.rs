@@ -166,6 +166,12 @@ unsafe extern "C" {
         pointer: *mut *const u8,
         length: *mut usize,
     ) -> u32;
+    pub fn tinytsx_config_read_roots() -> usize;
+    pub fn tinytsx_config_read_root(
+        index: usize,
+        pointer: *mut *const u8,
+        length: *mut usize,
+    ) -> u32;
     pub fn tinytsx_worker_operation(worker: usize) -> u32;
 }
 
@@ -209,6 +215,20 @@ unsafe extern "C" fn tinytsx_config_environment_variables() -> usize {
 
 #[cfg(not(feature = "generated"))]
 unsafe extern "C" fn tinytsx_config_environment_variable(
+    _index: usize,
+    _pointer: *mut *const u8,
+    _length: *mut usize,
+) -> u32 {
+    INTERNAL_ERROR
+}
+
+#[cfg(not(feature = "generated"))]
+unsafe extern "C" fn tinytsx_config_read_roots() -> usize {
+    0
+}
+
+#[cfg(not(feature = "generated"))]
+unsafe extern "C" fn tinytsx_config_read_root(
     _index: usize,
     _pointer: *mut *const u8,
     _length: *mut usize,
@@ -883,12 +903,12 @@ pub unsafe extern "C" fn tinytsx_html_write_environment_variable(
     // SAFETY: Generated names and fallbacks point at immutable static data.
     let name = unsafe { slice::from_raw_parts(name, name_len) };
     match environment::get(name) {
-        Some(SnapshotValue::Present(value)) => {
-            unsafe { tinytsx_html_write_static(writer, value.as_ptr(), value.len()) }
-        }
-        Some(SnapshotValue::Missing) if !fallback.is_null() => {
-            unsafe { tinytsx_html_write_static(writer, fallback, fallback_len) }
-        }
+        Some(SnapshotValue::Present(value)) => unsafe {
+            tinytsx_html_write_static(writer, value.as_ptr(), value.len())
+        },
+        Some(SnapshotValue::Missing) if !fallback.is_null() => unsafe {
+            tinytsx_html_write_static(writer, fallback, fallback_len)
+        },
         Some(SnapshotValue::Missing) if required == 0 => unsafe {
             tinytsx_html_write_static(writer, b"undefined".as_ptr(), b"undefined".len())
         },
@@ -898,6 +918,28 @@ pub unsafe extern "C" fn tinytsx_html_write_environment_variable(
             RENDER_ERROR
         }
         None => INTERNAL_ERROR,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tinytsx_html_write_file_text(
+    writer: *mut TinyResponseWriter,
+    path: *const u8,
+    path_len: usize,
+    max_bytes: usize,
+) -> u32 {
+    if writer.is_null() || path.is_null() || path_len == 0 {
+        return INTERNAL_ERROR;
+    }
+    // SAFETY: Generated file paths point at immutable static data.
+    let path = unsafe { slice::from_raw_parts(path, path_len) };
+    match crate::application::read_file(path, max_bytes) {
+        Ok(value) => unsafe { tinytsx_html_write_static(writer, value.as_ptr(), value.len()) },
+        Err(status) => {
+            // SAFETY: the writer was validated above.
+            unsafe { (*writer).status = status };
+            status
+        }
     }
 }
 
@@ -1832,13 +1874,31 @@ pub fn configured_environment_variable(index: usize) -> Result<Vec<u8>, u32> {
     let mut pointer = ptr::null();
     let mut length = 0;
     // SAFETY: The generated object writes one immutable static string view.
-    let status = unsafe {
-        tinytsx_config_environment_variable(index, &mut pointer, &mut length)
-    };
+    let status = unsafe { tinytsx_config_environment_variable(index, &mut pointer, &mut length) };
     if status != OK {
         return Err(status);
     }
     if pointer.is_null() || length == 0 || length > 128 {
+        return Err(INTERNAL_ERROR);
+    }
+    // SAFETY: Successful generated configuration points at `length` static bytes.
+    Ok(unsafe { slice::from_raw_parts(pointer, length) }.to_vec())
+}
+
+pub fn configured_read_roots() -> usize {
+    // SAFETY: The generated object always provides the configuration function.
+    unsafe { tinytsx_config_read_roots() }
+}
+
+pub fn configured_read_root(index: usize) -> Result<Vec<u8>, u32> {
+    let mut pointer = ptr::null();
+    let mut length = 0;
+    // SAFETY: The generated object writes one immutable static string view.
+    let status = unsafe { tinytsx_config_read_root(index, &mut pointer, &mut length) };
+    if status != OK {
+        return Err(status);
+    }
+    if pointer.is_null() || length == 0 || length > 4096 {
         return Err(INTERNAL_ERROR);
     }
     // SAFETY: Successful generated configuration points at `length` static bytes.

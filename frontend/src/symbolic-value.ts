@@ -38,6 +38,7 @@ export type Value =
   | {kind: "routeChoice"; name: string; cases: Map<string, Value>; fallback: Value}
   | {kind: "requestHeader"; name: string}
   | {kind: "environmentVariable"; name: string; required: boolean; fallback?: string}
+  | {kind: "fileText"; path: string; maxBytes: number}
   | {kind: "queryParameter"; name: string; fallback?: string}
   | {kind: "queryPredicate"; name: string; test: "truthy" | "empty" | "present"}
   | {kind: "runtimeString"; parts: RuntimeStringPart[]}
@@ -77,6 +78,7 @@ export type RuntimeStringPart =
   | {kind: "routeParameter"; name: string}
   | {kind: "requestHeader"; name: string}
   | {kind: "environmentVariable"; name: string; required: boolean; fallback: string | undefined}
+  | {kind: "fileText"; path: string; maxBytes: number}
   | {kind: "queryParameter"; name: string; fallback: string | undefined; escapeHtml: boolean}
   | {kind: "fetchStatus"; url: string}
   | {kind: "elapsedMilliseconds"}
@@ -274,6 +276,7 @@ export function truthiness(value: Value): boolean | undefined {
     case "routeChoice": return undefined;
     case "requestHeader": return undefined;
     case "environmentVariable": return undefined;
+    case "fileText": return undefined;
     case "elapsedMilliseconds": return undefined;
     case "queryParameter":
     case "queryPredicate": return undefined;
@@ -299,6 +302,7 @@ export function typeOf(value: Value): string {
     case "routeChoice": return "object";
     case "requestHeader": return "string";
     case "environmentVariable": return "string";
+    case "fileText": return "string";
     case "fetchStatus": return "number";
     case "queryParameter": return "string";
     case "queryPredicate": return "boolean";
@@ -346,6 +350,7 @@ export function runtimeStringParts(value: Value): RuntimeStringPart[] | undefine
       required: value.required,
       fallback: value.fallback,
     }];
+    case "fileText": return [{kind: "fileText", path: value.path, maxBytes: value.maxBytes}];
     case "queryParameter": return [{
       kind: "queryParameter",
       name: value.name,

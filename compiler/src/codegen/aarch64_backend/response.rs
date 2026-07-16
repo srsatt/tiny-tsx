@@ -162,6 +162,19 @@ fn emit_handler_text_expression(
             emit_immediate(assembly, "x5", u64::from(*required));
             assembly.call(format_args!("tinytsx_html_write_environment_variable"));
         }
+        ValueExpression::FileText {
+            path, max_bytes, ..
+        } => {
+            asm_line!(assembly, "    ldr x0, [sp, #16]");
+            assembly.address("x1", format_args!("Ltinytsx_string_{path}"));
+            emit_immediate(
+                assembly,
+                "x2",
+                program.static_strings[*path].value.len() as u64,
+            );
+            emit_immediate(assembly, "x3", *max_bytes as u64);
+            assembly.call(format_args!("tinytsx_html_write_file_text"));
+        }
         ValueExpression::FetchStatus { url, .. } => {
             asm_line!(assembly, "    ldr x0, [sp, #16]");
             assembly.address("x1", format_args!("Ltinytsx_string_{url}"));

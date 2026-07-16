@@ -259,6 +259,12 @@ pub enum ValueExpression {
         fallback: Option<usize>,
         span: SourceSpan,
     },
+    FileText {
+        path: usize,
+        #[serde(rename = "maxBytes")]
+        max_bytes: usize,
+        span: SourceSpan,
+    },
     FetchStatus {
         url: usize,
         span: SourceSpan,
@@ -349,6 +355,24 @@ pub struct SourceSpan {
 }
 
 impl Program {
+    pub fn uses_filesystem(&self) -> bool {
+        self.handlers.iter().any(|handler| {
+            response_uses_filesystem(&handler.response)
+                || handler
+                    .basic_authorization
+                    .as_ref()
+                    .is_some_and(|guard| response_uses_filesystem(&guard.rejected.response))
+                || handler
+                    .entity_tag
+                    .as_ref()
+                    .is_some_and(|guard| response_uses_filesystem(&guard.not_modified.response))
+                || handler
+                    .parameter_validations
+                    .iter()
+                    .any(|guard| response_uses_filesystem(&guard.rejected.response))
+        })
+    }
+
     pub fn environment_variable_ids(&self) -> Vec<usize> {
         let mut ids = BTreeSet::new();
         for handler in &self.handlers {
@@ -601,6 +625,7 @@ impl Program {
             | ValueExpression::RouteParameter { .. }
             | ValueExpression::RequestHeader { .. }
             | ValueExpression::EnvironmentVariable { .. }
+            | ValueExpression::FileText { .. }
             | ValueExpression::FetchStatus { .. }
             | ValueExpression::QueryParameter { .. }
             | ValueExpression::QueryConditional { .. }
@@ -734,7 +759,9 @@ impl Program {
                 ..
             } => {
                 let Some(name) = self.static_strings.get(*name) else {
-                    return Err("environment variable references a missing static string".to_owned());
+                    return Err(
+                        "environment variable references a missing static string".to_owned()
+                    );
                 };
                 if name.value.is_empty()
                     || name.value.len() > 128
@@ -751,7 +778,29 @@ impl Program {
                     return Err("required environment access cannot have a fallback".to_owned());
                 }
                 if fallback.is_some_and(|fallback| fallback >= self.static_strings.len()) {
-                    return Err("environment fallback references a missing static string".to_owned());
+                    return Err(
+                        "environment fallback references a missing static string".to_owned()
+                    );
+                }
+                Ok(())
+            }
+            ValueExpression::FileText {
+                path, max_bytes, ..
+            } => {
+                let Some(path) = self.static_strings.get(*path) else {
+                    return Err("file read references a missing static string".to_owned());
+                };
+                if path.value.is_empty()
+                    || path.value.len() > 4096
+                    || path.value.starts_with('/')
+                    || path.value.split(['/', '\\']).any(|component| {
+                        component.is_empty() || component == "." || component == ".."
+                    })
+                {
+                    return Err("file read path is not a normalized relative path".to_owned());
+                }
+                if *max_bytes == 0 || *max_bytes > 1_048_576 {
+                    return Err("file read maxBytes is outside the native limit".to_owned());
                 }
                 Ok(())
             }
@@ -905,6 +954,31 @@ fn response_uses_openai(response: &HandlerResponse) -> bool {
         HandlerResponse::Html { .. } => false,
         HandlerResponse::Text { value, .. } => expression_uses_openai(value),
         HandlerResponse::Stream { chunks, .. } => chunks.iter().any(expression_uses_openai),
+    }
+}
+
+fn response_uses_filesystem(response: &HandlerResponse) -> bool {
+    match response {
+        HandlerResponse::Html { .. } => false,
+        HandlerResponse::Text { value, .. } => expression_uses_filesystem(value),
+        HandlerResponse::Stream { chunks, .. } => chunks.iter().any(expression_uses_filesystem),
+    }
+}
+
+fn expression_uses_filesystem(expression: &ValueExpression) -> bool {
+    match expression {
+        ValueExpression::FileText { .. } => true,
+        ValueExpression::Concat { values, .. } => values.iter().any(expression_uses_filesystem),
+        ValueExpression::DirectCall { arguments, .. } => {
+            arguments.iter().any(expression_uses_filesystem)
+        }
+        ValueExpression::QueryConditional {
+            when_present,
+            when_absent,
+            ..
+        } => expression_uses_filesystem(when_present) || expression_uses_filesystem(when_absent),
+        ValueExpression::WorkerCall { input, .. } => expression_uses_filesystem(input),
+        _ => false,
     }
 }
 

@@ -28,6 +28,7 @@ pub struct Options {
     pub aliases: Vec<String>,
     pub api_aliases: Vec<String>,
     pub allowed_environment: Vec<String>,
+    pub allowed_read_roots: Vec<String>,
     pub target: Target,
 }
 
@@ -43,6 +44,7 @@ struct BuildReport<'a> {
     logical_workers: usize,
     provider_workers: usize,
     provider_transport: bool,
+    filesystem: bool,
     request_memory_bytes: usize,
     gc: &'a str,
     modules: usize,
@@ -58,6 +60,7 @@ struct BuildReport<'a> {
 #[derive(Serialize)]
 struct BuildPermissions<'a> {
     environment: &'a [String],
+    read: &'a [String],
 }
 
 pub fn execute(options: &Options) -> Result<PathBuf, String> {
@@ -67,6 +70,7 @@ pub fn execute(options: &Options) -> Result<PathBuf, String> {
         &options.aliases,
         &options.api_aliases,
         &options.allowed_environment,
+        &options.allowed_read_roots,
     )?;
     compilation.retarget(options.target)?;
     let port = if options.port_explicit {
@@ -81,6 +85,7 @@ pub fn execute(options: &Options) -> Result<PathBuf, String> {
             port,
             workers: options.workers,
             request_memory: options.request_memory,
+            read_roots: options.allowed_read_roots.clone(),
         },
     )?;
 
@@ -243,7 +248,9 @@ fn write_report(
         .map_err(|error| format!("could not inspect {}: {error}", output.display()))?
         .len();
     let provider_transport = compilation.program.uses_openai_transport();
-    let application_pool = !compilation.program.workers.is_empty() || provider_transport;
+    let filesystem = compilation.program.uses_filesystem();
+    let application_pool =
+        !compilation.program.workers.is_empty() || provider_transport || filesystem;
     let mut runtime_features = vec![
         "http1",
         "bounded-writer",
@@ -255,6 +262,9 @@ fn write_report(
     if provider_transport {
         runtime_features.push("bounded-provider-transport");
     }
+    if filesystem {
+        runtime_features.push("bounded-filesystem-read");
+    }
     let report = BuildReport {
         target: options.target.triple(),
         runtime: "bootstrap",
@@ -265,6 +275,7 @@ fn write_report(
         logical_workers: compilation.program.workers.len(),
         provider_workers: usize::from(provider_transport) * options.workers,
         provider_transport,
+        filesystem,
         request_memory_bytes: options.request_memory,
         gc: "disabled",
         modules: compilation.program.statistics.modules,
@@ -276,6 +287,7 @@ fn write_report(
         runtime_features,
         permissions: BuildPermissions {
             environment: &options.allowed_environment,
+            read: &options.allowed_read_roots,
         },
     };
     let json = serde_json::to_string_pretty(&report)
@@ -300,9 +312,10 @@ fn print_summary(
     println!("Port:                {port}");
     println!("Workers:             {}", options.workers);
     let provider_transport = compilation.program.uses_openai_transport();
+    let filesystem = compilation.program.uses_filesystem();
     println!(
         "Application workers: {} executors; {} logical workers; provider transport {}",
-        usize::from(!compilation.program.workers.is_empty() || provider_transport)
+        usize::from(!compilation.program.workers.is_empty() || provider_transport || filesystem)
             * options.workers,
         compilation.program.workers.len(),
         if provider_transport {
@@ -310,6 +323,11 @@ fn print_summary(
         } else {
             "disabled"
         },
+    );
+    println!(
+        "Filesystem:          {} read root(s); request-time reads {}",
+        options.allowed_read_roots.len(),
+        if filesystem { "enabled" } else { "disabled" },
     );
     println!("Request memory:      {} bytes", options.request_memory);
     println!(

@@ -34,3 +34,12 @@ fn rejects_non_portable_environment_capabilities_before_compilation() {
     .unwrap_err();
     assert!(error.contains("invalid environment capability `9INVALID`"));
 }
+
+#[test]
+fn rejects_missing_filesystem_roots_before_compilation() {
+    let error = run(["build", "app.tsx", "--allow-read", "/tinytsx/not-present"]
+        .into_iter()
+        .map(Into::into))
+    .unwrap_err();
+    assert!(error.contains("TINY1502"));
+}
