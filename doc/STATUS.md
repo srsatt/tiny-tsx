@@ -37,13 +37,24 @@ produces and serves a native Mach-O executable from the example TSX source.
 - The Hono example manifest also contains the exact upstream behavior
   allowlist for Basic, Basic Auth, ETag, Powered By, Pretty JSON, and text
   streaming. Each row is labeled native-derived rather than direct execution.
-- Verification: `npm run test:frontend` (75/75),
+- All alpha backend specifiers now resolve as protected SDK modules:
+  `tinytsx:env`, `tinytsx:fs`, `tinytsx:sqlite`, and `tinytsx:actors`, alongside
+  the native `tinytsx:serve`. Packages and aliases cannot shadow them. The
+  frontend resolution test compiles one module importing all four declarations.
+- `tinytsx --list-builtins` emits versioned JSON with each built-in's native or
+  declared status, Apple/Linux targets, permission flags, and compiled default
+  limits. `doc/STANDARD_LIBRARY.md` defines versioning, default-deny capability
+  separation, recoverable errors, blocking/executor rules, bounded ownership,
+  close/dispose semantics, and post-alpha OS modules. `declared` intentionally
+  does not yet mean a native implementation.
+- Verification: `npm run test:frontend` (76/76),
   `npm run test:zod-openapi-reference` (1/1),
   `npm run test:zod-openapi` (2/2),
   `npm run test:hono-intake` (7/7),
   `cargo test --manifest-path runtime/bootstrap/Cargo.toml
   request_path_segment_minimum_length_counts_percent_decoded_bytes` (1/1),
-  `cargo test -p tinytsx` (53/53), and
+  `cargo test -p tinytsx` (53/53),
+  `cargo test -p tinytsx builtins` (1/1), and
   `cargo clippy --workspace --all-targets -- -D warnings`.
 
 ## Verified capabilities

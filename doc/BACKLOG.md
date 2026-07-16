@@ -37,13 +37,13 @@ The alpha profiles are:
       non-goals, and known incompatibilities.
 - [x] Resolve bare package imports and package declarations so documented Hono
       applications do not require long `--alias`/`--api` command lines.
-- [ ] Define built-in module resolution for `tinytsx:env`, `tinytsx:fs`,
+- [x] Define built-in module resolution for `tinytsx:env`, `tinytsx:fs`,
       `tinytsx:sqlite`, and `tinytsx:actors`; built-ins must not be resolved from
       `node_modules` or shadowed by application packages.
 - [ ] Add stable diagnostic codes for unavailable built-ins, missing native
       capabilities, denied paths, exceeded limits, and unsupported actor or
       SQLite operations.
-- [ ] Decide and document the alpha compatibility policy: additive APIs are
+- [x] Decide and document the alpha compatibility policy: additive APIs are
       allowed between alpha releases; breaking changes require release notes and
       an alpha-version increment.
 
@@ -79,19 +79,19 @@ The alpha profiles are:
 
 ### A2 — Define the TinyTSX backend standard library
 
-- [ ] Add `doc/STANDARD_LIBRARY.md` defining built-in-module versioning,
+- [x] Add `doc/STANDARD_LIBRARY.md` defining built-in-module versioning,
       capability permissions, error types, blocking rules, resource ownership,
       bounds, target support, and the distinction from Web-standard APIs.
 - [ ] Keep built-in declarations in the shipped SDK and implementations in
       focused zero-JavaScript native runtime modules. Applications must not need
       npm packages to use them.
-- [ ] Add `tinytsx --list-builtins` or equivalent machine-readable capability
+- [x] Add `tinytsx --list-builtins` or equivalent machine-readable capability
       output, including target availability and compiled limits.
-- [ ] Define a common disposable-resource contract (`close`/`dispose`) for file,
+- [x] Define a common disposable-resource contract (`close`/`dispose`) for file,
       SQLite, and actor handles without requiring a general garbage collector.
-- [ ] Define how potentially blocking filesystem and database work uses the
+- [x] Define how potentially blocking filesystem and database work uses the
       application executor rather than blocking an HTTP executor.
-- [ ] Record candidates for post-alpha OS modules (path utilities, signals,
+- [x] Record candidates for post-alpha OS modules (path utilities, signals,
       subprocesses, sockets) without adding them to the alpha gate.
 
 ### A3 — Add environment input and bounded file reading
