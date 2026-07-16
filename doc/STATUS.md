@@ -27,6 +27,27 @@ produces and serves a native Mach-O executable from the example TSX source.
   (2/2), `cargo test --workspace`, and
   `cargo clippy --workspace --all-targets -- -D warnings`.
 
+### Filesystem capability (2026-07-17)
+
+- `tinytsx:fs` is native for bounded UTF-8 `readTextFile()` calls. Source paths
+  are static normalized relative paths, `--allow-read <root>` is default-deny,
+  roots are canonicalized and embedded, and per-call `maxBytes` is capped at
+  1 MiB. The build report records canonical roots and whether filesystem
+  application workers are active.
+- Reads run on the fixed application executor, not an HTTP executor. The runtime
+  canonicalizes each target, rejects root/symlink escape and non-files,
+  performs a bounded read, validates UTF-8, and returns owned bytes for copying
+  into the request arena. Unit evidence covers missing paths, directories,
+  traversal, symlink escape, invalid UTF-8, overflow, and replacement between
+  calls.
+- The pinned upstream Hono `serve-static` landing runs unchanged natively. The
+  `examples/hono-static/server.ts` adapter preserves that landing and serves its
+  two pinned text assets through the public built-in, with native missing and
+  too-small-limit recovery. Linux-arm64 output passes Clang assembly.
+- Verification: `npm run test:frontend` (81/81), `npm run test:fs-native`
+  (3/3), `cargo test --workspace`, and
+  `cargo clippy --workspace --all-targets -- -D warnings`.
+
 ### Earlier evidence (2026-07-16)
 
 - Bare scoped/unscoped imports resolve through nearest-package `node_modules`,

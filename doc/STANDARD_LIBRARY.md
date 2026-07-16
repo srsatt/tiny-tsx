@@ -76,6 +76,24 @@ Bounded UTF-8 `readTextFile(path, options)` only. Binary buffers, writes,
 directory mutation, watching, and ambient current-directory access are outside
 the initial contract.
 
+Each call uses a compile-time-known normalized relative path: no absolute,
+empty, `.`, or `..` segments are accepted, and the UTF-8 path is limited to
+4096 bytes. At least one existing directory must be granted with
+`--allow-read <root>`; roots are canonicalized during compilation and again at
+startup, sorted, deduplicated, limited to 16, and embedded in the native
+artifact. A request resolves the relative path under those roots in order and
+rejects a canonical target outside the selected root, including a symlink
+escape.
+
+`maxBytes` is a positive compile-time integer capped at 1 MiB and defaults to
+that cap. The application executor opens the canonical regular file, reads at
+most `maxBytes + 1`, validates UTF-8, then returns owned bytes that the HTTP
+executor copies into its request arena. Missing paths, directories, invalid
+UTF-8, permission failures, traversal, and overflow return a bounded internal
+response error without terminating the server. Each call canonicalizes and
+opens anew, so a completed read owns one coherent result while a later call may
+observe an atomic file replacement.
+
 ### `tinytsx:sqlite`
 
 Single-owner database and prepared-statement handles with positional values,

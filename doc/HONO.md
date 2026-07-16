@@ -29,8 +29,11 @@ The separate example matrix in `tests/compat/hono/examples-manifest.json`
 records nine completed or planned alpha tracers with provenance, imports/APIs,
 intake, native/assembly state, HTTP/reference evidence, and the first unsupported
 boundary. The local environment tracer combines Hono, `@hono/node-server`, and
-the bounded `tinytsx:env` startup snapshot. Its `behaviorAllowlist` names the
-exact upstream behavior files and selectors used as native-derived evidence.
+the bounded `tinytsx:env` startup snapshot. The static tracer executes the
+pinned upstream landing unchanged, then uses the public `tinytsx:fs` built-in
+to serve the pinned text assets through application workers. Its
+`behaviorAllowlist` names the exact upstream behavior files and selectors used
+as native-derived evidence.
 
 Run `npm run test:hono-intake` to validate both matrices and every referenced
 evidence path.

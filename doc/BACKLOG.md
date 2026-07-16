@@ -72,7 +72,7 @@ The alpha profiles are:
       coverage, Bun/reference coverage, and the first unsupported boundary.
 - [ ] Keep the complete pinned `basic` and `jsx-ssr` applications as mandatory
       release gates on every supported native target.
-- [ ] Compile and execute the pinned upstream `serve-static` landing application,
+- [x] Compile and execute the pinned upstream `serve-static` landing application,
       then extend it with `tinytsx:fs` using the pinned assets as the file API
       tracer.
 - [ ] Use the pinned upstream `blog` routes and behavior as the CRUD contract for
@@ -124,20 +124,20 @@ The alpha profiles are:
 - [ ] Connect permitted environment values to typed Hono bindings and cover
       missing/denied configuration without exposing the entire host environment.
 
-- [ ] Specify and declare `tinytsx:fs` with an alpha-minimum text-file read API;
+- [x] Specify and declare `tinytsx:fs` with an alpha-minimum text-file read API;
       reserve binary buffers, directory mutation, watching, and writes for later
       unless an alpha example proves they are required.
-- [ ] Add explicit `--allow-read <root>` capabilities. Default-deny request-time
+- [x] Add explicit `--allow-read <root>` capabilities. Default-deny request-time
       filesystem access, canonicalize paths before permission checks, and keep
       environment and filesystem capabilities separate.
-- [ ] Define deterministic behavior for missing files, directories, invalid
+- [x] Define deterministic behavior for missing files, directories, invalid
       UTF-8, symlinks, traversal attempts, permission denial, and concurrent
       replacement.
-- [ ] Enforce configurable maximum path and file sizes, copy results into a
+- [x] Enforce configurable maximum path and file sizes, copy results into a
       documented ownership domain, and return recoverable errors on overflow.
 - [ ] Add native unit tests, permission/security tests, request-time Hono tests,
       and Apple/Linux target coverage.
-- [ ] Run the Hono static-file tracer through the public built-in rather than a
+- [x] Run the Hono static-file tracer through the public built-in rather than a
       test-only runtime intrinsic.
 
 ### A4 — Promote logical workers into lightweight actors

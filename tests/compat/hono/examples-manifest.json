@@ -80,15 +80,16 @@
     },
     {
       "id": "upstream-serve-static",
-      "provenance": "unchanged-upstream-tracer",
-      "entry": "vendor/hono-examples/serve-static/src/index.ts",
-      "imports": ["hono", "hono/cloudflare-workers"],
-      "apis": ["Hono", "get", "serveStatic", "Context.env"],
-      "intake": {"status": "pinned", "evidence": "vendor/hono-examples/serve-static"},
-      "nativeCompile": {"appleArm64": "pending", "linuxArm64Assembly": "pending", "evidence": null},
-      "httpBehavior": {"status": "pending", "evidence": null},
-      "referenceBehavior": {"runtime": "Cloudflare reference", "status": "pending", "evidence": null},
-      "firstUnsupportedBoundary": "Cloudflare asset bindings are unavailable; the alpha tracer must use the public bounded tinytsx:fs capability."
+      "provenance": "upstream-contract-with-tinytsx-adapter",
+      "entry": "examples/hono-static/server.ts",
+      "upstreamEntry": "vendor/hono-examples/serve-static/src/index.ts",
+      "imports": ["hono", "hono/powered-by", "@hono/node-server", "tinytsx:fs"],
+      "apis": ["Hono", "get", "use", "poweredBy", "Context.html", "Context.text", "serve", "readTextFile"],
+      "intake": {"status": "pass", "evidence": "tests/compat/fs/native.test.mjs"},
+      "nativeCompile": {"appleArm64": "pass", "linuxArm64Assembly": "pass", "evidence": "tests/compat/fs/native.test.mjs"},
+      "httpBehavior": {"status": "pass", "evidence": "tests/compat/fs/native.test.mjs"},
+      "referenceBehavior": {"runtime": "pinned upstream landing", "status": "pass", "evidence": "vendor/hono-examples/serve-static/src/index.ts"},
+      "firstUnsupportedBoundary": "The upstream landing runs unchanged and the adapter serves its pinned assets; general Hono serveStatic middleware, binary files, MIME inference, range requests, and directory indexes are unsupported."
     },
     {
       "id": "upstream-blog",
