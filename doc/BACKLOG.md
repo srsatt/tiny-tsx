@@ -8,6 +8,24 @@ A checked item must have evidence in `doc/STATUS.md` or its commit message.
 Work top to bottom unless a failed tracer requires pulling one of its explicit
 dependencies forward.
 
+For alpha work, “done” means the public API is declared, the native path is
+implemented, success and bounded-failure behavior is tested, the compatibility
+or capability matrix is updated, and the release suite runs the evidence. A
+parser-only or declaration-only implementation is not enough.
+
+The dependency order is intentional:
+
+1. freeze the contract and executable Hono matrix;
+2. finish the shared built-in/capability infrastructure;
+3. deliver environment and file access through the static-file tracer;
+4. deliver the actor core through the counter tracer;
+5. build SQLite on the actor ownership model and prove it through the blog;
+6. package and verify the release.
+
+New APIs discovered by a tracer are added to its smallest owning slice. They do
+not expand alpha automatically: either add an explicit acceptance test here or
+record the boundary in `doc/COMPATIBILITY.md` and defer it.
+
 ## Alpha definition
 
 The first public milestone is `0.1.0-alpha.1`: an installable developer preview
@@ -93,6 +111,10 @@ The alpha profiles are:
       application executor rather than blocking an HTTP executor.
 - [x] Record candidates for post-alpha OS modules (path utilities, signals,
       subprocesses, sockets) without adding them to the alpha gate.
+- [ ] Freeze the alpha built-in surface to `tinytsx:env`, `tinytsx:fs`,
+      `tinytsx:sqlite`, and `tinytsx:actors`. Any additional OS API requires a
+      tracer, capability model, bounds, target matrix, and an explicit backlog
+      change.
 
 ### A3 — Add environment input and bounded file reading
 
@@ -118,28 +140,7 @@ The alpha profiles are:
 - [ ] Run the Hono static-file tracer through the public built-in rather than a
       test-only runtime intrinsic.
 
-### A4 — Add bounded SQLite persistence
-
-- [ ] Pin a SQLite revision and choose a reproducible linking policy. Prefer a
-      vendored/static alpha artifact with license and provenance records so
-      applications do not depend on an undeclared host SQLite installation.
-- [ ] Specify and declare `tinytsx:sqlite` with database open/close, prepared
-      statements, positional binding, bounded query rows, execute results, and
-      explicit transactions.
-- [ ] Define the alpha value mapping for `null`, integer, finite number, text,
-      and blob; reject unsupported dynamic values at compile time.
-- [ ] Make each connection single-owner and serialize its operations through a
-      logical worker/actor mailbox instead of sharing a native handle across HTTP
-      executors.
-- [ ] Require an explicit filesystem capability for on-disk databases and offer
-      `:memory:` for deterministic tests.
-- [ ] Bound SQL length, parameter count, row count, row bytes, open statements,
-      busy timeout, and queued operations; surface typed recoverable failures.
-- [ ] Prove schema creation, insert/select/update/delete, rollback, contention,
-      malformed SQL, limit recovery, shutdown, and restart persistence.
-- [ ] Run the Hono blog tracer end to end against the public SQLite built-in.
-
-### A5 — Promote logical workers into lightweight actors
+### A4 — Promote logical workers into lightweight actors
 
 - [ ] Add `doc/ACTORS.md` defining actor identity, state ownership, mailbox
       ordering, ask/reply, tell, stop, failure, restart, supervision boundary,
@@ -164,7 +165,28 @@ The alpha profiles are:
       hot mailbox, isolation, stop/drain behavior, panic recovery, and no native
       thread growth proportional to actor count.
 - [ ] Run the Hono counter tracer through the public actor API and persist one
-      actor variant through `tinytsx:sqlite`.
+      actor variant through `tinytsx:sqlite` after A5 is complete.
+
+### A5 — Add bounded SQLite persistence
+
+- [ ] Pin a SQLite revision and choose a reproducible linking policy. Prefer a
+      vendored/static alpha artifact with license and provenance records so
+      applications do not depend on an undeclared host SQLite installation.
+- [ ] Specify and declare `tinytsx:sqlite` with database open/close, prepared
+      statements, positional binding, bounded query rows, execute results, and
+      explicit transactions.
+- [ ] Define the alpha value mapping for `null`, integer, finite number, text,
+      and blob; reject unsupported dynamic values at compile time.
+- [ ] Make each connection single-owner and serialize its operations through the
+      A4 actor mailbox instead of sharing a native handle across HTTP executors.
+- [ ] Require an explicit filesystem capability for on-disk databases and offer
+      `:memory:` for deterministic tests.
+- [ ] Bound SQL length, parameter count, row count, row bytes, open statements,
+      busy timeout, and queued operations; surface typed recoverable failures.
+- [ ] Prove schema creation, insert/select/update/delete, rollback, contention,
+      malformed SQL, limit recovery, shutdown, and restart persistence.
+- [ ] Run the Hono blog tracer end to end against the public SQLite built-in,
+      then add the persistent variant of the A4 counter tracer.
 
 ### A6 — Make the alpha release installable
 
