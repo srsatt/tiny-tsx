@@ -171,7 +171,7 @@ The alpha profiles are:
 
 ### A5 — Add bounded SQLite persistence
 
-- [ ] Pin a SQLite revision and choose a reproducible linking policy. Prefer a
+- [x] Pin a SQLite revision and choose a reproducible linking policy. Prefer a
       vendored/static alpha artifact with license and provenance records so
       applications do not depend on an undeclared host SQLite installation.
 - [ ] Specify and declare `tinytsx:sqlite` with database open/close, prepared

@@ -96,6 +96,13 @@ produces and serves a native Mach-O executable from the example TSX source.
   recoverable post-stop request, Apple-arm64 execution, and Linux-arm64
   assembly. `doc/ACTORS.md` records the local-only boundary and missing
   structured-message, timeout, supervision, scale, and persistence work.
+- The SQLite foundation is pinned and reproducible: the focused
+  `tinytsx-runtime-sqlite` crate uses `rusqlite` 0.40.1, bundled
+  `libsqlite3-sys` 0.38.1, and the SQLite 3.53.2 amalgamation. Its bounded core
+  covers prepared values, result row/byte limits, malformed SQL recovery, and
+  null/integer/finite-real/text/blob mapping. It is not marked as a native
+  built-in until compiler lowering, single-owner worker integration,
+  capabilities, and the tracers are complete.
 - Verification: `npm run test:frontend` (82/82),
   `npm run test:zod-openapi-reference` (1/1),
   `npm run test:zod-openapi` (2/2),
@@ -105,6 +112,7 @@ produces and serves a native Mach-O executable from the example TSX source.
   `cargo test -p tinytsx` (53/53),
   `cargo test -p tinytsx builtins` (1/1), and
   `npm run test:actors-native` (2/2),
+  `cargo test -p tinytsx-runtime-sqlite` (3/3),
   `cargo clippy --workspace --all-targets -- -D warnings`.
 
 ## Verified capabilities
