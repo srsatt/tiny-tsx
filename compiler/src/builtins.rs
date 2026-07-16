@@ -47,7 +47,7 @@ fn manifest() -> Manifest {
             },
             Builtin {
                 specifier: "tinytsx:env",
-                status: "declared",
+                status: "native",
                 targets: TARGETS,
                 permissions: &["allow-env"],
                 limits: Limits {
@@ -122,5 +122,6 @@ mod tests {
                 "tinytsx:actors",
             ]
         );
+        assert_eq!(manifest().builtins[1].status, "native");
     }
 }

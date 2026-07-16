@@ -135,6 +135,33 @@ fn emit_handler_text_expression(
             );
             assembly.call(format_args!("tinytsx_html_write_request_header"));
         }
+        ValueExpression::EnvironmentVariable {
+            name,
+            required,
+            fallback,
+            ..
+        } => {
+            asm_line!(assembly, "    ldr x0, [sp, #16]");
+            assembly.address("x1", format_args!("Ltinytsx_string_{name}"));
+            emit_immediate(
+                assembly,
+                "x2",
+                program.static_strings[*name].value.len() as u64,
+            );
+            if let Some(fallback) = fallback {
+                assembly.address("x3", format_args!("Ltinytsx_string_{fallback}"));
+                emit_immediate(
+                    assembly,
+                    "x4",
+                    program.static_strings[*fallback].value.len() as u64,
+                );
+            } else {
+                asm_line!(assembly, "    mov x3, #0");
+                asm_line!(assembly, "    mov x4, #0");
+            }
+            emit_immediate(assembly, "x5", u64::from(*required));
+            assembly.call(format_args!("tinytsx_html_write_environment_variable"));
+        }
         ValueExpression::FetchStatus { url, .. } => {
             asm_line!(assembly, "    ldr x0, [sp, #16]");
             assembly.address("x1", format_args!("Ltinytsx_string_{url}"));

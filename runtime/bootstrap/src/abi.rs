@@ -7,6 +7,8 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use crate::environment::{self, SnapshotValue};
+
 pub const OK: u32 = 0;
 pub const REQUEST_OOM: u32 = 1;
 pub const BAD_REQUEST: u32 = 2;
@@ -158,6 +160,12 @@ unsafe extern "C" {
     pub fn tinytsx_config_request_memory() -> usize;
     pub fn tinytsx_config_worker_modules() -> usize;
     pub fn tinytsx_config_provider_transport() -> usize;
+    pub fn tinytsx_config_environment_variables() -> usize;
+    pub fn tinytsx_config_environment_variable(
+        index: usize,
+        pointer: *mut *const u8,
+        length: *mut usize,
+    ) -> u32;
     pub fn tinytsx_worker_operation(worker: usize) -> u32;
 }
 
@@ -192,6 +200,20 @@ unsafe extern "C" fn tinytsx_config_worker_modules() -> usize {
 #[cfg(not(feature = "generated"))]
 unsafe extern "C" fn tinytsx_config_provider_transport() -> usize {
     0
+}
+
+#[cfg(not(feature = "generated"))]
+unsafe extern "C" fn tinytsx_config_environment_variables() -> usize {
+    0
+}
+
+#[cfg(not(feature = "generated"))]
+unsafe extern "C" fn tinytsx_config_environment_variable(
+    _index: usize,
+    _pointer: *mut *const u8,
+    _length: *mut usize,
+) -> u32 {
+    INTERNAL_ERROR
 }
 
 #[cfg(not(feature = "generated"))]
@@ -839,6 +861,44 @@ pub unsafe extern "C" fn tinytsx_html_write_request_header(
     }
     // SAFETY: The fallback literal is static for the duration of the copy.
     unsafe { tinytsx_html_write_static(writer, b"undefined".as_ptr(), b"undefined".len()) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tinytsx_html_write_environment_variable(
+    writer: *mut TinyResponseWriter,
+    name: *const u8,
+    name_len: usize,
+    fallback: *const u8,
+    fallback_len: usize,
+    required: u32,
+) -> u32 {
+    if writer.is_null()
+        || name.is_null()
+        || name_len == 0
+        || (fallback.is_null() && fallback_len != 0)
+        || required > 1
+    {
+        return INTERNAL_ERROR;
+    }
+    // SAFETY: Generated names and fallbacks point at immutable static data.
+    let name = unsafe { slice::from_raw_parts(name, name_len) };
+    match environment::get(name) {
+        Some(SnapshotValue::Present(value)) => {
+            unsafe { tinytsx_html_write_static(writer, value.as_ptr(), value.len()) }
+        }
+        Some(SnapshotValue::Missing) if !fallback.is_null() => {
+            unsafe { tinytsx_html_write_static(writer, fallback, fallback_len) }
+        }
+        Some(SnapshotValue::Missing) if required == 0 => unsafe {
+            tinytsx_html_write_static(writer, b"undefined".as_ptr(), b"undefined".len())
+        },
+        Some(SnapshotValue::Missing | SnapshotValue::InvalidUtf8 | SnapshotValue::TooLarge) => {
+            // SAFETY: the writer was validated above.
+            unsafe { (*writer).status = RENDER_ERROR };
+            RENDER_ERROR
+        }
+        None => INTERNAL_ERROR,
+    }
 }
 
 #[unsafe(no_mangle)]
@@ -1761,6 +1821,28 @@ pub fn configured_worker_modules() -> usize {
 pub fn configured_provider_transport() -> bool {
     // SAFETY: The generated object always provides the configuration function.
     unsafe { tinytsx_config_provider_transport() != 0 }
+}
+
+pub fn configured_environment_variables() -> usize {
+    // SAFETY: The generated object always provides the configuration function.
+    unsafe { tinytsx_config_environment_variables() }
+}
+
+pub fn configured_environment_variable(index: usize) -> Result<Vec<u8>, u32> {
+    let mut pointer = ptr::null();
+    let mut length = 0;
+    // SAFETY: The generated object writes one immutable static string view.
+    let status = unsafe {
+        tinytsx_config_environment_variable(index, &mut pointer, &mut length)
+    };
+    if status != OK {
+        return Err(status);
+    }
+    if pointer.is_null() || length == 0 || length > 128 {
+        return Err(INTERNAL_ERROR);
+    }
+    // SAFETY: Successful generated configuration points at `length` static bytes.
+    Ok(unsafe { slice::from_raw_parts(pointer, length) }.to_vec())
 }
 
 pub fn worker_operation(worker: usize) -> u32 {

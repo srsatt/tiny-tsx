@@ -1901,6 +1901,15 @@ function evaluateCall(
         ? {kind: "fetchResponse", url: url.value}
         : unknown("fetch requires one closed URL string");
     }
+    if (callable.kind === "reference" && isEnvironmentBuiltin(callable)) {
+      const name = arguments_[0];
+      const operation = environmentBuiltinOperation(callable);
+      return arguments_.length === 1
+        && name?.kind === "string"
+        && (operation === "get" || operation === "require")
+        ? {kind: "environmentVariable", name: name.value, required: operation === "require"}
+        : unknown("environment access requires one closed name string");
+    }
     if (callable.kind === "reference" && callable.callable !== undefined) {
       return invokeFunctionLike(
         evaluator,
@@ -2507,6 +2516,20 @@ function evaluateCall(
   );
 }
 
+function isEnvironmentBuiltin(value: Value & {kind: "reference"}): boolean {
+  return environmentBuiltinOperation(value) !== undefined
+    && value.callable?.module.path.replaceAll("\\", "/").endsWith("/sdk/builtins/env.ts") === true;
+}
+
+function environmentBuiltinOperation(
+  value: Value & {kind: "reference"},
+): "get" | "require" | undefined {
+  const declaration = value.callable?.declaration;
+  if (declaration === undefined || !ts.isFunctionDeclaration(declaration)) return undefined;
+  const name = declaration.name?.text;
+  return name === "get" || name === "require" ? name : undefined;
+}
+
 function isPinnedCreateOpenAiCompatible(value: Value & {kind: "reference"}): boolean {
   return value.name === "createOpenAICompatible"
     && value.callable?.module.path.replaceAll("\\", "/")
@@ -3050,6 +3073,12 @@ function evaluateExpression(
           ? {...left, fallback: fallback.value}
           : unknown("query parameter fallback is not a closed string");
       }
+      if (left.kind === "environmentVariable" && !left.required) {
+        const fallback = evaluate(evaluator, expression.right, module, environment, instance);
+        return fallback.kind === "string"
+          ? {...left, fallback: fallback.value}
+          : unknown("environment variable fallback is not a closed string");
+      }
       return left.kind === "undefined" || left.kind === "null"
         ? evaluate(evaluator, expression.right, module, environment, instance)
         : left;
@@ -3243,6 +3272,7 @@ function evaluateExpression(
         && body.kind !== "readableStream"
         && body.kind !== "workerCall"
         && body.kind !== "openAiChatText"
+        && body.kind !== "environmentVariable"
         && body.kind !== "routeParameter"
         && body.kind !== "responseBody"
         && body.kind !== "undefined"
@@ -3254,7 +3284,7 @@ function evaluateExpression(
       }
       const runtimeBody = body.kind === "routeParameter"
         ? [{kind: "routeParameter" as const, name: body.name}]
-        : body.kind === "workerCall" || body.kind === "openAiChatText"
+        : body.kind === "workerCall" || body.kind === "openAiChatText" || body.kind === "environmentVariable"
           ? runtimeStringParts(body)
         : body.kind === "runtimeString"
           ? body.parts
@@ -4265,6 +4295,7 @@ function isTrackedAllocation(expression: ts.Expression, value: Value): boolean {
     || value.kind === "request"
     || value.kind === "routeParameter"
     || value.kind === "requestHeader"
+    || value.kind === "environmentVariable"
     || value.kind === "queryParameter"
     || value.kind === "queryPredicate"
     || value.kind === "fetchStatus"

@@ -67,6 +67,35 @@ fn emit_config(assembly: &mut Emitter, options: Options, program: &Program) {
     emit_immediate(assembly, "x0", u64::from(program.uses_openai_transport()));
     asm_line!(assembly, "    ret");
 
+    let environment = program.environment_variable_ids();
+    assembly.global_function(format_args!("tinytsx_config_environment_variables"));
+    emit_immediate(assembly, "x0", environment.len() as u64);
+    asm_line!(assembly, "    ret");
+
+    assembly.global_function(format_args!("tinytsx_config_environment_variable"));
+    asm_line!(assembly, "    cbz x1, Ltinytsx_environment_variable_invalid");
+    asm_line!(assembly, "    cbz x2, Ltinytsx_environment_variable_invalid");
+    for (index, _) in environment.iter().enumerate() {
+        asm_line!(assembly, "    cmp x0, #{index}");
+        asm_line!(assembly, "    b.eq Ltinytsx_environment_variable_{index}");
+    }
+    asm_line!(assembly, "Ltinytsx_environment_variable_invalid:");
+    emit_immediate(assembly, "x0", 4);
+    asm_line!(assembly, "    ret");
+    for (index, string) in environment.iter().enumerate() {
+        asm_line!(assembly, "Ltinytsx_environment_variable_{index}:");
+        assembly.address("x3", format_args!("Ltinytsx_string_{string}"));
+        asm_line!(assembly, "    str x3, [x1]");
+        emit_immediate(
+            assembly,
+            "x3",
+            program.static_strings[*string].value.len() as u64,
+        );
+        asm_line!(assembly, "    str x3, [x2]");
+        asm_line!(assembly, "    mov x0, #0");
+        asm_line!(assembly, "    ret");
+    }
+
     assembly.global_function(format_args!("tinytsx_worker_operation"));
     emit_immediate(assembly, "x1", program.workers.len() as u64);
     asm_line!(assembly, "    cmp x0, x1");

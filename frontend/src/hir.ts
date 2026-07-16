@@ -98,6 +98,13 @@ export type ValueExpression =
       span: SourceSpan;
     }
   | {
+      kind: "environmentVariable";
+      name: number;
+      required: boolean;
+      fallback?: number;
+      span: SourceSpan;
+    }
+  | {
       kind: "fetchStatus";
       url: number;
       span: SourceSpan;

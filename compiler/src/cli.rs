@@ -6,7 +6,7 @@ const USAGE: &str = "\
 TinyTSX native TSX compiler
 
 Usage:
-  tinytsx check <entry.tsx> [--emit-hir | --emit-asm] [--target triple] [--alias specifier=path] [--api specifier=path]
+  tinytsx check <entry.tsx> [--emit-hir | --emit-asm] [--target triple] [--alias specifier=path] [--api specifier=path] [--allow-env name]...
   tinytsx build <entry.tsx> [options]
   tinytsx run <entry.tsx> [options]
   tinytsx test262 <case.js> [--output path]
@@ -114,6 +114,7 @@ fn parse_build_options(
         keep_temps: false,
         aliases: Vec::new(),
         api_aliases: Vec::new(),
+        allowed_environment: Vec::new(),
         target: Target::default_for_host(),
     };
     let mut index = 0;
@@ -142,6 +143,9 @@ fn parse_build_options(
                 .push(option_value(arguments, &mut index)?.to_owned()),
             "--api" => options
                 .api_aliases
+                .push(option_value(arguments, &mut index)?.to_owned()),
+            "--allow-env" => options
+                .allowed_environment
                 .push(option_value(arguments, &mut index)?.to_owned()),
             "--target" => {
                 options.target = option_value(arguments, &mut index)?.parse()?;
@@ -181,6 +185,7 @@ fn parse_build_options(
     if options.request_memory == 0 {
         return Err("request memory must be greater than zero".to_owned());
     }
+    validate_environment_capabilities(&mut options.allowed_environment)?;
     Ok(options)
 }
 
@@ -207,6 +212,7 @@ fn check(arguments: &[String]) -> Result<(), String> {
     let mut emit_asm = false;
     let mut aliases = Vec::new();
     let mut api_aliases = Vec::new();
+    let mut allowed_environment = Vec::new();
     let mut target = Target::default_for_host();
 
     let mut index = 0;
@@ -216,6 +222,9 @@ fn check(arguments: &[String]) -> Result<(), String> {
             "--emit-asm" => emit_asm = true,
             "--alias" => aliases.push(option_value(arguments, &mut index)?.to_owned()),
             "--api" => api_aliases.push(option_value(arguments, &mut index)?.to_owned()),
+            "--allow-env" => {
+                allowed_environment.push(option_value(arguments, &mut index)?.to_owned())
+            }
             "--target" => target = option_value(arguments, &mut index)?.parse()?,
             option if option.starts_with('-') => {
                 return Err(format!("unknown check option `{option}`"));
@@ -230,7 +239,9 @@ fn check(arguments: &[String]) -> Result<(), String> {
         return Err("--emit-hir and --emit-asm cannot be used together".to_owned());
     }
     let entry = entry.ok_or_else(|| format!("check requires an entry module\n\n{USAGE}"))?;
-    let mut compilation = frontend::compile(entry, &aliases, &api_aliases)?;
+    validate_environment_capabilities(&mut allowed_environment)?;
+    let mut compilation =
+        frontend::compile(entry, &aliases, &api_aliases, &allowed_environment)?;
     compilation.retarget(target)?;
 
     if emit_hir {
@@ -249,6 +260,29 @@ fn check(arguments: &[String]) -> Result<(), String> {
             compilation.program.statistics.components,
             compilation.program.statistics.static_html_bytes,
         );
+    }
+    Ok(())
+}
+
+fn validate_environment_capabilities(names: &mut Vec<String>) -> Result<(), String> {
+    names.sort();
+    names.dedup();
+    if names.len() > 64 {
+        return Err("at most 64 environment capabilities may be granted".to_owned());
+    }
+    for name in names.iter() {
+        if name.is_empty()
+            || name.len() > 128
+            || !name.is_ascii()
+            || name.as_bytes()[0].is_ascii_digit()
+            || !name
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+        {
+            return Err(format!(
+                "invalid environment capability `{name}`; expected an ASCII name up to 128 bytes"
+            ));
+        }
     }
     Ok(())
 }

@@ -35,6 +35,7 @@ pub fn compile(
     entry: &str,
     aliases: &[String],
     api_aliases: &[String],
+    allowed_environment: &[String],
 ) -> Result<Compilation, String> {
     let root = repository_root();
     let script = root.join("frontend/dist/src/cli.js");
@@ -56,6 +57,9 @@ pub fn compile(
     }
     for alias in api_aliases {
         command.arg("--api").arg(alias);
+    }
+    for name in allowed_environment {
+        command.arg("--allow-env").arg(name);
     }
     let output = command
         .output()

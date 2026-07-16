@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import ts from "typescript";
 import {analyzeApplicationEntry} from "./application-entry.js";
-import {validateUnavailableBuiltinOperations} from "./builtin-validation.js";
+import {validateBuiltinOperations} from "./builtin-validation.js";
 import {
   evaluateApplicationConstructor,
   evaluateApplicationInitialization,
@@ -44,6 +44,7 @@ export interface CompileOptions {
   sdkPath: string;
   aliases?: Readonly<Record<string, string>>;
   apiAliases?: Readonly<Record<string, string>>;
+  allowedEnvironment?: ReadonlySet<string>;
 }
 
 export function compileEntry(entryPath: string, options: CompileOptions): HirProgram {
@@ -118,7 +119,7 @@ export function compileEntry(entryPath: string, options: CompileOptions): HirPro
   if (typeScriptDiagnostics.length > 0) {
     throw new CompileFailure(typeScriptDiagnostics.map(fromTypeScript));
   }
-  validateUnavailableBuiltinOperations(graph);
+  validateBuiltinOperations(graph, options.allowedEnvironment ?? new Set());
   const getDeclarations = sourceFile.statements.filter(isGetDeclaration);
   if (getDeclarations.length === 0) {
     if (application !== undefined) {
@@ -637,6 +638,15 @@ function lowerRuntimeString(
       if (part.kind === "requestHeader") {
         return {kind: "requestHeader" as const, header: strings.intern(part.name), span};
       }
+      if (part.kind === "environmentVariable") {
+        return {
+          kind: "environmentVariable" as const,
+          name: strings.intern(part.name),
+          required: part.required,
+          ...(part.fallback === undefined ? {} : {fallback: strings.intern(part.fallback)}),
+          span,
+        };
+      }
       if (part.kind === "fetchStatus") {
         return {kind: "fetchStatus" as const, url: strings.intern(part.url), span};
       }
@@ -686,6 +696,7 @@ function dynamicResponseExpressions(body: ResponseBody): number {
     return body.filter(part =>
       part.kind === "routeParameter"
       || part.kind === "requestHeader"
+      || part.kind === "environmentVariable"
       || part.kind === "fetchStatus"
       || part.kind === "queryParameter"
       || part.kind === "workerCall"

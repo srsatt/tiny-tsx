@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -253,6 +253,12 @@ pub enum ValueExpression {
         header: usize,
         span: SourceSpan,
     },
+    EnvironmentVariable {
+        name: usize,
+        required: bool,
+        fallback: Option<usize>,
+        span: SourceSpan,
+    },
     FetchStatus {
         url: usize,
         span: SourceSpan,
@@ -343,6 +349,23 @@ pub struct SourceSpan {
 }
 
 impl Program {
+    pub fn environment_variable_ids(&self) -> Vec<usize> {
+        let mut ids = BTreeSet::new();
+        for handler in &self.handlers {
+            collect_response_environment_ids(&handler.response, &mut ids);
+            if let Some(authorization) = &handler.basic_authorization {
+                collect_response_environment_ids(&authorization.rejected.response, &mut ids);
+            }
+            if let Some(entity_tag) = &handler.entity_tag {
+                collect_response_environment_ids(&entity_tag.not_modified.response, &mut ids);
+            }
+            for validation in &handler.parameter_validations {
+                collect_response_environment_ids(&validation.rejected.response, &mut ids);
+            }
+        }
+        ids.into_iter().collect()
+    }
+
     pub fn uses_openai_transport(&self) -> bool {
         self.handlers.iter().any(|handler| {
             response_uses_openai(&handler.response)
@@ -373,6 +396,9 @@ impl Program {
             "aarch64-apple-darwin" | "aarch64-unknown-linux-gnu"
         ) {
             return Err(format!("unsupported HIR target `{}`", self.target));
+        }
+        if self.environment_variable_ids().len() > 64 {
+            return Err("HIR may reference at most 64 environment variables".to_owned());
         }
         if self.handlers.is_empty()
             || self
@@ -574,6 +600,7 @@ impl Program {
             ValueExpression::Concat { .. }
             | ValueExpression::RouteParameter { .. }
             | ValueExpression::RequestHeader { .. }
+            | ValueExpression::EnvironmentVariable { .. }
             | ValueExpression::FetchStatus { .. }
             | ValueExpression::QueryParameter { .. }
             | ValueExpression::QueryConditional { .. }
@@ -697,6 +724,34 @@ impl Program {
                 };
                 if header.value.is_empty() {
                     return Err("request header name must not be empty".to_owned());
+                }
+                Ok(())
+            }
+            ValueExpression::EnvironmentVariable {
+                name,
+                required,
+                fallback,
+                ..
+            } => {
+                let Some(name) = self.static_strings.get(*name) else {
+                    return Err("environment variable references a missing static string".to_owned());
+                };
+                if name.value.is_empty()
+                    || name.value.len() > 128
+                    || !name.value.is_ascii()
+                    || name.value.as_bytes()[0].is_ascii_digit()
+                    || !name
+                        .value
+                        .bytes()
+                        .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+                {
+                    return Err("environment variable has a non-portable name".to_owned());
+                }
+                if *required && fallback.is_some() {
+                    return Err("required environment access cannot have a fallback".to_owned());
+                }
+                if fallback.is_some_and(|fallback| fallback >= self.static_strings.len()) {
+                    return Err("environment fallback references a missing static string".to_owned());
                 }
                 Ok(())
             }
@@ -850,6 +905,46 @@ fn response_uses_openai(response: &HandlerResponse) -> bool {
         HandlerResponse::Html { .. } => false,
         HandlerResponse::Text { value, .. } => expression_uses_openai(value),
         HandlerResponse::Stream { chunks, .. } => chunks.iter().any(expression_uses_openai),
+    }
+}
+
+fn collect_response_environment_ids(response: &HandlerResponse, ids: &mut BTreeSet<usize>) {
+    match response {
+        HandlerResponse::Html { .. } => {}
+        HandlerResponse::Text { value, .. } => collect_environment_ids(value, ids),
+        HandlerResponse::Stream { chunks, .. } => {
+            for chunk in chunks {
+                collect_environment_ids(chunk, ids);
+            }
+        }
+    }
+}
+
+fn collect_environment_ids(expression: &ValueExpression, ids: &mut BTreeSet<usize>) {
+    match expression {
+        ValueExpression::EnvironmentVariable { name, .. } => {
+            ids.insert(*name);
+        }
+        ValueExpression::Concat { values, .. } => {
+            for value in values {
+                collect_environment_ids(value, ids);
+            }
+        }
+        ValueExpression::DirectCall { arguments, .. } => {
+            for argument in arguments {
+                collect_environment_ids(argument, ids);
+            }
+        }
+        ValueExpression::QueryConditional {
+            when_present,
+            when_absent,
+            ..
+        } => {
+            collect_environment_ids(when_present, ids);
+            collect_environment_ids(when_absent, ids);
+        }
+        ValueExpression::WorkerCall { input, .. } => collect_environment_ids(input, ids),
+        _ => {}
     }
 }
 

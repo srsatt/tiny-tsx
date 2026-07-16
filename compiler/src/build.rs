@@ -27,6 +27,7 @@ pub struct Options {
     pub keep_temps: bool,
     pub aliases: Vec<String>,
     pub api_aliases: Vec<String>,
+    pub allowed_environment: Vec<String>,
     pub target: Target,
 }
 
@@ -51,12 +52,22 @@ struct BuildReport<'a> {
     dynamic_html_expressions: usize,
     memory: &'a MemoryReport,
     runtime_features: Vec<&'a str>,
+    permissions: BuildPermissions<'a>,
+}
+
+#[derive(Serialize)]
+struct BuildPermissions<'a> {
+    environment: &'a [String],
 }
 
 pub fn execute(options: &Options) -> Result<PathBuf, String> {
     options.target.ensure_native()?;
-    let mut compilation =
-        frontend::compile(&options.entry, &options.aliases, &options.api_aliases)?;
+    let mut compilation = frontend::compile(
+        &options.entry,
+        &options.aliases,
+        &options.api_aliases,
+        &options.allowed_environment,
+    )?;
     compilation.retarget(options.target)?;
     let port = if options.port_explicit {
         options.port
@@ -263,6 +274,9 @@ fn write_report(
         dynamic_html_expressions: compilation.program.statistics.dynamic_html_expressions,
         memory: &compilation.program.memory,
         runtime_features,
+        permissions: BuildPermissions {
+            environment: &options.allowed_environment,
+        },
     };
     let json = serde_json::to_string_pretty(&report)
         .map_err(|error| format!("could not serialize build report: {error}"))?;

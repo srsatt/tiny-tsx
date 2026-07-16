@@ -61,6 +61,7 @@ pub(super) fn emit_value_expression(
         ValueExpression::Concat { .. }
         | ValueExpression::RouteParameter { .. }
         | ValueExpression::RequestHeader { .. }
+        | ValueExpression::EnvironmentVariable { .. }
         | ValueExpression::FetchStatus { .. }
         | ValueExpression::QueryParameter { .. }
         | ValueExpression::QueryConditional { .. }

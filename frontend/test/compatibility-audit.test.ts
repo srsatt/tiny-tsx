@@ -126,9 +126,9 @@ test("resolves every backend standard-library module from the shipped SDK", () =
 
 test("rejects declaration-only built-in operations with a stable diagnostic", () => {
   const entry = write("unavailable-builtin.ts", `
-    import {get} from "tinytsx:env";
+    import {readTextFile} from "tinytsx:fs";
     export function GET(_request: Request): Response {
-      return Response.text(get("APP_NAME") ?? "missing");
+      return Response.text(readTextFile("index.html"));
     }
   `);
 
@@ -136,8 +136,56 @@ test("rejects declaration-only built-in operations with a stable diagnostic", ()
     () => compileEntry(entry, {sdkPath: path.join(repository, "sdk/index.d.ts")}),
     (error: unknown) => error instanceof CompileFailure
       && error.diagnostics[0]?.code === "TINY1500"
-      && error.diagnostics[0]?.message.includes("tinytsx:env.get"),
+      && error.diagnostics[0]?.message.includes("tinytsx:fs.readTextFile"),
   );
+});
+
+test("requires explicit environment capabilities before lowering", () => {
+  const entry = write("env-capability.ts", `
+    import {get} from "tinytsx:env";
+    import {serve} from "tinytsx:serve";
+    serve({fetch: () => new Response(get("APP_NAME") ?? "missing")});
+  `);
+  assert.throws(
+    () => compileEntry(entry, {sdkPath: path.join(repository, "sdk/index.d.ts")}),
+    (error: unknown) => error instanceof CompileFailure
+      && error.diagnostics.some(diagnostic => diagnostic.code === "TINY1501"
+        && diagnostic.message.includes("APP_NAME")),
+  );
+});
+
+test("lowers permitted environment access with a closed fallback", () => {
+  const entry = write("env-lowering.ts", `
+    import {get} from "tinytsx:env";
+    import {serve} from "tinytsx:serve";
+    import {Hono} from "hono";
+    const app = new Hono();
+    app.get("/", context => context.text(get("APP_NAME") ?? "missing"));
+    serve({fetch: app.fetch});
+  `);
+
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    allowedEnvironment: new Set(["APP_NAME"]),
+    aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+    apiAliases: {hono: path.join(repository, "tests/compat/hono/api.d.ts")},
+  });
+  assert.deepEqual(hir.handlers[0]?.response, {
+    kind: "text",
+    value: {
+      kind: "concat",
+      values: [{
+        kind: "environmentVariable",
+        name: 0,
+        required: false,
+        fallback: 1,
+        span: hir.handlers[0]?.span,
+      }],
+      span: hir.handlers[0]?.span,
+    },
+    contentType: "text/plain;charset=UTF-8",
+  });
+  assert.deepEqual(hir.staticStrings.map(value => value.value), ["APP_NAME", "missing"]);
 });
 
 test("loads a compile-time-known Worker module without treating it as an import binding", () => {

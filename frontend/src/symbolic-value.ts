@@ -37,6 +37,7 @@ export type Value =
   | {kind: "routeParameter"; name: string}
   | {kind: "routeChoice"; name: string; cases: Map<string, Value>; fallback: Value}
   | {kind: "requestHeader"; name: string}
+  | {kind: "environmentVariable"; name: string; required: boolean; fallback?: string}
   | {kind: "queryParameter"; name: string; fallback?: string}
   | {kind: "queryPredicate"; name: string; test: "truthy" | "empty" | "present"}
   | {kind: "runtimeString"; parts: RuntimeStringPart[]}
@@ -75,6 +76,7 @@ export type RuntimeStringPart =
   | {kind: "literal"; value: string}
   | {kind: "routeParameter"; name: string}
   | {kind: "requestHeader"; name: string}
+  | {kind: "environmentVariable"; name: string; required: boolean; fallback: string | undefined}
   | {kind: "queryParameter"; name: string; fallback: string | undefined; escapeHtml: boolean}
   | {kind: "fetchStatus"; url: string}
   | {kind: "elapsedMilliseconds"}
@@ -271,6 +273,7 @@ export function truthiness(value: Value): boolean | undefined {
     case "routeParameter": return true;
     case "routeChoice": return undefined;
     case "requestHeader": return undefined;
+    case "environmentVariable": return undefined;
     case "elapsedMilliseconds": return undefined;
     case "queryParameter":
     case "queryPredicate": return undefined;
@@ -295,6 +298,7 @@ export function typeOf(value: Value): string {
     case "runtimeHtml": return "string";
     case "routeChoice": return "object";
     case "requestHeader": return "string";
+    case "environmentVariable": return "string";
     case "fetchStatus": return "number";
     case "queryParameter": return "string";
     case "queryPredicate": return "boolean";
@@ -336,6 +340,12 @@ export function runtimeStringParts(value: Value): RuntimeStringPart[] | undefine
     case "html": return value.value === "" ? [] : [{kind: "literal", value: value.value}];
     case "routeParameter": return [{kind: "routeParameter", name: value.name}];
     case "requestHeader": return [{kind: "requestHeader", name: value.name}];
+    case "environmentVariable": return [{
+      kind: "environmentVariable",
+      name: value.name,
+      required: value.required,
+      fallback: value.fallback,
+    }];
     case "queryParameter": return [{
       kind: "queryParameter",
       name: value.name,
