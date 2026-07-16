@@ -28,10 +28,17 @@ produces and serves a native Mach-O executable from the example TSX source.
 - Assembly uses native component functions, the documented writer helper, static
   bytes in `__TEXT,__const`, and a global `tinytsx_handle_get` entrypoint.
 - Codegen now uses target-neutral `asm_line!`/`asm_write!` emission, shared
-  AArch64 frame helpers, and a focused `macos_arm64` adapter split by functions,
-  handlers, responses, values, and data. Codegen tests live in separate files.
+  AArch64 frame helpers, shared functions/handlers/responses/values/data
+  lowering, and thin Mach-O/ELF dialect adapters. Codegen tests live in separate
+  files.
   The static-page and dynamic-Hono assembly remained byte-identical across the
   refactor (SHA-256 `eefa808f...75daf` and `e17ddcf3...a9fb`).
+- `--target` accepts `aarch64-apple-darwin` and
+  `aarch64-unknown-linux-gnu` for `check`, `build`, and emitted HIR. Static and
+  dynamic-Hono Linux assembly both pass Clang's AArch64 assembler and produce
+  ELF64/AArch64 objects. Final `build` linking is enabled on a matching native
+  host; cross-host linking is rejected before frontend compilation. The Apple
+  target still builds, serves, and reports its canonical target unchanged.
 - Apple clang assembles generated text and Cargo/rustc links the object into the
   fixed-worker Rust bootstrap runtime. No generated application code passes
   through LLVM, JavaScript, WebAssembly, or an interpreter.
@@ -431,7 +438,9 @@ rtk cargo test --workspace
 rtk cargo clippy --workspace --all-targets -- -D warnings
 rtk cargo test -p tinytsx-runtime-worker
 rtk cargo run -q -p tinytsx -- check examples/static-page/server.tsx --emit-asm
+rtk cargo run -q -p tinytsx -- check examples/static-page/server.tsx --target aarch64-unknown-linux-gnu --emit-asm
 rtk cargo test -p tinytsx codegen::
+rtk cargo test -p tinytsx --test codegen_targets
 rtk cargo run -q -p tinytsx -- check examples/staged-constants/server.tsx --emit-hir
 rtk cargo run -q -p tinytsx -- build examples/static-page/server.tsx --port 3017 --output dist/static-server --release --emit-hir --emit-asm
 rtk curl -i --max-time 5 http://127.0.0.1:3017/

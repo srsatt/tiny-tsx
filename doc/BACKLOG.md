@@ -14,6 +14,9 @@ commit message.
 - [x] Emit deterministic Apple arm64 assembly and expose `--emit-asm`.
 - [x] Split codegen into reusable assembly/AArch64 modules and a focused Apple
       arm64 target adapter, with all codegen tests in separate files.
+- [x] Add `aarch64-unknown-linux-gnu` HIR/codegen/build selection, emit
+      assembler-verified ELF for static and dynamic Hono programs, and retain
+      native-host-only final linking with an explicit cross-host diagnostic.
 - [x] Implement the single-worker bootstrap HTTP runtime.
 - [x] Assemble and link a native Mach-O executable through the Rust toolchain.
 - [x] Implement `tinytsx build`, output selection, and temporary artifacts.

@@ -91,11 +91,11 @@ compatibility profile supports it. GC is not an assumed destination: only an
 executed cyclic/aliased escaping graph can justify a collector spike, and any
 result remains isolated per worker rather than becoming a shared process heap.
 
-## D-012: Add target adapters before a generic target interface
+## D-012: Share AArch64 lowering through a closed object-format dialect
 
 Code generation uses a target-neutral assembly sink, reusable architecture
-helpers, and explicit OS/architecture adapter modules. Apple sections, symbols,
-calling convention details, and runtime ABI lowering stay in `macos_arm64`.
-A second target is added as a sibling adapter and only then may duplicated,
-demonstrably identical behavior be promoted into a shared interface. This keeps
-new build targets possible without freezing a speculative backend abstraction.
+helpers, and explicit OS/architecture adapters. Adding Linux arm64 demonstrated
+that instruction selection and runtime ABI lowering are shared, while sections,
+symbol prefixes, visibility, and address relocations vary by object format.
+Those differences use a closed Apple/ELF dialect rather than a speculative
+general target trait. A future non-AArch64 target gets a separate backend.

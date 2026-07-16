@@ -1,4 +1,4 @@
-# TinyTSX Prototype — Native TSX Server Compiler for macOS
+# TinyTSX Prototype — Native TSX Server Compiler
 
 You are a senior compiler engineer, runtime engineer, and performance-oriented systems programmer.
 
@@ -15,7 +15,8 @@ The first development platform and target is:
 * the macOS arm64 calling convention;
 * the system assembler and linker available through Xcode Command Line Tools.
 
-The developer is currently working on a Mac, so the project must be fully buildable and testable locally on macOS before any Linux support is attempted.
+That Apple target remains the primary development platform. The compiler now
+also emits AArch64 ELF and supports native builds on Linux arm64.
 
 The intended programming model is:
 
@@ -44,10 +45,11 @@ export function GET(request: Request): Response {
 }
 ```
 
-The compiler should produce a native macOS executable:
+The compiler produces a native executable for the selected host target:
 
 ```bash
 tinytsx build server.tsx \
+  --target aarch64-apple-darwin \
   --workers 8 \
   --request-memory 262144 \
   --release \
@@ -105,12 +107,14 @@ npm run build --prefix frontend
 cargo build -p tinytsx
 ```
 
-Inspect the source, HIR, or generated Apple arm64 assembly:
+Inspect the source, HIR, or generated AArch64 assembly:
 
 ```bash
 ./target/debug/tinytsx check examples/static-page/server.tsx
 ./target/debug/tinytsx check examples/static-page/server.tsx --emit-hir
 ./target/debug/tinytsx check examples/static-page/server.tsx --emit-asm
+./target/debug/tinytsx check examples/static-page/server.tsx \
+  --target aarch64-unknown-linux-gnu --emit-asm
 ```
 
 Build and run the native bootstrap server:
@@ -316,9 +320,9 @@ Do not emit raw machine code until the textual assembly backend works reliably.
 
 The TinyTSX compiler and runtime may themselves be written in Rust and built with `rustc`. The “no LLVM” constraint applies to the path taken by user TS/TSX code. TinyTSX must not lower the user program through LLVM IR.
 
-## 2.2 macOS Apple Silicon first
+## 2.2 AArch64 native targets
 
-The initial target is only:
+The initial and primary target is:
 
 ```text
 aarch64-apple-darwin
@@ -326,23 +330,21 @@ aarch64-apple-darwin
 
 Support:
 
-* Apple Silicon Macs;
-* Mach-O;
-* arm64;
-* the macOS arm64 ABI;
+* Apple Silicon Macs with Mach-O and the Apple arm64 ABI;
+* Linux arm64 with ELF and the AArch64 ELF ABI;
 * dynamic linking to system frameworks or `libSystem` where useful.
 
 Do not initially support:
 
 * x86-64 macOS;
-* Linux;
 * Windows;
-* cross-compilation;
+* cross-host final linking;
 * universal binaries;
 * iOS;
 * direct ELF generation.
 
-Keep target-specific code isolated so Linux arm64 or Linux x86-64 can be added later.
+Cross-host assembly inspection is supported with `check --target ... --emit-asm`.
+Final executable linking requires a host matching the selected target.
 
 Current target module structure:
 
@@ -351,8 +353,7 @@ codegen/
   mod.rs
   assembly.rs
   aarch64.rs
-  constant_data.rs
-  macos_arm64/
+  aarch64_backend/
     mod.rs
     functions.rs
     handlers.rs
@@ -360,6 +361,9 @@ codegen/
     values.rs
     data.rs
     tests.rs
+  constant_data.rs
+  macos_arm64.rs
+  linux_arm64.rs
 ```
 
 ## 2.3 First-class TSX without React
@@ -1242,13 +1246,13 @@ Avoid exposing Rust-specific data layouts across the ABI.
 
 ---
 
-# 9. macOS arm64 backend
+# 9. AArch64 native backend
 
 ## 9.1 Assembly target
 
-Generate textual arm64 assembly accepted by the macOS toolchain.
+Generate textual arm64 assembly accepted by Clang for Mach-O or ELF.
 
-Use the Apple arm64 ABI.
+Use the selected Apple or Linux AArch64 ABI and object-format spelling.
 
 Start with:
 
@@ -2042,8 +2046,10 @@ tinytsx/
 │           ├── mod.rs
 │           ├── assembly.rs
 │           ├── aarch64.rs
+│           ├── aarch64_backend/
 │           ├── constant_data.rs
-│           └── macos_arm64/
+│           ├── macos_arm64.rs
+│           └── linux_arm64.rs
 │
 ├── runtime/
 │   ├── bootstrap/

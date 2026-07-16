@@ -1,8 +1,14 @@
 # Code generation architecture
 
-Code generation consumes validated HIR and emits readable textual assembly. The
-current implementation has one target adapter, Apple arm64, but its reusable
-parts no longer depend on Darwin sections, symbols, or runtime ABI names.
+Code generation consumes validated HIR and emits readable textual assembly for
+two AArch64 targets:
+
+- `aarch64-apple-darwin` using Mach-O syntax and Apple symbol spelling;
+- `aarch64-unknown-linux-gnu` using ELF syntax and ELF symbol spelling.
+
+Final linking is native-host only. Either host may inspect the other target with
+`check --target <triple> --emit-asm`; `build` rejects a non-host target before
+compilation rather than silently producing a partial executable.
 
 ## Module boundaries
 
@@ -10,53 +16,56 @@ parts no longer depend on Darwin sections, symbols, or runtime ABI names.
 compiler/src/codegen/
   mod.rs                  public target entrypoints and options
   assembly.rs             target-neutral text sink and emission macros
-  aarch64.rs              reusable AArch64 instructions and frame planning
-  constant_data.rs        target-neutral staged-value serialization
-  macos_arm64/
-    mod.rs                Apple target orchestration and exported config ABI
+  aarch64.rs              AArch64 writer, dialect, instructions, frame planning
+  aarch64_backend/
+    mod.rs                shared AArch64 orchestration and exported config ABI
     functions.rs          component and value-function emission
     handlers.rs           request dispatch, guards, headers, and middleware
     response.rs           response and request-time text emission
     values.rs             closed value-expression emission
-    data.rs               Mach-O constant sections and byte directives
-    tests.rs              Apple target characterization tests
+    data.rs               constant labels and byte directives
+    tests.rs              shared Apple characterization tests
+  constant_data.rs        target-neutral staged-value serialization
+  macos_arm64.rs          thin Mach-O dialect adapter
+  linux_arm64.rs          thin ELF dialect adapter
 ```
 
 `asm_line!` and `asm_write!` are the only formatting interface target adapters
 should use. They hide the infallible `String` formatting detail and remove
 repeated `writeln!(...).unwrap()` plumbing from instruction selection.
 
-`aarch64.rs` owns only architecture-level behavior that another AArch64 target
-can reuse: immediate construction, prologue/epilogue emission, request-context
-preservation, and bounded frame sizing. Mach-O sections, Apple symbol spelling,
-runtime ABI calls, response lowering, and static-data labels remain in the
-`macos_arm64` adapter.
+`aarch64.rs` owns architecture and object-format spelling: immediate
+construction, prologue/epilogue emission, request-context preservation, bounded
+frame sizing, symbol prefixes, address relocations, visibility, and sections.
+The shared backend owns instruction selection and runtime ABI lowering. The two
+thin adapters select the Apple or ELF dialect.
 
-There is deliberately no generic target trait yet. A second backend should be
-added as a sibling adapter with an explicit entrypoint in `codegen/mod.rs`.
-Shared behavior should move upward only when two adapters need the same concept;
-this keeps the interface based on demonstrated reuse rather than predictions.
+There is deliberately no open-ended target trait. The second concrete target
+showed that a closed AArch64 dialect is the required seam. A future architecture
+should add its own backend rather than forcing non-AArch64 instructions through
+this interface.
 
 ## Adding a target
 
-1. Add a sibling adapter directory named for the OS and architecture.
-2. Define its section syntax, symbol visibility, calling convention, runtime
-   ABI mapping, value lowering, and static-data representation inside it.
-3. Reuse `Assembly`, constant-data encoding, and architecture helpers only when
-   their contracts match the new target.
-4. Add a public entrypoint and explicit target selection without changing the
-   existing Apple entrypoint.
-5. Keep adapter tests in a separate `tests.rs` and shared-module tests in
-   sibling `*_tests.rs` files.
-6. Add emitted-assembly characterization tests plus assemble/link and native
-   runtime tests for the target.
+1. For another AArch64 object format, extend the closed dialect with its section,
+   symbol, visibility, call, and address-relocation spelling.
+2. For another architecture, add a sibling backend and keep its instruction and
+   frame rules out of `aarch64.rs`.
+3. Reuse `Assembly` and constant-data encoding only when their contracts match.
+4. Add explicit target parsing, HIR retargeting, assembler/linker selection,
+   build-report identity, and native-host validation.
+5. Keep tests outside production modules.
+6. Prove emitted assembly with the target assembler and prove final linking and
+   execution on a native host.
 
 For refactors that should not change generated code, compare emitted assembly
 byte-for-byte before and after the change. The representative commands are:
 
 ```bash
-rtk cargo run -q -p tinytsx -- check examples/static-page/server.tsx --emit-asm
+rtk cargo run -q -p tinytsx -- check examples/static-page/server.tsx \
+  --target aarch64-apple-darwin --emit-asm
 rtk cargo run -q -p tinytsx -- check tests/compat/hono/dynamic-jsx-smoke.tsx \
   --alias hono=vendor/hono/src/index.ts \
-  --api hono=tests/compat/hono/api.d.ts --emit-asm
+  --api hono=tests/compat/hono/api.d.ts \
+  --target aarch64-unknown-linux-gnu --emit-asm
 ```
