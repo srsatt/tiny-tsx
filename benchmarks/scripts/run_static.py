@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import atexit
 import http.client
 import json
 import os
@@ -20,6 +21,29 @@ from reporting import render_markdown, summarize
 
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def alias_arguments(flag: str, aliases: dict[str, str]) -> list[str]:
+    return [value for alias, target in aliases.items() for value in (flag, f"{alias}={target}")]
+
+
+AI_MANIFEST = json.loads((ROOT / "tests/compat/ai/manifest.json").read_text())
+AI_TINY_ARGS = [
+    *alias_arguments("--alias", {
+        **AI_MANIFEST["runtimeAliases"],
+        "hono": "vendor/hono/src/index.ts",
+    }),
+    *alias_arguments("--api", {
+        "ai": "tests/compat/ai/node_modules/ai/dist/index.d.ts",
+        "hono": "tests/compat/ai/node_modules/hono/dist/types/index.d.ts",
+        "@ai-sdk/gateway": "tests/compat/ai/node_modules/@ai-sdk/gateway/dist/index.d.ts",
+        "@ai-sdk/provider": "tests/compat/ai/node_modules/@ai-sdk/provider/dist/index.d.ts",
+        "@ai-sdk/provider-utils": "tests/compat/ai/node_modules/@ai-sdk/provider-utils/dist/index.d.ts",
+        "@ai-sdk/openai-compatible": "tests/compat/ai/node_modules/@ai-sdk/openai-compatible/dist/index.d.ts",
+    }),
+]
+
+
 WORKLOADS = {
     "static-page": {
         "body": b"<html><body><h1>Hello from TinyTSX</h1></body></html>",
@@ -152,6 +176,23 @@ WORKLOADS = {
             "--tsconfig-override", "benchmarks/bun/hono-runtime-tsconfig.json",
         ],
     },
+    "hono-ai-provider": {
+        "body": b"Hello from local provider",
+        "content_type": "text/plain; charset=UTF-8",
+        "headers": {},
+        "numeric_headers": [],
+        "path": "/ai-local",
+        "scope": "pinned 656-module Hono plus AI SDK generateText path, one real OpenAI-compatible POST through a shared zero-delay loopback provider; HTTP/1.1; localhost",
+        "limitation": "The mock provider has no model latency or token generation; this isolates framework, transport, message-copy, and JSON-decoding overhead and is not an inference benchmark.",
+        "tiny_entry": "tests/compat/ai/hono-local-provider-smoke.ts",
+        "tiny_args": AI_TINY_ARGS,
+        "tiny_setup": ["npm", "ci", "--prefix", "tests/compat/ai"],
+        "bun_script": "benchmarks/bun/hono-ai-provider-server.ts",
+        "bun_args": [],
+        "support_script": "benchmarks/bun/openai-compatible-provider.ts",
+        "support_port": 39453,
+        "support_path": "/health",
+    },
 }
 
 
@@ -188,6 +229,9 @@ def main() -> int:
             "path": workload["path"],
         },
     }
+    support_process = start_support_server(workload, bun_binary)
+    if support_process is not None:
+        atexit.register(stop_server, support_process)
     if reference_target := workload.get("reference_target"):
         workload = dict(workload)
         workload["body"] = capture_reference_body(
@@ -260,6 +304,7 @@ def main() -> int:
             "workers": arguments.workers,
             "requestMemoryBytes": 262_144,
             "keepAlive": arguments.keep_alive,
+            "supportProcess": support_process is not None,
         },
         "correctness": {
             "path": workload["path"],
@@ -288,6 +333,9 @@ def main() -> int:
     print(markdown)
     print(f"JSON: {prefix.with_suffix('.json')}")
     print(f"Markdown: {prefix.with_suffix('.md')}")
+    if support_process is not None:
+        stop_server(support_process)
+        atexit.unregister(stop_server)
     return 0
 
 
@@ -331,6 +379,8 @@ def build_tinytsx(
     workload: dict[str, Any],
     workers: int = 1,
 ) -> None:
+    if setup := workload.get("tiny_setup"):
+        subprocess.run(setup, cwd=ROOT, check=True)
     subprocess.run(["npm", "run", "build", "--prefix", "frontend"], cwd=ROOT, check=True)
     subprocess.run(
         tinytsx_build_command(output, port, workload, workers),
@@ -363,6 +413,25 @@ def start_server(spec: dict[str, Any]) -> subprocess.Popen[bytes]:
         stdout=subprocess.DEVNULL,
         stderr=subprocess.PIPE,
     )
+
+
+def start_support_server(
+    workload: dict[str, Any],
+    bun_binary: Path,
+) -> subprocess.Popen[bytes] | None:
+    script = workload.get("support_script")
+    if script is None:
+        return None
+    port = int(workload["support_port"])
+    process = start_server({
+        "command": [str(bun_binary), "run", str(ROOT / script)],
+        "environment": {"TINYTSX_PROVIDER_PORT": str(port)},
+    })
+    response = wait_for_response(process, port, str(workload["support_path"]))
+    if response["status"] != 200 or response["body"] != b"ok":
+        stop_server(process)
+        raise RuntimeError(f"support server health check failed: {response}")
+    return process
 
 
 def measure_startup(

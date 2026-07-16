@@ -18,6 +18,7 @@
     "benchmark:hono-dynamic-jsx": "python3 benchmarks/scripts/run_static.py --workload hono-dynamic-jsx --keep-alive",
     "benchmark:hono-stream-text": "python3 benchmarks/scripts/run_static.py --workload hono-stream-text --keep-alive",
     "benchmark:hono-worker": "python3 benchmarks/scripts/run_static.py --workload hono-worker --keep-alive",
+    "benchmark:hono-ai-provider": "python3 benchmarks/scripts/run_static.py --workload hono-ai-provider --keep-alive",
     "test:benchmarks": "python3 -m unittest discover -s benchmarks/tests -p 'test_*.py'",
     "test:frontend": "npm --prefix frontend test",
     "test:native-api": "cargo test -p tinytsx-runtime-bootstrap abi::tests",

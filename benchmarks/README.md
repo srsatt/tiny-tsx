@@ -1,6 +1,6 @@
 # TinyTSX benchmarks
 
-The harness has six workloads:
+The harness has seven workloads:
 
 - `static-page` compares the current static TinyTSX vertical slice to an
   idiomatic `Bun.serve` server returning the same response;
@@ -16,7 +16,10 @@ The harness has six workloads:
 - `hono-stream-text` runs the pinned 33-module upstream `streamText()` path and
   requires three finite HTTP/1.1 chunks plus the decoded 19-byte body; and
 - `hono-worker` compares one persistent logical string worker per target,
-  including copied request/reply messages through an async Hono route.
+  including copied request/reply messages through an async Hono route; and
+- `hono-ai-provider` runs the pinned 656-module Hono + AI SDK Core +
+  OpenAI-compatible provider graph against one shared zero-delay loopback
+  provider. The support process is excluded from both targets' RSS.
 
 Both verify status, content length, response bytes, powered-by behavior, and a
 numeric response-time header before collecting samples. Target-specific content
@@ -55,6 +58,7 @@ npm run benchmark:hono-jsx-ssr-keepalive
 npm run benchmark:hono-dynamic-jsx
 npm run benchmark:hono-stream-text
 npm run benchmark:hono-worker
+npm run benchmark:hono-ai-provider
 ```
 
 Run the worker-scaling baseline as four independent, equivalence-checked
@@ -123,3 +127,10 @@ response gates. Dynamic JSX reaches 0.72–0.79x Bun throughput at concurrency
 8–64; finite streaming reaches 0.72–0.90x. TinyTSX stays near 6.1 MiB warm but
 retains the measured high-concurrency p99 fairness problem. These are
 exploratory route measurements, not general AOT/JIT claims.
+
+The local-provider comparison is retained as
+`2026-07-16-m5-max-hono-ai-provider-keepalive-w{1,8}.{json,md}`. One provider
+worker saturates near 12.3k requests/s; eight reusable provider transports reach
+43.4–46.1k requests/s at concurrency 8–64 and use 10.03 MiB warm RSS. The mock
+provider performs no inference or token generation, so this isolates framework,
+transport, copying, and JSON-decoding overhead rather than model performance.

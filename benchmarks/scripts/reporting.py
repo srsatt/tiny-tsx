@@ -63,7 +63,7 @@ def render_markdown(result: dict[str, Any]) -> str:
         "",
         f"Generated: {result['timestamp']}",
         "",
-        f"> Scope: {result['scope']}. {_transport_scope(result)}; one server process. "
+        f"> Scope: {result['scope']}. {_transport_scope(result)}; {_process_scope(result)}. "
         "This is not a general dynamic-language benchmark.",
         "",
         "## Environment",
@@ -146,6 +146,12 @@ def _transport_scope(result: dict[str, Any]) -> str:
     if result["configuration"]["keepAlive"]:
         return "HTTP/1.1 connections are reused"
     return "a new TCP connection is opened per request"
+
+
+def _process_scope(result: dict[str, Any]) -> str:
+    if result["configuration"].get("supportProcess"):
+        return "one measured server process plus one shared support process excluded from RSS"
+    return "one server process"
 
 
 def _mib(value: int) -> float:

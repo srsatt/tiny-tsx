@@ -99,6 +99,19 @@ class StaticHarnessTest(unittest.TestCase):
             "tests/compat/workers/hono-worker-smoke.ts",
         )
 
+    def test_ai_provider_workload_uses_the_exact_pinned_graph(self) -> None:
+        workload = WORKLOADS["hono-ai-provider"]
+
+        self.assertEqual(workload["path"], "/ai-local")
+        self.assertEqual(workload["body"], b"Hello from local provider")
+        self.assertEqual(workload["support_port"], 39453)
+        self.assertIn("656-module", workload["scope"])
+        self.assertIn("@ai-sdk/openai-compatible=", " ".join(workload["tiny_args"]))
+        self.assertEqual(
+            workload["tiny_entry"],
+            "tests/compat/ai/hono-local-provider-smoke.ts",
+        )
+
     def test_keep_alive_scope_records_the_bounded_reconnect_policy(self) -> None:
         workload = WORKLOADS["hono-jsx-ssr"]
 
