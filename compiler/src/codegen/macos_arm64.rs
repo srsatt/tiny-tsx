@@ -1,19 +1,22 @@
-use std::fmt::Write;
-
 use crate::{
     codegen::Options,
     hir::{ConstantValue, HandlerResponse, HtmlOp, Program, ValueExpression},
 };
 
-use super::constant_data;
-
-const HANDLER_SCRATCH_BASE: usize = 48;
+use super::{
+    aarch64::{
+        HANDLER_SCRATCH_BASE, emit_epilogue, emit_immediate, emit_prologue,
+        preserve_request_context, value_frame_size,
+    },
+    assembly::{Assembly, asm_line, asm_write},
+    constant_data,
+};
 
 pub fn emit(program: &Program, options: Options) -> Result<String, String> {
     program.validate()?;
-    let mut assembly = String::new();
-    writeln!(assembly, ".section __TEXT,__text,regular,pure_instructions").unwrap();
-    writeln!(assembly, ".p2align 2").unwrap();
+    let mut assembly = Assembly::new();
+    asm_line!(assembly, ".section __TEXT,__text,regular,pure_instructions");
+    asm_line!(assembly, ".p2align 2");
 
     for function in &program.functions {
         emit_value_function(&mut assembly, function.id, &function.body, program)?;
@@ -31,86 +34,86 @@ pub fn emit(program: &Program, options: Options) -> Result<String, String> {
     emit_handlers(&mut assembly, program)?;
     emit_config(&mut assembly, options, program);
     emit_static_data(&mut assembly, program)?;
-    Ok(assembly)
+    Ok(assembly.finish())
 }
 
-fn emit_config(assembly: &mut String, options: Options, program: &Program) {
-    writeln!(assembly, "\n.globl _tinytsx_config_port").unwrap();
-    writeln!(assembly, "_tinytsx_config_port:").unwrap();
+fn emit_config(assembly: &mut Assembly, options: Options, program: &Program) {
+    asm_line!(assembly, "\n.globl _tinytsx_config_port");
+    asm_line!(assembly, "_tinytsx_config_port:");
     emit_immediate(assembly, "x0", u64::from(options.port));
-    writeln!(assembly, "    ret").unwrap();
+    asm_line!(assembly, "    ret");
 
-    writeln!(assembly, "\n.globl _tinytsx_config_workers").unwrap();
-    writeln!(assembly, "_tinytsx_config_workers:").unwrap();
+    asm_line!(assembly, "\n.globl _tinytsx_config_workers");
+    asm_line!(assembly, "_tinytsx_config_workers:");
     emit_immediate(assembly, "x0", options.workers as u64);
-    writeln!(assembly, "    ret").unwrap();
+    asm_line!(assembly, "    ret");
 
-    writeln!(assembly, "\n.globl _tinytsx_config_request_memory").unwrap();
-    writeln!(assembly, "_tinytsx_config_request_memory:").unwrap();
+    asm_line!(assembly, "\n.globl _tinytsx_config_request_memory");
+    asm_line!(assembly, "_tinytsx_config_request_memory:");
     emit_immediate(assembly, "x0", options.request_memory as u64);
-    writeln!(assembly, "    ret").unwrap();
+    asm_line!(assembly, "    ret");
 
-    writeln!(assembly, "\n.globl _tinytsx_config_worker_modules").unwrap();
-    writeln!(assembly, "_tinytsx_config_worker_modules:").unwrap();
+    asm_line!(assembly, "\n.globl _tinytsx_config_worker_modules");
+    asm_line!(assembly, "_tinytsx_config_worker_modules:");
     emit_immediate(assembly, "x0", program.workers.len() as u64);
-    writeln!(assembly, "    ret").unwrap();
+    asm_line!(assembly, "    ret");
 
-    writeln!(assembly, "\n.globl _tinytsx_config_provider_transport").unwrap();
-    writeln!(assembly, "_tinytsx_config_provider_transport:").unwrap();
+    asm_line!(assembly, "\n.globl _tinytsx_config_provider_transport");
+    asm_line!(assembly, "_tinytsx_config_provider_transport:");
     emit_immediate(assembly, "x0", u64::from(program.uses_openai_transport()));
-    writeln!(assembly, "    ret").unwrap();
+    asm_line!(assembly, "    ret");
 
-    writeln!(assembly, "\n.globl _tinytsx_worker_operation").unwrap();
-    writeln!(assembly, "_tinytsx_worker_operation:").unwrap();
+    asm_line!(assembly, "\n.globl _tinytsx_worker_operation");
+    asm_line!(assembly, "_tinytsx_worker_operation:");
     emit_immediate(assembly, "x1", program.workers.len() as u64);
-    writeln!(assembly, "    cmp x0, x1").unwrap();
-    writeln!(assembly, "    b.hs Ltinytsx_worker_operation_invalid").unwrap();
+    asm_line!(assembly, "    cmp x0, x1");
+    asm_line!(assembly, "    b.hs Ltinytsx_worker_operation_invalid");
     emit_immediate(assembly, "x0", 1);
-    writeln!(assembly, "    ret").unwrap();
-    writeln!(assembly, "Ltinytsx_worker_operation_invalid:").unwrap();
-    writeln!(assembly, "    mov x0, #0").unwrap();
-    writeln!(assembly, "    ret").unwrap();
+    asm_line!(assembly, "    ret");
+    asm_line!(assembly, "Ltinytsx_worker_operation_invalid:");
+    asm_line!(assembly, "    mov x0, #0");
+    asm_line!(assembly, "    ret");
 }
 
-fn emit_function(assembly: &mut String, symbol: &str, operations: &[HtmlOp], program: &Program) {
-    writeln!(assembly, "\n.private_extern {symbol}").unwrap();
-    writeln!(assembly, "{symbol}:").unwrap();
+fn emit_function(assembly: &mut Assembly, symbol: &str, operations: &[HtmlOp], program: &Program) {
+    asm_line!(assembly, "\n.private_extern {symbol}");
+    asm_line!(assembly, "{symbol}:");
     emit_prologue(assembly, 32);
     preserve_request_context(assembly);
     let return_label = format!("L{}_return", symbol.trim_start_matches('_'));
 
     if operations.is_empty() {
-        writeln!(assembly, "    mov w0, #0").unwrap();
+        asm_line!(assembly, "    mov w0, #0");
     }
     for operation in operations {
         match operation {
             HtmlOp::WriteStatic { string, .. } => {
-                writeln!(assembly, "    ldr x0, [sp, #16]").unwrap();
-                writeln!(assembly, "    adrp x1, Ltinytsx_string_{string}@PAGE").unwrap();
-                writeln!(assembly, "    add x1, x1, Ltinytsx_string_{string}@PAGEOFF").unwrap();
+                asm_line!(assembly, "    ldr x0, [sp, #16]");
+                asm_line!(assembly, "    adrp x1, Ltinytsx_string_{string}@PAGE");
+                asm_line!(assembly, "    add x1, x1, Ltinytsx_string_{string}@PAGEOFF");
                 emit_immediate(
                     assembly,
                     "x2",
                     program.static_strings[*string].value.len() as u64,
                 );
-                writeln!(assembly, "    bl _tinytsx_html_write_static").unwrap();
-                writeln!(assembly, "    cbnz w0, {return_label}").unwrap();
+                asm_line!(assembly, "    bl _tinytsx_html_write_static");
+                asm_line!(assembly, "    cbnz w0, {return_label}");
             }
             HtmlOp::CallComponent { component, .. } => {
-                writeln!(assembly, "    ldr x0, [sp, #24]").unwrap();
-                writeln!(assembly, "    ldr x1, [sp, #16]").unwrap();
-                writeln!(assembly, "    bl _tinytsx_component_{component}").unwrap();
-                writeln!(assembly, "    cbnz w0, {return_label}").unwrap();
+                asm_line!(assembly, "    ldr x0, [sp, #24]");
+                asm_line!(assembly, "    ldr x1, [sp, #16]");
+                asm_line!(assembly, "    bl _tinytsx_component_{component}");
+                asm_line!(assembly, "    cbnz w0, {return_label}");
             }
         }
     }
-    writeln!(assembly, "    mov w0, #0").unwrap();
-    writeln!(assembly, "{return_label}:").unwrap();
+    asm_line!(assembly, "    mov w0, #0");
+    asm_line!(assembly, "{return_label}:");
     emit_epilogue(assembly, 32);
 }
 
 fn emit_value_function(
-    assembly: &mut String,
+    assembly: &mut Assembly,
     id: usize,
     body: &ValueExpression,
     program: &Program,
@@ -118,31 +121,30 @@ fn emit_value_function(
     let function = &program.functions[id];
     let scratch_base = 16 + function.parameters.len() * 16;
     let frame_size = value_frame_size(scratch_base, body)?;
-    writeln!(assembly, "\n.private_extern _tinytsx_function_{id}").unwrap();
-    writeln!(assembly, "_tinytsx_function_{id}:").unwrap();
+    asm_line!(assembly, "\n.private_extern _tinytsx_function_{id}");
+    asm_line!(assembly, "_tinytsx_function_{id}:");
     emit_prologue(assembly, frame_size);
     for (index, (first, second)) in [("x0", "x1"), ("x2", "x3"), ("x4", "x5"), ("x6", "x7")]
         .into_iter()
         .take(function.parameters.len())
         .enumerate()
     {
-        writeln!(
+        asm_line!(
             assembly,
             "    stp {}, {}, [sp, #{}]",
             first,
             second,
             16 + index * 16
-        )
-        .unwrap();
+        );
     }
     emit_value_expression(assembly, body, program, scratch_base)?;
     emit_epilogue(assembly, frame_size);
     Ok(())
 }
 
-fn emit_handlers(assembly: &mut String, program: &Program) -> Result<(), String> {
-    writeln!(assembly, "\n.globl _tinytsx_handle_get").unwrap();
-    writeln!(assembly, "_tinytsx_handle_get:").unwrap();
+fn emit_handlers(assembly: &mut Assembly, program: &Program) -> Result<(), String> {
+    asm_line!(assembly, "\n.globl _tinytsx_handle_get");
+    asm_line!(assembly, "_tinytsx_handle_get:");
     let frame_size = program
         .handlers
         .iter()
@@ -163,58 +165,66 @@ fn emit_handlers(assembly: &mut String, program: &Program) -> Result<(), String>
     preserve_request_context(assembly);
     let return_label = "Ltinytsx_handle_get_return";
     for (index, handler) in program.handlers.iter().enumerate() {
-        writeln!(assembly, "    ldr x0, [sp, #24]").unwrap();
-        writeln!(
+        asm_line!(assembly, "    ldr x0, [sp, #24]");
+        asm_line!(
             assembly,
             "    adrp x1, Ltinytsx_handler_method_{index}@PAGE"
-        )
-        .unwrap();
-        writeln!(
+        );
+        asm_line!(
             assembly,
             "    add x1, x1, Ltinytsx_handler_method_{index}@PAGEOFF"
-        )
-        .unwrap();
+        );
         emit_immediate(assembly, "x2", handler.method.len() as u64);
-        writeln!(assembly, "    bl _tinytsx_request_method_equals").unwrap();
-        writeln!(assembly, "    cbz w0, Ltinytsx_handle_get_next_{index}").unwrap();
-        writeln!(assembly, "    ldr x0, [sp, #24]").unwrap();
-        writeln!(assembly, "    adrp x1, Ltinytsx_handler_path_{index}@PAGE").unwrap();
-        writeln!(
+        asm_line!(assembly, "    bl _tinytsx_request_method_equals");
+        asm_line!(assembly, "    cbz w0, Ltinytsx_handle_get_next_{index}");
+        asm_line!(assembly, "    ldr x0, [sp, #24]");
+        asm_line!(assembly, "    adrp x1, Ltinytsx_handler_path_{index}@PAGE");
+        asm_line!(
             assembly,
             "    add x1, x1, Ltinytsx_handler_path_{index}@PAGEOFF"
-        )
-        .unwrap();
+        );
         emit_immediate(assembly, "x2", handler.path.len() as u64);
-        writeln!(assembly, "    bl _tinytsx_request_path_matches").unwrap();
-        writeln!(assembly, "    cbnz w0, Ltinytsx_handle_get_match_{index}").unwrap();
-        writeln!(assembly, "Ltinytsx_handle_get_next_{index}:").unwrap();
+        asm_line!(assembly, "    bl _tinytsx_request_path_matches");
+        asm_line!(assembly, "    cbnz w0, Ltinytsx_handle_get_match_{index}");
+        asm_line!(assembly, "Ltinytsx_handle_get_next_{index}:");
     }
     emit_immediate(assembly, "x0", 5);
-    writeln!(assembly, "    b {return_label}").unwrap();
+    asm_line!(assembly, "    b {return_label}");
     for (index, handler) in program.handlers.iter().enumerate() {
-        writeln!(assembly, "Ltinytsx_handle_get_match_{index}:").unwrap();
+        asm_line!(assembly, "Ltinytsx_handle_get_match_{index}:");
         if let Some(entity_tag) = &handler.entity_tag {
             let normal_label = format!("Ltinytsx_handler_{index}_etag_normal");
-            writeln!(assembly, "    ldr x0, [sp, #24]").unwrap();
-            writeln!(assembly, "    adrp x1, Ltinytsx_handler_{index}_etag@PAGE").unwrap();
-            writeln!(
+            asm_line!(assembly, "    ldr x0, [sp, #24]");
+            asm_line!(assembly, "    adrp x1, Ltinytsx_handler_{index}_etag@PAGE");
+            asm_line!(
                 assembly,
                 "    add x1, x1, Ltinytsx_handler_{index}_etag@PAGEOFF"
-            )
-            .unwrap();
+            );
             emit_immediate(assembly, "x2", entity_tag.value.len() as u64);
-            writeln!(assembly, "    bl _tinytsx_request_if_none_match").unwrap();
-            writeln!(assembly, "    cbz w0, {normal_label}").unwrap();
+            asm_line!(assembly, "    bl _tinytsx_request_if_none_match");
+            asm_line!(assembly, "    cbz w0, {normal_label}");
             for (header_index, header) in entity_tag.not_modified.headers.iter().enumerate() {
-                writeln!(assembly, "    ldr x0, [sp, #16]").unwrap();
-                writeln!(assembly, "    adrp x1, Ltinytsx_handler_{index}_not_modified_header_{header_index}_name@PAGE").unwrap();
-                writeln!(assembly, "    add x1, x1, Ltinytsx_handler_{index}_not_modified_header_{header_index}_name@PAGEOFF").unwrap();
+                asm_line!(assembly, "    ldr x0, [sp, #16]");
+                asm_line!(
+                    assembly,
+                    "    adrp x1, Ltinytsx_handler_{index}_not_modified_header_{header_index}_name@PAGE"
+                );
+                asm_line!(
+                    assembly,
+                    "    add x1, x1, Ltinytsx_handler_{index}_not_modified_header_{header_index}_name@PAGEOFF"
+                );
                 emit_immediate(assembly, "x2", header.name.len() as u64);
-                writeln!(assembly, "    adrp x3, Ltinytsx_handler_{index}_not_modified_header_{header_index}_value@PAGE").unwrap();
-                writeln!(assembly, "    add x3, x3, Ltinytsx_handler_{index}_not_modified_header_{header_index}_value@PAGEOFF").unwrap();
+                asm_line!(
+                    assembly,
+                    "    adrp x3, Ltinytsx_handler_{index}_not_modified_header_{header_index}_value@PAGE"
+                );
+                asm_line!(
+                    assembly,
+                    "    add x3, x3, Ltinytsx_handler_{index}_not_modified_header_{header_index}_value@PAGEOFF"
+                );
                 emit_immediate(assembly, "x4", header.value.len() as u64);
-                writeln!(assembly, "    bl _tinytsx_response_header_static").unwrap();
-                writeln!(assembly, "    cbnz w0, {return_label}").unwrap();
+                asm_line!(assembly, "    bl _tinytsx_response_header_static");
+                asm_line!(assembly, "    cbnz w0, {return_label}");
             }
             emit_handler_response(
                 assembly,
@@ -223,74 +233,66 @@ fn emit_handlers(assembly: &mut String, program: &Program) -> Result<(), String>
                 return_label,
                 index,
             )?;
-            writeln!(assembly, "    b {return_label}").unwrap();
-            writeln!(assembly, "{normal_label}:").unwrap();
+            asm_line!(assembly, "    b {return_label}");
+            asm_line!(assembly, "{normal_label}:");
         }
         if let Some(authorization) = &handler.basic_authorization {
             let authorized_label = format!("Ltinytsx_handler_{index}_basic_auth_authorized");
             for (credential_index, credential) in authorization.credentials.iter().enumerate() {
-                writeln!(assembly, "    ldr x0, [sp, #24]").unwrap();
-                writeln!(
+                asm_line!(assembly, "    ldr x0, [sp, #24]");
+                asm_line!(
                     assembly,
                     "    adrp x1, Ltinytsx_handler_{index}_credential_{credential_index}_username@PAGE"
-                )
-                .unwrap();
-                writeln!(
+                );
+                asm_line!(
                     assembly,
                     "    add x1, x1, Ltinytsx_handler_{index}_credential_{credential_index}_username@PAGEOFF"
-                )
-                .unwrap();
+                );
                 emit_immediate(assembly, "x2", credential.username.len() as u64);
-                writeln!(
+                asm_line!(
                     assembly,
                     "    adrp x3, Ltinytsx_handler_{index}_credential_{credential_index}_password@PAGE"
-                )
-                .unwrap();
-                writeln!(
+                );
+                asm_line!(
                     assembly,
                     "    add x3, x3, Ltinytsx_handler_{index}_credential_{credential_index}_password@PAGEOFF"
-                )
-                .unwrap();
+                );
                 emit_immediate(assembly, "x4", credential.password.len() as u64);
-                writeln!(assembly, "    bl _tinytsx_request_basic_auth_equals").unwrap();
-                writeln!(assembly, "    cbnz w0, {authorized_label}").unwrap();
+                asm_line!(assembly, "    bl _tinytsx_request_basic_auth_equals");
+                asm_line!(assembly, "    cbnz w0, {authorized_label}");
             }
             for string in &authorization.rejected.stderr {
-                writeln!(assembly, "    adrp x0, Ltinytsx_string_{string}@PAGE").unwrap();
-                writeln!(assembly, "    add x0, x0, Ltinytsx_string_{string}@PAGEOFF").unwrap();
+                asm_line!(assembly, "    adrp x0, Ltinytsx_string_{string}@PAGE");
+                asm_line!(assembly, "    add x0, x0, Ltinytsx_string_{string}@PAGEOFF");
                 emit_immediate(
                     assembly,
                     "x1",
                     program.static_strings[*string].value.len() as u64,
                 );
-                writeln!(assembly, "    bl _tinytsx_console_error_static").unwrap();
+                asm_line!(assembly, "    bl _tinytsx_console_error_static");
             }
             for (header_index, header) in authorization.rejected.headers.iter().enumerate() {
-                writeln!(assembly, "    ldr x0, [sp, #16]").unwrap();
-                writeln!(
+                asm_line!(assembly, "    ldr x0, [sp, #16]");
+                asm_line!(
                     assembly,
                     "    adrp x1, Ltinytsx_handler_{index}_rejected_header_{header_index}_name@PAGE"
-                )
-                .unwrap();
-                writeln!(
+                );
+                asm_line!(
                     assembly,
                     "    add x1, x1, Ltinytsx_handler_{index}_rejected_header_{header_index}_name@PAGEOFF"
-                )
-                .unwrap();
+                );
                 emit_immediate(assembly, "x2", header.name.len() as u64);
-                writeln!(
+                asm_line!(
                     assembly,
                     "    adrp x3, Ltinytsx_handler_{index}_rejected_header_{header_index}_value@PAGE"
-                )
-                .unwrap();
-                writeln!(
+                );
+                asm_line!(
                     assembly,
                     "    add x3, x3, Ltinytsx_handler_{index}_rejected_header_{header_index}_value@PAGEOFF"
-                )
-                .unwrap();
+                );
                 emit_immediate(assembly, "x4", header.value.len() as u64);
-                writeln!(assembly, "    bl _tinytsx_response_header_static").unwrap();
-                writeln!(assembly, "    cbnz w0, {return_label}").unwrap();
+                asm_line!(assembly, "    bl _tinytsx_response_header_static");
+                asm_line!(assembly, "    cbnz w0, {return_label}");
             }
             emit_handler_response(
                 assembly,
@@ -299,94 +301,86 @@ fn emit_handlers(assembly: &mut String, program: &Program) -> Result<(), String>
                 return_label,
                 index,
             )?;
-            writeln!(assembly, "    b {return_label}").unwrap();
-            writeln!(assembly, "{authorized_label}:").unwrap();
+            asm_line!(assembly, "    b {return_label}");
+            asm_line!(assembly, "{authorized_label}:");
         }
         if !handler.elapsed_headers.is_empty() {
-            writeln!(assembly, "    bl _tinytsx_date_now_millis").unwrap();
-            writeln!(assembly, "    str x0, [sp, #32]").unwrap();
+            asm_line!(assembly, "    bl _tinytsx_date_now_millis");
+            asm_line!(assembly, "    str x0, [sp, #32]");
         }
         for string in &handler.stderr {
-            writeln!(assembly, "    adrp x0, Ltinytsx_string_{string}@PAGE").unwrap();
-            writeln!(assembly, "    add x0, x0, Ltinytsx_string_{string}@PAGEOFF").unwrap();
+            asm_line!(assembly, "    adrp x0, Ltinytsx_string_{string}@PAGE");
+            asm_line!(assembly, "    add x0, x0, Ltinytsx_string_{string}@PAGEOFF");
             emit_immediate(
                 assembly,
                 "x1",
                 program.static_strings[*string].value.len() as u64,
             );
-            writeln!(assembly, "    bl _tinytsx_console_error_static").unwrap();
+            asm_line!(assembly, "    bl _tinytsx_console_error_static");
         }
         for (header_index, header) in handler.headers.iter().enumerate() {
-            writeln!(assembly, "    ldr x0, [sp, #16]").unwrap();
-            writeln!(
+            asm_line!(assembly, "    ldr x0, [sp, #16]");
+            asm_line!(
                 assembly,
                 "    adrp x1, Ltinytsx_handler_{index}_header_{header_index}_name@PAGE"
-            )
-            .unwrap();
-            writeln!(
+            );
+            asm_line!(
                 assembly,
                 "    add x1, x1, Ltinytsx_handler_{index}_header_{header_index}_name@PAGEOFF"
-            )
-            .unwrap();
+            );
             emit_immediate(assembly, "x2", header.name.len() as u64);
-            writeln!(
+            asm_line!(
                 assembly,
                 "    adrp x3, Ltinytsx_handler_{index}_header_{header_index}_value@PAGE"
-            )
-            .unwrap();
-            writeln!(
+            );
+            asm_line!(
                 assembly,
                 "    add x3, x3, Ltinytsx_handler_{index}_header_{header_index}_value@PAGEOFF"
-            )
-            .unwrap();
+            );
             emit_immediate(assembly, "x4", header.value.len() as u64);
-            writeln!(assembly, "    bl _tinytsx_response_header_static").unwrap();
-            writeln!(assembly, "    cbnz w0, {return_label}").unwrap();
+            asm_line!(assembly, "    bl _tinytsx_response_header_static");
+            asm_line!(assembly, "    cbnz w0, {return_label}");
         }
         emit_handler_response(assembly, &handler.response, program, return_label, index)?;
         if !handler.elapsed_headers.is_empty() {
-            writeln!(assembly, "    cbnz w0, {return_label}").unwrap();
-            writeln!(assembly, "    bl _tinytsx_date_now_millis").unwrap();
-            writeln!(assembly, "    str x0, [sp, #40]").unwrap();
+            asm_line!(assembly, "    cbnz w0, {return_label}");
+            asm_line!(assembly, "    bl _tinytsx_date_now_millis");
+            asm_line!(assembly, "    str x0, [sp, #40]");
         }
         for (header_index, header) in handler.elapsed_headers.iter().enumerate() {
-            writeln!(assembly, "    ldr x0, [sp, #16]").unwrap();
-            writeln!(
+            asm_line!(assembly, "    ldr x0, [sp, #16]");
+            asm_line!(
                 assembly,
                 "    adrp x1, Ltinytsx_handler_{index}_elapsed_{header_index}_name@PAGE"
-            )
-            .unwrap();
-            writeln!(
+            );
+            asm_line!(
                 assembly,
                 "    add x1, x1, Ltinytsx_handler_{index}_elapsed_{header_index}_name@PAGEOFF"
-            )
-            .unwrap();
+            );
             emit_immediate(assembly, "x2", header.name.len() as u64);
-            writeln!(assembly, "    ldr x3, [sp, #32]").unwrap();
-            writeln!(assembly, "    ldr x4, [sp, #40]").unwrap();
-            writeln!(
+            asm_line!(assembly, "    ldr x3, [sp, #32]");
+            asm_line!(assembly, "    ldr x4, [sp, #40]");
+            asm_line!(
                 assembly,
                 "    adrp x5, Ltinytsx_handler_{index}_elapsed_{header_index}_suffix@PAGE"
-            )
-            .unwrap();
-            writeln!(
+            );
+            asm_line!(
                 assembly,
                 "    add x5, x5, Ltinytsx_handler_{index}_elapsed_{header_index}_suffix@PAGEOFF"
-            )
-            .unwrap();
+            );
             emit_immediate(assembly, "x6", header.suffix.len() as u64);
-            writeln!(assembly, "    bl _tinytsx_response_header_elapsed_millis").unwrap();
-            writeln!(assembly, "    cbnz w0, {return_label}").unwrap();
+            asm_line!(assembly, "    bl _tinytsx_response_header_elapsed_millis");
+            asm_line!(assembly, "    cbnz w0, {return_label}");
         }
-        writeln!(assembly, "    b {return_label}").unwrap();
+        asm_line!(assembly, "    b {return_label}");
     }
-    writeln!(assembly, "{return_label}:").unwrap();
+    asm_line!(assembly, "{return_label}:");
     emit_epilogue(assembly, frame_size);
     Ok(())
 }
 
 fn emit_handler_response(
-    assembly: &mut String,
+    assembly: &mut Assembly,
     response: &HandlerResponse,
     program: &Program,
     return_label: &str,
@@ -395,9 +389,9 @@ fn emit_handler_response(
     match response {
         HandlerResponse::Html { component } => {
             emit_response_begin(assembly, 200, 1, return_label);
-            writeln!(assembly, "    ldr x0, [sp, #24]").unwrap();
-            writeln!(assembly, "    ldr x1, [sp, #16]").unwrap();
-            writeln!(assembly, "    bl _tinytsx_component_{component}").unwrap();
+            asm_line!(assembly, "    ldr x0, [sp, #24]");
+            asm_line!(assembly, "    ldr x1, [sp, #16]");
+            asm_line!(assembly, "    bl _tinytsx_component_{component}");
         }
         HandlerResponse::Text {
             value,
@@ -437,27 +431,27 @@ fn emit_handler_response(
                 _ => 2,
             };
             emit_response_begin(assembly, *status, content_type_id, return_label);
-            writeln!(assembly, "    ldr x0, [sp, #16]").unwrap();
-            writeln!(assembly, "    bl _tinytsx_response_stream_begin").unwrap();
-            writeln!(assembly, "    cbnz w0, {return_label}").unwrap();
+            asm_line!(assembly, "    ldr x0, [sp, #16]");
+            asm_line!(assembly, "    bl _tinytsx_response_stream_begin");
+            asm_line!(assembly, "    cbnz w0, {return_label}");
             let mut conditional_index = 0;
             for chunk in chunks {
                 if let ValueExpression::StringLiteral { string, .. } = chunk {
-                    writeln!(assembly, "    ldr x0, [sp, #16]").unwrap();
-                    writeln!(assembly, "    adrp x1, Ltinytsx_string_{string}@PAGE").unwrap();
-                    writeln!(assembly, "    add x1, x1, Ltinytsx_string_{string}@PAGEOFF").unwrap();
+                    asm_line!(assembly, "    ldr x0, [sp, #16]");
+                    asm_line!(assembly, "    adrp x1, Ltinytsx_string_{string}@PAGE");
+                    asm_line!(assembly, "    add x1, x1, Ltinytsx_string_{string}@PAGEOFF");
                     emit_immediate(
                         assembly,
                         "x2",
                         program.static_strings[*string].value.len() as u64,
                     );
-                    writeln!(assembly, "    bl _tinytsx_response_stream_chunk_static").unwrap();
-                    writeln!(assembly, "    cbnz w0, {return_label}").unwrap();
+                    asm_line!(assembly, "    bl _tinytsx_response_stream_chunk_static");
+                    asm_line!(assembly, "    cbnz w0, {return_label}");
                     continue;
                 }
-                writeln!(assembly, "    ldr x0, [sp, #16]").unwrap();
-                writeln!(assembly, "    bl _tinytsx_response_stream_chunk_begin").unwrap();
-                writeln!(assembly, "    cbnz w0, {return_label}").unwrap();
+                asm_line!(assembly, "    ldr x0, [sp, #16]");
+                asm_line!(assembly, "    bl _tinytsx_response_stream_chunk_begin");
+                asm_line!(assembly, "    cbnz w0, {return_label}");
                 emit_handler_text_expression(
                     assembly,
                     chunk,
@@ -466,10 +460,10 @@ fn emit_handler_response(
                     handler_index,
                     &mut conditional_index,
                 )?;
-                writeln!(assembly, "    cbnz w0, {return_label}").unwrap();
-                writeln!(assembly, "    ldr x0, [sp, #16]").unwrap();
-                writeln!(assembly, "    bl _tinytsx_response_stream_chunk_end").unwrap();
-                writeln!(assembly, "    cbnz w0, {return_label}").unwrap();
+                asm_line!(assembly, "    cbnz w0, {return_label}");
+                asm_line!(assembly, "    ldr x0, [sp, #16]");
+                asm_line!(assembly, "    bl _tinytsx_response_stream_chunk_end");
+                asm_line!(assembly, "    cbnz w0, {return_label}");
             }
         }
     }
@@ -477,7 +471,7 @@ fn emit_handler_response(
 }
 
 fn emit_handler_text_expression(
-    assembly: &mut String,
+    assembly: &mut Assembly,
     expression: &ValueExpression,
     program: &Program,
     return_label: &str,
@@ -495,37 +489,37 @@ fn emit_handler_text_expression(
                     handler_index,
                     conditional_index,
                 )?;
-                writeln!(assembly, "    cbnz w0, {return_label}").unwrap();
+                asm_line!(assembly, "    cbnz w0, {return_label}");
             }
         }
         ValueExpression::RouteParameter { segment, .. } => {
-            writeln!(assembly, "    ldr x0, [sp, #16]").unwrap();
-            writeln!(assembly, "    ldr x1, [sp, #24]").unwrap();
+            asm_line!(assembly, "    ldr x0, [sp, #16]");
+            asm_line!(assembly, "    ldr x1, [sp, #24]");
             emit_immediate(assembly, "x2", *segment as u64);
-            writeln!(assembly, "    bl _tinytsx_html_write_path_segment").unwrap();
+            asm_line!(assembly, "    bl _tinytsx_html_write_path_segment");
         }
         ValueExpression::RequestHeader { header, .. } => {
-            writeln!(assembly, "    ldr x0, [sp, #16]").unwrap();
-            writeln!(assembly, "    ldr x1, [sp, #24]").unwrap();
-            writeln!(assembly, "    adrp x2, Ltinytsx_string_{header}@PAGE").unwrap();
-            writeln!(assembly, "    add x2, x2, Ltinytsx_string_{header}@PAGEOFF").unwrap();
+            asm_line!(assembly, "    ldr x0, [sp, #16]");
+            asm_line!(assembly, "    ldr x1, [sp, #24]");
+            asm_line!(assembly, "    adrp x2, Ltinytsx_string_{header}@PAGE");
+            asm_line!(assembly, "    add x2, x2, Ltinytsx_string_{header}@PAGEOFF");
             emit_immediate(
                 assembly,
                 "x3",
                 program.static_strings[*header].value.len() as u64,
             );
-            writeln!(assembly, "    bl _tinytsx_html_write_request_header").unwrap();
+            asm_line!(assembly, "    bl _tinytsx_html_write_request_header");
         }
         ValueExpression::FetchStatus { url, .. } => {
-            writeln!(assembly, "    ldr x0, [sp, #16]").unwrap();
-            writeln!(assembly, "    adrp x1, Ltinytsx_string_{url}@PAGE").unwrap();
-            writeln!(assembly, "    add x1, x1, Ltinytsx_string_{url}@PAGEOFF").unwrap();
+            asm_line!(assembly, "    ldr x0, [sp, #16]");
+            asm_line!(assembly, "    adrp x1, Ltinytsx_string_{url}@PAGE");
+            asm_line!(assembly, "    add x1, x1, Ltinytsx_string_{url}@PAGEOFF");
             emit_immediate(
                 assembly,
                 "x2",
                 program.static_strings[*url].value.len() as u64,
             );
-            writeln!(assembly, "    bl _tinytsx_html_write_fetch_status").unwrap();
+            asm_line!(assembly, "    bl _tinytsx_html_write_fetch_status");
         }
         ValueExpression::QueryParameter {
             query,
@@ -533,33 +527,32 @@ fn emit_handler_text_expression(
             escape_html,
             ..
         } => {
-            writeln!(assembly, "    ldr x0, [sp, #16]").unwrap();
-            writeln!(assembly, "    ldr x1, [sp, #24]").unwrap();
-            writeln!(assembly, "    adrp x2, Ltinytsx_string_{query}@PAGE").unwrap();
-            writeln!(assembly, "    add x2, x2, Ltinytsx_string_{query}@PAGEOFF").unwrap();
+            asm_line!(assembly, "    ldr x0, [sp, #16]");
+            asm_line!(assembly, "    ldr x1, [sp, #24]");
+            asm_line!(assembly, "    adrp x2, Ltinytsx_string_{query}@PAGE");
+            asm_line!(assembly, "    add x2, x2, Ltinytsx_string_{query}@PAGEOFF");
             emit_immediate(
                 assembly,
                 "x3",
                 program.static_strings[*query].value.len() as u64,
             );
             if let Some(fallback) = fallback {
-                writeln!(assembly, "    adrp x4, Ltinytsx_string_{fallback}@PAGE").unwrap();
-                writeln!(
+                asm_line!(assembly, "    adrp x4, Ltinytsx_string_{fallback}@PAGE");
+                asm_line!(
                     assembly,
                     "    add x4, x4, Ltinytsx_string_{fallback}@PAGEOFF"
-                )
-                .unwrap();
+                );
                 emit_immediate(
                     assembly,
                     "x5",
                     program.static_strings[*fallback].value.len() as u64,
                 );
             } else {
-                writeln!(assembly, "    mov x4, #0").unwrap();
-                writeln!(assembly, "    mov x5, #0").unwrap();
+                asm_line!(assembly, "    mov x4, #0");
+                asm_line!(assembly, "    mov x5, #0");
             }
             emit_immediate(assembly, "x6", u64::from(*escape_html));
-            writeln!(assembly, "    bl _tinytsx_html_write_query_parameter").unwrap();
+            asm_line!(assembly, "    bl _tinytsx_html_write_query_parameter");
         }
         ValueExpression::QueryConditional {
             query,
@@ -572,16 +565,16 @@ fn emit_handler_text_expression(
             let absent_label =
                 format!("Ltinytsx_handler_{handler_index}_query_{branch_index}_absent");
             let end_label = format!("Ltinytsx_handler_{handler_index}_query_{branch_index}_end");
-            writeln!(assembly, "    ldr x0, [sp, #24]").unwrap();
-            writeln!(assembly, "    adrp x1, Ltinytsx_string_{query}@PAGE").unwrap();
-            writeln!(assembly, "    add x1, x1, Ltinytsx_string_{query}@PAGEOFF").unwrap();
+            asm_line!(assembly, "    ldr x0, [sp, #24]");
+            asm_line!(assembly, "    adrp x1, Ltinytsx_string_{query}@PAGE");
+            asm_line!(assembly, "    add x1, x1, Ltinytsx_string_{query}@PAGEOFF");
             emit_immediate(
                 assembly,
                 "x2",
                 program.static_strings[*query].value.len() as u64,
             );
-            writeln!(assembly, "    bl _tinytsx_request_query_has").unwrap();
-            writeln!(assembly, "    cbz w0, {absent_label}").unwrap();
+            asm_line!(assembly, "    bl _tinytsx_request_query_has");
+            asm_line!(assembly, "    cbz w0, {absent_label}");
             emit_handler_text_expression(
                 assembly,
                 when_present,
@@ -590,9 +583,9 @@ fn emit_handler_text_expression(
                 handler_index,
                 conditional_index,
             )?;
-            writeln!(assembly, "    cbnz w0, {return_label}").unwrap();
-            writeln!(assembly, "    b {end_label}").unwrap();
-            writeln!(assembly, "{absent_label}:").unwrap();
+            asm_line!(assembly, "    cbnz w0, {return_label}");
+            asm_line!(assembly, "    b {end_label}");
+            asm_line!(assembly, "{absent_label}:");
             emit_handler_text_expression(
                 assembly,
                 when_absent,
@@ -601,51 +594,50 @@ fn emit_handler_text_expression(
                 handler_index,
                 conditional_index,
             )?;
-            writeln!(assembly, "{end_label}:").unwrap();
+            asm_line!(assembly, "{end_label}:");
         }
         ValueExpression::WorkerCall { worker, input, .. } => match input.as_ref() {
             ValueExpression::StringLiteral { string, .. } => {
-                writeln!(assembly, "    ldr x0, [sp, #16]").unwrap();
+                asm_line!(assembly, "    ldr x0, [sp, #16]");
                 emit_immediate(assembly, "x1", *worker as u64);
-                writeln!(assembly, "    adrp x2, Ltinytsx_string_{string}@PAGE").unwrap();
-                writeln!(assembly, "    add x2, x2, Ltinytsx_string_{string}@PAGEOFF").unwrap();
+                asm_line!(assembly, "    adrp x2, Ltinytsx_string_{string}@PAGE");
+                asm_line!(assembly, "    add x2, x2, Ltinytsx_string_{string}@PAGEOFF");
                 emit_immediate(
                     assembly,
                     "x3",
                     program.static_strings[*string].value.len() as u64,
                 );
-                writeln!(assembly, "    bl _tinytsx_worker_call_static").unwrap();
+                asm_line!(assembly, "    bl _tinytsx_worker_call_static");
             }
             ValueExpression::QueryParameter {
                 query, fallback, ..
             } => {
-                writeln!(assembly, "    ldr x0, [sp, #16]").unwrap();
-                writeln!(assembly, "    ldr x1, [sp, #24]").unwrap();
+                asm_line!(assembly, "    ldr x0, [sp, #16]");
+                asm_line!(assembly, "    ldr x1, [sp, #24]");
                 emit_immediate(assembly, "x2", *worker as u64);
-                writeln!(assembly, "    adrp x3, Ltinytsx_string_{query}@PAGE").unwrap();
-                writeln!(assembly, "    add x3, x3, Ltinytsx_string_{query}@PAGEOFF").unwrap();
+                asm_line!(assembly, "    adrp x3, Ltinytsx_string_{query}@PAGE");
+                asm_line!(assembly, "    add x3, x3, Ltinytsx_string_{query}@PAGEOFF");
                 emit_immediate(
                     assembly,
                     "x4",
                     program.static_strings[*query].value.len() as u64,
                 );
                 if let Some(fallback) = fallback {
-                    writeln!(assembly, "    adrp x5, Ltinytsx_string_{fallback}@PAGE").unwrap();
-                    writeln!(
+                    asm_line!(assembly, "    adrp x5, Ltinytsx_string_{fallback}@PAGE");
+                    asm_line!(
                         assembly,
                         "    add x5, x5, Ltinytsx_string_{fallback}@PAGEOFF"
-                    )
-                    .unwrap();
+                    );
                     emit_immediate(
                         assembly,
                         "x6",
                         program.static_strings[*fallback].value.len() as u64,
                     );
                 } else {
-                    writeln!(assembly, "    mov x5, #0").unwrap();
-                    writeln!(assembly, "    mov x6, #0").unwrap();
+                    asm_line!(assembly, "    mov x5, #0");
+                    asm_line!(assembly, "    mov x6, #0");
                 }
-                writeln!(assembly, "    bl _tinytsx_worker_call_query").unwrap();
+                asm_line!(assembly, "    bl _tinytsx_worker_call_query");
             }
             _ => return Err("unsupported worker call input".to_owned()),
         },
@@ -655,67 +647,70 @@ fn emit_handler_text_expression(
             body,
             ..
         } => {
-            writeln!(assembly, "    ldr x0, [sp, #16]").unwrap();
-            writeln!(assembly, "    adrp x1, Ltinytsx_string_{url}@PAGE").unwrap();
-            writeln!(assembly, "    add x1, x1, Ltinytsx_string_{url}@PAGEOFF").unwrap();
+            asm_line!(assembly, "    ldr x0, [sp, #16]");
+            asm_line!(assembly, "    adrp x1, Ltinytsx_string_{url}@PAGE");
+            asm_line!(assembly, "    add x1, x1, Ltinytsx_string_{url}@PAGEOFF");
             emit_immediate(
                 assembly,
                 "x2",
                 program.static_strings[*url].value.len() as u64,
             );
-            writeln!(
+            asm_line!(
                 assembly,
                 "    adrp x3, Ltinytsx_string_{authorization}@PAGE"
-            )
-            .unwrap();
-            writeln!(
+            );
+            asm_line!(
                 assembly,
                 "    add x3, x3, Ltinytsx_string_{authorization}@PAGEOFF"
-            )
-            .unwrap();
+            );
             emit_immediate(
                 assembly,
                 "x4",
                 program.static_strings[*authorization].value.len() as u64,
             );
-            writeln!(assembly, "    adrp x5, Ltinytsx_string_{body}@PAGE").unwrap();
-            writeln!(assembly, "    add x5, x5, Ltinytsx_string_{body}@PAGEOFF").unwrap();
+            asm_line!(assembly, "    adrp x5, Ltinytsx_string_{body}@PAGE");
+            asm_line!(assembly, "    add x5, x5, Ltinytsx_string_{body}@PAGEOFF");
             emit_immediate(
                 assembly,
                 "x6",
                 program.static_strings[*body].value.len() as u64,
             );
-            writeln!(assembly, "    bl _tinytsx_html_write_openai_chat_text").unwrap();
+            asm_line!(assembly, "    bl _tinytsx_html_write_openai_chat_text");
         }
         _ => {
             emit_value_expression(assembly, expression, program, HANDLER_SCRATCH_BASE)?;
-            writeln!(assembly, "    mov x2, x1").unwrap();
-            writeln!(assembly, "    mov x1, x0").unwrap();
-            writeln!(assembly, "    ldr x0, [sp, #16]").unwrap();
-            writeln!(assembly, "    bl _tinytsx_html_write_static").unwrap();
+            asm_line!(assembly, "    mov x2, x1");
+            asm_line!(assembly, "    mov x1, x0");
+            asm_line!(assembly, "    ldr x0, [sp, #16]");
+            asm_line!(assembly, "    bl _tinytsx_html_write_static");
         }
     }
     Ok(())
 }
 
-fn emit_response_begin(assembly: &mut String, status: u16, content_type: u16, return_label: &str) {
-    writeln!(assembly, "    ldr x0, [sp, #16]").unwrap();
+fn emit_response_begin(
+    assembly: &mut Assembly,
+    status: u16,
+    content_type: u16,
+    return_label: &str,
+) {
+    asm_line!(assembly, "    ldr x0, [sp, #16]");
     emit_immediate(assembly, "x1", u64::from(status));
     emit_immediate(assembly, "x2", u64::from(content_type));
-    writeln!(assembly, "    bl _tinytsx_response_begin").unwrap();
-    writeln!(assembly, "    cbnz w0, {return_label}").unwrap();
+    asm_line!(assembly, "    bl _tinytsx_response_begin");
+    asm_line!(assembly, "    cbnz w0, {return_label}");
 }
 
 fn emit_value_expression(
-    assembly: &mut String,
+    assembly: &mut Assembly,
     expression: &ValueExpression,
     program: &Program,
     scratch_base: usize,
 ) -> Result<(), String> {
     match expression {
         ValueExpression::StringLiteral { string, .. } => {
-            writeln!(assembly, "    adrp x0, Ltinytsx_string_{string}@PAGE").unwrap();
-            writeln!(assembly, "    add x0, x0, Ltinytsx_string_{string}@PAGEOFF").unwrap();
+            asm_line!(assembly, "    adrp x0, Ltinytsx_string_{string}@PAGE");
+            asm_line!(assembly, "    add x0, x0, Ltinytsx_string_{string}@PAGEOFF");
             emit_immediate(
                 assembly,
                 "x1",
@@ -726,17 +721,16 @@ fn emit_value_expression(
             let ConstantValue::String { value } = &program.constants[*constant].value else {
                 return Err("string expression references a non-string constant".to_owned());
             };
-            writeln!(assembly, "    adrp x0, Ltinytsx_constant_{constant}@PAGE").unwrap();
-            writeln!(
+            asm_line!(assembly, "    adrp x0, Ltinytsx_constant_{constant}@PAGE");
+            asm_line!(
                 assembly,
                 "    add x0, x0, Ltinytsx_constant_{constant}@PAGEOFF"
-            )
-            .unwrap();
-            writeln!(assembly, "    add x0, x0, #5").unwrap();
+            );
+            asm_line!(assembly, "    add x0, x0, #5");
             emit_immediate(assembly, "x1", value.len() as u64);
         }
         ValueExpression::Parameter { parameter, .. } => {
-            writeln!(assembly, "    ldp x0, x1, [sp, #{}]", 16 + parameter * 16).unwrap();
+            asm_line!(assembly, "    ldp x0, x1, [sp, #{}]", 16 + parameter * 16);
         }
         ValueExpression::DirectCall {
             function,
@@ -746,26 +740,24 @@ fn emit_value_expression(
             let nested_scratch = scratch_base + arguments.len() * 16;
             for (index, argument) in arguments.iter().enumerate() {
                 emit_value_expression(assembly, argument, program, nested_scratch)?;
-                writeln!(
+                asm_line!(
                     assembly,
                     "    stp x0, x1, [sp, #{}]",
                     scratch_base + index * 16
-                )
-                .unwrap();
+                );
             }
             for (index, (first, second)) in [("x0", "x1"), ("x2", "x3"), ("x4", "x5"), ("x6", "x7")]
                 .into_iter()
                 .take(arguments.len())
                 .enumerate()
             {
-                writeln!(
+                asm_line!(
                     assembly,
                     "    ldp {first}, {second}, [sp, #{}]",
                     scratch_base + index * 16
-                )
-                .unwrap();
+                );
             }
-            writeln!(assembly, "    bl _tinytsx_function_{function}").unwrap();
+            asm_line!(assembly, "    bl _tinytsx_function_{function}");
         }
         ValueExpression::Concat { .. }
         | ValueExpression::RouteParameter { .. }
@@ -781,192 +773,120 @@ fn emit_value_expression(
     Ok(())
 }
 
-fn emit_prologue(assembly: &mut String, frame_size: usize) {
-    writeln!(assembly, "    stp x29, x30, [sp, #-{frame_size}]!").unwrap();
-    writeln!(assembly, "    mov x29, sp").unwrap();
-}
-
-fn preserve_request_context(assembly: &mut String) {
-    writeln!(assembly, "    str x1, [sp, #16]").unwrap();
-    writeln!(assembly, "    str x0, [sp, #24]").unwrap();
-}
-
-fn emit_epilogue(assembly: &mut String, frame_size: usize) {
-    writeln!(assembly, "    ldp x29, x30, [sp], #{frame_size}").unwrap();
-    writeln!(assembly, "    ret").unwrap();
-}
-
-fn value_frame_size(base: usize, expression: &ValueExpression) -> Result<usize, String> {
-    let required = base + scratch_slots(expression) * 16;
-    let frame_size = required.max(16).div_ceil(16) * 16;
-    if frame_size > 496 {
-        return Err("function call expression requires more than 496 bytes of stack".to_owned());
-    }
-    Ok(frame_size)
-}
-
-fn scratch_slots(expression: &ValueExpression) -> usize {
-    match expression {
-        ValueExpression::DirectCall { arguments, .. } => {
-            arguments.len() + arguments.iter().map(scratch_slots).max().unwrap_or(0)
-        }
-        ValueExpression::Concat { values, .. } => {
-            values.iter().map(scratch_slots).max().unwrap_or(0)
-        }
-        ValueExpression::QueryConditional {
-            when_present,
-            when_absent,
-            ..
-        } => scratch_slots(when_present).max(scratch_slots(when_absent)),
-        ValueExpression::WorkerCall { input, .. } => scratch_slots(input),
-        _ => 0,
-    }
-}
-
-fn emit_static_data(assembly: &mut String, program: &Program) -> Result<(), String> {
-    writeln!(assembly, "\n.section __TEXT,__const").unwrap();
+fn emit_static_data(assembly: &mut Assembly, program: &Program) -> Result<(), String> {
+    asm_line!(assembly, "\n.section __TEXT,__const");
     for (index, handler) in program.handlers.iter().enumerate() {
-        writeln!(assembly, ".p2align 3").unwrap();
-        writeln!(assembly, "Ltinytsx_handler_method_{index}:").unwrap();
+        asm_line!(assembly, ".p2align 3");
+        asm_line!(assembly, "Ltinytsx_handler_method_{index}:");
         emit_bytes(assembly, handler.method.as_bytes());
-        writeln!(assembly, ".p2align 3").unwrap();
-        writeln!(assembly, "Ltinytsx_handler_path_{index}:").unwrap();
+        asm_line!(assembly, ".p2align 3");
+        asm_line!(assembly, "Ltinytsx_handler_path_{index}:");
         emit_bytes(assembly, handler.path.as_bytes());
         for (header_index, header) in handler.headers.iter().enumerate() {
-            writeln!(assembly, ".p2align 3").unwrap();
-            writeln!(
+            asm_line!(assembly, ".p2align 3");
+            asm_line!(
                 assembly,
                 "Ltinytsx_handler_{index}_header_{header_index}_name:"
-            )
-            .unwrap();
+            );
             emit_bytes(assembly, header.name.as_bytes());
-            writeln!(assembly, ".p2align 3").unwrap();
-            writeln!(
+            asm_line!(assembly, ".p2align 3");
+            asm_line!(
                 assembly,
                 "Ltinytsx_handler_{index}_header_{header_index}_value:"
-            )
-            .unwrap();
+            );
             emit_bytes(assembly, header.value.as_bytes());
         }
         for (header_index, header) in handler.elapsed_headers.iter().enumerate() {
-            writeln!(assembly, ".p2align 3").unwrap();
-            writeln!(
+            asm_line!(assembly, ".p2align 3");
+            asm_line!(
                 assembly,
                 "Ltinytsx_handler_{index}_elapsed_{header_index}_name:"
-            )
-            .unwrap();
+            );
             emit_bytes(assembly, header.name.as_bytes());
-            writeln!(assembly, ".p2align 3").unwrap();
-            writeln!(
+            asm_line!(assembly, ".p2align 3");
+            asm_line!(
                 assembly,
                 "Ltinytsx_handler_{index}_elapsed_{header_index}_suffix:"
-            )
-            .unwrap();
+            );
             emit_bytes(assembly, header.suffix.as_bytes());
         }
         if let Some(authorization) = &handler.basic_authorization {
             for (credential_index, credential) in authorization.credentials.iter().enumerate() {
-                writeln!(assembly, ".p2align 3").unwrap();
-                writeln!(
+                asm_line!(assembly, ".p2align 3");
+                asm_line!(
                     assembly,
                     "Ltinytsx_handler_{index}_credential_{credential_index}_username:"
-                )
-                .unwrap();
+                );
                 emit_bytes(assembly, credential.username.as_bytes());
-                writeln!(assembly, ".p2align 3").unwrap();
-                writeln!(
+                asm_line!(assembly, ".p2align 3");
+                asm_line!(
                     assembly,
                     "Ltinytsx_handler_{index}_credential_{credential_index}_password:"
-                )
-                .unwrap();
+                );
                 emit_bytes(assembly, credential.password.as_bytes());
             }
             for (header_index, header) in authorization.rejected.headers.iter().enumerate() {
-                writeln!(assembly, ".p2align 3").unwrap();
-                writeln!(
+                asm_line!(assembly, ".p2align 3");
+                asm_line!(
                     assembly,
                     "Ltinytsx_handler_{index}_rejected_header_{header_index}_name:"
-                )
-                .unwrap();
+                );
                 emit_bytes(assembly, header.name.as_bytes());
-                writeln!(assembly, ".p2align 3").unwrap();
-                writeln!(
+                asm_line!(assembly, ".p2align 3");
+                asm_line!(
                     assembly,
                     "Ltinytsx_handler_{index}_rejected_header_{header_index}_value:"
-                )
-                .unwrap();
+                );
                 emit_bytes(assembly, header.value.as_bytes());
             }
         }
         if let Some(entity_tag) = &handler.entity_tag {
-            writeln!(assembly, ".p2align 3").unwrap();
-            writeln!(assembly, "Ltinytsx_handler_{index}_etag:").unwrap();
+            asm_line!(assembly, ".p2align 3");
+            asm_line!(assembly, "Ltinytsx_handler_{index}_etag:");
             emit_bytes(assembly, entity_tag.value.as_bytes());
             for (header_index, header) in entity_tag.not_modified.headers.iter().enumerate() {
-                writeln!(assembly, ".p2align 3").unwrap();
-                writeln!(
+                asm_line!(assembly, ".p2align 3");
+                asm_line!(
                     assembly,
                     "Ltinytsx_handler_{index}_not_modified_header_{header_index}_name:"
-                )
-                .unwrap();
+                );
                 emit_bytes(assembly, header.name.as_bytes());
-                writeln!(assembly, ".p2align 3").unwrap();
-                writeln!(
+                asm_line!(assembly, ".p2align 3");
+                asm_line!(
                     assembly,
                     "Ltinytsx_handler_{index}_not_modified_header_{header_index}_value:"
-                )
-                .unwrap();
+                );
                 emit_bytes(assembly, header.value.as_bytes());
             }
         }
     }
     for string in &program.static_strings {
-        writeln!(assembly, ".p2align 3").unwrap();
-        writeln!(assembly, "Ltinytsx_string_{}:", string.id).unwrap();
+        asm_line!(assembly, ".p2align 3");
+        asm_line!(assembly, "Ltinytsx_string_{}:", string.id);
         emit_bytes(assembly, string.value.as_bytes());
     }
     for constant in &program.constants {
-        writeln!(assembly, ".p2align 3").unwrap();
-        writeln!(assembly, "Ltinytsx_constant_{}:", constant.id).unwrap();
+        asm_line!(assembly, ".p2align 3");
+        asm_line!(assembly, "Ltinytsx_constant_{}:", constant.id);
         emit_bytes(assembly, &constant_data::encode(&constant.value)?);
     }
     Ok(())
 }
 
-fn emit_bytes(assembly: &mut String, bytes: &[u8]) {
+fn emit_bytes(assembly: &mut Assembly, bytes: &[u8]) {
     if bytes.is_empty() {
-        writeln!(assembly, "    .byte 0").unwrap();
+        asm_line!(assembly, "    .byte 0");
         return;
     }
     for chunk in bytes.chunks(16) {
-        write!(assembly, "    .byte ").unwrap();
+        asm_write!(assembly, "    .byte ");
         for (index, byte) in chunk.iter().enumerate() {
             if index > 0 {
-                write!(assembly, ", ").unwrap();
+                asm_write!(assembly, ", ");
             }
-            write!(assembly, "{byte}").unwrap();
+            asm_write!(assembly, "{byte}");
         }
-        writeln!(assembly).unwrap();
-    }
-}
-
-fn emit_immediate(assembly: &mut String, register: &str, value: u64) {
-    let chunks = [
-        (value & 0xffff) as u16,
-        ((value >> 16) & 0xffff) as u16,
-        ((value >> 32) & 0xffff) as u16,
-        ((value >> 48) & 0xffff) as u16,
-    ];
-    writeln!(assembly, "    movz {register}, #{}", chunks[0]).unwrap();
-    for (index, chunk) in chunks.into_iter().enumerate().skip(1) {
-        if chunk != 0 {
-            writeln!(
-                assembly,
-                "    movk {register}, #{chunk}, lsl #{}",
-                index * 16
-            )
-            .unwrap();
-        }
+        asm_line!(assembly);
     }
 }
 

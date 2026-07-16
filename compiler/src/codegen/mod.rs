@@ -1,3 +1,5 @@
+mod aarch64;
+mod assembly;
 mod constant_data;
 mod macos_arm64;
 
