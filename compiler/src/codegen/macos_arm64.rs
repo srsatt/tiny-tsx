@@ -55,6 +55,11 @@ fn emit_config(assembly: &mut String, options: Options, program: &Program) {
     emit_immediate(assembly, "x0", program.workers.len() as u64);
     writeln!(assembly, "    ret").unwrap();
 
+    writeln!(assembly, "\n.globl _tinytsx_config_provider_transport").unwrap();
+    writeln!(assembly, "_tinytsx_config_provider_transport:").unwrap();
+    emit_immediate(assembly, "x0", u64::from(program.uses_openai_transport()));
+    writeln!(assembly, "    ret").unwrap();
+
     writeln!(assembly, "\n.globl _tinytsx_worker_operation").unwrap();
     writeln!(assembly, "_tinytsx_worker_operation:").unwrap();
     emit_immediate(assembly, "x1", program.workers.len() as u64);
@@ -644,6 +649,44 @@ fn emit_handler_text_expression(
             }
             _ => return Err("unsupported worker call input".to_owned()),
         },
+        ValueExpression::OpenAiChatText {
+            url,
+            authorization,
+            body,
+            ..
+        } => {
+            writeln!(assembly, "    ldr x0, [sp, #16]").unwrap();
+            writeln!(assembly, "    adrp x1, Ltinytsx_string_{url}@PAGE").unwrap();
+            writeln!(assembly, "    add x1, x1, Ltinytsx_string_{url}@PAGEOFF").unwrap();
+            emit_immediate(
+                assembly,
+                "x2",
+                program.static_strings[*url].value.len() as u64,
+            );
+            writeln!(
+                assembly,
+                "    adrp x3, Ltinytsx_string_{authorization}@PAGE"
+            )
+            .unwrap();
+            writeln!(
+                assembly,
+                "    add x3, x3, Ltinytsx_string_{authorization}@PAGEOFF"
+            )
+            .unwrap();
+            emit_immediate(
+                assembly,
+                "x4",
+                program.static_strings[*authorization].value.len() as u64,
+            );
+            writeln!(assembly, "    adrp x5, Ltinytsx_string_{body}@PAGE").unwrap();
+            writeln!(assembly, "    add x5, x5, Ltinytsx_string_{body}@PAGEOFF").unwrap();
+            emit_immediate(
+                assembly,
+                "x6",
+                program.static_strings[*body].value.len() as u64,
+            );
+            writeln!(assembly, "    bl _tinytsx_html_write_openai_chat_text").unwrap();
+        }
         _ => {
             emit_value_expression(assembly, expression, program, HANDLER_SCRATCH_BASE)?;
             writeln!(assembly, "    mov x2, x1").unwrap();
@@ -730,7 +773,8 @@ fn emit_value_expression(
         | ValueExpression::FetchStatus { .. }
         | ValueExpression::QueryParameter { .. }
         | ValueExpression::QueryConditional { .. }
-        | ValueExpression::WorkerCall { .. } => {
+        | ValueExpression::WorkerCall { .. }
+        | ValueExpression::OpenAiChatText { .. } => {
             return Err("request-time expression used outside a handler response".to_owned());
         }
     }

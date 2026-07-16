@@ -21,6 +21,7 @@ const apiAliases = {
   "@ai-sdk/gateway": "tests/compat/ai/node_modules/@ai-sdk/gateway/dist/index.d.ts",
   "@ai-sdk/provider": "tests/compat/ai/node_modules/@ai-sdk/provider/dist/index.d.ts",
   "@ai-sdk/provider-utils": "tests/compat/ai/node_modules/@ai-sdk/provider-utils/dist/index.d.ts",
+  "@ai-sdk/openai-compatible": "tests/compat/ai/node_modules/@ai-sdk/openai-compatible/dist/index.d.ts",
 };
 const args = [
   "run", "-q", "-p", "tinytsx", "--", "build",

@@ -121,6 +121,13 @@ export type ValueExpression =
       worker: number;
       input: ValueExpression;
       span: SourceSpan;
+    }
+  | {
+      kind: "openAiChatText";
+      url: number;
+      authorization: number;
+      body: number;
+      span: SourceSpan;
     };
 
 export interface FunctionParameter {

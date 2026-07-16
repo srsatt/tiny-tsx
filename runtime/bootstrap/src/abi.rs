@@ -26,8 +26,16 @@ pub const MAX_DYNAMIC_HEADER_BYTES: usize = 256;
 pub const MAX_STREAM_CHUNKS: usize = 16;
 
 const MAX_FETCH_URL_BYTES: usize = 2048;
+const MAX_PROVIDER_AUTHORIZATION_BYTES: usize = 1024;
+const MAX_PROVIDER_BODY_BYTES: usize = 8192;
+const MAX_PROVIDER_RESPONSE_BYTES: usize = 262_144;
 const CURLOPT_URL: u32 = 10_002;
+const CURLOPT_WRITEDATA: u32 = 10_001;
 const CURLOPT_WRITEFUNCTION: u32 = 20_011;
+const CURLOPT_POST: u32 = 47;
+const CURLOPT_POSTFIELDS: u32 = 10_015;
+const CURLOPT_POSTFIELDSIZE: u32 = 60;
+const CURLOPT_HTTPHEADER: u32 = 10_023;
 const CURLOPT_FOLLOWLOCATION: u32 = 52;
 const CURLOPT_NOSIGNAL: u32 = 99;
 const CURLOPT_TIMEOUT_MS: u32 = 155;
@@ -45,9 +53,36 @@ unsafe extern "C" {
     fn curl_easy_perform(handle: *mut c_void) -> i32;
     fn curl_easy_getinfo(handle: *mut c_void, info: u32, ...) -> i32;
     fn curl_easy_cleanup(handle: *mut c_void);
+    fn curl_slist_append(list: *mut c_void, value: *const c_char) -> *mut c_void;
+    fn curl_slist_free_all(list: *mut c_void);
 }
 
 static CURL_READY: OnceLock<bool> = OnceLock::new();
+
+pub(crate) struct OpenAiTransport {
+    handle: *mut c_void,
+}
+
+impl Default for OpenAiTransport {
+    fn default() -> Self {
+        Self {
+            handle: ptr::null_mut(),
+        }
+    }
+}
+
+// SAFETY: a transport is owned by one logical application worker. Its mutex
+// prevents simultaneous use when the worker is scheduled on another executor.
+unsafe impl Send for OpenAiTransport {}
+
+impl Drop for OpenAiTransport {
+    fn drop(&mut self) {
+        if !self.handle.is_null() {
+            // SAFETY: this transport exclusively owns its easy handle.
+            unsafe { curl_easy_cleanup(self.handle) };
+        }
+    }
+}
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -122,6 +157,7 @@ unsafe extern "C" {
     pub fn tinytsx_config_workers() -> usize;
     pub fn tinytsx_config_request_memory() -> usize;
     pub fn tinytsx_config_worker_modules() -> usize;
+    pub fn tinytsx_config_provider_transport() -> usize;
     pub fn tinytsx_worker_operation(worker: usize) -> u32;
 }
 
@@ -150,6 +186,11 @@ unsafe extern "C" fn tinytsx_config_request_memory() -> usize {
 
 #[cfg(not(feature = "generated"))]
 unsafe extern "C" fn tinytsx_config_worker_modules() -> usize {
+    0
+}
+
+#[cfg(not(feature = "generated"))]
+unsafe extern "C" fn tinytsx_config_provider_transport() -> usize {
     0
 }
 
@@ -790,6 +831,350 @@ pub unsafe extern "C" fn tinytsx_html_write_fetch_status(
     unsafe { tinytsx_html_write_static(writer, status.as_ptr(), status.len()) }
 }
 
+#[repr(C)]
+struct CurlBodyCapture {
+    start: *mut u8,
+    len: usize,
+    capacity: usize,
+    overflow: bool,
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tinytsx_html_write_openai_chat_text(
+    writer: *mut TinyResponseWriter,
+    url: *const u8,
+    url_len: usize,
+    authorization: *const u8,
+    authorization_len: usize,
+    body: *const u8,
+    body_len: usize,
+) -> u32 {
+    if writer.is_null()
+        || url.is_null()
+        || authorization.is_null()
+        || body.is_null()
+        || url_len == 0
+        || url_len > MAX_FETCH_URL_BYTES
+        || authorization_len == 0
+        || authorization_len > MAX_PROVIDER_AUTHORIZATION_BYTES
+        || body_len == 0
+        || body_len > MAX_PROVIDER_BODY_BYTES
+    {
+        return INTERNAL_ERROR;
+    }
+    // SAFETY: Generated code supplies immutable static slices for this call.
+    let url = unsafe { slice::from_raw_parts(url, url_len) };
+    let authorization = unsafe { slice::from_raw_parts(authorization, authorization_len) };
+    let body = unsafe { slice::from_raw_parts(body, body_len) };
+    let request = crate::application::OpenAiRequest {
+        url: url.to_vec(),
+        authorization: authorization.to_vec(),
+        body: body.to_vec(),
+    };
+    match crate::application::call_openai(request) {
+        Ok(output) => {
+            // SAFETY: the application reply remains alive during this bounded arena copy.
+            unsafe { tinytsx_html_write_static(writer, output.as_ptr(), output.len()) }
+        }
+        Err(status) => {
+            // SAFETY: the generated handler supplied this non-null writer.
+            unsafe { (*writer).status = status };
+            status
+        }
+    }
+}
+
+impl OpenAiTransport {
+    pub(crate) fn perform(
+        &mut self,
+        url: &[u8],
+        authorization: &[u8],
+        body: &[u8],
+    ) -> Result<Vec<u8>, u32> {
+        if url.is_empty()
+            || url.len() > MAX_FETCH_URL_BYTES
+            || authorization.is_empty()
+            || authorization.len() > MAX_PROVIDER_AUTHORIZATION_BYTES
+            || body.is_empty()
+            || body.len() > MAX_PROVIDER_BODY_BYTES
+        {
+            return Err(INTERNAL_ERROR);
+        }
+        let mut output = vec![0_u8; MAX_PROVIDER_RESPONSE_BYTES];
+        let mut capture = CurlBodyCapture {
+            start: output.as_mut_ptr(),
+            len: 0,
+            capacity: output.len(),
+            overflow: false,
+        };
+        let Some(response_len) = self.post(url, authorization, body, &mut capture) else {
+            return Err(if capture.overflow {
+                REQUEST_OOM
+            } else {
+                RENDER_ERROR
+            });
+        };
+        // SAFETY: libcurl wrote exactly `response_len` bytes into the bounded reply allocation.
+        let response = unsafe { slice::from_raw_parts(capture.start, response_len) };
+        let Some(content) = openai_chat_content(response) else {
+            return Err(RENDER_ERROR);
+        };
+        let content_offset = content.as_ptr() as usize - capture.start as usize;
+        let content_len = content.len();
+        let Some(decoded_len) =
+            decode_json_string_in_place(capture.start, content_offset, content_len)
+        else {
+            return Err(RENDER_ERROR);
+        };
+        output.truncate(decoded_len);
+        Ok(output)
+    }
+
+    fn post(
+        &mut self,
+        url: &[u8],
+        authorization: &[u8],
+        body: &[u8],
+        capture: &mut CurlBodyCapture,
+    ) -> Option<usize> {
+        if url.contains(&0)
+            || authorization.contains(&0)
+            || !*CURL_READY.get_or_init(|| {
+                // SAFETY: This process-wide initialization is protected by `OnceLock`.
+                unsafe { curl_global_init(CURL_GLOBAL_DEFAULT) == CURLE_OK }
+            })
+        {
+            return None;
+        }
+        if self.handle.is_null() {
+            // SAFETY: global initialization succeeded and this transport owns the result.
+            self.handle = unsafe { curl_easy_init() };
+            if self.handle.is_null() {
+                return None;
+            }
+        }
+        let mut nul_url = [0_u8; MAX_FETCH_URL_BYTES + 1];
+        nul_url[..url.len()].copy_from_slice(url);
+        let prefix = b"Authorization: ";
+        let mut auth_header = [0_u8; MAX_PROVIDER_AUTHORIZATION_BYTES + 16];
+        auth_header[..prefix.len()].copy_from_slice(prefix);
+        auth_header[prefix.len()..prefix.len() + authorization.len()]
+            .copy_from_slice(authorization);
+        // SAFETY: all pointers supplied to libcurl remain alive through the synchronous request.
+        unsafe {
+            let content_type =
+                curl_slist_append(ptr::null_mut(), c"Content-Type: application/json".as_ptr());
+            if content_type.is_null() {
+                return None;
+            }
+            let headers = curl_slist_append(content_type, auth_header.as_ptr().cast());
+            if headers.is_null() {
+                curl_slist_free_all(content_type);
+                return None;
+            }
+            let configured = curl_easy_setopt(self.handle, CURLOPT_URL, nul_url.as_ptr())
+                == CURLE_OK
+                && curl_easy_setopt(self.handle, CURLOPT_POST, 1 as c_long) == CURLE_OK
+                && curl_easy_setopt(self.handle, CURLOPT_POSTFIELDS, body.as_ptr()) == CURLE_OK
+                && curl_easy_setopt(self.handle, CURLOPT_POSTFIELDSIZE, body.len() as c_long)
+                    == CURLE_OK
+                && curl_easy_setopt(self.handle, CURLOPT_HTTPHEADER, headers) == CURLE_OK
+                && curl_easy_setopt(
+                    self.handle,
+                    CURLOPT_WRITEFUNCTION,
+                    capture_provider_body as CurlWriteCallback,
+                ) == CURLE_OK
+                && curl_easy_setopt(
+                    self.handle,
+                    CURLOPT_WRITEDATA,
+                    (capture as *mut CurlBodyCapture).cast::<c_void>(),
+                ) == CURLE_OK
+                && curl_easy_setopt(self.handle, CURLOPT_FOLLOWLOCATION, 0 as c_long) == CURLE_OK
+                && curl_easy_setopt(self.handle, CURLOPT_NOSIGNAL, 1 as c_long) == CURLE_OK
+                && curl_easy_setopt(self.handle, CURLOPT_TIMEOUT_MS, 10_000 as c_long) == CURLE_OK;
+            let mut response_code = 0 as c_long;
+            let completed = configured
+                && curl_easy_perform(self.handle) == CURLE_OK
+                && curl_easy_getinfo(self.handle, CURLINFO_RESPONSE_CODE, &mut response_code)
+                    == CURLE_OK;
+            curl_slist_free_all(headers);
+            (completed && (200..=299).contains(&response_code) && !capture.overflow)
+                .then_some(capture.len)
+        }
+    }
+}
+
+unsafe extern "C" fn capture_provider_body(
+    bytes: *mut c_char,
+    size: usize,
+    items: usize,
+    data: *mut c_void,
+) -> usize {
+    let Some(total) = size.checked_mul(items) else {
+        return 0;
+    };
+    if data.is_null() || (bytes.is_null() && total != 0) {
+        return 0;
+    }
+    // SAFETY: libcurl passes back the capture pointer supplied for this request.
+    let capture = unsafe { &mut *data.cast::<CurlBodyCapture>() };
+    if total > capture.capacity.saturating_sub(capture.len) {
+        capture.overflow = true;
+        return 0;
+    }
+    if total != 0 {
+        // SAFETY: the capacity check proves this write stays in the request arena.
+        unsafe {
+            ptr::copy_nonoverlapping(bytes.cast::<u8>(), capture.start.add(capture.len), total)
+        };
+        capture.len += total;
+    }
+    total
+}
+
+fn openai_chat_content(response: &[u8]) -> Option<&[u8]> {
+    let choices = find_bytes(response, b"\"choices\"")?;
+    let message = choices + find_bytes(&response[choices..], b"\"message\"")?;
+    json_string_field(&response[message..], b"content")
+}
+
+fn find_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    haystack
+        .windows(needle.len())
+        .position(|candidate| candidate == needle)
+}
+
+fn json_string_field<'a>(object: &'a [u8], key: &[u8]) -> Option<&'a [u8]> {
+    let mut pattern = Vec::with_capacity(key.len() + 2);
+    pattern.push(b'"');
+    pattern.extend_from_slice(key);
+    pattern.push(b'"');
+    let key = find_bytes(object, &pattern)? + pattern.len();
+    let mut cursor = key;
+    while object.get(cursor).is_some_and(u8::is_ascii_whitespace) {
+        cursor += 1;
+    }
+    if object.get(cursor) != Some(&b':') {
+        return None;
+    }
+    cursor += 1;
+    while object.get(cursor).is_some_and(u8::is_ascii_whitespace) {
+        cursor += 1;
+    }
+    if object.get(cursor) != Some(&b'"') {
+        return None;
+    }
+    cursor += 1;
+    let start = cursor;
+    let mut escaped = false;
+    while let Some(&byte) = object.get(cursor) {
+        if !escaped && byte == b'"' {
+            return Some(&object[start..cursor]);
+        }
+        escaped = !escaped && byte == b'\\';
+        cursor += 1;
+    }
+    None
+}
+
+fn decode_json_string_in_place(
+    destination: *mut u8,
+    encoded_offset: usize,
+    encoded_len: usize,
+) -> Option<usize> {
+    let mut source = 0;
+    let mut output = 0;
+    while source < encoded_len {
+        // SAFETY: the caller provides an offset and length inside the captured arena body.
+        let byte = unsafe { destination.add(encoded_offset + source).read() };
+        if byte != b'\\' {
+            if byte < 0x20 {
+                return None;
+            }
+            // SAFETY: output never advances faster than source, so the arena write is in bounds.
+            unsafe { destination.add(output).write(byte) };
+            output += 1;
+            source += 1;
+            continue;
+        }
+        source += 1;
+        if source >= encoded_len {
+            return None;
+        }
+        // SAFETY: the bound above keeps this read inside the encoded JSON string.
+        let escaped = unsafe { destination.add(encoded_offset + source).read() };
+        source += 1;
+        let decoded = match escaped {
+            b'"' | b'\\' | b'/' => escaped,
+            b'b' => 0x08,
+            b'f' => 0x0c,
+            b'n' => b'\n',
+            b'r' => b'\r',
+            b't' => b'\t',
+            b'u' => {
+                if source + 4 > encoded_len {
+                    return None;
+                }
+                // SAFETY: four bytes remain in the captured JSON string.
+                let digits =
+                    unsafe { slice::from_raw_parts(destination.add(encoded_offset + source), 4) };
+                let code = parse_hex_quad(digits)?;
+                source += 4;
+                let scalar = if (0xd800..=0xdbff).contains(&code) {
+                    if source + 6 > encoded_len
+                        || unsafe { destination.add(encoded_offset + source).read() } != b'\\'
+                        || unsafe { destination.add(encoded_offset + source + 1).read() } != b'u'
+                    {
+                        return None;
+                    }
+                    // SAFETY: the bound above leaves four low-surrogate digits.
+                    let low_digits = unsafe {
+                        slice::from_raw_parts(destination.add(encoded_offset + source + 2), 4)
+                    };
+                    let low = parse_hex_quad(low_digits)?;
+                    if !(0xdc00..=0xdfff).contains(&low) {
+                        return None;
+                    }
+                    source += 6;
+                    0x1_0000 + ((u32::from(code) - 0xd800) << 10) + (u32::from(low) - 0xdc00)
+                } else if (0xdc00..=0xdfff).contains(&code) {
+                    return None;
+                } else {
+                    u32::from(code)
+                };
+                let character = char::from_u32(scalar)?;
+                let mut utf8 = [0_u8; 4];
+                let bytes = character.encode_utf8(&mut utf8).as_bytes();
+                // SAFETY: a Unicode escape consumes six bytes and emits at most four.
+                unsafe {
+                    ptr::copy_nonoverlapping(bytes.as_ptr(), destination.add(output), bytes.len())
+                };
+                output += bytes.len();
+                continue;
+            }
+            _ => return None,
+        };
+        // SAFETY: a two-byte escape emits one byte within the captured range.
+        unsafe { destination.add(output).write(decoded) };
+        output += 1;
+    }
+    // SAFETY: decoded bytes occupy the beginning of the same bounded allocation.
+    std::str::from_utf8(unsafe { slice::from_raw_parts(destination, output) }).ok()?;
+    Some(output)
+}
+
+fn parse_hex_quad(bytes: &[u8]) -> Option<u16> {
+    bytes.iter().try_fold(0_u16, |value, byte| {
+        let digit = match byte {
+            b'0'..=b'9' => u16::from(byte - b'0'),
+            b'a'..=b'f' => u16::from(byte - b'a' + 10),
+            b'A'..=b'F' => u16::from(byte - b'A' + 10),
+            _ => return None,
+        };
+        value.checked_mul(16)?.checked_add(digit)
+    })
+}
+
 fn fetch_response_status(url: &[u8]) -> Option<u16> {
     if url.contains(&0)
         || !*CURL_READY.get_or_init(|| {
@@ -1339,6 +1724,11 @@ pub fn configured_workers() -> usize {
 pub fn configured_worker_modules() -> usize {
     // SAFETY: The generated object always provides the configuration functions.
     unsafe { tinytsx_config_worker_modules() }
+}
+
+pub fn configured_provider_transport() -> bool {
+    // SAFETY: The generated object always provides the configuration function.
+    unsafe { tinytsx_config_provider_transport() != 0 }
 }
 
 pub fn worker_operation(worker: usize) -> u32 {

@@ -612,6 +612,15 @@ function lowerRuntimeString(
           span,
         };
       }
+      if (part.kind === "openAiChatText") {
+        return {
+          kind: "openAiChatText",
+          url: strings.intern(part.url),
+          authorization: strings.intern(part.authorization),
+          body: strings.intern(part.body),
+          span,
+        };
+      }
       return {
         kind: "routeParameter",
         name: part.name,
@@ -632,6 +641,7 @@ function dynamicResponseExpressions(body: ResponseBody): number {
       || part.kind === "fetchStatus"
       || part.kind === "queryParameter"
       || part.kind === "workerCall"
+      || part.kind === "openAiChatText"
     ).length;
   }
   if (body.kind === "stream") {

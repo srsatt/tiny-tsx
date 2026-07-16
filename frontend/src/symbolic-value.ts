@@ -37,6 +37,9 @@ export type Value =
   | {kind: "streamReader"; state: StreamState}
   | {kind: "worker"; state: WorkerState}
   | {kind: "workerCall"; module: string; input: WorkerMessage}
+  | {kind: "openAiProvider"; baseUrl: string; authorization: string}
+  | {kind: "openAiModel"; baseUrl: string; authorization: string; model: string}
+  | {kind: "openAiChatText"; url: string; authorization: string; body: string}
   | {
       kind: "closure";
       span: SourceSpan;
@@ -64,7 +67,8 @@ export type RuntimeStringPart =
   | {kind: "queryParameter"; name: string; fallback: string | undefined; escapeHtml: boolean}
   | {kind: "fetchStatus"; url: string}
   | {kind: "elapsedMilliseconds"}
-  | {kind: "workerCall"; module: string; input: WorkerMessage};
+  | {kind: "workerCall"; module: string; input: WorkerMessage}
+  | {kind: "openAiChatText"; url: string; authorization: string; body: string};
 
 export type WorkerMessage =
   | {kind: "literal"; value: string}
@@ -250,6 +254,9 @@ export function truthiness(value: Value): boolean | undefined {
     case "streamReader": return true;
     case "worker": return true;
     case "workerCall": return undefined;
+    case "openAiProvider":
+    case "openAiModel": return true;
+    case "openAiChatText": return undefined;
     case "routeParameter": return true;
     case "routeChoice": return undefined;
     case "requestHeader": return undefined;
@@ -286,6 +293,9 @@ export function typeOf(value: Value): string {
     case "streamReader": return "object";
     case "worker": return "object";
     case "workerCall": return "string";
+    case "openAiProvider": return "function";
+    case "openAiModel": return "object";
+    case "openAiChatText": return "string";
     case "schema": return "object";
     case "closure":
     case "reference": return "function";
@@ -326,6 +336,7 @@ export function runtimeStringParts(value: Value): RuntimeStringPart[] | undefine
     case "runtimeString": return value.parts;
     case "runtimeHtml": return value.parts;
     case "workerCall": return [{kind: "workerCall", module: value.module, input: value.input}];
+    case "openAiChatText": return [{...value}];
     default: return undefined;
   }
 }

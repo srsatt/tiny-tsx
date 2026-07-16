@@ -1,7 +1,7 @@
 use super::{
     BAD_REQUEST, CONTENT_TYPE_HTML, CONTENT_TYPE_NONE, CONTENT_TYPE_TEXT, INTERNAL_ERROR,
-    MAX_DYNAMIC_HEADER_BYTES, MAX_RESPONSE_HEADERS, MAX_STREAM_CHUNKS, OK, REQUEST_OOM,
-    RequestArena, TinyHeader, TinyResponseWriter, TinyStringView, render, request,
+    MAX_DYNAMIC_HEADER_BYTES, MAX_RESPONSE_HEADERS, MAX_STREAM_CHUNKS, OK, OpenAiTransport,
+    REQUEST_OOM, RequestArena, TinyHeader, TinyResponseWriter, TinyStringView, render, request,
     request_with_headers, tinytsx_html_write_fetch_status, tinytsx_html_write_path_segment,
     tinytsx_html_write_query_parameter, tinytsx_html_write_request_header,
     tinytsx_html_write_static, tinytsx_request_basic_auth_equals, tinytsx_request_if_none_match,
@@ -573,6 +573,109 @@ fn fetch_status_writes_the_local_http_response_code() {
     assert_eq!(result, OK);
     assert_eq!(&output, b"204");
     peer.join().expect("join local fetch peer");
+}
+
+#[test]
+fn openai_chat_posts_json_and_decodes_the_assistant_text() {
+    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind local provider");
+    let address = listener.local_addr().expect("local provider address");
+    let peer = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().expect("accept local provider request");
+        let mut request = [0_u8; 4096];
+        let length = stream
+            .read(&mut request)
+            .expect("read local provider request");
+        let response =
+            br#"{"choices":[{"message":{"content":"Hello\nfrom local \u03bb \ud83d\ude00"}}]}"#;
+        write!(
+            stream,
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+            response.len(),
+        )
+        .expect("write local provider head");
+        stream
+            .write_all(response)
+            .expect("write local provider body");
+        request[..length].to_vec()
+    });
+    let url = format!("http://{address}/v1/chat/completions");
+    let authorization = b"Bearer local-test-key";
+    let body = br#"{"model":"local-model","messages":[{"role":"user","content":"hello"}]}"#;
+    let output = OpenAiTransport::default()
+        .perform(url.as_bytes(), authorization, body)
+        .expect("perform local provider request");
+
+    assert_eq!(output, "Hello\nfrom local λ 😀".as_bytes());
+    let request = peer.join().expect("join local provider");
+    assert!(request.starts_with(b"POST /v1/chat/completions HTTP/1.1\r\n"));
+    let authorization = b"Authorization: Bearer local-test-key\r\n";
+    assert!(
+        request
+            .windows(authorization.len())
+            .any(|window| window.eq_ignore_ascii_case(authorization))
+    );
+    assert!(request.ends_with(body));
+}
+
+#[test]
+fn openai_transport_reuses_one_http_connection() {
+    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind local provider");
+    let address = listener.local_addr().expect("local provider address");
+    let peer = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().expect("accept local provider connection");
+        stream
+            .set_read_timeout(Some(std::time::Duration::from_secs(2)))
+            .expect("bound provider read");
+        for request_index in 0..2 {
+            read_http_request(&mut stream);
+            let response = br#"{"choices":[{"message":{"content":"reused"}}]}"#;
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: {}\r\n\r\n",
+                response.len(),
+                if request_index == 0 { "keep-alive" } else { "close" },
+            )
+            .expect("write local provider head");
+            stream
+                .write_all(response)
+                .expect("write local provider body");
+        }
+    });
+    let url = format!("http://{address}/v1/chat/completions");
+    let mut transport = OpenAiTransport::default();
+
+    for _ in 0..2 {
+        let output = transport
+            .perform(
+                url.as_bytes(),
+                b"Bearer local-test-key",
+                br#"{"model":"local-model","messages":[]}"#,
+            )
+            .expect("perform local provider request");
+        assert_eq!(output, b"reused");
+    }
+    peer.join().expect("join local provider");
+}
+
+fn read_http_request(stream: &mut std::net::TcpStream) {
+    let mut request = Vec::new();
+    let mut byte = [0_u8; 1];
+    while !request.ends_with(b"\r\n\r\n") {
+        stream.read_exact(&mut byte).expect("read provider head");
+        request.push(byte[0]);
+    }
+    let head = std::str::from_utf8(&request).expect("provider head is utf8");
+    let content_length = head
+        .lines()
+        .find_map(|line| {
+            line.strip_prefix("Content-Length: ")
+                .or_else(|| line.strip_prefix("content-length: "))
+        })
+        .expect("provider content length")
+        .parse::<usize>()
+        .expect("numeric provider content length");
+    let mut body = vec![0_u8; content_length];
+    stream.read_exact(&mut body).expect("read provider body");
 }
 
 #[test]

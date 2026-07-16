@@ -251,6 +251,12 @@ pub enum ValueExpression {
         input: Box<ValueExpression>,
         span: SourceSpan,
     },
+    OpenAiChatText {
+        url: usize,
+        authorization: usize,
+        body: usize,
+        span: SourceSpan,
+    },
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -311,6 +317,20 @@ pub struct SourceSpan {
 }
 
 impl Program {
+    pub fn uses_openai_transport(&self) -> bool {
+        self.handlers.iter().any(|handler| {
+            response_uses_openai(&handler.response)
+                || handler
+                    .basic_authorization
+                    .as_ref()
+                    .is_some_and(|guard| response_uses_openai(&guard.rejected.response))
+                || handler
+                    .entity_tag
+                    .as_ref()
+                    .is_some_and(|guard| response_uses_openai(&guard.not_modified.response))
+        })
+    }
+
     pub fn validate(&self) -> Result<(), String> {
         if self.version != 2 {
             return Err(format!(
@@ -499,7 +519,8 @@ impl Program {
             | ValueExpression::FetchStatus { .. }
             | ValueExpression::QueryParameter { .. }
             | ValueExpression::QueryConditional { .. }
-            | ValueExpression::WorkerCall { .. } => {
+            | ValueExpression::WorkerCall { .. }
+            | ValueExpression::OpenAiChatText { .. } => {
                 return Err(
                     "request-time expressions are only valid in handler responses".to_owned(),
                 );
@@ -675,6 +696,36 @@ impl Program {
                 }
                 self.validate_handler_expression(input, route_pattern)
             }
+            ValueExpression::OpenAiChatText {
+                url,
+                authorization,
+                body,
+                ..
+            } => {
+                let Some(url) = self.static_strings.get(*url) else {
+                    return Err("OpenAI chat URL references a missing static string".to_owned());
+                };
+                let Some(authorization) = self.static_strings.get(*authorization) else {
+                    return Err(
+                        "OpenAI authorization references a missing static string".to_owned()
+                    );
+                };
+                let Some(body) = self.static_strings.get(*body) else {
+                    return Err("OpenAI body references a missing static string".to_owned());
+                };
+                if !valid_provider_url(&url.value) {
+                    return Err(
+                        "OpenAI chat URL must use HTTPS or a loopback HTTP origin".to_owned()
+                    );
+                }
+                if !authorization.value.starts_with("Bearer ")
+                    || authorization.value.len() <= "Bearer ".len()
+                    || body.value.is_empty()
+                {
+                    return Err("OpenAI chat request metadata is invalid".to_owned());
+                }
+                Ok(())
+            }
             _ => self.validate_expression(expression, 0),
         }
     }
@@ -733,6 +784,31 @@ impl Program {
             _ => {}
         }
         Ok(())
+    }
+}
+
+fn response_uses_openai(response: &HandlerResponse) -> bool {
+    match response {
+        HandlerResponse::Html { .. } => false,
+        HandlerResponse::Text { value, .. } => expression_uses_openai(value),
+        HandlerResponse::Stream { chunks, .. } => chunks.iter().any(expression_uses_openai),
+    }
+}
+
+fn expression_uses_openai(expression: &ValueExpression) -> bool {
+    match expression {
+        ValueExpression::OpenAiChatText { .. } => true,
+        ValueExpression::Concat { values, .. } => values.iter().any(expression_uses_openai),
+        ValueExpression::DirectCall { arguments, .. } => {
+            arguments.iter().any(expression_uses_openai)
+        }
+        ValueExpression::QueryConditional {
+            when_present,
+            when_absent,
+            ..
+        } => expression_uses_openai(when_present) || expression_uses_openai(when_absent),
+        ValueExpression::WorkerCall { input, .. } => expression_uses_openai(input),
+        _ => false,
     }
 }
 
@@ -822,6 +898,12 @@ fn validate_route_pattern(pattern: &str) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+fn valid_provider_url(url: &str) -> bool {
+    url.starts_with("https://")
+        || url.starts_with("http://127.0.0.1:")
+        || url.starts_with("http://localhost:")
 }
 
 fn route_parameter_name(segment: &str) -> Option<&str> {

@@ -1309,6 +1309,12 @@ function sameResponseHeaderValue(left: ResponseHeaderValue, right: ResponseHeade
         && candidate.module === part.module
         && sameWorkerMessage(candidate.input, part.input);
     }
+    if (part.kind === "openAiChatText") {
+      return candidate?.kind === "openAiChatText"
+        && candidate.url === part.url
+        && candidate.authorization === part.authorization
+        && candidate.body === part.body;
+    }
     return candidate?.kind === part.kind && candidate.name === part.name;
   });
 }
@@ -1744,8 +1750,26 @@ function evaluateCall(
   }
   if (ts.isIdentifier(call.expression)) {
     const callable = evaluate(evaluator, call.expression, module, environment, instance);
+    if (callable.kind === "reference" && isPinnedCreateOpenAiCompatible(callable)) {
+      return evaluatePinnedCreateOpenAiCompatible(arguments_);
+    }
     if (callable.kind === "reference" && isPinnedStreamText(callable)) {
       return evaluatePinnedStreamText(evaluator, arguments_, instance);
+    }
+    if (callable.kind === "reference" && isPinnedGenerateText(callable)) {
+      const providerResult = evaluatePinnedProviderGenerateText(arguments_);
+      if (providerResult !== undefined) return providerResult;
+    }
+    if (callable.kind === "openAiProvider") {
+      const model = arguments_[0];
+      return arguments_.length === 1 && model?.kind === "string"
+        ? {
+          kind: "openAiModel",
+          baseUrl: callable.baseUrl,
+          authorization: callable.authorization,
+          model: model.value,
+        }
+        : unknown("OpenAI-compatible provider requires one closed model id");
     }
     if (callable.kind === "closure") {
       return invokeClosure(evaluator, callable, arguments_, instance);
@@ -2217,6 +2241,63 @@ function evaluateCall(
         : ""
     }`,
   );
+}
+
+function isPinnedCreateOpenAiCompatible(value: Value & {kind: "reference"}): boolean {
+  return value.name === "createOpenAICompatible"
+    && value.callable?.module.path.replaceAll("\\", "/")
+      .endsWith("/packages/openai-compatible/src/openai-compatible-provider.ts") === true;
+}
+
+function evaluatePinnedCreateOpenAiCompatible(arguments_: Value[]): Value {
+  const options = arguments_[0];
+  if (arguments_.length !== 1 || options?.kind !== "record") {
+    return unknown("OpenAI-compatible provider requires one closed options record");
+  }
+  if ([...options.fields.keys()].some(name => !["name", "baseURL", "apiKey"].includes(name))) {
+    return unknown("OpenAI-compatible provider options are outside the native transport slice");
+  }
+  const name = options.fields.get("name");
+  const baseUrl = options.fields.get("baseURL");
+  const apiKey = options.fields.get("apiKey");
+  if (name?.kind !== "string" || baseUrl?.kind !== "string" || apiKey?.kind !== "string") {
+    return unknown("OpenAI-compatible provider name, baseURL, and apiKey must be closed strings");
+  }
+  return {
+    kind: "openAiProvider",
+    baseUrl: baseUrl.value.replace(/\/$/, ""),
+    authorization: `Bearer ${apiKey.value}`,
+  };
+}
+
+function isPinnedGenerateText(value: Value & {kind: "reference"}): boolean {
+  return value.name === "generateText"
+    && value.callable?.module.path.replaceAll("\\", "/")
+      .endsWith("/packages/ai/src/generate-text/generate-text.ts") === true;
+}
+
+function evaluatePinnedProviderGenerateText(arguments_: Value[]): Value | undefined {
+  const options = arguments_[0];
+  if (arguments_.length !== 1 || options?.kind !== "record") return undefined;
+  const model = options.fields.get("model");
+  if (model?.kind !== "openAiModel") return undefined;
+  if ([...options.fields.keys()].some(name => !["model", "prompt"].includes(name))) {
+    return unknown("native OpenAI-compatible generateText only supports model and prompt");
+  }
+  const prompt = options.fields.get("prompt");
+  if (prompt?.kind !== "string") {
+    return unknown("native OpenAI-compatible generateText requires a closed string prompt");
+  }
+  const text: Value = {
+    kind: "openAiChatText",
+    url: `${model.baseUrl}/chat/completions`,
+    authorization: model.authorization,
+    body: JSON.stringify({
+      model: model.model,
+      messages: [{role: "user", content: prompt.value}],
+    }),
+  };
+  return {kind: "record", fields: new Map([["text", text]])};
 }
 
 function isPinnedStreamText(value: Value & {kind: "reference"}): boolean {
@@ -2896,6 +2977,7 @@ function evaluateExpression(
         && body.kind !== "runtimeHtml"
         && body.kind !== "readableStream"
         && body.kind !== "workerCall"
+        && body.kind !== "openAiChatText"
         && body.kind !== "routeParameter"
         && body.kind !== "responseBody"
         && body.kind !== "undefined"
@@ -2907,7 +2989,7 @@ function evaluateExpression(
       }
       const runtimeBody = body.kind === "routeParameter"
         ? [{kind: "routeParameter" as const, name: body.name}]
-        : body.kind === "workerCall"
+        : body.kind === "workerCall" || body.kind === "openAiChatText"
           ? runtimeStringParts(body)
         : body.kind === "runtimeString"
           ? body.parts

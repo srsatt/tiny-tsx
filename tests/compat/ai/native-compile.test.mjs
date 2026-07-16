@@ -57,6 +57,17 @@ test("compiles deterministic AI SDK streaming through a Web Response", () => {
   assert.ok(hir.memory.summary.request > 0);
 });
 
+test("compiles local OpenAI-compatible provider text as a native HTTP expression", () => {
+  const hir = compileAiEntry("hono-local-provider-smoke.ts");
+
+  const route = hir.handlers.find(handler => handler.path === "/ai-local");
+  assert.equal(route?.response.kind, "text");
+  const value = route?.response.kind === "text" ? route.response.value : undefined;
+  assert.equal(value?.kind, "concat");
+  assert.equal(value?.kind === "concat" ? value.values[0]?.kind : undefined, "openAiChatText");
+  assertArenaMemoryReport(hir);
+});
+
 function assertArenaMemoryReport(hir) {
   assert.equal(hir.memory.policy, "arena");
   assert.equal(hir.memory.managedHeapRequired, false);
@@ -89,6 +100,7 @@ function compileAiEntry(entry) {
       "@ai-sdk/gateway": "tests/compat/ai/node_modules/@ai-sdk/gateway/dist/index.d.ts",
       "@ai-sdk/provider": "tests/compat/ai/node_modules/@ai-sdk/provider/dist/index.d.ts",
       "@ai-sdk/provider-utils": "tests/compat/ai/node_modules/@ai-sdk/provider-utils/dist/index.d.ts",
+      "@ai-sdk/openai-compatible": "tests/compat/ai/node_modules/@ai-sdk/openai-compatible/dist/index.d.ts",
     }),
   });
 }

@@ -37,6 +37,8 @@ struct BuildReport<'a> {
     workers: usize,
     application_workers: usize,
     logical_workers: usize,
+    provider_workers: usize,
+    provider_transport: bool,
     request_memory_bytes: usize,
     gc: &'a str,
     modules: usize,
@@ -45,7 +47,7 @@ struct BuildReport<'a> {
     static_html_bytes: usize,
     dynamic_html_expressions: usize,
     memory: &'a MemoryReport,
-    runtime_features: [&'a str; 6],
+    runtime_features: Vec<&'a str>,
 }
 
 pub fn execute(options: &Options) -> Result<PathBuf, String> {
@@ -207,14 +209,29 @@ fn write_report(output: &Path, compilation: &Compilation, options: &Options) -> 
     let binary_bytes = fs::metadata(output)
         .map_err(|error| format!("could not inspect {}: {error}", output.display()))?
         .len();
+    let provider_transport = compilation.program.uses_openai_transport();
+    let application_pool = !compilation.program.workers.is_empty() || provider_transport;
+    let mut runtime_features = vec![
+        "http1",
+        "bounded-writer",
+        "bounded-worker-pool",
+        "keep-alive",
+        "bounded-response-streaming",
+        "bounded-application-worker-pool",
+    ];
+    if provider_transport {
+        runtime_features.push("bounded-provider-transport");
+    }
     let report = BuildReport {
         target: "aarch64-apple-darwin",
         runtime: "bootstrap",
         binary_bytes,
         port: options.port,
         workers: options.workers,
-        application_workers: usize::from(!compilation.program.workers.is_empty()) * options.workers,
+        application_workers: usize::from(application_pool) * options.workers,
         logical_workers: compilation.program.workers.len(),
+        provider_workers: usize::from(provider_transport) * options.workers,
+        provider_transport,
         request_memory_bytes: options.request_memory,
         gc: "disabled",
         modules: compilation.program.statistics.modules,
@@ -223,14 +240,7 @@ fn write_report(output: &Path, compilation: &Compilation, options: &Options) -> 
         static_html_bytes: compilation.program.statistics.static_html_bytes,
         dynamic_html_expressions: compilation.program.statistics.dynamic_html_expressions,
         memory: &compilation.program.memory,
-        runtime_features: [
-            "http1",
-            "bounded-writer",
-            "bounded-worker-pool",
-            "keep-alive",
-            "bounded-response-streaming",
-            "bounded-application-worker-pool",
-        ],
+        runtime_features,
     };
     let json = serde_json::to_string_pretty(&report)
         .map_err(|error| format!("could not serialize build report: {error}"))?;
@@ -251,10 +261,17 @@ fn print_summary(
     println!("Target:              aarch64-apple-darwin");
     println!("Runtime:             bootstrap");
     println!("Workers:             {}", options.workers);
+    let provider_transport = compilation.program.uses_openai_transport();
     println!(
-        "Application workers: {} executors; {} logical workers",
-        usize::from(!compilation.program.workers.is_empty()) * options.workers,
+        "Application workers: {} executors; {} logical workers; provider transport {}",
+        usize::from(!compilation.program.workers.is_empty() || provider_transport)
+            * options.workers,
         compilation.program.workers.len(),
+        if provider_transport {
+            "enabled"
+        } else {
+            "disabled"
+        },
     );
     println!("Request memory:      {} bytes", options.request_memory);
     println!(

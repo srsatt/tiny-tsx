@@ -5,8 +5,15 @@ mod http;
 fn main() {
     let workers = abi::configured_workers();
     match application::initialize(workers) {
-        Ok(application_workers) if application_workers > 0 => {
-            println!("Application workers: {workers}; logical workers: {application_workers}");
+        Ok((logical_workers, provider_transport)) if logical_workers > 0 || provider_transport => {
+            println!(
+                "Application workers: {workers}; logical workers: {logical_workers}; provider transport: {}",
+                if provider_transport {
+                    "enabled"
+                } else {
+                    "disabled"
+                },
+            );
         }
         Ok(_) => {}
         Err(error) => {
