@@ -11,6 +11,7 @@ general JavaScript compatibility.
 | --- | --- | --- |
 | Hono | `vendor/hono`, tag `v4.12.30`, commit `b2ae3a2204a48ce15a26448fd746d39745eb1837` | Upstream TypeScript source and Hono behavior |
 | Hono examples | `vendor/hono-examples`, commit `3b0b62875a0e1265763fea1c6388866d5697ef81` | Complete upstream basic and JSX SSR applications plus selected behavior contracts |
+| Hono Zod OpenAPI | `@hono/zod-openapi@1.5.1`, `hono@4.12.30`, `zod@4.4.3`, npm lock in `tests/compat/zod-openapi` | Published package resolution, path validation, typed request data, and generated OpenAPI document tracer |
 | Test262 | `vendor/test262`, commit `f2d1435644797268dca1f7988cad5a4e89ccd8d2` | Allowlisted ECMAScript semantics |
 | WPT | selected source at revision `08e168922e0c0d42250335a40e679fa5123489df` | Web API behavior provenance; not a full submodule |
 
@@ -242,6 +243,46 @@ installed upstream error closure, and emits the final 500 response without
 powered-by or timing headers. A focused native E2E verifies this exact
 failure ordering; it is a pinned Hono/Bun compatibility specialization rather
 than general runtime type-error or Promise rejection support.
+
+## Package resolution, serving, and Zod OpenAPI
+
+Runtime imports now resolve ordinary scoped and unscoped packages from the
+nearest `node_modules` directory. Resolution understands package `exports`,
+condition objects, wildcard subpaths, and `module`/`main` fallbacks. Compiler
+built-ins are selected before application aliases or packages and therefore
+cannot be shadowed from `node_modules`. This closes package loading; it does not
+mean that every successfully resolved package can be lowered.
+
+`tinytsx:serve` is the Hono-neutral source API for selecting a fetch application
+and optional closed port. `@hono/node-server` resolves to the same compile-time
+host adapter, so the documented `serve(app)` and
+`serve({ fetch: app.fetch, port })` entry shapes do not require a JavaScript
+server in the produced executable. This is an AOT entry contract only; the
+alpha does not claim the complete `@hono/node-server` event, TLS, connection, or
+shutdown API.
+
+The pinned `@hono/zod-openapi` tracer resolves 113 published runtime modules
+without aliases and executes the actual `OpenAPIHono -> Hono` class chain. The
+admitted source subset currently covers:
+
+- `z.object`, `z.string`, `z.number`, closed `.min(...)`, and `.openapi(...)`
+  examples/reference metadata;
+- `createRoute` with a closed GET path, path-parameter schema, JSON response
+  schema, and closed response description;
+- `app.openapi`, `c.req.valid('param')`, dynamic path data in `c.json`, and
+  the default Zod rejection for the pinned string minimum-length constraint;
+- `app.doc` with a closed OpenAPI 3.0 configuration, component schemas,
+  parameters, responses, and `$ref` generation.
+
+The Bun reference and native HTTP suites pin the success response, the `id`
+minimum-length rejection, and the complete generated `/doc` JSON. Schema and
+document construction happen during AOT evaluation; the native server contains
+neither a JavaScript engine nor Zod. This evidence does not cover arbitrary Zod
+effects/refinements/transforms, request bodies, query/header/cookie validation,
+custom hooks, OpenAPI 3.1, or the rest of the Zod/OpenAPI surface. The native
+minimum-length guard currently counts percent-decoded path bytes and is proven
+only for the ASCII identifier contract in the tracer; general JavaScript
+UTF-16 string-length parity remains unsupported.
 
 ### Type-only API overlay
 

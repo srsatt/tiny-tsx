@@ -7,6 +7,45 @@ Last updated: 2026-07-16
 Milestones 0–2 are complete for the static-page vertical slice. The compiler
 produces and serves a native Mach-O executable from the example TSX source.
 
+## Alpha implementation evidence (2026-07-16)
+
+- Bare scoped/unscoped imports resolve through nearest-package `node_modules`,
+  `exports` conditions and wildcards, with `module`/`main` fallback. Protected
+  compiler built-ins win over aliases and packages.
+- `tinytsx:serve` and the compatible `@hono/node-server` entry contract support
+  `serve(app)` plus a closed source-level port without requiring a default
+  export. Native E2E coverage proves the source port and an explicit CLI port
+  override.
+- The pinned `@hono/zod-openapi@1.5.1`, Hono 4.12.30, and Zod 4.4.3 npm graph
+  type-checks and resolves all 113 runtime modules without aliases. TinyTSX
+  executes the published `OpenAPIHono` class-expression chain and lowers the
+  official-style `createRoute` application.
+- Native HTTP matches the Bun reference for `GET /users/1212121`, the Zod
+  `min(3)` rejection at `/users/x`, and the complete `/doc` OpenAPI JSON. HIR
+  retains the path validation as a bounded native guard; schema/document work
+  remains compile-time-only and requires no managed heap or JavaScript engine.
+- `tests/compat/hono/examples-manifest.json` now records the alpha example
+  matrix as executable data: provenance, entry/import/API surface, intake,
+  Apple/native and Linux-assembly state, HTTP/reference evidence, and the first
+  unsupported boundary for eight completed or planned tracers. The Hono intake
+  suite validates every row and referenced evidence path.
+- The official Hono guide/helper/middleware review is persisted in
+  `tests/compat/hono/docs-matrix.json` and summarized in `doc/HONO.md`. It
+  records 24 middleware, 15 helper, seven guide, and six core API rows plus
+  deployment/architecture rows. Only Body Limit and CORS are pulled into the
+  alpha middleware plan; all other gaps are explicitly bounded or deferred.
+- The Hono example manifest also contains the exact upstream behavior
+  allowlist for Basic, Basic Auth, ETag, Powered By, Pretty JSON, and text
+  streaming. Each row is labeled native-derived rather than direct execution.
+- Verification: `npm run test:frontend` (75/75),
+  `npm run test:zod-openapi-reference` (1/1),
+  `npm run test:zod-openapi` (2/2),
+  `npm run test:hono-intake` (7/7),
+  `cargo test --manifest-path runtime/bootstrap/Cargo.toml
+  request_path_segment_minimum_length_counts_percent_decoded_bytes` (1/1),
+  `cargo test -p tinytsx` (53/53), and
+  `cargo clippy --workspace --all-targets -- -D warnings`.
+
 ## Verified capabilities
 
 - Compact Cargo workspace with compiler and bootstrap runtime binaries.

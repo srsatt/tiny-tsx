@@ -35,7 +35,7 @@ The alpha profiles are:
 - [ ] Add `doc/ALPHA.md` with the supported syntax, Hono/Web API matrix, native
       targets, standard-library modules, limits, security model, prerequisites,
       non-goals, and known incompatibilities.
-- [ ] Resolve bare package imports and package declarations so documented Hono
+- [x] Resolve bare package imports and package declarations so documented Hono
       applications do not require long `--alias`/`--api` command lines.
 - [ ] Define built-in module resolution for `tinytsx:env`, `tinytsx:fs`,
       `tinytsx:sqlite`, and `tinytsx:actors`; built-ins must not be resolved from
@@ -49,7 +49,7 @@ The alpha profiles are:
 
 ### A1 — Broaden the executable Hono matrix
 
-- [ ] Add a machine-readable example matrix recording source provenance,
+- [x] Add a machine-readable example matrix recording source provenance,
       required imports/APIs, intake status, native compile status, HTTP behavior
       coverage, Bun/reference coverage, and the first unsupported boundary.
 - [ ] Keep the complete pinned `basic` and `jsx-ssr` applications as mandatory
@@ -74,7 +74,7 @@ The alpha profiles are:
       reference, and assemble the Linux-arm64 output in cross-host tests.
 - [ ] Resolve the known Hono response-clone Content-Type difference with direct
       Web-platform evidence and pin the decision in every affected contract.
-- [ ] Replace the open-ended “broader Hono tests” task with an explicit allowlist
+- [x] Replace the open-ended “broader Hono tests” task with an explicit allowlist
       of upstream Hono behavior files exercised by the alpha matrix.
 
 ### A2 — Define the TinyTSX backend standard library
