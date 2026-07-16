@@ -27,6 +27,11 @@ produces and serves a native Mach-O executable from the example TSX source.
   print readable HIR or deterministic Apple arm64 assembly.
 - Assembly uses native component functions, the documented writer helper, static
   bytes in `__TEXT,__const`, and a global `tinytsx_handle_get` entrypoint.
+- Codegen now uses target-neutral `asm_line!`/`asm_write!` emission, shared
+  AArch64 frame helpers, and a focused `macos_arm64` adapter split by functions,
+  handlers, responses, values, and data. Codegen tests live in separate files.
+  The static-page and dynamic-Hono assembly remained byte-identical across the
+  refactor (SHA-256 `eefa808f...75daf` and `e17ddcf3...a9fb`).
 - Apple clang assembles generated text and Cargo/rustc links the object into the
   fixed-worker Rust bootstrap runtime. No generated application code passes
   through LLVM, JavaScript, WebAssembly, or an interpreter.
@@ -426,6 +431,7 @@ rtk cargo test --workspace
 rtk cargo clippy --workspace --all-targets -- -D warnings
 rtk cargo test -p tinytsx-runtime-worker
 rtk cargo run -q -p tinytsx -- check examples/static-page/server.tsx --emit-asm
+rtk cargo test -p tinytsx codegen::
 rtk cargo run -q -p tinytsx -- check examples/staged-constants/server.tsx --emit-hir
 rtk cargo run -q -p tinytsx -- build examples/static-page/server.tsx --port 3017 --output dist/static-server --release --emit-hir --emit-asm
 rtk curl -i --max-time 5 http://127.0.0.1:3017/

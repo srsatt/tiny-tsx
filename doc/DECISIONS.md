@@ -90,3 +90,12 @@ observable state within those ownership domains is rejected until an explicit
 compatibility profile supports it. GC is not an assumed destination: only an
 executed cyclic/aliased escaping graph can justify a collector spike, and any
 result remains isolated per worker rather than becoming a shared process heap.
+
+## D-012: Add target adapters before a generic target interface
+
+Code generation uses a target-neutral assembly sink, reusable architecture
+helpers, and explicit OS/architecture adapter modules. Apple sections, symbols,
+calling convention details, and runtime ABI lowering stay in `macos_arm64`.
+A second target is added as a sibling adapter and only then may duplicated,
+demonstrably identical behavior be promoted into a shared interface. This keeps
+new build targets possible without freezing a speculative backend abstraction.

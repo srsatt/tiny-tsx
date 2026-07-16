@@ -12,6 +12,8 @@ commit message.
 - [x] Add frontend positive and negative tests.
 - [x] Implement `tinytsx check` and `--emit-hir`.
 - [x] Emit deterministic Apple arm64 assembly and expose `--emit-asm`.
+- [x] Split codegen into reusable assembly/AArch64 modules and a focused Apple
+      arm64 target adapter, with all codegen tests in separate files.
 - [x] Implement the single-worker bootstrap HTTP runtime.
 - [x] Assemble and link a native Mach-O executable through the Rust toolchain.
 - [x] Implement `tinytsx build`, output selection, and temporary artifacts.

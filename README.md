@@ -344,18 +344,22 @@ Do not initially support:
 
 Keep target-specific code isolated so Linux arm64 or Linux x86-64 can be added later.
 
-Suggested target module structure:
+Current target module structure:
 
 ```text
 codegen/
-  aarch64/
-    instruction.rs
-    register.rs
-    calling_convention.rs
-    emitter.rs
-
-targets/
-  macos_arm64.rs
+  mod.rs
+  assembly.rs
+  aarch64.rs
+  constant_data.rs
+  macos_arm64/
+    mod.rs
+    functions.rs
+    handlers.rs
+    response.rs
+    values.rs
+    data.rs
+    tests.rs
 ```
 
 ## 2.3 First-class TSX without React
@@ -2036,7 +2040,10 @@ tinytsx/
 │       ├── build.rs
 │       └── codegen/
 │           ├── mod.rs
-│           └── macos_arm64.rs
+│           ├── assembly.rs
+│           ├── aarch64.rs
+│           ├── constant_data.rs
+│           └── macos_arm64/
 │
 ├── runtime/
 │   ├── bootstrap/
