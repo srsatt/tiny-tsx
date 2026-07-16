@@ -26,7 +26,7 @@ WebSockets, JWT/JWK, proxying, SSG, platform adapter detection, or Bun/Node
 runtime compatibility merely because Hono documents them.
 
 The separate example matrix in `tests/compat/hono/examples-manifest.json`
-records nine completed or planned alpha tracers with provenance, imports/APIs,
+records ten completed or planned alpha tracers with provenance, imports/APIs,
 intake, native/assembly state, HTTP/reference evidence, and the first unsupported
 boundary. The local environment tracer combines Hono, `@hono/node-server`, and
 the bounded `tinytsx:env` startup snapshot. The static tracer executes the

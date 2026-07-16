@@ -21,8 +21,14 @@ runtime errors, and a failed operation does not poison the connection. The core
 unit suite covers prepared insertion, all value families, bounded queries,
 malformed SQL recovery, and row/byte/parameter limits.
 
-This foundation is not yet the public `tinytsx:sqlite` implementation. Before
-promotion, each connection must be owned by one logical application worker; the
-compiler must lower the declared database/statement API; on-disk paths must use
-separate read/write capabilities; transactions and close semantics need native
-tests; and the Hono blog plus persistent actor tracers must pass end to end.
+The first `native-partial` public slice lowers a compile-time `:memory:`
+`Database`, closed `exec(sql)` effects, and idempotent `close`/`dispose`. Each
+connection is owned by one logical application worker on the fixed executor.
+The Hono owner tracer proves schema creation, persistent mutation, constraint
+failure recovery, repeated close, post-close failure, Apple execution, and
+Linux-arm64 assembly.
+
+Before promotion to `native`, the compiler must lower prepared statements and
+result values; on-disk paths must use separate read/write capabilities;
+transactions need native tests; and the Hono blog plus persistent actor tracers
+must pass end to end.

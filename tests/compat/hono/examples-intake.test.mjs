@@ -30,6 +30,7 @@ test("records the alpha example matrix with executable evidence and boundaries",
     "tinytsx-serve-entry",
     "tinytsx-environment",
     "upstream-serve-static",
+    "tinytsx-sqlite-owner",
     "upstream-blog",
     "upstream-durable-objects-counter",
   ];

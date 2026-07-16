@@ -11,9 +11,10 @@ targets, permissions, and compiled default limits.
 Built-in APIs follow the compiler alpha version. Additive changes may ship in a
 later alpha. Breaking source or behavior changes require release notes and an
 alpha-version increment. A declaration in the SDK means the source contract is
-reserved; only a manifest status of `native` means the implementation is an
-alpha release feature. `declared` operations must fail compilation with a stable
-diagnostic until promoted.
+reserved; only a manifest status of `native` means the complete documented
+alpha module is a release feature. `native-partial` names an executable tracer
+whose remaining operations are still release gates. `declared` operations must
+fail compilation with a stable diagnostic until promoted.
 
 Apple arm64 and Linux arm64 are the only native alpha targets. Cross-host Linux
 assembly inspection is evidence for code generation, not runtime availability.
@@ -96,10 +97,13 @@ observe an atomic file replacement.
 
 ### `tinytsx:sqlite`
 
-Single-owner database and prepared-statement handles with positional values,
-bounded rows, execute results, explicit close/dispose, and transactions before
-promotion to `native`. `:memory:` is capability-free; disk databases require
-read and write roots.
+The current `native-partial` slice is a single-owner `:memory:` database with
+closed `exec(sql)` effects and idempotent `close`/`dispose`, serialized through
+one logical application worker. SQL is capped at 65,536 bytes and uses the
+vendored runtime described in `doc/PERSISTENCE.md`. Prepared statements,
+positional values, bounded returned rows, execute-result values, transactions,
+and on-disk read/write capabilities remain required before promotion to
+`native`.
 
 ### `tinytsx:actors`
 

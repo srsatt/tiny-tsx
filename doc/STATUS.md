@@ -82,8 +82,8 @@ produces and serves a native Mach-O executable from the example TSX source.
   `tinytsx:env`, `tinytsx:fs`, `tinytsx:sqlite`, and `tinytsx:actors`, alongside
   the native `tinytsx:serve`. Packages and aliases cannot shadow them. The
   frontend resolution test compiles one module importing all four declarations.
-- `tinytsx --list-builtins` emits versioned JSON with each built-in's native or
-  declared status, Apple/Linux targets, permission flags, and compiled default
+- `tinytsx --list-builtins` emits versioned JSON with each built-in's native,
+  native-partial, or declared status, Apple/Linux targets, permission flags, and compiled default
   limits. `doc/STANDARD_LIBRARY.md` defines versioning, default-deny capability
   separation, recoverable errors, blocking/executor rules, bounded ownership,
   close/dispose semantics, and post-alpha OS modules. `declared` intentionally
@@ -100,9 +100,12 @@ produces and serves a native Mach-O executable from the example TSX source.
   `tinytsx-runtime-sqlite` crate uses `rusqlite` 0.40.1, bundled
   `libsqlite3-sys` 0.38.1, and the SQLite 3.53.2 amalgamation. Its bounded core
   covers prepared values, result row/byte limits, malformed SQL recovery, and
-  null/integer/finite-real/text/blob mapping. It is not marked as a native
-  built-in until compiler lowering, single-owner worker integration,
-  capabilities, and the tracers are complete.
+  null/integer/finite-real/text/blob mapping. The first `native-partial`
+  integration lowers `:memory:` database owners, closed `exec` effects, and
+  idempotent close through that worker. Its Hono test proves schema creation,
+  retained mutation, SQL-error recovery, post-close failure, Apple execution,
+  and Linux-arm64 assembly. Prepared parameters/results, transactions, disk
+  capabilities, and the blog remain open.
 - Verification: `npm run test:frontend` (82/82),
   `npm run test:zod-openapi-reference` (1/1),
   `npm run test:zod-openapi` (2/2),
@@ -110,9 +113,10 @@ produces and serves a native Mach-O executable from the example TSX source.
   `cargo test --manifest-path runtime/bootstrap/Cargo.toml
   request_path_segment_minimum_length_counts_percent_decoded_bytes` (1/1),
   `cargo test -p tinytsx` (53/53),
-  `cargo test -p tinytsx builtins` (1/1), and
+  `cargo test -p tinytsx builtins` (1/1),
   `npm run test:actors-native` (2/2),
   `cargo test -p tinytsx-runtime-sqlite` (3/3),
+  `npm run test:sqlite-native` (2/2), and
   `cargo clippy --workspace --all-targets -- -D warnings`.
 
 ## Verified capabilities
