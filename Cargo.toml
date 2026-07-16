@@ -1,5 +1,5 @@
 [workspace]
-members = ["compiler", "runtime/bootstrap", "runtime/worker"]
+members = ["compiler", "runtime/bootstrap", "runtime/wasm", "runtime/worker"]
 resolver = "2"
 
 [workspace.package]

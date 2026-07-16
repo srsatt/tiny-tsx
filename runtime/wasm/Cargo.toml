@@ -1,0 +1,15 @@
+[package]
+name = "tinytsx-runtime-wasm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[features]
+default = []
+interpreter = ["dep:wasmi"]
+
+[dependencies]
+wasmi = { version = "=1.1.0", default-features = false, features = ["std"], optional = true }
