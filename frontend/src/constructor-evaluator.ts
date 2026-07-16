@@ -86,6 +86,13 @@ export interface EvaluatedRoute {
   basePath: string;
   handlerKind: "closure" | "reference" | "unknown";
   response?: EvaluatedResponse;
+  parameterValidations?: EvaluatedParameterValidation[];
+}
+
+export interface EvaluatedParameterValidation {
+  name: string;
+  minLength: number;
+  rejected: EvaluatedResponse;
 }
 
 export interface EvaluatedResponse {
@@ -129,6 +136,7 @@ interface Evaluator {
   issues: ConstructorIssue[];
   root: ResolvedRuntimeClass;
   routerInsertions: number;
+  pathParameterValidations: Map<string, EvaluatedParameterValidation[]>;
   instanceClasses: WeakMap<Value & {kind: "instance"}, ResolvedRuntimeClass>;
   runtimeValues: Map<string, Value>;
   activeRuntimeValues: Set<string>;
@@ -237,6 +245,7 @@ function initializeConstructor(
     issues: [],
     root: resolved,
     routerInsertions: 0,
+    pathParameterValidations: new Map(),
     instanceClasses: new WeakMap(),
     runtimeValues: new Map(),
     activeRuntimeValues: new Set(),
@@ -309,6 +318,9 @@ function executeApplicationCalls(
     const arguments_ = call.arguments.map(argument =>
       evaluate(evaluator, argument, entry, environment, receiver)
     );
+    if (call.expression.name.text === "openapi") {
+      recordOpenApiParameterValidations(evaluator, arguments_[0]);
+    }
     if (callable?.kind === "closure") {
       invokeClosure(evaluator, callable, arguments_, receiver);
       continue;
@@ -370,6 +382,9 @@ function summarizeRoutes(
         notFoundHandler,
       )
       : undefined;
+    const installedValidations = evaluator.pathParameterValidations.get(
+      `${method.value}\0${path.value}`,
+    );
     const route: Omit<EvaluatedRoute, "response"> = {
       method: method.value,
       path: path.value,
@@ -379,6 +394,9 @@ function summarizeRoutes(
         : handler?.kind === "reference"
           ? "reference" as const
           : "unknown" as const,
+      ...(installedValidations === undefined
+        ? parameterValidations(middleware)
+        : {parameterValidations: installedValidations}),
     };
     if (response?.kind === "routeChoice") {
       return [
@@ -392,6 +410,95 @@ function summarizeRoutes(
     }
     return [{...route, ...(response === undefined ? {} : {response})}];
   });
+}
+
+function parameterValidations(
+  middleware: Array<Value & {kind: "closure"}>,
+): {parameterValidations?: EvaluatedParameterValidation[]} {
+  const schemas = middleware.flatMap(handler => {
+    const values = nestedValues(handler);
+    const targetsParam = values.some(value => value.kind === "string" && value.value === "param");
+    return targetsParam
+      ? values.filter((value): value is Value & {kind: "schema"} =>
+        value.kind === "schema" && value.schemaType === "object"
+      )
+      : [];
+  });
+  const validations = schemas.flatMap(schema => [...(schema.fields ?? new Map())].flatMap(
+    ([name, field]) => field.kind === "schema" && field.minLength !== undefined
+      ? [{
+        name,
+        minLength: field.minLength,
+        rejected: zodMinimumLengthRejection(name, field.minLength),
+      }]
+      : [],
+  ));
+  return validations.length === 0 ? {} : {parameterValidations: validations};
+}
+
+function recordOpenApiParameterValidations(evaluator: Evaluator, route: Value | undefined): void {
+  if (route?.kind !== "record") return;
+  const method = route.fields.get("method");
+  const path = route.fields.get("path");
+  const request = route.fields.get("request");
+  const params = request?.kind === "record" ? request.fields.get("params") : undefined;
+  if (
+    method?.kind !== "string"
+    || path?.kind !== "string"
+    || params?.kind !== "schema"
+    || params.schemaType !== "object"
+  ) return;
+  const validations = [...(params.fields ?? new Map())].flatMap(([name, field]) =>
+    field.kind === "schema" && field.minLength !== undefined
+      ? [{
+        name,
+        minLength: field.minLength,
+        rejected: zodMinimumLengthRejection(name, field.minLength),
+      }]
+      : []
+  );
+  if (validations.length === 0) return;
+  const routingPath = path.value.replaceAll(/\/{(.+?)}/g, "/:$1");
+  evaluator.pathParameterValidations.set(`${method.value.toUpperCase()}\0${routingPath}`, validations);
+}
+
+function nestedValues(root: Value): Value[] {
+  const output: Value[] = [];
+  const seen = new WeakSet<object>();
+  const visit = (value: Value): void => {
+    output.push(value);
+    if (typeof value !== "object" || seen.has(value)) return;
+    seen.add(value);
+    if (value.kind === "closure") {
+      for (const captured of value.environment.values()) visit(captured);
+    } else if (value.kind === "record" || value.kind === "instance") {
+      for (const field of value.fields.values()) visit(field);
+    } else if (value.kind === "array") {
+      for (const item of value.items) visit(item);
+    }
+  };
+  visit(root);
+  return output;
+}
+
+function zodMinimumLengthRejection(name: string, minimum: number): EvaluatedResponse {
+  const issue = [{
+    origin: "string",
+    code: "too_small",
+    minimum,
+    inclusive: true,
+    path: [name],
+    message: `Too small: expected string to have >=${minimum} characters`,
+  }];
+  return {
+    kind: "text",
+    body: JSON.stringify({
+      success: false,
+      error: {name: "ZodError", message: JSON.stringify(issue, null, 2)},
+    }),
+    status: 400,
+    contentType: "application/json",
+  };
 }
 
 function evaluateRouteHandler(
@@ -1455,11 +1562,13 @@ function invokeClosure(
   arguments_: Value[],
   instance: Value & {kind: "instance"},
 ): Value {
+  const environment = new Map(closure.environment);
+  if (closure.lexicalThis !== undefined) environment.set("#this", closure.lexicalThis);
   return invokeFunctionLike(
     evaluator,
     closure.expression,
     closure.module,
-    new Map(closure.environment),
+    environment,
     arguments_,
     instance,
   );
@@ -1806,6 +1915,13 @@ function evaluateCall(
   if (ts.isPropertyAccessExpression(call.expression)) {
     const receiver = evaluate(evaluator, call.expression.expression, module, environment, instance);
     const name = memberName(call.expression.name);
+    if (
+      receiver.kind === "instance"
+      && (name === "getOpenAPIDocument" || name === "getOpenAPI31Document")
+    ) {
+      const document = evaluateOpenApiDocument(receiver, arguments_[0]);
+      if (document !== undefined) return document;
+    }
     if (receiver.kind === "reference" && receiver.name === "Date" && name === "now") {
       return arguments_.length === 0
         ? {kind: "clockNow"}
@@ -1838,9 +1954,31 @@ function evaluateCall(
     if (
       receiver.kind === "reference"
       && receiver.name === "z"
-      && ["array", "literal", "object", "record", "string", "union", "unknown"].includes(name)
+      && [
+        "array",
+        "bigint",
+        "boolean",
+        "coerce",
+        "date",
+        "enum",
+        "literal",
+        "null",
+        "number",
+        "object",
+        "record",
+        "string",
+        "undefined",
+        "union",
+        "unknown",
+      ].includes(name)
     ) {
-      return {kind: "schema"};
+      const first = arguments_[0];
+      return {
+        kind: "schema",
+        schemaType: name,
+        ...(name === "object" && first?.kind === "record" ? {fields: first.fields} : {}),
+        ...(name === "array" && first?.kind === "schema" ? {item: first} : {}),
+      };
     }
     if (receiver.kind === "reference" && receiver.name === "z4" && name === "safeParseAsync") {
       return {
@@ -1902,6 +2040,22 @@ function evaluateCall(
         ? {kind: "routeParameter", name: key.value}
         : UNDEFINED;
     }
+    if (receiver.kind === "request" && name === "valid") {
+      const target = arguments_[0];
+      if (target?.kind !== "string") {
+        return unknown("request validation target is not a closed string");
+      }
+      if (target.value === "param") {
+        return {
+          kind: "record",
+          fields: new Map(routeParameterNames(receiver.routePattern).map(parameter => [
+            parameter,
+            {kind: "routeParameter", name: parameter},
+          ])),
+        };
+      }
+      return unknown(`validated request target ${target.value} is not lowerable`);
+    }
     if (receiver.kind === "request" && name === "query") {
       const key = arguments_[0];
       return key?.kind === "string"
@@ -1951,6 +2105,30 @@ function evaluateCall(
         }
         : unknown("Object.entries argument is not a closed record");
     }
+    if (receiver.kind === "reference" && receiver.name === "Object" && name === "keys") {
+      const value = arguments_[0];
+      return value?.kind === "record" || value?.kind === "instance"
+        ? {
+          kind: "array",
+          items: [...value.fields.keys()].map(key => ({kind: "string", value: key})),
+        }
+        : unknown("Object.keys argument is not a closed object");
+    }
+    if (receiver.kind === "reference" && receiver.name === "Object" && name === "defineProperty") {
+      const target = arguments_[0];
+      const key = arguments_[1];
+      const descriptor = arguments_[2];
+      if (
+        (target?.kind !== "record" && target?.kind !== "instance")
+        || key?.kind !== "string"
+        || descriptor?.kind !== "record"
+      ) {
+        return unknown("Object.defineProperty arguments are not closed");
+      }
+      const value = descriptor.fields.get("value");
+      if (value !== undefined) target.fields.set(key.value, value);
+      return target;
+    }
     if (receiver.kind === "reference" && receiver.name === "Object" && name === "values") {
       const value = arguments_[0];
       return value?.kind === "record"
@@ -1977,7 +2155,10 @@ function evaluateCall(
       const value = arguments_[0] ?? UNDEFINED;
       const space = arguments_[2];
       const serialized = stringifyJson(value, space?.kind === "number" ? space.value : undefined);
-      return serialized === undefined ? UNDEFINED : {kind: "string", value: serialized};
+      if (serialized !== undefined) return {kind: "string", value: serialized};
+      if (space !== undefined && space.kind !== "undefined") return UNDEFINED;
+      const parts = stringifyRuntimeJson(value);
+      return parts === undefined ? UNDEFINED : {kind: "runtimeString", parts};
     }
     if (receiver.kind === "headers" && name === "get") {
       const key = arguments_[0];
@@ -2019,11 +2200,58 @@ function evaluateCall(
         ? {kind: "boolean", value: new RegExp(receiver.source, receiver.flags).test(input.value)}
         : unknown("RegExp.test input is not a closed string");
     }
-    if (
-      receiver.kind === "schema"
-      && ["array", "describe", "nullable", "nullish", "optional"].includes(name)
-    ) {
-      return receiver;
+    if (receiver.kind === "schema") {
+      if (name === "safeParseAsync" || name === "safeParse") {
+        return {
+          kind: "record",
+          fields: new Map([
+            ["success", {kind: "boolean", value: true}],
+            ["data", arguments_[0] ?? UNDEFINED],
+          ]),
+        };
+      }
+      if (name === "parseAsync" || name === "parse") return arguments_[0] ?? UNDEFINED;
+      if (name === "array") return {...receiver, schemaType: "array", item: receiver};
+      if (name === "openapi") {
+        const first = arguments_[0];
+        const second = arguments_[1];
+        return {
+          ...receiver,
+          ...(first?.kind === "string" ? {refId: first.value} : {}),
+          ...(first?.kind === "record" ? {metadata: first} : {}),
+          ...(second?.kind === "record" ? {metadata: second} : {}),
+        };
+      }
+      if (name === "min") {
+        const minimum = arguments_[0];
+        return minimum?.kind === "number"
+          ? {
+            ...receiver,
+            ...(receiver.schemaType === "string"
+              ? {minLength: minimum.value}
+              : {minimum: minimum.value}),
+          }
+          : unknown("Zod min constraint is not a closed number");
+      }
+      if (name === "length") {
+        const length = arguments_[0];
+        return length?.kind === "number" && receiver.schemaType === "string"
+          ? {...receiver, minLength: length.value}
+          : receiver;
+      }
+      if (name === "optional") return {...receiver, optional: true};
+      if ([
+        "default",
+        "describe",
+        "int",
+        "max",
+        "nullable",
+        "nullish",
+        "positive",
+        "nonnegative",
+      ].includes(name)) {
+        return {...receiver};
+      }
     }
     if (receiver.kind === "array" && name === "map") {
       const callback = arguments_[0];
@@ -2055,6 +2283,17 @@ function evaluateCall(
         );
         if (mapped.kind === "array") items.push(...mapped.items);
         else items.push(mapped);
+      }
+      return {kind: "array", items};
+    }
+    if (receiver.kind === "array" && name === "flat") {
+      const depth = arguments_[0];
+      if (depth !== undefined && depth.kind !== "number") {
+        return unknown("Array.flat depth is not a closed number");
+      }
+      let items = [...receiver.items];
+      for (let level = 0; level < (depth?.kind === "number" ? depth.value : 1); level++) {
+        items = items.flatMap(item => item.kind === "array" ? item.items : [item]);
       }
       return {kind: "array", items};
     }
@@ -2194,6 +2433,31 @@ function evaluateCall(
     }
     if (receiver.kind === "string") {
       if (name === "toUpperCase") return {kind: "string", value: receiver.value.toUpperCase()};
+      if (name === "replace" || name === "replaceAll") {
+        const searched = arguments_[0];
+        const replacement = arguments_[1];
+        if (replacement?.kind !== "string") {
+          return unknown(`String.${name} replacement is not a closed string`);
+        }
+        if (searched?.kind === "string") {
+          return {
+            kind: "string",
+            value: name === "replaceAll"
+              ? receiver.value.replaceAll(searched.value, replacement.value)
+              : receiver.value.replace(searched.value, replacement.value),
+          };
+        }
+        if (searched?.kind === "regexp") {
+          const expression = new RegExp(searched.source, searched.flags);
+          return {
+            kind: "string",
+            value: name === "replaceAll"
+              ? receiver.value.replaceAll(expression, replacement.value)
+              : receiver.value.replace(expression, replacement.value),
+          };
+        }
+        return unknown(`String.${name} search value is not closed`);
+      }
       if (name === "includes") {
         const searched = arguments_[0];
         return searched?.kind === "string"
@@ -2545,7 +2809,7 @@ function evaluateExpression(
     return {kind: "null"};
   }
   if (expression.kind === ts.SyntaxKind.ThisKeyword) {
-    return instance;
+    return environment.get("#this") ?? instance;
   }
   if (ts.isIdentifier(expression)) {
     const local = environment.get(expression.text);
@@ -2677,6 +2941,7 @@ function evaluateExpression(
       expression,
       module,
       environment: new Map(environment),
+      ...(ts.isArrowFunction(expression) ? {lexicalThis: instance} : {}),
     };
   }
   if (ts.isPropertyAccessExpression(expression)) {
@@ -3105,6 +3370,10 @@ function evaluateExpression(
       }
       : unknown("numeric unary operand is not a closed number");
   }
+  if (ts.isVoidExpression(expression)) {
+    evaluate(evaluator, expression.expression, module, environment, instance);
+    return UNDEFINED;
+  }
   if (
     ts.isPostfixUnaryExpression(expression)
     && (expression.operator === ts.SyntaxKind.PlusPlusToken
@@ -3526,6 +3795,181 @@ function stringifyJson(value: Value, space?: number): string | undefined {
     : JSON.stringify(converted, null, space);
 }
 
+function stringifyRuntimeJson(value: Value): RuntimeStringPart[] | undefined {
+  const parts: RuntimeStringPart[] = [];
+  return appendRuntimeJsonValue(parts, value, false) ? parts : undefined;
+}
+
+function evaluateOpenApiDocument(
+  application: Value & {kind: "instance"},
+  config: Value | undefined,
+): Value | undefined {
+  if (config?.kind !== "record") return undefined;
+  const registry = application.fields.get("openAPIRegistry");
+  const definitions = registry?.kind === "instance"
+    ? registry.fields.get("_definitions")
+    : undefined;
+  if (definitions?.kind !== "array") return undefined;
+
+  const base = jsonValue(config, false);
+  if (base === UNSUPPORTED_JSON || base === undefined || typeof base !== "object" || base === null) {
+    return undefined;
+  }
+  const components: Record<string, unknown> = {};
+  const paths: Record<string, Record<string, unknown>> = {};
+  for (const definition of definitions.items) {
+    if (definition.kind !== "record") continue;
+    const type = definition.fields.get("type");
+    const route = definition.fields.get("route");
+    if (type?.kind !== "string" || type.value !== "route" || route?.kind !== "record") continue;
+    const method = route.fields.get("method");
+    const routePath = route.fields.get("path");
+    const responses = route.fields.get("responses");
+    if (method?.kind !== "string" || routePath?.kind !== "string" || responses?.kind !== "record") {
+      continue;
+    }
+    const operation: Record<string, unknown> = {};
+    const request = route.fields.get("request");
+    const params = request?.kind === "record" ? request.fields.get("params") : undefined;
+    if (params?.kind === "schema" && params.schemaType === "object" && params.fields !== undefined) {
+      operation.parameters = [...params.fields].flatMap(([fieldName, field]) => {
+        if (field.kind !== "schema") return [];
+        const metadata = field.metadata?.kind === "record" ? field.metadata : undefined;
+        const param = metadata?.fields.get("param");
+        const parameter = param?.kind === "record" ? param : undefined;
+        const name = parameter?.fields.get("name");
+        const location = parameter?.fields.get("in");
+        return [{
+          schema: openApiSchema(field, components, false),
+          required: field.optional !== true,
+          name: name?.kind === "string" ? name.value : fieldName,
+          in: location?.kind === "string" ? location.value : "path",
+        }];
+      });
+    }
+    operation.responses = Object.fromEntries([...responses.fields].flatMap(([status, response]) => {
+      if (response.kind !== "record") return [];
+      const converted = jsonValue(response, false);
+      if (converted === UNSUPPORTED_JSON || typeof converted !== "object" || converted === null) {
+        const description = response.fields.get("description");
+        const output: Record<string, unknown> = {
+          description: description?.kind === "string" ? description.value : "",
+        };
+        const content = response.fields.get("content");
+        if (content?.kind === "record") {
+          output.content = Object.fromEntries([...content.fields].flatMap(([mediaType, media]) => {
+            if (media.kind !== "record") return [];
+            const schema = media.fields.get("schema");
+            return schema?.kind === "schema"
+              ? [[mediaType, {schema: openApiSchema(schema, components, true)}]]
+              : [];
+          }));
+        }
+        return [[status, output]];
+      }
+      return [[status, converted]];
+    }));
+    (paths[routePath.value] ??= {})[method.value.toLowerCase()] = operation;
+  }
+
+  return fromJsonValue({
+    ...(base as Record<string, unknown>),
+    components: {schemas: components, parameters: {}},
+    paths,
+  });
+}
+
+function openApiSchema(
+  schema: Extract<Value, {kind: "schema"}>,
+  components: Record<string, unknown>,
+  useReference: boolean,
+): Record<string, unknown> {
+  if (schema.refId !== undefined && useReference) {
+    components[schema.refId] ??= openApiSchema(schema, components, false);
+    return {$ref: `#/components/schemas/${schema.refId}`};
+  }
+  const output: Record<string, unknown> = {};
+  if (schema.schemaType === "object") {
+    output.type = "object";
+    output.properties = Object.fromEntries([...(schema.fields ?? new Map())].flatMap(([name, field]) =>
+      field.kind === "schema" ? [[name, openApiSchema(field, components, true)]] : []
+    ));
+    const required = [...(schema.fields ?? new Map())].flatMap(([name, field]) =>
+      field.kind === "schema" && field.optional !== true ? [name] : []
+    );
+    if (required.length > 0) output.required = required;
+  } else if (schema.schemaType === "array") {
+    output.type = "array";
+    if (schema.item?.kind === "schema") output.items = openApiSchema(schema.item, components, true);
+  } else if (schema.schemaType !== undefined) {
+    output.type = schema.schemaType;
+  }
+  if (schema.minLength !== undefined) output.minLength = schema.minLength;
+  if (schema.minimum !== undefined) output.minimum = schema.minimum;
+  if (schema.metadata?.kind === "record") {
+    const example = schema.metadata.fields.get("example");
+    if (example !== undefined) {
+      const converted = jsonValue(example, false);
+      if (converted !== UNSUPPORTED_JSON && converted !== undefined) output.example = converted;
+    }
+  }
+  if (schema.refId !== undefined && !useReference) components[schema.refId] = output;
+  return output;
+}
+
+function appendRuntimeJsonValue(
+  parts: RuntimeStringPart[],
+  value: Value,
+  arrayElement: boolean,
+): boolean {
+  if (value.kind === "routeParameter") {
+    appendRuntimePart(parts, {kind: "literal", value: "\""});
+    appendRuntimePart(parts, {kind: "routeParameter", name: value.name});
+    appendRuntimePart(parts, {kind: "literal", value: "\""});
+    return true;
+  }
+  if (value.kind === "undefined") {
+    if (!arrayElement) return false;
+    appendRuntimePart(parts, {kind: "literal", value: "null"});
+    return true;
+  }
+  if (value.kind === "null" || value.kind === "boolean" || value.kind === "string") {
+    appendRuntimePart(parts, {kind: "literal", value: JSON.stringify(
+      value.kind === "null" ? null : value.value,
+    )});
+    return true;
+  }
+  if (value.kind === "number") {
+    appendRuntimePart(parts, {
+      kind: "literal",
+      value: JSON.stringify(Number.isFinite(value.value) ? value.value : null),
+    });
+    return true;
+  }
+  if (value.kind === "array") {
+    appendRuntimePart(parts, {kind: "literal", value: "["});
+    for (const [index, item] of value.items.entries()) {
+      if (index > 0) appendRuntimePart(parts, {kind: "literal", value: ","});
+      if (!appendRuntimeJsonValue(parts, item, true)) return false;
+    }
+    appendRuntimePart(parts, {kind: "literal", value: "]"});
+    return true;
+  }
+  if (value.kind === "record") {
+    appendRuntimePart(parts, {kind: "literal", value: "{"});
+    let emitted = 0;
+    for (const [name, field] of value.fields) {
+      if (field.kind === "undefined") continue;
+      if (emitted++ > 0) appendRuntimePart(parts, {kind: "literal", value: ","});
+      appendRuntimePart(parts, {kind: "literal", value: `${JSON.stringify(name)}:`});
+      if (!appendRuntimeJsonValue(parts, field, false)) return false;
+    }
+    appendRuntimePart(parts, {kind: "literal", value: "}"});
+    return true;
+  }
+  return false;
+}
+
 function fromJsonValue(value: unknown): Value {
   if (value === null) return {kind: "null"};
   if (typeof value === "boolean") return {kind: "boolean", value};
@@ -3567,7 +4011,7 @@ function jsonValue(value: Value, arrayElement: boolean): unknown | typeof UNSUPP
       }
       return result;
     }
-    default: return arrayElement ? null : undefined;
+    default: return UNSUPPORTED_JSON;
   }
 }
 

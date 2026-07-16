@@ -181,8 +181,16 @@ export interface Handler {
   stderr?: number[];
   basicAuthorization?: BasicAuthorization;
   entityTag?: EntityTag;
+  parameterValidations?: ParameterValidation[];
   response: HandlerResponse;
   span: SourceSpan;
+}
+
+export interface ParameterValidation {
+  name: string;
+  segment: number;
+  minLength: number;
+  rejected: GuardedResponse;
 }
 
 export interface StaticHeader {

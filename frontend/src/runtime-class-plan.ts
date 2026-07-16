@@ -27,7 +27,7 @@ export interface RuntimeClassPlan {
 
 export interface ResolvedRuntimeClass {
   module: SourceModule;
-  declaration: ts.ClassDeclaration;
+  declaration: ts.ClassLikeDeclaration;
 }
 
 export function resolveRuntimeClassPlan(
@@ -175,6 +175,17 @@ function resolveLocal(
   for (const statement of module.sourceFile.statements) {
     if (ts.isClassDeclaration(statement) && statement.name?.text === localName) {
       return {module, declaration: statement};
+    }
+    if (ts.isVariableStatement(statement)) {
+      const declaration = statement.declarationList.declarations.find(candidate =>
+        ts.isIdentifier(candidate.name)
+        && candidate.name.text === localName
+        && candidate.initializer !== undefined
+        && ts.isClassExpression(candidate.initializer)
+      );
+      if (declaration?.initializer !== undefined && ts.isClassExpression(declaration.initializer)) {
+        return {module, declaration: declaration.initializer};
+      }
     }
     if (
       ts.isImportDeclaration(statement)

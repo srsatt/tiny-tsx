@@ -13,7 +13,17 @@ export type Value =
   | {kind: "string"; value: string}
   | {kind: "html"; value: string}
   | {kind: "regexp"; source: string; flags: string}
-  | {kind: "schema"}
+  | {
+      kind: "schema";
+      schemaType?: string;
+      fields?: Map<string, Value>;
+      item?: Value;
+      metadata?: Value;
+      refId?: string;
+      minLength?: number;
+      minimum?: number;
+      optional?: boolean;
+    }
   | {kind: "error"; name: string; message: string}
   | {kind: "thrown"; value: Value}
   | {kind: "array"; items: Value[]}
@@ -46,6 +56,7 @@ export type Value =
       expression: ts.ArrowFunction | ts.FunctionExpression | ts.MethodDeclaration;
       module: SourceModule;
       environment: Map<string, Value>;
+      lexicalThis?: Value & {kind: "instance"};
     }
   | {kind: "reference"; name: string; module: string; callable?: ResolvedCallable}
   | {kind: "constructed"; name: string; module: string}

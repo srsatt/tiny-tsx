@@ -304,13 +304,23 @@ function lowerApplicationInitialization(
     : (["GET", "POST"] as const).flatMap(method =>
       routes.some(route => route.method === method && route.path === "/*")
         ? []
-        : [{method, path: "/*", response: initialization.notFoundResponse!}]
+        : [{
+          method,
+          path: "/*",
+          response: initialization.notFoundResponse!,
+          parameterValidations: undefined,
+        }]
     );
   const constrainedFallbackRoutes = routes.flatMap(route =>
     route.path.includes("{")
     && route.response?.status === 404
     && !routes.some(candidate => candidate.method === route.method && candidate.path === "/*")
-      ? [{method: route.method, path: "/*", response: route.response}]
+      ? [{
+        method: route.method,
+        path: "/*",
+        response: route.response,
+        parameterValidations: undefined,
+      }]
       : []
   );
   const emittedRoutes = [...routes, ...fallbackRoutes, ...constrainedFallbackRoutes];
@@ -326,6 +336,9 @@ function lowerApplicationInitialization(
   if (emittedRoutes.some(route =>
     route.response === undefined
     || !isLowerableEvaluatedResponse(route.response)
+    || route.parameterValidations?.some(validation =>
+      !isLowerableEvaluatedResponse(validation.rejected)
+    ) === true
   ) || loweredHeaders.some(headers => headers === undefined)) {
     return undefined;
   }
@@ -374,12 +387,21 @@ function lowerApplicationInitialization(
     const entityTag = response.entityTag === undefined
       ? undefined
       : lowerEntityTag(response.entityTag, route.path, strings, workers, span);
+    const parameterValidations = route.parameterValidations?.map(validation => ({
+      name: validation.name,
+      segment: routeParameterSegment(route.path, validation.name),
+      minLength: validation.minLength,
+      rejected: lowerGuardedResponse(validation.rejected, route.path, strings, workers, span),
+    }));
     return {
       method: route.method as "GET" | "POST",
       path: route.path,
       ...responseHeaders,
       ...(basicAuthorization === undefined ? {} : {basicAuthorization}),
       ...(entityTag === undefined ? {} : {entityTag}),
+      ...(parameterValidations === undefined || parameterValidations.length === 0
+        ? {}
+        : {parameterValidations}),
       ...(response.stderr === undefined
         ? {}
         : {stderr: response.stderr.map(line => strings.intern(line))}),
