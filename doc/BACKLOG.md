@@ -1,285 +1,287 @@
 # Backlog
 
-Items are ordered. A checked item must have evidence in `doc/STATUS.md` or its
-commit message.
+This is the active, ordered work queue. Detailed completed history and exact
+verification commands live in `doc/STATUS.md`; compatibility provenance lives
+in `doc/COMPATIBILITY.md`.
 
-## Milestones 0–2
+A checked item must have evidence in `doc/STATUS.md` or its commit message.
+Work top to bottom unless a failed tracer requires pulling one of its explicit
+dependencies forward.
 
-- [x] Add compact Cargo/npm workspace, SDK declarations, and static example.
-- [x] Define versioned, source-located JSON HIR shared by frontend and compiler.
-- [x] Collect TypeScript diagnostics and validate the static TinyTSX subset.
-- [x] Lower static TSX and component calls into coalesced HTML operations.
-- [x] Add frontend positive and negative tests.
-- [x] Implement `tinytsx check` and `--emit-hir`.
-- [x] Emit deterministic Apple arm64 assembly and expose `--emit-asm`.
-- [x] Split codegen into reusable assembly/AArch64 modules and a focused Apple
-      arm64 target adapter, with all codegen tests in separate files.
-- [x] Add `aarch64-unknown-linux-gnu` HIR/codegen/build selection, emit
-      assembler-verified ELF for static and dynamic Hono programs, and retain
-      native-host-only final linking with an explicit cross-host diagnostic.
-- [x] Implement the single-worker bootstrap HTTP runtime.
-- [x] Assemble and link a native Mach-O executable through the Rust toolchain.
-- [x] Implement `tinytsx build`, output selection, and temporary artifacts.
-- [x] Add a real HTTP end-to-end test and report executable size.
-- [x] Update README with exact working commands.
+## Alpha definition
 
-## Benchmark evidence
+The first public milestone is `0.1.0-alpha.1`: an installable developer preview
+that can compile and run the documented Hono examples without a JavaScript
+engine in the produced server.
 
-- [x] Add an idiomatic Bun static server with equivalent response semantics.
-- [x] Add repeated startup, RSS, throughput, and latency measurement via `oha`.
-- [x] Retain machine-readable samples and a readable static preview report.
-- [x] Run the complete pinned 34-module Hono application through TinyTSX and
-      the real Bun/Hono runtime with response-contract validation.
-- [x] Record repeated complete-app startup, idle/post-warm-up RSS, throughput,
-      and latency samples through concurrency 128.
-- [x] Run the exact pinned JSX SSR source on TinyTSX and Bun with byte-identical
-      root HTML, then record startup, RSS, and load through concurrency 64.
-- [ ] Resolve the Hono response-clone Content-Type difference with direct
-      Web-platform evidence and an explicit compatibility decision.
-- [x] Implement HTTP/1.1 keep-alive and rerun equivalent transport tests.
-- [x] Implement the bounded native worker pool and benchmark 1/2/4/8 workers.
-- [ ] Benchmark dynamic escaping, request arenas, route parameters, JSON/query
-      branches, and representative response sizes.
-- [x] Record repeated eight-worker keep-alive previews for request-time nested
-      JSX escaping and finite `streamText()` against Bun.
+Alpha is not a claim of general TypeScript, ECMAScript, Node, Deno, Bun, Web API,
+or Hono compatibility. The release must publish an exact supported matrix,
+bounded-resource behavior, native prerequisites, and compile-time diagnostics
+for unsupported behavior.
+
+The alpha profiles are:
+
+- native Apple arm64 build and execution;
+- native Linux arm64 build and execution;
+- cross-host AArch64 assembly inspection only;
+- arena-only request memory with no managed heap;
+- pinned upstream Hono source, not a compiler-owned Hono replacement;
+- built-in TinyTSX backend modules with no npm runtime dependency.
+
+## Alpha critical path
+
+### A0 — Freeze the developer-preview contract
+
+- [ ] Add `doc/ALPHA.md` with the supported syntax, Hono/Web API matrix, native
+      targets, standard-library modules, limits, security model, prerequisites,
+      non-goals, and known incompatibilities.
+- [ ] Resolve bare package imports and package declarations so documented Hono
+      applications do not require long `--alias`/`--api` command lines.
+- [ ] Define built-in module resolution for `tinytsx:env`, `tinytsx:fs`,
+      `tinytsx:sqlite`, and `tinytsx:actors`; built-ins must not be resolved from
+      `node_modules` or shadowed by application packages.
+- [ ] Add stable diagnostic codes for unavailable built-ins, missing native
+      capabilities, denied paths, exceeded limits, and unsupported actor or
+      SQLite operations.
+- [ ] Decide and document the alpha compatibility policy: additive APIs are
+      allowed between alpha releases; breaking changes require release notes and
+      an alpha-version increment.
+
+### A1 — Broaden the executable Hono matrix
+
+- [ ] Add a machine-readable example matrix recording source provenance,
+      required imports/APIs, intake status, native compile status, HTTP behavior
+      coverage, Bun/reference coverage, and the first unsupported boundary.
+- [ ] Keep the complete pinned `basic` and `jsx-ssr` applications as mandatory
+      release gates on every supported native target.
+- [ ] Compile and execute the pinned upstream `serve-static` landing application,
+      then extend it with `tinytsx:fs` using the pinned assets as the file API
+      tracer.
+- [ ] Use the pinned upstream `blog` routes and behavior as the CRUD contract for
+      a Hono + `tinytsx:sqlite` example. Clearly distinguish any TinyTSX binding
+      adapter from unchanged upstream source.
+- [ ] Close the minimum portable dependencies exposed by that blog tracer:
+      bounded JSON request bodies, closed-shape JSON parsing, CORS middleware,
+      `crypto.randomUUID()`, and environment-backed Hono bindings.
+- [ ] Use the pinned upstream `durable-objects` counter behavior as the contract
+      for a Hono + `tinytsx:actors` counter example. Do not claim Cloudflare API
+      compatibility unless the upstream source itself runs unchanged.
+- [ ] Add at least one multi-module user-auth/configuration example covering
+      environment input, middleware, error handling, and persistent state without
+      network credentials in the automated suite.
+- [ ] For every alpha example, build a native server, exercise success and error
+      HTTP paths, compare portable behavior with Bun or another declared
+      reference, and assemble the Linux-arm64 output in cross-host tests.
+- [ ] Resolve the known Hono response-clone Content-Type difference with direct
+      Web-platform evidence and pin the decision in every affected contract.
+- [ ] Replace the open-ended “broader Hono tests” task with an explicit allowlist
+      of upstream Hono behavior files exercised by the alpha matrix.
+
+### A2 — Define the TinyTSX backend standard library
+
+- [ ] Add `doc/STANDARD_LIBRARY.md` defining built-in-module versioning,
+      capability permissions, error types, blocking rules, resource ownership,
+      bounds, target support, and the distinction from Web-standard APIs.
+- [ ] Keep built-in declarations in the shipped SDK and implementations in
+      focused zero-JavaScript native runtime modules. Applications must not need
+      npm packages to use them.
+- [ ] Add `tinytsx --list-builtins` or equivalent machine-readable capability
+      output, including target availability and compiled limits.
+- [ ] Define a common disposable-resource contract (`close`/`dispose`) for file,
+      SQLite, and actor handles without requiring a general garbage collector.
+- [ ] Define how potentially blocking filesystem and database work uses the
+      application executor rather than blocking an HTTP executor.
+- [ ] Record candidates for post-alpha OS modules (path utilities, signals,
+      subprocesses, sockets) without adding them to the alpha gate.
+
+### A3 — Add environment input and bounded file reading
+
+- [ ] Specify and declare read-only `tinytsx:env` access with explicit
+      `--allow-env <name>` capabilities, missing-value behavior, UTF-8 rules,
+      maximum value length, and immutable startup snapshots.
+- [ ] Connect permitted environment values to typed Hono bindings and cover
+      missing/denied configuration without exposing the entire host environment.
+
+- [ ] Specify and declare `tinytsx:fs` with an alpha-minimum text-file read API;
+      reserve binary buffers, directory mutation, watching, and writes for later
+      unless an alpha example proves they are required.
+- [ ] Add explicit `--allow-read <root>` capabilities. Default-deny request-time
+      filesystem access, canonicalize paths before permission checks, and keep
+      environment and filesystem capabilities separate.
+- [ ] Define deterministic behavior for missing files, directories, invalid
+      UTF-8, symlinks, traversal attempts, permission denial, and concurrent
+      replacement.
+- [ ] Enforce configurable maximum path and file sizes, copy results into a
+      documented ownership domain, and return recoverable errors on overflow.
+- [ ] Add native unit tests, permission/security tests, request-time Hono tests,
+      and Apple/Linux target coverage.
+- [ ] Run the Hono static-file tracer through the public built-in rather than a
+      test-only runtime intrinsic.
+
+### A4 — Add bounded SQLite persistence
+
+- [ ] Pin a SQLite revision and choose a reproducible linking policy. Prefer a
+      vendored/static alpha artifact with license and provenance records so
+      applications do not depend on an undeclared host SQLite installation.
+- [ ] Specify and declare `tinytsx:sqlite` with database open/close, prepared
+      statements, positional binding, bounded query rows, execute results, and
+      explicit transactions.
+- [ ] Define the alpha value mapping for `null`, integer, finite number, text,
+      and blob; reject unsupported dynamic values at compile time.
+- [ ] Make each connection single-owner and serialize its operations through a
+      logical worker/actor mailbox instead of sharing a native handle across HTTP
+      executors.
+- [ ] Require an explicit filesystem capability for on-disk databases and offer
+      `:memory:` for deterministic tests.
+- [ ] Bound SQL length, parameter count, row count, row bytes, open statements,
+      busy timeout, and queued operations; surface typed recoverable failures.
+- [ ] Prove schema creation, insert/select/update/delete, rollback, contention,
+      malformed SQL, limit recovery, shutdown, and restart persistence.
+- [ ] Run the Hono blog tracer end to end against the public SQLite built-in.
+
+### A5 — Promote logical workers into lightweight actors
+
+- [ ] Add `doc/ACTORS.md` defining actor identity, state ownership, mailbox
+      ordering, ask/reply, tell, stop, failure, restart, supervision boundary,
+      fairness, and shutdown. State explicitly that actors are local and are not
+      one operating-system thread each.
+- [ ] Specify and declare `tinytsx:actors` around compile-time-known actor
+      behaviors and typed `ActorRef` handles. The alpha API must provide bounded
+      `ask`, bounded fire-and-forget `tell`, and idempotent `stop`.
+- [ ] Reuse the existing fixed application executor and logical-worker mailbox;
+      spawning or stopping an actor must not create or destroy a native thread.
+- [ ] Extend message copying from strings to an explicit structured subset of
+      primitives, closed records, and bounded arrays. Preserve isolation and
+      reject unsupported identity/transfer semantics.
+- [ ] Define actor-local state storage without a managed heap; reject state that
+      escapes the supported worker arena/lifetime contract.
+- [ ] Add deterministic mailbox-full, stopped, handler-failure, timeout, and
+      caller-cancellation behavior. Automatic restart/supervision is optional for
+      the first alpha but its absence must be explicit.
+- [ ] Measure 1,000 and 10,000 idle/local actors, publish bytes per actor and
+      thread count, then set a documented practical limit from evidence.
+- [ ] Prove per-actor FIFO ordering, parallelism across actors, fairness under a
+      hot mailbox, isolation, stop/drain behavior, panic recovery, and no native
+      thread growth proportional to actor count.
+- [ ] Run the Hono counter tracer through the public actor API and persist one
+      actor variant through `tinytsx:sqlite`.
+
+### A6 — Make the alpha release installable
+
+- [ ] Remove compile-time source-checkout discovery from the released compiler.
+      Define an installed resource layout for frontend JavaScript, TypeScript,
+      SDK declarations, runtime link inputs, licenses, and built-in metadata.
+- [ ] Decide whether alpha bundles the frontend/runtime assets or declares Node,
+      TypeScript, Rust, Clang, libcurl, and SQLite as prerequisites. A release
+      must fail with actionable diagnostics when a declared prerequisite is
+      missing.
+- [ ] Add `tinytsx --version` and report compiler version, HIR version, target,
+      runtime ABI version, built-ins, and pinned compatibility revisions.
+- [ ] Set the workspace/package version to `0.1.0-alpha.1`, add a changelog and
+      third-party notices, and ensure generated reports carry the same version.
+- [ ] Add a reproducible `release:verify` command that starts from a clean tree,
+      builds release artifacts, runs the alpha example matrix, checks reports,
+      and fails on uncommitted generated changes.
+- [ ] Produce installable Apple-arm64 and Linux-arm64 archives with checksums and
+      an explicit artifact manifest. Verify each archive from a clean directory,
+      outside the repository checkout.
+- [ ] Add native Apple-arm64 and Linux-arm64 CI/release jobs. Cross-assembled ELF
+      evidence does not replace executing the Linux archive on Linux.
+- [ ] Verify startup, graceful shutdown, malformed input recovery, request OOM,
+      worker/actor saturation, filesystem denial, SQLite contention, and clean
+      resource disposal in release builds.
+- [ ] Publish one short getting-started path that installs the archive, builds a
+      Hono application using files/SQLite/actors, and exercises it with `curl`.
+
+## Alpha exit gate
+
+Do not tag `0.1.0-alpha.1` until all of these are true:
+
+- [ ] Every A0–A6 item is complete or explicitly moved to post-alpha with the
+      alpha contract adjusted so no documented feature depends on it.
+- [ ] The complete Rust, frontend, Hono, Test262 allowlist, WPT allowlist, native
+      API, benchmark-harness, and alpha example suites pass from a clean tree.
+- [ ] Apple and Linux archives install and execute outside the checkout, and
+      their checksums, version output, build reports, and HTTP contracts match
+      the release manifest.
+- [ ] The published compatibility matrix contains no unqualified “supports
+      Hono/TypeScript/Web APIs” claim and links every supported row to executable
+      evidence.
+- [ ] Security/resource limits and known issues for files, SQLite, actors,
+      network transport, and request memory are documented and tested.
+- [ ] A repeated release benchmark records startup, idle/warm RSS, throughput,
+      median/p99 latency, binary size, and actor/SQLite overhead without making
+      claims broader than the measured workloads.
+
+## Ordered post-alpha backlog
+
+### P1 — Compatibility and language depth
+
+- [ ] Promote remaining syntax-only Test262 cases only when their complete
+      assertion programs execute natively.
+- [ ] Expand ordinary functions to locals, branches, closures, additional native
+      types, and general typed expressions/statements.
+- [ ] Compile function values, closures, records, arrays, ordinary loops, the
+      restricted class semantics required by `hono/tiny`, and required runtime
+      rest/spread operations.
+- [ ] Implement bounded native `Map`, constant `symbol`, signed zero, `NaN`, and
+      infinities with complete semantics evidence.
+- [ ] Replace whole-module forbidden-syntax rejection with request/initialization
+      reachability and specialize remaining closed-shape Hono object rest.
+- [ ] Add native RegExp, exceptions, Promise/async scheduling, and additional
+      allowlisted Test262 coverage.
+
+### P2 — Web and Hono breadth
+
+- [ ] Generalize Request, Response, Headers, Fetch, URL, encoding, request bodies
+      beyond the alpha JSON subset, abort/timeout, and portable non-macOS
+      transports.
+- [ ] Add optional/multi-segment route parameters, general constraints,
+      non-terminal catch-alls, and broader request-dependent handlers.
+- [ ] Add invalid UTF-8 replacement semantics with upstream parser evidence.
+- [ ] Add request-dependent stream chunks, sleep, cancellation, backpressure,
+      and disconnect propagation.
+- [ ] Continue expanding the explicit upstream Hono behavior allowlist and
+      example matrix; never replace it with a blanket compatibility claim.
+
+### P3 — Actors, AI, persistence, and managed memory
+
+- [ ] Add actor supervision trees, restart intensity, monitors/links, registries,
+      persistence snapshots, and remote/distributed actors only from separate
+      evidence-driven proposals.
+- [ ] Add deterministic AI invalid-schema and multi-step/tool-call behavior.
+- [ ] Add heap ABI descriptors, roots, safepoints/stack maps, and write barriers,
+      then compare established conservative and precise per-worker collectors.
+      Do not implement a production collector from scratch.
+- [ ] Expose the optional no-WASI WASM profile through an explicit built-in only
+      after capability, packaging, and actor-isolation contracts are complete.
+
+### P4 — Performance evidence
+
+- [ ] Benchmark dynamic escaping, arenas, route parameters, JSON/query branches,
+      response sizes, files, SQLite, and actors under representative load.
 - [ ] Add CPU, syscall, allocation, peak-RSS, and first-launch instrumentation.
-- [ ] Run controlled, longer-duration release comparisons before publishing claims.
+- [ ] Run controlled longer-duration comparisons before publishing performance
+      claims and optimize only from profiles.
 
-## Workers, AI, and managed memory
+## Completed foundation
 
-- [x] Define native executor versus logical worker terminology, lifecycle,
-      isolation, message ownership, overload, and shutdown contracts.
-- [x] Add a zero-dependency reusable native worker-pool crate with a bounded
-      FIFO queue, worker-local state, panic recovery, and draining shutdown.
-- [x] Make the HTTP bootstrap consume the shared pool and enable `--workers N`.
-- [x] Prove concurrent request execution, deterministic saturation 503, response
-      isolation, and recovery after overload.
-- [x] Benchmark equivalent Hono workloads with 1/2/4/8 workers, reporting RSS,
-      throughput, median/p99 latency, and queue saturation behavior.
-- [x] Implement compile-time-known module Workers as syntax sugar over isolated
-      mailboxes and a separate application task pool.
-- [x] Add bounded logical-worker mailboxes with per-worker state, request/reply
-      ownership, parallel workers, termination, panic recovery, and draining
-      shutdown tests to the zero-dependency runtime library.
-- [x] Connect that application pool to the bootstrap ABI and lower the first
-      compile-time-known TypeScript `Worker` module.
-- [x] Benchmark one persistent logical string worker against a real Bun Worker,
-      including startup, RSS, request/reply throughput, and latency.
-- [ ] Add `postMessage`/message events, source-level termination, general
-      message shapes, and a multi-Worker load-balancing example.
-- [x] Pin an exact AI SDK Core revision and run the Hono-style syntax/type/source
-      intake against `ai`, `@ai-sdk/provider`, `@ai-sdk/provider-utils`, its
-      gateway dependency, and the selected schema dependency.
-- [x] Record the exact `ai@7.0.28` candidate revision/manifest, Core-only scope,
-      deterministic fake-model target, test layers, and worker/GC exit gates.
-- [x] Compile a deterministic AI SDK Core test with a fake model and no network,
-      credentials, or provider package before attempting streaming/provider I/O.
-- [x] Compile deterministic invalid prompt behavior through the upstream AI SDK
-      error class and installed Hono error handler, matched against Bun.
-- [ ] Add deterministic invalid-schema behavior before treating the native Zod
-      boundary as more than a known-valid tracer specialization.
-- [ ] Compile deterministic multi-step/tool-call behavior.
-- [x] Compile a finite deterministic `streamText` model and return the SDK text
-      stream as a Hono Web `Response`, preserving chunks and content type.
-- [x] Add bounded local OpenAI-compatible provider HTTP I/O on the separate
-      application pool, with exact request/response behavior and reusable
-      per-worker connections.
-- [x] Benchmark the pinned 656-module provider path against Bun with one and
-      eight workers, including startup, RSS, throughput, and latency.
-- [x] Inventory Promise, async iterator, Web Streams, AbortSignal, encoding,
-      Fetch, URL, crypto, timer, and persistent-heap gaps from that exact graph.
-- [x] Define static, request, worker, message, and managed-heap lifetimes plus
-      the evidence threshold for starting a collector integration spike.
-- [x] Emit executed allocation-site, alias, lifetime, and escape evidence in HIR
-      and native build reports, with a machine-checked managed-heap decision.
-- [ ] Add heap ABI descriptors, roots, safepoints/stack maps, and write-barrier
-      sites before selecting a precise collector.
-- [ ] Compare an established conservative collector and a precise per-worker
-      collector/toolkit; do not implement a production GC from scratch.
-- [x] Define an optional WASM compatibility profile: loader, imports allowlist,
-      ABI, bounded linear memory, WASI policy, AOT/interpreter choice, and worker
-      isolation. Keep it absent from zero-dependency builds until enabled.
-- [x] Load and execute one pinned no-WASI WASM fixture with deterministic memory
-      limits before evaluating framework or plugin use cases.
-
-## Next slice
-
-- [x] Load relative ESM runtime graphs for TypeScript, TSX, and JavaScript source.
-- [x] Emit an aggregate compatibility report instead of stopping at the first
-      unsupported Hono construct.
-- [x] Pin an exact-source `hono/tiny` smoke application and continuously audit
-      its reachable modules.
-- [x] Add the Test262 pin, allowlist, provenance validation, and syntax-intake
-      runner contract.
-- [x] Add focused native host API conformance tests and a dedicated test command.
-- [x] Type-check the entire pinned Hono runtime graph against TypeScript's
-      standard DOM and DOM iterable declarations without handwritten global
-      Request/Response replacements.
-- [x] Compile a relative ESM component through HIR, assembly, native linking,
-      and a real HTTP test.
-- [x] Route the pinned bare `hono/tiny` import through the compiling frontend and
-      preserve its exact-source unsupported boundary as capabilities advance.
-- [ ] Resolve bare package imports and combine runtime source with package
-      declarations in the compiling frontend.
-- [x] Allow a type-only `api.d.ts` alias while retaining the upstream package
-      source as the runtime compilation graph.
-- [x] Add a first-route tracer for the full `hono` entry used by the upstream
-      basic example, alongside the smaller `hono/tiny` tracer.
-- [x] Pin the upstream `honojs/examples` revision and intake its complete basic
-      source and behavior test rather than only the first route.
-- [x] Add an allowlist-driven native Test262 compiler/runner and execute the
-      exact `typeof undefined` case as a standalone Mach-O program.
-- [x] Execute the complete six-assertion Test262 `typeof bigint` case, including
-      closed `BigInt(...)` conversion and `Object(...)` boxing categories.
-- [x] Execute the complete Test262 infinite `for (;;)` case through 101 native
-      pre-increments, numeric throw/catch completion, and final counter checks.
-- [x] Execute the complete pinned `Array.prototype.unshift` Test262 case with a
-      bounded dense numeric array, source-ordered mutation, length results, and
-      out-of-range `undefined` checks.
-- [ ] Promote the remaining syntax-only Test262 cases only as their complete
-      assertion programs become executable.
-- [ ] Compile function values, closures, records, arrays, and ordinary loops.
-- [x] Keep compile-time closed records distinct from dynamic `Map` values in
-      staging, HIR terminology, tests, and the documented object model.
-- [ ] Implement bounded native `Map` storage for genuinely dynamic keys.
-- [x] Add a conservative AOT staging pass for imported closed constants,
-      constant array/object spread, and closed-value destructuring rest.
-- [x] Classify every reachable Hono spread/rest site as constant or runtime and
-      prove the method-table spread folds to seven static method names.
-- [ ] Use TypeScript record layouts to specialize request-time closed-shape
-      object rest such as Hono's `optionsWithoutStrict`.
-- [x] Feed staged values into a typed HIR constant pool and deterministic native
-      read-only data blobs.
-- [x] Preserve `undefined` and arbitrary-precision bigint staged constants and
-      add their allowlisted Test262 syntax cases.
-- [ ] Add constant `symbol` values and preserve signed zero, `NaN`, and
-      infinities before claiming complete ECMAScript primitive constants.
-- [x] Lower reachable named functions with up to four required string
-      parameters, imported direct calls, and staged string constants through
-      native code generation.
-- [x] Emit native text response metadata and verify the Hono basic route body
-      and content type through a real HTTP request.
-- [ ] Expand ordinary functions to locals, branches, closures, additional
-      native types, and general typed expressions and statements.
-- [x] Lower closed constructor string fields and an immediate class method call
-      through the ordinary function HIR and native calling convention.
-- [ ] Compile the restricted class semantics required by `hono/tiny`.
-- [ ] Specialize Hono's constant method-name computed assignments into closed
-      class fields without enabling arbitrary dynamic object properties.
-- [x] Prove the constructor's closed `forEach` assignment enumerates exactly
-      `get`, `post`, `put`, `delete`, `options`, `patch`, and `all`, and admit
-      that site while retaining diagnostics for dynamic computed keys.
-- [ ] Replace whole-module forbidden-syntax rejection with reachability from
-      default-exported application initialization and request dispatch.
-- [x] Recognize a constructed default application, preserve its ordered
-      top-level calls, and select it before validating unused imported methods.
-- [x] Resolve the constructed binding through runtime imports/re-exports and
-      preserve the derived/base class constructor chain with source spans and
-      ordered operation kinds.
-- [x] Execute the traced constructor and registration calls against upstream
-      class/function source to produce an immutable compile-time route artifact.
-- [x] Symbolically execute Hono/HonoBase default parameters, field initializers,
-      `super`, the closed method loop, assignments, destructuring,
-      `Object.assign`, conditionals, closures, and router construction.
-- [x] Invoke the installed `get` closure and execute its `#addRoute` effects.
-- [x] Lower one evaluated static GET route and its upstream `Context.text`
-      response into HIR and path-checked native request dispatch.
-- [x] Generalize native dispatch to multiple ordered static GET routes.
-- [x] Dispatch closed POST routes by request method and preserve explicit HTTP
-      status plus Hono text/JSON content types.
-- [x] Add non-empty `:name` route segments, request-time `c.req.param(name)`,
-      percent decoding, and streamed text interpolation.
-- [x] Add terminal `*` route matching, including the base path and deeper
-      segments, and compile the basic example's `/api/*` 404 fallback.
-- [ ] Add optional and additional multi-segment route patterns plus
-      broader request-dependent handler bodies.
-- [x] Match Hono's `:id{[0-9]+}` route slice natively and specialize a finite
-      closed-record `Array.find` into exact response routes plus a 404 fallback.
-- [ ] Add optional parameters, general constraints, and non-terminal catch-alls;
-      the native constraint backend currently admits only `[0-9]+`.
-- [x] Compose same-method/path handlers into one ordered route and apply closed
-      post-`next()` response effects.
-- [x] Lower the request-query-dependent response branch in
-      `app.get('/api/posts', prettyJSON(), handler)`.
-- [x] Compile upstream `Context.redirect('/')` with status 302, `Location`, an
-      empty body, and no content type.
-- [x] Borrow bounded request headers and stream the basic example's
-      `c.req.header('User-Agent')` value through native text output.
-- [x] Apply closed post-handler middleware and compile upstream `poweredBy()`
-      through native response-header emission.
-- [x] Evaluate multiple constructed Hono bindings and mount nested applications
-      through upstream `route()`, `basePath()`, `#clone()`, and `#addRoute`.
-- [x] Compile the basic example's closed `/hello/*` async middleware and static
-      post-`next()` response header.
-- [x] Lower an explicitly installed Hono `notFound()` handler into ordered GET
-      and POST native fallback dispatch.
-- [x] Route a closed thrown `Error` through an explicitly installed Hono
-      `onError()` handler, including native `console.error` output.
-- [x] Compile the basic example's exact `Date.now()` response-time middleware
-      into a bounded runtime-formatted header, including composition with
-      `prettyJSON()` response clones.
-- [x] Compile the basic example's closed `basicAuth` configuration into a native
-      request guard, including authorized, rejected, and custom-error behavior.
-- [x] Compile the basic example's closed `etag` response into an AOT SHA-1 tag
-      and native `If-None-Match` 200/304 dispatch.
-- [x] Compile the exact `await fetch('https://example.com/').status` route into
-      a request-time native fetch expression, with focused ABI and HTTP E2E
-      coverage.
-- [x] Preserve Hono's deliberately invalid truthy handler return through its
-      installed error path, then compile/build the complete pinned 110-line
-      basic application as one native executable.
-- [x] Verify the complete executable against the upstream basic root contract,
-      including powered-by and response-time middleware, and provide a single
-      reproducible build command.
-- [ ] Generalize Fetch to Request/init inputs, response bodies and headers,
-      abort/timeout semantics, and portable non-macOS host transports.
-- [ ] Compile the required rest/spread operations.
-- [ ] Add a native RegExp backend and allowlisted Test262 cases.
-- [ ] Add the general Request, Response, Headers, Fetch, URL, and encoding
-      native APIs.
-- [x] Add bounded static response headers with HTTP validation,
-      case-insensitive replacement, and wire emission.
-- [x] Lower closed `JSON.stringify`, `Headers`, `Object.entries`, array binding,
-      and `for...of` semantics used by Hono `Context.json/#newResponse`.
-- [x] Intake a pinned Web Platform Test for `Headers.set()` casing and connect
-      it to focused native-derived ABI evidence.
-- [x] Intake the pinned WPT `ResponseInit.status` source and connect its closed
-      201 case to native-derived Hono E2E evidence.
-- [x] Intake the pinned WPT `URLSearchParams.has(name)` source and connect its
-      one-argument presence case to focused native query ABI evidence.
-- [x] Add an allowlist-driven native WPT compiler/runner and execute every
-      assertion in the complete pinned `URLSearchParams.get()` source.
-- [x] Promote the complete pinned `URLSearchParams.has()` source by adding
-      false assertions, ordered append/delete mutation, Web IDL string
-      coercion, and the two-argument `has`/`delete` semantics it exercises.
-- [x] Execute the complete pinned `URLSearchParams` stringifier WPT with form
-      `+`/percent decoding, UTF-8 percent serialization, malformed escape
-      preservation, and live mutation of the selected linked URL cases.
-- [ ] Add invalid UTF-8 replacement semantics and direct upstream parser
-      evidence before claiming the complete form-urlencoded parser.
-- [x] Share native form-decoding semantics with application Request query lookup,
-      then cover encoded query names through the Hono HTTP path.
-- [ ] Add exceptions, Promise, async/await, and a bounded native task executor.
-- [x] Add the pinned Test262 throw-statement and Error-message cases to the
-      syntax allowlist; native Test262 execution remains pending.
-- [x] Admit async/await handlers when application initialization fully stages
-      them without creating a native Promise or suspended task.
-- [x] Reproduce the pinned basic example's selected root-route status and
-      `X-Powered-By: Hono` assertions through a native HTTP E2E.
-- [ ] Run broader upstream Hono behavior tests as features become available.
-- [x] Run the pinned first-route source under Bun and TinyTSX, require equivalent
-      responses, and persist a repeated exploratory comparison.
-- [ ] Repeat the exact-source comparison once request-dependent handlers and
-      keep-alive HTTP are available.
-- [x] Lower request query values and closed fallbacks through dynamic component
-      props into request-time native JSX.
-- [x] Match Bun/Hono HTML escaping for decoded request values in JSX text and
-      quoted attributes, including nested component markup.
-- [x] Compile pinned upstream `hono/streaming` `streamText()` and emit bounded
-      HTTP/1.1 chunks without collecting the whole body.
-- [ ] Add request-dependent stream chunks, `sleep`, cancellation, backpressure,
-      and disconnect propagation; the first executable slice is finite and
-      statically planned.
-- [x] Fixed request arena and recoverable request OOM.
-- [x] Fixed native worker pool and bounded dispatch queue.
-- [ ] Add request parsing and response equivalence cases beyond the static page.
+- [x] Compile static/multi-module TSX, closed Hono applications, dynamic escaped
+      JSX, finite streaming, workers, and selected AI SDK paths into native
+      Apple-arm64 servers without a JavaScript engine.
+- [x] Pin Hono, Hono examples, Test262, WPT inputs, and AI SDK sources with
+      provenance-preserving intake/native test layers.
+- [x] Compile and execute the complete pinned Hono `basic` and `jsx-ssr`
+      applications with native HTTP behavior coverage.
+- [x] Implement bounded request arenas, HTTP/1.1 keep-alive, request framing,
+      streaming responses, fixed HTTP/application executor pools, saturation
+      recovery, and logical-worker request/reply mailboxes.
+- [x] Distinguish closed records from dynamic maps and serialize staged constants
+      into deterministic native data.
+- [x] Implement reusable assembly macros, shared AArch64 lowering, and thin
+      Mach-O/ELF dialect adapters with byte-stable Apple output and
+      assembler-verified Linux output.
+- [x] Record TinyTSX/Bun startup, RSS, throughput, latency, worker, streaming,
+      JSX, Hono, and provider benchmark evidence with stated limitations.
+- [x] Define memory-lifetime/GC decision gates and a separate bounded no-WASI
+      interpreter profile without adding either to the default runtime.
