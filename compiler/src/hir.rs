@@ -15,6 +15,8 @@ pub struct Program {
     pub components: Vec<Component>,
     #[serde(default)]
     pub workers: Vec<WorkerModule>,
+    #[serde(default)]
+    pub actors: Vec<ActorModule>,
     pub handlers: Vec<Handler>,
     pub static_strings: Vec<StaticString>,
     #[serde(default)]
@@ -101,6 +103,28 @@ pub enum WorkerOperation {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ActorModule {
+    pub id: usize,
+    pub operation: ActorOperation,
+    pub initial_state: i64,
+    pub mailbox_capacity: usize,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ActorOperation {
+    Counter,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum ActorAction {
+    Tell { actor: usize, message: i64 },
+    Stop { actor: usize },
+}
+
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum HtmlOp {
     WriteStatic { string: usize, span: SourceSpan },
@@ -122,6 +146,8 @@ pub struct Handler {
     pub entity_tag: Option<EntityTag>,
     #[serde(default, rename = "parameterValidations")]
     pub parameter_validations: Vec<ParameterValidation>,
+    #[serde(default, rename = "actorActions")]
+    pub actor_actions: Vec<ActorAction>,
     #[serde(default)]
     pub stderr: Vec<usize>,
     pub response: HandlerResponse,
@@ -265,6 +291,11 @@ pub enum ValueExpression {
         max_bytes: usize,
         span: SourceSpan,
     },
+    ActorCall {
+        actor: usize,
+        message: i64,
+        span: SourceSpan,
+    },
     FetchStatus {
         url: usize,
         span: SourceSpan,
@@ -355,6 +386,10 @@ pub struct SourceSpan {
 }
 
 impl Program {
+    pub fn uses_actors(&self) -> bool {
+        !self.actors.is_empty()
+    }
+
     pub fn uses_filesystem(&self) -> bool {
         self.handlers.iter().any(|handler| {
             response_uses_filesystem(&handler.response)
@@ -449,6 +484,14 @@ impl Program {
             validate_response_headers(&handler.headers, &handler.elapsed_headers)?;
             self.validate_stderr(&handler.stderr)?;
             self.validate_handler_response(&handler.response, &handler.path)?;
+            for action in &handler.actor_actions {
+                let actor = match action {
+                    ActorAction::Tell { actor, .. } | ActorAction::Stop { actor } => actor,
+                };
+                if *actor >= self.actors.len() {
+                    return Err("handler actor action references a missing actor".to_owned());
+                }
+            }
             if let Some(authorization) = &handler.basic_authorization {
                 if authorization.credentials.is_empty() {
                     return Err("Basic Authorization guard has no credentials".to_owned());
@@ -558,6 +601,14 @@ impl Program {
                 return Err(format!("worker {index} references a missing module"));
             }
         }
+        for (index, actor) in self.actors.iter().enumerate() {
+            if actor.id != index {
+                return Err(format!("actor id {} is not canonical", actor.id));
+            }
+            if actor.mailbox_capacity == 0 || actor.mailbox_capacity > 64 {
+                return Err(format!("actor {index} mailbox capacity is outside 1..=64"));
+            }
+        }
         for (index, constant) in self.constants.iter().enumerate() {
             if constant.id != index {
                 return Err(format!("constant id {} is not canonical", constant.id));
@@ -626,6 +677,7 @@ impl Program {
             | ValueExpression::RequestHeader { .. }
             | ValueExpression::EnvironmentVariable { .. }
             | ValueExpression::FileText { .. }
+            | ValueExpression::ActorCall { .. }
             | ValueExpression::FetchStatus { .. }
             | ValueExpression::QueryParameter { .. }
             | ValueExpression::QueryConditional { .. }
@@ -801,6 +853,12 @@ impl Program {
                 }
                 if *max_bytes == 0 || *max_bytes > 1_048_576 {
                     return Err("file read maxBytes is outside the native limit".to_owned());
+                }
+                Ok(())
+            }
+            ValueExpression::ActorCall { actor, .. } => {
+                if *actor >= self.actors.len() {
+                    return Err("actor call references a missing actor".to_owned());
                 }
                 Ok(())
             }

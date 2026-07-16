@@ -6,10 +6,11 @@ use std::{
     },
 };
 
-use tinytsx_runtime_worker::{ApplicationPool, LogicalWorker};
+use tinytsx_runtime_worker::{ApplicationPool, CallError, LogicalWorker, PostError};
 
 use crate::abi::{
-    APPLICATION_OVERLOAD, INTERNAL_ERROR, OpenAiTransport, configured_provider_transport,
+    APPLICATION_OVERLOAD, INTERNAL_ERROR, OpenAiTransport, RENDER_ERROR, actor_initial_state,
+    actor_mailbox_capacity, actor_operation, configured_actors, configured_provider_transport,
     configured_worker_modules, worker_operation,
 };
 
@@ -25,6 +26,7 @@ enum ApplicationMessage {
     Worker(Vec<u8>),
     OpenAi(OpenAiRequest),
     ReadFile(ReadFileRequest),
+    ActorCounter(i64),
 }
 
 pub struct OpenAiRequest {
@@ -40,6 +42,8 @@ struct ReadFileRequest {
 
 struct WorkerState {
     operation: u32,
+    actor_operation: u32,
+    actor_counter: i64,
     provider: OpenAiTransport,
 }
 
@@ -48,6 +52,7 @@ struct ApplicationRuntime {
     workers: Vec<Worker>,
     providers: Vec<Worker>,
     files: Vec<Worker>,
+    actors: Vec<Worker>,
     next_provider: AtomicUsize,
     next_file: AtomicUsize,
 }
@@ -58,7 +63,8 @@ pub fn initialize(executor_count: usize) -> io::Result<(usize, bool, bool)> {
     let worker_count = configured_worker_modules();
     let provider_enabled = configured_provider_transport();
     let filesystem_enabled = crate::filesystem::enabled();
-    if worker_count == 0 && !provider_enabled && !filesystem_enabled {
+    let actor_count = configured_actors();
+    if worker_count == 0 && !provider_enabled && !filesystem_enabled && actor_count == 0 {
         return Ok((0, false, false));
     }
     let queue_capacity = executor_count
@@ -68,8 +74,16 @@ pub fn initialize(executor_count: usize) -> io::Result<(usize, bool, bool)> {
         executor_count,
         queue_capacity,
         WORKER_MAILBOX_CAPACITY,
-        |id| WorkerState {
+        move |id| WorkerState {
             operation: worker_operation(id),
+            actor_operation: id
+                .checked_sub(worker_count)
+                .filter(|actor| *actor < actor_count)
+                .map_or(0, actor_operation),
+            actor_counter: id
+                .checked_sub(worker_count)
+                .filter(|actor| *actor < actor_count)
+                .map_or(0, actor_initial_state),
             provider: OpenAiTransport::default(),
         },
         |state, message| match message {
@@ -90,9 +104,19 @@ pub fn initialize(executor_count: usize) -> io::Result<(usize, bool, bool)> {
             ApplicationMessage::ReadFile(request) => {
                 crate::filesystem::read_text(&request.path, request.max_bytes)
             }
+            ApplicationMessage::ActorCounter(delta) => {
+                if state.actor_operation != 1 {
+                    return Err(INTERNAL_ERROR);
+                }
+                state.actor_counter = state.actor_counter.checked_add(delta).ok_or(RENDER_ERROR)?;
+                Ok(state.actor_counter.to_string().into_bytes())
+            }
         },
     )?;
     let workers = (0..worker_count).map(|_| pool.spawn()).collect();
+    let actors = (0..actor_count)
+        .map(|actor| pool.spawn_with_capacity(actor_mailbox_capacity(actor)))
+        .collect::<Result<Vec<_>, _>>()?;
     let providers = if provider_enabled {
         (0..executor_count).map(|_| pool.spawn()).collect()
     } else {
@@ -109,6 +133,7 @@ pub fn initialize(executor_count: usize) -> io::Result<(usize, bool, bool)> {
             workers,
             providers,
             files,
+            actors,
             next_provider: AtomicUsize::new(0),
             next_file: AtomicUsize::new(0),
         })
@@ -150,4 +175,50 @@ pub fn read_file(path: &[u8], max_bytes: usize) -> Result<Vec<u8>, u32> {
             max_bytes,
         }))
         .map_err(|_| APPLICATION_OVERLOAD)?
+}
+
+pub fn ask_actor(actor: usize, message: i64) -> Result<Vec<u8>, u32> {
+    let runtime = APPLICATION.get().ok_or(INTERNAL_ERROR)?;
+    let actor = runtime.actors.get(actor).ok_or(INTERNAL_ERROR)?;
+    actor
+        .call(ApplicationMessage::ActorCounter(message))
+        .map_err(actor_call_status)?
+}
+
+pub fn tell_actor(actor: usize, message: i64) -> u32 {
+    let Some(runtime) = APPLICATION.get() else {
+        return INTERNAL_ERROR;
+    };
+    let Some(actor) = runtime.actors.get(actor) else {
+        return INTERNAL_ERROR;
+    };
+    match actor.try_post(ApplicationMessage::ActorCounter(message)) {
+        Ok(_reply) => 0,
+        Err(error) => actor_post_status(error),
+    }
+}
+
+fn actor_call_status(error: CallError<ApplicationMessage>) -> u32 {
+    match error {
+        CallError::Post(error) => actor_post_status(error),
+        CallError::Reply(_) => RENDER_ERROR,
+    }
+}
+
+fn actor_post_status(error: PostError<ApplicationMessage>) -> u32 {
+    match error {
+        PostError::MailboxFull(_) | PostError::PoolFull(_) => APPLICATION_OVERLOAD,
+        PostError::Closed(_) | PostError::Terminated(_) => RENDER_ERROR,
+    }
+}
+
+pub fn stop_actor(actor: usize) -> u32 {
+    let Some(runtime) = APPLICATION.get() else {
+        return INTERNAL_ERROR;
+    };
+    let Some(actor) = runtime.actors.get(actor) else {
+        return INTERNAL_ERROR;
+    };
+    actor.terminate();
+    0
 }

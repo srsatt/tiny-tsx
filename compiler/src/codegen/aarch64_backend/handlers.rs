@@ -1,4 +1,4 @@
-use crate::hir::{HandlerResponse, Program};
+use crate::hir::{ActorAction, HandlerResponse, Program};
 
 use super::super::{
     aarch64::{
@@ -192,6 +192,20 @@ pub(super) fn emit_handlers(assembly: &mut Emitter, program: &Program) -> Result
                 program.static_strings[*string].value.len() as u64,
             );
             assembly.call(format_args!("tinytsx_console_error_static"));
+        }
+        for action in &handler.actor_actions {
+            match action {
+                ActorAction::Tell { actor, message } => {
+                    emit_immediate(assembly, "x0", *actor as u64);
+                    emit_immediate(assembly, "x1", *message as u64);
+                    assembly.call(format_args!("tinytsx_actor_tell_counter"));
+                }
+                ActorAction::Stop { actor } => {
+                    emit_immediate(assembly, "x0", *actor as u64);
+                    assembly.call(format_args!("tinytsx_actor_stop"));
+                }
+            }
+            asm_line!(assembly, "    cbnz w0, {return_label}");
         }
         for (header_index, header) in handler.headers.iter().enumerate() {
             asm_line!(assembly, "    ldr x0, [sp, #16]");

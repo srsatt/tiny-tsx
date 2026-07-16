@@ -59,6 +59,17 @@ export interface WorkerModule {
   operation: "asciiUppercase";
 }
 
+export interface ActorModule {
+  id: number;
+  operation: "counter";
+  initialState: number;
+  mailboxCapacity: number;
+}
+
+export type ActorAction =
+  | {kind: "tell"; actor: number; message: number}
+  | {kind: "stop"; actor: number};
+
 export type ValueExpression =
   | {
       kind: "stringLiteral";
@@ -108,6 +119,12 @@ export type ValueExpression =
       kind: "fileText";
       path: number;
       maxBytes: number;
+      span: SourceSpan;
+    }
+  | {
+      kind: "actorCall";
+      actor: number;
+      message: number;
       span: SourceSpan;
     }
   | {
@@ -195,6 +212,7 @@ export interface Handler {
   basicAuthorization?: BasicAuthorization;
   entityTag?: EntityTag;
   parameterValidations?: ParameterValidation[];
+  actorActions?: ActorAction[];
   response: HandlerResponse;
   span: SourceSpan;
 }
@@ -276,6 +294,7 @@ export interface HirProgram {
   functions: HirFunction[];
   components: Component[];
   workers: WorkerModule[];
+  actors: ActorModule[];
   handlers: Handler[];
   staticStrings: StaticString[];
   constants: Constant[];

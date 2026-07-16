@@ -63,6 +63,7 @@ pub(super) fn emit_value_expression(
         | ValueExpression::RequestHeader { .. }
         | ValueExpression::EnvironmentVariable { .. }
         | ValueExpression::FileText { .. }
+        | ValueExpression::ActorCall { .. }
         | ValueExpression::FetchStatus { .. }
         | ValueExpression::QueryParameter { .. }
         | ValueExpression::QueryConditional { .. }

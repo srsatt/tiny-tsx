@@ -1,30 +1,23 @@
-export type ActorPrimitive = undefined | null | boolean | number | string;
-export type ActorValue = ActorPrimitive | readonly ActorValue[] | Readonly<{[key: string]: ActorValue}>;
-
-export interface ActorContext<State extends ActorValue> {
-  state: State;
+export interface CounterActorContext {
+  state: number;
 }
 
-export type ActorBehavior<State extends ActorValue, Message extends ActorValue, Reply extends ActorValue> =
-  (context: ActorContext<State>, message: Message) => Reply | Promise<Reply>;
+export type CounterActorBehavior =
+  (context: CounterActorContext, message: number) => string;
 
 export interface ActorOptions {
   mailboxCapacity?: number;
 }
 
-export interface ActorRef<Message extends ActorValue, Reply extends ActorValue> {
-  ask(message: Message): Promise<Reply>;
-  tell(message: Message): boolean;
+export interface CounterActorRef {
+  ask(message: number): Promise<string>;
+  tell(message: number): void;
   stop(): void;
   dispose(): void;
 }
 
-export declare function spawn<
-  State extends ActorValue,
-  Message extends ActorValue,
-  Reply extends ActorValue,
->(
-  behavior: ActorBehavior<State, Message, Reply>,
-  initialState: State,
+export declare function spawn(
+  behavior: CounterActorBehavior,
+  initialState: number,
   options?: ActorOptions,
-): ActorRef<Message, Reply>;
+): CounterActorRef;

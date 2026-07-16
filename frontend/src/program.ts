@@ -233,6 +233,7 @@ export function compileEntry(entryPath: string, options: CompileOptions): HirPro
     functions,
     components,
     workers: [],
+    actors: [],
     handlers: [handler],
     staticStrings: strings.values,
     constants,
@@ -415,6 +416,11 @@ function lowerApplicationInitialization(
       ...(parameterValidations === undefined || parameterValidations.length === 0
         ? {}
         : {parameterValidations}),
+      ...(response.actorActions === undefined || response.actorActions.length === 0
+        ? {}
+        : {actorActions: response.actorActions.map(action => action.kind === "tell"
+          ? {kind: "tell" as const, actor: action.actor.id, message: action.message!}
+          : {kind: "stop" as const, actor: action.actor.id})}),
       ...(response.stderr === undefined
         ? {}
         : {stderr: response.stderr.map(line => strings.intern(line))}),
@@ -431,6 +437,12 @@ function lowerApplicationInitialization(
     functions: [],
     components: [],
     workers: workers.values,
+    actors: initialization.actors.map(actor => ({
+      id: actor.id,
+      operation: actor.operation,
+      initialState: actor.initialState,
+      mailboxCapacity: actor.mailboxCapacity,
+    })),
     handlers,
     staticStrings: strings.values,
     constants: [],
@@ -660,6 +672,14 @@ function lowerRuntimeString(
           span,
         };
       }
+      if (part.kind === "actorCall") {
+        return {
+          kind: "actorCall" as const,
+          actor: part.actor.id,
+          message: part.message,
+          span,
+        };
+      }
       if (part.kind === "fetchStatus") {
         return {kind: "fetchStatus" as const, url: strings.intern(part.url), span};
       }
@@ -711,6 +731,7 @@ function dynamicResponseExpressions(body: ResponseBody): number {
       || part.kind === "requestHeader"
       || part.kind === "environmentVariable"
       || part.kind === "fileText"
+      || part.kind === "actorCall"
       || part.kind === "fetchStatus"
       || part.kind === "queryParameter"
       || part.kind === "workerCall"

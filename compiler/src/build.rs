@@ -42,6 +42,7 @@ struct BuildReport<'a> {
     workers: usize,
     application_workers: usize,
     logical_workers: usize,
+    actors: usize,
     provider_workers: usize,
     provider_transport: bool,
     filesystem: bool,
@@ -249,8 +250,9 @@ fn write_report(
         .len();
     let provider_transport = compilation.program.uses_openai_transport();
     let filesystem = compilation.program.uses_filesystem();
+    let actors = compilation.program.uses_actors();
     let application_pool =
-        !compilation.program.workers.is_empty() || provider_transport || filesystem;
+        !compilation.program.workers.is_empty() || provider_transport || filesystem || actors;
     let mut runtime_features = vec![
         "http1",
         "bounded-writer",
@@ -265,6 +267,9 @@ fn write_report(
     if filesystem {
         runtime_features.push("bounded-filesystem-read");
     }
+    if actors {
+        runtime_features.push("bounded-local-actors");
+    }
     let report = BuildReport {
         target: options.target.triple(),
         runtime: "bootstrap",
@@ -273,6 +278,7 @@ fn write_report(
         workers: options.workers,
         application_workers: usize::from(application_pool) * options.workers,
         logical_workers: compilation.program.workers.len(),
+        actors: compilation.program.actors.len(),
         provider_workers: usize::from(provider_transport) * options.workers,
         provider_transport,
         filesystem,
@@ -313,16 +319,22 @@ fn print_summary(
     println!("Workers:             {}", options.workers);
     let provider_transport = compilation.program.uses_openai_transport();
     let filesystem = compilation.program.uses_filesystem();
+    let actors = compilation.program.uses_actors();
     println!(
         "Application workers: {} executors; {} logical workers; provider transport {}",
-        usize::from(!compilation.program.workers.is_empty() || provider_transport || filesystem)
-            * options.workers,
+        usize::from(
+            !compilation.program.workers.is_empty() || provider_transport || filesystem || actors
+        ) * options.workers,
         compilation.program.workers.len(),
         if provider_transport {
             "enabled"
         } else {
             "disabled"
         },
+    );
+    println!(
+        "Actors:              {} local actor(s)",
+        compilation.program.actors.len()
     );
     println!(
         "Filesystem:          {} read root(s); request-time reads {}",

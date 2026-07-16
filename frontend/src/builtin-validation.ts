@@ -5,7 +5,6 @@ import type {ModuleGraph} from "./module-graph.js";
 
 const unavailableBuiltins = new Set([
   "tinytsx:sqlite",
-  "tinytsx:actors",
 ]);
 
 const ENVIRONMENT_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -30,7 +29,7 @@ export function validateBuiltinOperations(
       if (
         !ts.isImportDeclaration(statement)
         || !ts.isStringLiteral(statement.moduleSpecifier)
-        || (!["tinytsx:env", "tinytsx:fs"].includes(statement.moduleSpecifier.text)
+        || (!["tinytsx:env", "tinytsx:fs", "tinytsx:actors"].includes(statement.moduleSpecifier.text)
           && !unavailableBuiltins.has(statement.moduleSpecifier.text))
       ) continue;
       const bindings = statement.importClause?.namedBindings;
@@ -99,7 +98,7 @@ export function validateBuiltinOperations(
               help: `re-run with \`--allow-env ${name}\``,
             });
           }
-        } else {
+        } else if (imported.specifier === "tinytsx:fs") {
           validateFilesystemCall(
             diagnostics,
             imported,

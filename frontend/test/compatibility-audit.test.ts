@@ -190,6 +190,50 @@ test("lowers a permitted bounded file read through Hono", () => {
   assert.equal(hir.staticStrings[0]?.value, "asset.txt");
 });
 
+test("lowers a bounded counter actor with ask, tell, and stop", () => {
+  const entry = write("actor-lowering.ts", `
+    import {spawn} from "tinytsx:actors";
+    import {serve} from "tinytsx:serve";
+    import {Hono} from "hono";
+    const counter = spawn((context, delta: number) => {
+      context.state += delta;
+      return String(context.state);
+    }, 0);
+    const app = new Hono();
+    app.get("/ask", async context => context.text(await counter.ask(1)));
+    app.get("/tell", context => {
+      counter.tell(2);
+      return context.text("queued");
+    });
+    app.get("/stop", context => {
+      counter.stop();
+      return context.text("stopped");
+    });
+    serve({fetch: app.fetch});
+  `);
+
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+    apiAliases: {hono: path.join(repository, "tests/compat/hono/api.d.ts")},
+  });
+  assert.deepEqual(hir.actors, [{
+    id: 0,
+    operation: "counter",
+    initialState: 0,
+    mailboxCapacity: 64,
+  }]);
+  assert.deepEqual(hir.handlers[0]?.response.kind === "text"
+    ? hir.handlers[0].response.value
+    : undefined, {
+    kind: "concat",
+    values: [{kind: "actorCall", actor: 0, message: 1, span: hir.handlers[0]?.span}],
+    span: hir.handlers[0]?.span,
+  });
+  assert.deepEqual(hir.handlers[1]?.actorActions, [{kind: "tell", actor: 0, message: 2}]);
+  assert.deepEqual(hir.handlers[2]?.actorActions, [{kind: "stop", actor: 0}]);
+});
+
 test("requires explicit environment capabilities before lowering", () => {
   const entry = write("env-capability.ts", `
     import {get} from "tinytsx:env";

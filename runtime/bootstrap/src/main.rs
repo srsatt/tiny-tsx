@@ -24,10 +24,14 @@ fn main() {
     let workers = abi::configured_workers();
     match application::initialize(workers) {
         Ok((logical_workers, provider_transport, filesystem))
-            if logical_workers > 0 || provider_transport || filesystem =>
+            if logical_workers > 0
+                || provider_transport
+                || filesystem
+                || abi::configured_actors() > 0 =>
         {
             println!(
-                "Application workers: {workers}; logical workers: {logical_workers}; provider transport: {}; filesystem: {}",
+                "Application workers: {workers}; logical workers: {logical_workers}; actors: {}; provider transport: {}; filesystem: {}",
+                abi::configured_actors(),
                 if provider_transport {
                     "enabled"
                 } else {

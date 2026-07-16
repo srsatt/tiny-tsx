@@ -35,6 +35,7 @@ import {
   type ResponseHeaderValue,
   type Value,
   type RuntimeStringPart,
+  type ActorState,
   type StreamState,
   valuesEqual,
 } from "./symbolic-value.js";
@@ -104,6 +105,13 @@ export interface EvaluatedResponse {
   stderr?: string[];
   basicAuthorization?: EvaluatedBasicAuthorization;
   entityTag?: EvaluatedEntityTag;
+  actorActions?: EvaluatedActorAction[];
+}
+
+export interface EvaluatedActorAction {
+  kind: "tell" | "stop";
+  actor: ActorState;
+  message?: number;
 }
 
 interface EvaluatedRouteChoice {
@@ -127,6 +135,7 @@ export interface ApplicationInitializationEvaluation extends ConstructorEvaluati
   routes: EvaluatedRoute[];
   notFoundResponse?: EvaluatedResponse;
   routerInsertions: number;
+  actors: ActorState[];
 }
 
 interface Evaluator {
@@ -141,6 +150,8 @@ interface Evaluator {
   runtimeValues: Map<string, Value>;
   activeRuntimeValues: Set<string>;
   memory: MemoryTracker;
+  actorActions: WeakMap<Value & {kind: "instance"}, EvaluatedActorAction[]>;
+  actors: Map<string, ActorState>;
 }
 
 interface MemorySiteState {
@@ -205,6 +216,7 @@ export function evaluateApplicationInitialization(
     routes,
     ...installedNotFound,
     routerInsertions: evaluator.routerInsertions,
+    actors: [...evaluator.actors.values()],
   };
 }
 
@@ -250,6 +262,8 @@ function initializeConstructor(
     runtimeValues: new Map(),
     activeRuntimeValues: new Set(),
     memory: {sites: new Map(), values: new WeakMap()},
+    actorActions: new WeakMap(),
+    actors: new Map(),
   };
   const instance: Value & {kind: "instance"} = {kind: "instance", fields: new Map()};
   evaluator.instanceClasses.set(instance, resolved);
@@ -661,6 +675,7 @@ function evaluateRouteHandler(
   const stderrLines = stderr?.kind === "array"
     ? stderr.items.flatMap(value => value.kind === "string" ? [value.value] : [])
     : [];
+  const actorActions = evaluator.actorActions.get(context) ?? [];
   return {
     kind: "text",
     body: response.body,
@@ -668,6 +683,7 @@ function evaluateRouteHandler(
     contentType: response.contentType,
     ...(headers.length === 0 ? {} : {headers}),
     ...(stderrLines.length === 0 ? {} : {stderr: stderrLines}),
+    ...(actorActions.length === 0 ? {} : {actorActions}),
     ...(basicAuthorization === undefined
       ? {}
       : {
@@ -1433,6 +1449,11 @@ function sameResponseHeaderValue(left: ResponseHeaderValue, right: ResponseHeade
         && candidate.path === part.path
         && candidate.maxBytes === part.maxBytes;
     }
+    if (part.kind === "actorCall") {
+      return candidate?.kind === "actorCall"
+        && candidate.actor.key === part.actor.key
+        && candidate.message === part.message;
+    }
     return candidate?.kind === part.kind && candidate.name === part.name;
   });
 }
@@ -1943,6 +1964,50 @@ function evaluateCall(
         }
         : unknown("filesystem read requires a closed path and maxBytes");
     }
+    if (callable.kind === "reference" && isActorSpawnBuiltin(callable)) {
+      const behavior = arguments_[0];
+      const initialState = arguments_[1];
+      const options = arguments_[2];
+      const mailbox = options === undefined
+        ? 64
+        : options.kind === "record" && options.fields.size === 0
+          ? 64
+          : options.kind === "record" && options.fields.size === 1
+            ? options.fields.get("mailboxCapacity")
+            : undefined;
+      const mailboxCapacity = typeof mailbox === "number"
+        ? mailbox
+        : mailbox?.kind === "number"
+          ? mailbox.value
+          : undefined;
+      if (
+        arguments_.length < 2
+        || arguments_.length > 3
+        || behavior?.kind !== "closure"
+        || initialState?.kind !== "number"
+        || !Number.isSafeInteger(initialState.value)
+        || mailboxCapacity === undefined
+        || !Number.isSafeInteger(mailboxCapacity)
+        || mailboxCapacity < 1
+        || mailboxCapacity > 64
+        || !isCounterActorBehavior(behavior)
+      ) {
+        return unknown("actor spawn requires the bounded counter behavior, integer state, and mailbox capacity up to 64");
+      }
+      const key = `${module.path}:${call.getStart(module.sourceFile)}`;
+      let state = evaluator.actors.get(key);
+      if (state === undefined) {
+        state = {
+          id: evaluator.actors.size,
+          key,
+          operation: "counter",
+          initialState: initialState.value,
+          mailboxCapacity,
+        };
+        evaluator.actors.set(key, state);
+      }
+      return {kind: "actor", state};
+    }
     if (callable.kind === "reference" && callable.callable !== undefined) {
       return invokeFunctionLike(
         evaluator,
@@ -1957,6 +2022,31 @@ function evaluateCall(
   if (ts.isPropertyAccessExpression(call.expression)) {
     const receiver = evaluate(evaluator, call.expression.expression, module, environment, instance);
     const name = memberName(call.expression.name);
+    if (receiver.kind === "actor" && name === "ask") {
+      const message = arguments_[0];
+      return arguments_.length === 1
+        && message?.kind === "number"
+        && Number.isSafeInteger(message.value)
+        ? {kind: "actorCall", actor: receiver.state, message: message.value}
+        : unknown("ActorRef.ask requires one closed integer message");
+    }
+    if (receiver.kind === "actor" && name === "tell") {
+      const message = arguments_[0];
+      if (arguments_.length !== 1 || message?.kind !== "number" || !Number.isSafeInteger(message.value)) {
+        return unknown("ActorRef.tell requires one closed integer message");
+      }
+      appendActorAction(evaluator, instance, {
+        kind: "tell",
+        actor: receiver.state,
+        message: message.value,
+      });
+      return UNDEFINED;
+    }
+    if (receiver.kind === "actor" && (name === "stop" || name === "dispose")) {
+      if (arguments_.length !== 0) return unknown(`ActorRef.${name} does not accept arguments`);
+      appendActorAction(evaluator, instance, {kind: "stop", actor: receiver.state});
+      return UNDEFINED;
+    }
     if (
       receiver.kind === "instance"
       && (name === "getOpenAPIDocument" || name === "getOpenAPI31Document")
@@ -2560,6 +2650,60 @@ function isFilesystemBuiltin(value: Value & {kind: "reference"}): boolean {
     && ts.isFunctionDeclaration(declaration)
     && declaration.name?.text === "readTextFile"
     && value.callable?.module.path.replaceAll("\\", "/").endsWith("/sdk/builtins/fs.ts") === true;
+}
+
+function isActorSpawnBuiltin(value: Value & {kind: "reference"}): boolean {
+  const declaration = value.callable?.declaration;
+  return declaration !== undefined
+    && ts.isFunctionDeclaration(declaration)
+    && declaration.name?.text === "spawn"
+    && value.callable?.module.path.replaceAll("\\", "/").endsWith("/sdk/builtins/actors.ts") === true;
+}
+
+function isCounterActorBehavior(value: Value & {kind: "closure"}): boolean {
+  const expression = value.expression;
+  const body = expression.body;
+  if (expression.parameters.length !== 2 || body === undefined || !ts.isBlock(body)) return false;
+  const context = expression.parameters[0]?.name;
+  const message = expression.parameters[1]?.name;
+  if (!context || !message || !ts.isIdentifier(context) || !ts.isIdentifier(message)) return false;
+  const [update, returned] = body.statements;
+  if (
+    body.statements.length !== 2
+    || update === undefined
+    || !ts.isExpressionStatement(update)
+    || !ts.isBinaryExpression(update.expression)
+    || update.expression.operatorToken.kind !== ts.SyntaxKind.PlusEqualsToken
+    || !isActorStateAccess(update.expression.left, context.text)
+    || !ts.isIdentifier(update.expression.right)
+    || update.expression.right.text !== message.text
+    || returned === undefined
+    || !ts.isReturnStatement(returned)
+    || returned.expression === undefined
+  ) return false;
+  const result = returned.expression;
+  return ts.isCallExpression(result)
+    && ts.isIdentifier(result.expression)
+    && result.expression.text === "String"
+    && result.arguments.length === 1
+    && isActorStateAccess(result.arguments[0]!, context.text);
+}
+
+function isActorStateAccess(expression: ts.Expression, context: string): boolean {
+  return ts.isPropertyAccessExpression(expression)
+    && ts.isIdentifier(expression.expression)
+    && expression.expression.text === context
+    && expression.name.text === "state";
+}
+
+function appendActorAction(
+  evaluator: Evaluator,
+  instance: Value & {kind: "instance"},
+  action: EvaluatedActorAction,
+): void {
+  const actions = evaluator.actorActions.get(instance) ?? [];
+  actions.push(action);
+  evaluator.actorActions.set(instance, actions);
 }
 
 function environmentBuiltinOperation(
@@ -3315,6 +3459,7 @@ function evaluateExpression(
         && body.kind !== "openAiChatText"
         && body.kind !== "environmentVariable"
         && body.kind !== "fileText"
+        && body.kind !== "actorCall"
         && body.kind !== "routeParameter"
         && body.kind !== "responseBody"
         && body.kind !== "undefined"
@@ -3326,7 +3471,7 @@ function evaluateExpression(
       }
       const runtimeBody = body.kind === "routeParameter"
         ? [{kind: "routeParameter" as const, name: body.name}]
-        : body.kind === "workerCall" || body.kind === "openAiChatText" || body.kind === "environmentVariable" || body.kind === "fileText"
+        : body.kind === "workerCall" || body.kind === "openAiChatText" || body.kind === "environmentVariable" || body.kind === "fileText" || body.kind === "actorCall"
           ? runtimeStringParts(body)
         : body.kind === "runtimeString"
           ? body.parts
@@ -4316,7 +4461,7 @@ function trackEvaluatedValue(
       valueKind: value.kind,
       instances: 0,
       maxReferences: 0,
-      escape: value.kind === "worker" ? "worker" : "none",
+      escape: value.kind === "worker" || value.kind === "actor" ? "worker" : "none",
     };
     tracker.sites.set(key, site);
   }
@@ -4339,6 +4484,7 @@ function isTrackedAllocation(expression: ts.Expression, value: Value): boolean {
     || value.kind === "requestHeader"
     || value.kind === "environmentVariable"
     || value.kind === "fileText"
+    || value.kind === "actorCall"
     || value.kind === "queryParameter"
     || value.kind === "queryPredicate"
     || value.kind === "fetchStatus"

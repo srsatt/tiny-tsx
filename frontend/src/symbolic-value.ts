@@ -39,6 +39,8 @@ export type Value =
   | {kind: "requestHeader"; name: string}
   | {kind: "environmentVariable"; name: string; required: boolean; fallback?: string}
   | {kind: "fileText"; path: string; maxBytes: number}
+  | {kind: "actor"; state: ActorState}
+  | {kind: "actorCall"; actor: ActorState; message: number}
   | {kind: "queryParameter"; name: string; fallback?: string}
   | {kind: "queryPredicate"; name: string; test: "truthy" | "empty" | "present"}
   | {kind: "runtimeString"; parts: RuntimeStringPart[]}
@@ -79,6 +81,7 @@ export type RuntimeStringPart =
   | {kind: "requestHeader"; name: string}
   | {kind: "environmentVariable"; name: string; required: boolean; fallback: string | undefined}
   | {kind: "fileText"; path: string; maxBytes: number}
+  | {kind: "actorCall"; actor: ActorState; message: number}
   | {kind: "queryParameter"; name: string; fallback: string | undefined; escapeHtml: boolean}
   | {kind: "fetchStatus"; url: string}
   | {kind: "elapsedMilliseconds"}
@@ -92,6 +95,14 @@ export type WorkerMessage =
 export interface WorkerState {
   module: string;
   terminated: boolean;
+}
+
+export interface ActorState {
+  id: number;
+  key: string;
+  operation: "counter";
+  initialState: number;
+  mailboxCapacity: number;
 }
 
 export type ResponseHeaderValue = string | RuntimeStringPart[];
@@ -268,7 +279,9 @@ export function truthiness(value: Value): boolean | undefined {
     case "streamWriter":
     case "streamReader": return true;
     case "worker": return true;
+    case "actor": return true;
     case "workerCall": return undefined;
+    case "actorCall": return undefined;
     case "openAiProvider":
     case "openAiModel": return true;
     case "openAiChatText": return undefined;
@@ -311,7 +324,9 @@ export function typeOf(value: Value): string {
     case "streamWriter":
     case "streamReader": return "object";
     case "worker": return "object";
+    case "actor": return "object";
     case "workerCall": return "string";
+    case "actorCall": return "string";
     case "openAiProvider": return "function";
     case "openAiModel": return "object";
     case "openAiChatText": return "string";
@@ -351,6 +366,7 @@ export function runtimeStringParts(value: Value): RuntimeStringPart[] | undefine
       fallback: value.fallback,
     }];
     case "fileText": return [{kind: "fileText", path: value.path, maxBytes: value.maxBytes}];
+    case "actorCall": return [{kind: "actorCall", actor: value.actor, message: value.message}];
     case "queryParameter": return [{
       kind: "queryParameter",
       name: value.name,

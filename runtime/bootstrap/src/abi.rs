@@ -172,6 +172,10 @@ unsafe extern "C" {
         pointer: *mut *const u8,
         length: *mut usize,
     ) -> u32;
+    pub fn tinytsx_config_actors() -> usize;
+    pub fn tinytsx_actor_operation(actor: usize) -> u32;
+    pub fn tinytsx_actor_initial_state(actor: usize) -> i64;
+    pub fn tinytsx_actor_mailbox_capacity(actor: usize) -> usize;
     pub fn tinytsx_worker_operation(worker: usize) -> u32;
 }
 
@@ -234,6 +238,26 @@ unsafe extern "C" fn tinytsx_config_read_root(
     _length: *mut usize,
 ) -> u32 {
     INTERNAL_ERROR
+}
+
+#[cfg(not(feature = "generated"))]
+unsafe extern "C" fn tinytsx_config_actors() -> usize {
+    0
+}
+
+#[cfg(not(feature = "generated"))]
+unsafe extern "C" fn tinytsx_actor_operation(_actor: usize) -> u32 {
+    0
+}
+
+#[cfg(not(feature = "generated"))]
+unsafe extern "C" fn tinytsx_actor_initial_state(_actor: usize) -> i64 {
+    0
+}
+
+#[cfg(not(feature = "generated"))]
+unsafe extern "C" fn tinytsx_actor_mailbox_capacity(_actor: usize) -> usize {
+    0
 }
 
 #[cfg(not(feature = "generated"))]
@@ -317,6 +341,35 @@ fn decode_form_urlencoded(encoded: &[u8]) -> Vec<u8> {
         }
     }
     output
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tinytsx_actor_ask_counter(
+    writer: *mut TinyResponseWriter,
+    actor: usize,
+    message: i64,
+) -> u32 {
+    if writer.is_null() {
+        return INTERNAL_ERROR;
+    }
+    match crate::application::ask_actor(actor, message) {
+        Ok(output) => unsafe { tinytsx_html_write_static(writer, output.as_ptr(), output.len()) },
+        Err(status) => {
+            // SAFETY: the writer was validated above.
+            unsafe { (*writer).status = status };
+            status
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn tinytsx_actor_tell_counter(actor: usize, message: i64) -> u32 {
+    crate::application::tell_actor(actor, message)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn tinytsx_actor_stop(actor: usize) -> u32 {
+    crate::application::stop_actor(actor)
 }
 
 fn write_worker_reply(writer: *mut TinyResponseWriter, worker: usize, input: &[u8]) -> u32 {
@@ -1903,6 +1956,26 @@ pub fn configured_read_root(index: usize) -> Result<Vec<u8>, u32> {
     }
     // SAFETY: Successful generated configuration points at `length` static bytes.
     Ok(unsafe { slice::from_raw_parts(pointer, length) }.to_vec())
+}
+
+pub fn configured_actors() -> usize {
+    // SAFETY: The generated object always provides the configuration function.
+    unsafe { tinytsx_config_actors() }
+}
+
+pub fn actor_operation(actor: usize) -> u32 {
+    // SAFETY: The generated object returns zero for an invalid actor.
+    unsafe { tinytsx_actor_operation(actor) }
+}
+
+pub fn actor_initial_state(actor: usize) -> i64 {
+    // SAFETY: The generated object returns zero for an invalid actor.
+    unsafe { tinytsx_actor_initial_state(actor) }
+}
+
+pub fn actor_mailbox_capacity(actor: usize) -> usize {
+    // SAFETY: The generated object returns zero for an invalid actor.
+    unsafe { tinytsx_actor_mailbox_capacity(actor) }
 }
 
 pub fn worker_operation(worker: usize) -> u32 {

@@ -175,6 +175,12 @@ fn emit_handler_text_expression(
             emit_immediate(assembly, "x3", *max_bytes as u64);
             assembly.call(format_args!("tinytsx_html_write_file_text"));
         }
+        ValueExpression::ActorCall { actor, message, .. } => {
+            asm_line!(assembly, "    ldr x0, [sp, #16]");
+            emit_immediate(assembly, "x1", *actor as u64);
+            emit_immediate(assembly, "x2", *message as u64);
+            assembly.call(format_args!("tinytsx_actor_ask_counter"));
+        }
         ValueExpression::FetchStatus { url, .. } => {
             asm_line!(assembly, "    ldr x0, [sp, #16]");
             assembly.address("x1", format_args!("Ltinytsx_string_{url}"));

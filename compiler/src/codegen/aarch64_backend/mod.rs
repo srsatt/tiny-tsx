@@ -140,4 +140,33 @@ fn emit_config(assembly: &mut Emitter, options: &Options, program: &Program) {
     asm_line!(assembly, "Ltinytsx_worker_operation_invalid:");
     asm_line!(assembly, "    mov x0, #0");
     asm_line!(assembly, "    ret");
+
+    assembly.global_function(format_args!("tinytsx_config_actors"));
+    emit_immediate(assembly, "x0", program.actors.len() as u64);
+    asm_line!(assembly, "    ret");
+
+    for (name, selector) in [
+        ("tinytsx_actor_operation", 0_u8),
+        ("tinytsx_actor_initial_state", 1_u8),
+        ("tinytsx_actor_mailbox_capacity", 2_u8),
+    ] {
+        assembly.global_function(format_args!("{name}"));
+        for (index, actor) in program.actors.iter().enumerate() {
+            asm_line!(assembly, "    cmp x0, #{index}");
+            asm_line!(assembly, "    b.eq L{name}_{index}");
+            let _ = actor;
+        }
+        asm_line!(assembly, "    mov x0, #0");
+        asm_line!(assembly, "    ret");
+        for (index, actor) in program.actors.iter().enumerate() {
+            asm_line!(assembly, "L{name}_{index}:");
+            let value = match selector {
+                0 => 1,
+                1 => actor.initial_state as u64,
+                _ => actor.mailbox_capacity as u64,
+            };
+            emit_immediate(assembly, "x0", value);
+            asm_line!(assembly, "    ret");
+        }
+    }
 }

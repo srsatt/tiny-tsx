@@ -86,15 +86,29 @@ where
     }
 
     pub fn spawn(&self) -> LogicalWorker<S, M, R> {
+        self.spawn_with_capacity(self.mailbox_capacity)
+            .expect("pool mailbox capacity is validated during construction")
+    }
+
+    pub fn spawn_with_capacity(
+        &self,
+        mailbox_capacity: usize,
+    ) -> Result<LogicalWorker<S, M, R>, std::io::Error> {
+        if mailbox_capacity == 0 || mailbox_capacity > self.mailbox_capacity {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "logical worker mailbox capacity is outside the pool bound",
+            ));
+        }
         let id = self.next_worker_id.fetch_add(1, Ordering::Relaxed);
-        LogicalWorker {
+        Ok(LogicalWorker {
             control: Arc::new(WorkerControl::new(
                 id,
                 (self.initialize)(id),
-                self.mailbox_capacity,
+                mailbox_capacity,
             )),
             pool: self.weak_pool.clone(),
-        }
+        })
     }
 
     pub fn close(&self) {
