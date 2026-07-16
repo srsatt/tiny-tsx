@@ -111,14 +111,14 @@ The alpha profiles are:
       application executor rather than blocking an HTTP executor.
 - [x] Record candidates for post-alpha OS modules (path utilities, signals,
       subprocesses, sockets) without adding them to the alpha gate.
-- [ ] Freeze the alpha built-in surface to `tinytsx:env`, `tinytsx:fs`,
+- [x] Freeze the alpha built-in surface to `tinytsx:env`, `tinytsx:fs`,
       `tinytsx:sqlite`, and `tinytsx:actors`. Any additional OS API requires a
       tracer, capability model, bounds, target matrix, and an explicit backlog
       change.
 
 ### A3 — Add environment input and bounded file reading
 
-- [ ] Specify and declare read-only `tinytsx:env` access with explicit
+- [x] Specify and declare read-only `tinytsx:env` access with explicit
       `--allow-env <name>` capabilities, missing-value behavior, UTF-8 rules,
       maximum value length, and immutable startup snapshots.
 - [ ] Connect permitted environment values to typed Hono bindings and cover

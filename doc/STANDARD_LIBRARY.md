@@ -58,7 +58,17 @@ owner arena and cannot outlive that domain.
 ### `tinytsx:env`
 
 Read-only `get(name)` and `require(name)` over permitted immutable startup
-values. Names must be compile-time-known in the first alpha.
+values. Names must be compile-time-known, portable ASCII identifiers of at most
+128 bytes, and individually granted with `--allow-env <name>`. At most 64 names
+may be granted or referenced by one program.
+
+The runtime snapshots only referenced, permitted names before opening the HTTP
+listener. It never enumerates or exposes the rest of the host environment.
+Values must be UTF-8 and at most 4096 bytes. `get()` returns `undefined` for a
+missing value and supports a closed `??` string fallback; `require()` turns a
+missing value into a recoverable internal response error. Invalid UTF-8 and
+oversized values use the same bounded error path. The snapshot cannot change
+during the process lifetime.
 
 ### `tinytsx:fs`
 

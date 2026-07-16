@@ -67,6 +67,18 @@
       "firstUnsupportedBoundary": "Only compile-time-known constructed fetch applications and a closed port are accepted."
     },
     {
+      "id": "tinytsx-environment",
+      "provenance": "tinytsx-local",
+      "entry": "examples/hono-env/server.ts",
+      "imports": ["hono", "@hono/node-server", "tinytsx:env"],
+      "apis": ["Hono", "get", "serve", "env.get", "env.require"],
+      "intake": {"status": "pass", "evidence": "frontend/test/compatibility-audit.test.ts"},
+      "nativeCompile": {"appleArm64": "pass", "linuxArm64Assembly": "pending", "evidence": "tests/compat/env/native.test.mjs"},
+      "httpBehavior": {"status": "pass", "evidence": "tests/compat/env/native.test.mjs"},
+      "referenceBehavior": {"runtime": "not-applicable", "status": "not-applicable", "evidence": null},
+      "firstUnsupportedBoundary": "Names are static and individually permitted; dynamic lookup, ambient enumeration, mutation, and direct Context.env bindings are unsupported."
+    },
+    {
       "id": "upstream-serve-static",
       "provenance": "unchanged-upstream-tracer",
       "entry": "vendor/hono-examples/serve-static/src/index.ts",

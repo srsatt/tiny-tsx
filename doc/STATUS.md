@@ -1,13 +1,33 @@
 # Implementation status
 
-Last updated: 2026-07-16
+Last updated: 2026-07-17
 
 ## Current state
 
 Milestones 0–2 are complete for the static-page vertical slice. The compiler
 produces and serves a native Mach-O executable from the example TSX source.
 
-## Alpha implementation evidence (2026-07-16)
+## Alpha implementation evidence
+
+### Environment capability (2026-07-17)
+
+- `tinytsx:env` is native on the declared Apple-arm64 and Linux-arm64 targets.
+  `get()` and `require()` accept static portable names; `--allow-env <name>` is
+  required independently for each referenced value and missing permission fails
+  compilation with `TINY1501`.
+- The generated object enumerates only referenced names. The bootstrap runtime
+  snapshots those names before opening the listener, retains no ambient host
+  environment API, accepts at most 64 names, and bounds each UTF-8 value to 4096
+  bytes. Build reports record the sorted environment permission set.
+- The Hono + `@hono/node-server` example at `examples/hono-env/server.ts` proves
+  a present value, a missing `get()` fallback, a missing `require()` 500, an
+  oversized-value 500, and compile-time denial. It is recorded as the ninth row
+  in the executable Hono example matrix.
+- Verification: `npm run test:frontend` (79/79), `npm run test:env-native`
+  (2/2), `cargo test --workspace`, and
+  `cargo clippy --workspace --all-targets -- -D warnings`.
+
+### Earlier evidence (2026-07-16)
 
 - Bare scoped/unscoped imports resolve through nearest-package `node_modules`,
   `exports` conditions and wildcards, with `module`/`main` fallback. Protected
