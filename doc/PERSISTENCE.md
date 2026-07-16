@@ -22,13 +22,14 @@ unit suite covers prepared insertion, all value families, bounded queries,
 malformed SQL recovery, and row/byte/parameter limits.
 
 The first `native-partial` public slice lowers a compile-time `:memory:`
-`Database`, closed `exec(sql)` effects, and idempotent `close`/`dispose`. Each
+`Database`, closed `exec(sql)` effects, zero-parameter prepared `all()`/`get()`
+queries, bounded JSON row encoding, and idempotent `close`/`dispose`. Each
 connection is owned by one logical application worker on the fixed executor.
-The Hono owner tracer proves schema creation, persistent mutation, constraint
-failure recovery, repeated close, post-close failure, Apple execution, and
-Linux-arm64 assembly.
+The Hono owner tracer proves empty/list/first query results, schema creation,
+persistent mutation, constraint failure recovery, repeated close, post-close
+failure, Apple execution, and Linux-arm64 assembly.
 
-Before promotion to `native`, the compiler must lower prepared statements and
-result values; on-disk paths must use separate read/write capabilities;
+Before promotion to `native`, the compiler must lower positional values and
+typed execute results; on-disk paths must use separate read/write capabilities;
 transactions need native tests; and the Hono blog plus persistent actor tracers
 must pass end to end.
