@@ -185,6 +185,7 @@ fn link_runtime(
 ) -> Result<PathBuf, String> {
     let target_directory = temporary.join("target");
     let mut command = Command::new("cargo");
+    let runtime_features = runtime_cargo_features();
     command
         .arg("rustc")
         .arg("--manifest-path")
@@ -195,7 +196,7 @@ fn link_runtime(
             "--bin",
             "tinytsx-runtime-bootstrap",
             "--features",
-            "generated",
+            &runtime_features,
         ])
         .arg("--target-dir")
         .arg(&target_directory)
@@ -217,6 +218,19 @@ fn link_runtime(
         .join(target.triple())
         .join(if release { "release" } else { "debug" })
         .join("tinytsx-runtime-bootstrap"))
+}
+
+fn runtime_cargo_features() -> String {
+    if allocation_metrics_requested() {
+        "generated,allocation-metrics".to_owned()
+    } else {
+        "generated".to_owned()
+    }
+}
+
+fn allocation_metrics_requested() -> bool {
+    std::env::var_os("TINYTSX_INTERNAL_ALLOC_METRICS").as_deref()
+        == Some(std::ffi::OsStr::new("1"))
 }
 
 fn strip_binary(binary: &Path, target: Target) -> Result<(), String> {
@@ -292,6 +306,9 @@ fn write_report(
     }
     if sqlite {
         runtime_features.push("bounded-sqlite");
+    }
+    if allocation_metrics_requested() {
+        runtime_features.push("allocation-metrics");
     }
     let report = BuildReport {
         compiler_version: env!("CARGO_PKG_VERSION"),

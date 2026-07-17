@@ -82,6 +82,16 @@ or more hot messages remain. A two-executor barrier test separately proves
 cross-actor parallel execution. Sustained hot/cold throughput and tail latency
 remain P4 measurements.
 
+The comparison harness now records the first fresh-process launch separately
+from the startup median and samples whole-process CPU time, Unix/Mach syscalls,
+context switches, faults, thread count, and peak RSS during warm-up and load.
+An opt-in TinyTSX runtime feature also counts allocator calls, requested bytes,
+and live/peak-live bytes; it is excluded from ordinary builds and explicitly
+labels its atomic measurement overhead. Bun allocation ratios are not claimed.
+This adds the missing measurement capability, but it does not identify dominant
+CPU paths without profiles or turn short localhost runs into publication-grade
+evidence.
+
 ## Earlier connection-close and compatibility evidence
 
 ## Real JSX SSR result
@@ -352,6 +362,11 @@ run both cover that correction. Raw reports are
    separately. Exit: every throughput result names the dominant CPU path and
    memory growth source.
 
+   **Instrumentation complete; attribution remains open.** The harness captures
+   whole-process counters with `libproc`, samples RSS every 20 ms, and offers a
+   benchmark-only allocation-counting build. Profiles are still required to
+   name dominant code paths and memory-growth sources.
+
 ### P2 — optimize only from profiles, then validate claims
 
 7. **Reduce whole-application footprint.** Inspect `vmmap` and linked images,
@@ -363,6 +378,10 @@ run both cover that correction. Raw reports are
 9. **Separate first-post-build and warm startup suites.** Preserve the observed
    382 ms TinyTSX first-launch outlier, investigate signing/loader/cache effects,
    and report median plus tail rather than one blended number.
+
+   The report now preserves first launch separately from the fresh-process
+   median. Loader/signing/cache attribution and a multi-day tail distribution
+   remain open.
 10. **Run publication-grade validation.** Use 30–60 second samples, confidence
     intervals, a separate load-generator host, controlled power/thermal state,
     and repeated days/machines. Publish no general performance claim before

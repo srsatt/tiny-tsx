@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from oha_metrics import run_oha
+from process_metrics import ProcessSampler
 from reporting import render_markdown, summarize
 
 
@@ -242,7 +243,13 @@ def main() -> int:
     port = free_port()
     tiny_suffix = "" if arguments.workers == 1 else f"-w{arguments.workers}"
     tiny_binary = ROOT / f"benchmarks/dist/tinytsx-{arguments.workload}{tiny_suffix}"
-    build_tinytsx(tiny_binary, port, workload, arguments.workers)
+    build_tinytsx(
+        tiny_binary,
+        port,
+        workload,
+        arguments.workers,
+        arguments.allocation_metrics,
+    )
     bun_binary = Path(shutil.which("bun") or "bun").resolve()
     bun_script = ROOT / workload["bun_script"]
     specs = {
@@ -250,7 +257,11 @@ def main() -> int:
             "workload": arguments.workload,
             "name": "tinytsx",
             "command": [str(tiny_binary)],
-            "environment": {},
+            "environment": (
+                {"TINYTSX_INTERNAL_ALLOC_METRICS": "1"}
+                if arguments.allocation_metrics
+                else {}
+            ),
             "artifact": tiny_binary,
             "runtime": tiny_binary,
             "path": workload["path"],
@@ -268,14 +279,6 @@ def main() -> int:
     support_process = start_support_server(workload, bun_binary)
     if support_process is not None:
         atexit.register(stop_server, support_process)
-    if reference_target := workload.get("reference_target"):
-        workload = dict(workload)
-        workload["body"] = capture_reference_body(
-            specs[str(reference_target)],
-            port,
-            workload,
-        )
-
     targets: dict[str, Any] = {
         name: {
             "artifactBytes": spec["artifact"].stat().st_size,
@@ -283,13 +286,26 @@ def main() -> int:
             "startupSamplesMs": [],
             "idleRssSamplesBytes": [],
             "postWarmupRssSamplesBytes": [],
+            "resourceSamples": [],
+            "allocationSamples": [],
             "throughput": {str(value): [] for value in arguments.concurrency},
         }
         for name, spec in specs.items()
     }
+    if reference_target := workload.get("reference_target"):
+        workload = dict(workload)
+        reference_body, reference_startup_ms = capture_reference_body(
+            specs[str(reference_target)],
+            port,
+            workload,
+        )
+        workload["body"] = reference_body
+        targets[str(reference_target)]["startupSamplesMs"].append(reference_startup_ms)
     for run in range(arguments.startup_runs):
         order = ["tinytsx", "bun"] if run % 2 == 0 else ["bun", "tinytsx"]
         for name in order:
+            if len(targets[name]["startupSamplesMs"]) >= arguments.startup_runs:
+                continue
             targets[name]["startupSamplesMs"].append(
                 measure_startup(specs[name], port, workload)
             )
@@ -298,10 +314,12 @@ def main() -> int:
         order = ["tinytsx", "bun"] if run % 2 == 0 else ["bun", "tinytsx"]
         for name in order:
             process = start_server(specs[name])
+            sampler = None
             try:
                 correctness = wait_for_response(process, port, specs[name]["path"])
                 assert_correct(correctness, workload, name)
                 targets[name]["idleRssSamplesBytes"].append(resident_bytes(process.pid))
+                sampler = ProcessSampler(process.pid)
                 url = f"http://127.0.0.1:{port}{specs[name]['path']}"
                 run_oha(url, max(arguments.concurrency), 1, arguments.keep_alive)
                 targets[name]["postWarmupRssSamplesBytes"].append(
@@ -321,7 +339,17 @@ def main() -> int:
                     )
                     targets[name]["throughput"][str(concurrency)].append(sample.as_json())
             finally:
-                stop_server(process)
+                if sampler is not None:
+                    targets[name]["resourceSamples"].append(sampler.stop())
+                stderr = stop_server(process)
+                if (
+                    name == "tinytsx"
+                    and sampler is not None
+                    and arguments.allocation_metrics
+                ):
+                    targets[name]["allocationSamples"].append(
+                        parse_allocation_metrics(stderr)
+                    )
 
     timestamp = datetime.now(UTC).replace(microsecond=0).isoformat()
     raw = {
@@ -341,6 +369,12 @@ def main() -> int:
             "requestMemoryBytes": 262_144,
             "keepAlive": arguments.keep_alive,
             "supportProcess": support_process is not None,
+            "processSampleIntervalMs": 20,
+            "allocationInstrumentation": (
+                "TinyTSX global allocator only"
+                if arguments.allocation_metrics
+                else "disabled"
+            ),
         },
         "correctness": {
             "path": workload["path"],
@@ -388,6 +422,11 @@ def parse_arguments() -> argparse.Namespace:
         action="store_true",
         help="reuse HTTP/1.1 connections for both targets",
     )
+    parser.add_argument(
+        "--allocation-metrics",
+        action="store_true",
+        help="build TinyTSX with allocator counters (adds measurement overhead)",
+    )
     parser.add_argument("--output-prefix")
     arguments = parser.parse_args()
     arguments.concurrency = [int(value) for value in arguments.concurrency.split(",")]
@@ -414,13 +453,20 @@ def build_tinytsx(
     port: int,
     workload: dict[str, Any],
     workers: int = 1,
+    allocation_metrics: bool = False,
 ) -> None:
     if setup := workload.get("tiny_setup"):
         subprocess.run(setup, cwd=ROOT, check=True)
     subprocess.run(["npm", "run", "build", "--prefix", "frontend"], cwd=ROOT, check=True)
+    environment = os.environ.copy()
+    if allocation_metrics:
+        environment["TINYTSX_INTERNAL_ALLOC_METRICS"] = "1"
+    else:
+        environment.pop("TINYTSX_INTERNAL_ALLOC_METRICS", None)
     subprocess.run(
         tinytsx_build_command(output, port, workload, workers),
         cwd=ROOT,
+        env=environment,
         check=True,
     )
 
@@ -489,7 +535,8 @@ def capture_reference_body(
     spec: dict[str, Any],
     port: int,
     workload: dict[str, Any],
-) -> bytes:
+) -> tuple[bytes, float]:
+    started = time.perf_counter_ns()
     process = start_server(spec)
     try:
         response = wait_for_response(process, port, spec["path"])
@@ -500,7 +547,8 @@ def capture_reference_body(
                 "reference response mismatch: "
                 f"status={response['status']}, content-type={actual_type}"
             )
-        return bytes(response["body"])
+        startup_ms = (time.perf_counter_ns() - started) / 1_000_000
+        return bytes(response["body"]), startup_ms
     finally:
         stop_server(process)
 
@@ -614,7 +662,7 @@ def benchmark_limitations(
     return limitations
 
 
-def stop_server(process: subprocess.Popen[bytes]) -> None:
+def stop_server(process: subprocess.Popen[bytes]) -> bytes:
     if process.poll() is None:
         process.terminate()
         try:
@@ -622,6 +670,20 @@ def stop_server(process: subprocess.Popen[bytes]) -> None:
         except subprocess.TimeoutExpired:
             process.kill()
             process.wait(timeout=2)
+    return process.stderr.read() if process.stderr is not None else b""
+
+
+def parse_allocation_metrics(stderr: bytes) -> dict[str, int]:
+    prefix = b"TINYTSX_ALLOC_METRICS "
+    for line in reversed(stderr.splitlines()):
+        if line.startswith(prefix):
+            value = json.loads(line[len(prefix):])
+            if not isinstance(value, dict) or not all(
+                isinstance(item, int) and item >= 0 for item in value.values()
+            ):
+                break
+            return value
+    raise RuntimeError("TinyTSX server did not emit valid allocation metrics")
 
 
 def resident_bytes(pid: int) -> int:

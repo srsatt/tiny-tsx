@@ -14,11 +14,21 @@ from run_static import (  # noqa: E402
     expected_content_type,
     is_millisecond_header,
     normalize_content_type,
+    parse_allocation_metrics,
     tinytsx_build_command,
 )
 
 
 class StaticHarnessTest(unittest.TestCase):
+    def test_parses_the_native_allocator_report(self) -> None:
+        report = parse_allocation_metrics(
+            b'noise\nTINYTSX_ALLOC_METRICS {"allocationCalls":3,"peakLiveBytes":128}\n'
+        )
+
+        self.assertEqual(report, {"allocationCalls": 3, "peakLiveBytes": 128})
+        with self.assertRaises(RuntimeError):
+            parse_allocation_metrics(b"missing")
+
     def test_normalizes_equivalent_content_type_spelling(self) -> None:
         self.assertEqual(
             normalize_content_type("text/plain; charset=UTF-8"),

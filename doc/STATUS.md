@@ -66,6 +66,21 @@ produces and serves a native Mach-O executable from the example TSX source.
 - Verification: `npm run test:benchmarks` (17/17) plus all three controlled
   equivalence-checked benchmark runs.
 
+### Process and allocation instrumentation (2026-07-17)
+
+- Benchmark reports preserve the first fresh-process launch separately from the
+  startup median and use macOS `libproc` counters for CPU time, Unix/Mach
+  syscalls, context switches, faults, threads, and resident size. A background
+  sampler captures peak RSS every 20 ms throughout warm-up and load.
+- TinyTSX allocation counting is compiled only when the harness receives
+  `--allocation-metrics`. It records allocation/reallocation calls, requested
+  bytes, and live/peak-live bytes, labels its atomic overhead, and is absent
+  from ordinary comparison and production binaries. Bun allocation ratios are
+  deliberately not reported.
+- Verification: 23 benchmark-harness tests, 54 default bootstrap tests, 55
+  allocation-instrumented bootstrap tests, workspace Clippy with warnings
+  denied, and one equivalence-checked actor smoke in each instrumentation mode.
+
 ### Installed alpha example and failure gates (2026-07-17)
 
 - Every Hono example-manifest row names native and reference scripts reachable

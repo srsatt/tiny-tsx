@@ -10,6 +10,7 @@ path = "src/main.rs"
 
 [features]
 generated = []
+allocation-metrics = []
 
 [dependencies]
 serde_json = "=1.0.150"

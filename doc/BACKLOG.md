@@ -546,7 +546,14 @@ Hono” task.
 
 - [ ] Benchmark dynamic escaping, arenas, route parameters, JSON/query branches,
       response sizes, files, SQLite, and actors under representative load.
-- [ ] Add CPU, syscall, allocation, peak-RSS, and first-launch instrumentation.
+- [x] Add CPU, syscall, allocation, peak-RSS, and first-launch instrumentation.
+  - 2026-07-17: the macOS harness samples whole-process CPU time, Unix/Mach
+    syscalls, context switches, faults, threads, and peak RSS during warm-up and
+    load, and reports the first fresh-process launch separately from the startup
+    median. TinyTSX allocator counters are a benchmark-only opt-in Cargo feature
+    because their atomics change the measured path; ordinary comparisons and
+    production binaries do not include them, and no Bun allocation ratio is
+    claimed.
 - [ ] Run controlled longer-duration comparisons before publishing performance
       claims and optimize only from profiles.
 

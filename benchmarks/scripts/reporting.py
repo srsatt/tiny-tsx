@@ -32,11 +32,14 @@ def summarize(raw: dict[str, Any]) -> dict[str, Any]:
         }
         targets[name] = {
             **target,
+            "firstLaunchMs": target["startupSamplesMs"][0],
             "startupMedianMs": statistics.median(target["startupSamplesMs"]),
             "idleRssMedianBytes": int(statistics.median(target["idleRssSamplesBytes"])),
             "postWarmupRssMedianBytes": int(
                 statistics.median(target["postWarmupRssSamplesBytes"])
             ),
+            "resourceMedian": median_values(target["resourceSamples"]),
+            "allocationMedian": median_values(target["allocationSamples"]),
             "throughput": throughput,
         }
 
@@ -78,8 +81,8 @@ def render_markdown(result: dict[str, Any]) -> str:
         "",
         "## Footprint and startup",
         "",
-        "| Target | Startup-to-first-response median | Idle RSS median | Post-warm-up RSS median | App artifact | Runtime executable |",
-        "| --- | ---: | ---: | ---: | ---: | ---: |",
+        "| Target | First launch | Startup median | Idle RSS median | Post-warm-up RSS median | Peak sampled RSS | App artifact | Runtime executable |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
         _footprint_row("TinyTSX", tiny),
         _footprint_row("Bun", bun),
         "",
@@ -87,6 +90,22 @@ def render_markdown(result: dict[str, Any]) -> str:
         "runtime is required in deployment but may be shared by multiple applications.",
         "Idle RSS is sampled after one correctness request; post-warm-up RSS is sampled "
         "after one second at maximum concurrency.",
+        "Peak RSS is sampled from the server every 20 ms throughout warm-up and all load points.",
+        "",
+        "## Process and optional allocation pressure",
+        "",
+        "| Target | Server CPU | CPU utilization | Unix syscalls | Mach syscalls | Context switches | Page faults |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+        _process_row("TinyTSX", tiny),
+        _process_row("Bun", bun),
+        "",
+        "Counters are per measured server process from warm-up through the final load point; medians are across runs.",
+        "",
+        "| TinyTSX allocator | Calls | Reallocations | Requested bytes | Peak live bytes | Live bytes at shutdown |",
+        "| --- | ---: | ---: | ---: | ---: | ---: |",
+        _allocation_row(tiny),
+        "",
+        _allocation_note(result),
         "",
         "## Response contract",
         "",
@@ -134,12 +153,58 @@ def render_markdown(result: dict[str, Any]) -> str:
 
 def _footprint_row(label: str, target: dict[str, Any]) -> str:
     return (
-        f"| {label} | {target['startupMedianMs']:.2f} ms | "
+        f"| {label} | {target['firstLaunchMs']:.2f} ms | "
+        f"{target['startupMedianMs']:.2f} ms | "
         f"{_mib(target['idleRssMedianBytes']):.2f} MiB | "
         f"{_mib(target['postWarmupRssMedianBytes']):.2f} MiB | "
+        f"{_mib(int(target['resourceMedian']['peakRssBytes'])):.2f} MiB | "
         f"{_size(target['artifactBytes'])} | "
         f"{_size(target['runtimeExecutableBytes'])} |"
     )
+
+
+def _process_row(label: str, target: dict[str, Any]) -> str:
+    value = target["resourceMedian"]
+    return (
+        f"| {label} | {value['cpuSeconds']:.2f} s | "
+        f"{value['cpuUtilizationPercent']:.1f}% | "
+        f"{value['unixSyscalls']:,.0f} | {value['machSyscalls']:,.0f} | "
+        f"{value['contextSwitches']:,.0f} | {value['pageFaults']:,.0f} |"
+    )
+
+
+def _allocation_row(target: dict[str, Any]) -> str:
+    value = target["allocationMedian"]
+    if not value:
+        return "| Global allocator | disabled | disabled | disabled | disabled | disabled |"
+    return (
+        f"| Global allocator | {value['allocationCalls']:,.0f} | "
+        f"{value['reallocationCalls']:,.0f} | {_size(int(value['allocatedBytes']))} | "
+        f"{_size(int(value['peakLiveBytes']))} | {_size(int(value['liveBytes']))} |"
+    )
+
+
+def _allocation_note(result: dict[str, Any]) -> str:
+    if result["configuration"]["allocationInstrumentation"] == "disabled":
+        return (
+            "Allocator counters are disabled for this comparison, so the TinyTSX "
+            "throughput path has no instrumentation overhead."
+        )
+    return (
+        "Allocator counters cover the TinyTSX process from startup through graceful "
+        "shutdown. They add atomic counter overhead and are disabled in ordinary builds. "
+        "Bun does not expose an equivalent counter in this harness, so no allocation "
+        "ratio is claimed."
+    )
+
+
+def median_values(samples: list[dict[str, Any]]) -> dict[str, float]:
+    if not samples:
+        return {}
+    return {
+        key: statistics.median(float(sample[key]) for sample in samples)
+        for key in samples[0]
+    }
 
 
 def _transport_scope(result: dict[str, Any]) -> str:

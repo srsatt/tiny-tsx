@@ -131,6 +131,21 @@ samples, reducing systematic warm-up, JIT, and thermal-order bias. Idle RSS is
 measured after one correctness request; post-warm-up RSS is measured after one
 second at the maximum requested concurrency.
 
+Each report now separates the target's first launch from the median of all
+fresh-process startup samples. During warm-up and load, a macOS `libproc`
+sampler reads process CPU time, Unix/Mach syscall counts, context switches,
+faults, thread count, and RSS; RSS is sampled every 20 ms and the remaining
+counters are captured at the measurement boundaries. These are whole-server
+process counters, not per-route profiles, and the load generator runs on the
+same machine.
+
+Allocator instrumentation is opt-in because counting adds atomic work to every
+TinyTSX allocation. Use `--allocation-metrics` to build the runtime with that
+feature and record allocation/reallocation calls, requested bytes, peak live
+bytes, and live bytes at shutdown. Ordinary benchmark and production builds do
+not contain the counting allocator. Bun has no equivalent counter in this
+harness, so instrumented reports do not claim an allocation ratio.
+
 ## Alpha release comparison
 
 The repeated eight-worker keep-alive release comparison is retained in

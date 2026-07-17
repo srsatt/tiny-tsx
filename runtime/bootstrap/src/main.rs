@@ -1,4 +1,5 @@
 mod abi;
+mod allocation_metrics;
 mod application;
 mod environment;
 mod filesystem;
@@ -54,7 +55,9 @@ fn main() {
             std::process::exit(1);
         }
     }
-    if let Err(error) = http::serve() {
+    let result = http::serve();
+    allocation_metrics::report_if_requested();
+    if let Err(error) = result {
         eprintln!("TinyTSX runtime error: {error}");
         std::process::exit(1);
     }
