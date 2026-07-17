@@ -56,6 +56,22 @@ test("serves snapshotted environment values, fallbacks, and missing-required err
   await assertResponse(port, "/present", 500, "internal server error");
 });
 
+test("assembles typed Hono environment bindings for Linux arm64", () => {
+  const result = spawnSync("cargo", [
+    "run", "-q", "-p", "tinytsx", "--", "check", entry,
+    "--emit-asm", "--target", "aarch64-unknown-linux-gnu",
+    "--alias", "hono=vendor/hono/src/index.ts",
+    "--api", "hono=tests/compat/hono/api.d.ts",
+    ...environmentNames.flatMap(name => ["--allow-env", name]),
+  ], {cwd: repository, encoding: "utf8"});
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /tinytsx_html_write_environment_variable/);
+  const assembled = spawnSync("clang", [
+    "--target=aarch64-unknown-linux-gnu", "-x", "assembler", "-c", "-o", "/dev/null", "-",
+  ], {cwd: repository, input: result.stdout, encoding: "utf8"});
+  assert.equal(assembled.status, 0, assembled.stderr);
+});
+
 function build(binary, allowed, port = 39_462) {
   return spawnSync("cargo", [
     "run", "-q", "-p", "tinytsx", "--", "build", entry,
