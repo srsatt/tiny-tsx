@@ -33,6 +33,15 @@ impl<J> SubmitError<J> {
     }
 }
 
+/// The disposition of a job after one bounded handler turn.
+#[derive(Debug, PartialEq, Eq)]
+pub enum JobControl<J> {
+    /// The job is finished and releases its pool admission slot.
+    Complete,
+    /// The owned job remains live and should rotate behind queued work.
+    Resubmit(J),
+}
+
 /// A fixed set of native threads consuming a bounded FIFO job queue.
 pub struct WorkerPool<J> {
     shared: Arc<Shared<J>>,
@@ -56,6 +65,35 @@ impl<J: Send + 'static> WorkerPool<J> {
         S: Send + 'static,
         Initialize: Fn(usize) -> S + Send + Sync + 'static,
         Handle: Fn(&mut S, J) + Send + Sync + 'static,
+    {
+        Self::new_resumable(
+            worker_count,
+            queue_capacity,
+            initialize,
+            move |state, job| {
+                handle(state, job);
+                JobControl::Complete
+            },
+        )
+    }
+
+    /// Creates a pool whose jobs may yield and rotate behind queued work.
+    ///
+    /// Resubmission is atomic with taking the next queued job, so it neither
+    /// exceeds `queue_capacity` nor fails merely because the queue is full. If
+    /// no other job is waiting, the same worker immediately continues the
+    /// yielded job. Closing the pool stops further resubmission after the
+    /// current turn while still draining jobs accepted from outside the pool.
+    pub fn new_resumable<S, Initialize, Handle>(
+        worker_count: usize,
+        queue_capacity: usize,
+        initialize: Initialize,
+        handle: Handle,
+    ) -> io::Result<Self>
+    where
+        S: Send + 'static,
+        Initialize: Fn(usize) -> S + Send + Sync + 'static,
+        Handle: Fn(&mut S, J) -> JobControl<J> + Send + Sync + 'static,
     {
         if worker_count == 0 {
             return Err(io::Error::new(
@@ -84,9 +122,19 @@ impl<J: Send + 'static> WorkerPool<J> {
                 .spawn(move || {
                     let mut state = worker_initialize(index);
                     while let Some(job) = worker_shared.take() {
-                        let _ = catch_unwind(AssertUnwindSafe(|| {
-                            worker_handle(&mut state, job);
-                        }));
+                        let mut current = job;
+                        loop {
+                            let outcome = catch_unwind(AssertUnwindSafe(|| {
+                                worker_handle(&mut state, current)
+                            }));
+                            let Ok(JobControl::Resubmit(job)) = outcome else {
+                                break;
+                            };
+                            let Some(next) = worker_shared.resubmit(job) else {
+                                break;
+                            };
+                            current = next;
+                        }
                     }
                 });
 
@@ -188,6 +236,18 @@ impl<J> Shared<J> {
         }
     }
 
+    fn resubmit(&self, job: J) -> Option<J> {
+        let mut queue = lock(&self.queue);
+        if queue.closed {
+            return None;
+        }
+        let Some(next) = queue.jobs.pop_front() else {
+            return Some(job);
+        };
+        queue.jobs.push_back(job);
+        Some(next)
+    }
+
     fn close(&self) {
         let mut queue = lock(&self.queue);
         queue.closed = true;
@@ -222,7 +282,7 @@ mod tests {
         time::Duration,
     };
 
-    use super::{SubmitError, WorkerPool};
+    use super::{JobControl, SubmitError, WorkerPool};
 
     #[test]
     fn rejects_zero_workers_or_queue_capacity() {
@@ -357,5 +417,75 @@ mod tests {
         assert_eq!(pool.queue_capacity(), 8);
         pool.join();
         assert_eq!(completed.load(Ordering::Relaxed), 8);
+    }
+
+    #[test]
+    fn resumable_jobs_rotate_behind_the_bounded_queue() {
+        let gate = Arc::new((Mutex::new(false), Condvar::new()));
+        let (started_tx, started_rx) = mpsc::channel();
+        let pool = WorkerPool::new_resumable(1, 1, |_| (), {
+            let gate = Arc::clone(&gate);
+            move |_, (job, turns)| {
+                started_tx.send(job).expect("report job turn");
+                if job == 1 && turns == 2 {
+                    let (open, changed) = &*gate;
+                    let mut open = open.lock().expect("lock gate");
+                    while !*open {
+                        open = changed.wait(open).expect("wait for gate");
+                    }
+                }
+                if turns == 1 {
+                    JobControl::Complete
+                } else {
+                    JobControl::Resubmit((job, turns - 1))
+                }
+            }
+        })
+        .expect("create resumable pool");
+
+        pool.try_submit((1, 2)).expect("submit active job");
+        assert_eq!(started_rx.recv_timeout(Duration::from_secs(1)), Ok(1));
+        pool.try_submit((2, 1)).expect("fill waiting queue");
+        assert_eq!(pool.try_submit((3, 1)), Err(SubmitError::Full((3, 1))));
+
+        let (open, changed) = &*gate;
+        *open.lock().expect("lock gate") = true;
+        changed.notify_all();
+
+        assert_eq!(started_rx.recv_timeout(Duration::from_secs(1)), Ok(2));
+        assert_eq!(started_rx.recv_timeout(Duration::from_secs(1)), Ok(1));
+        pool.join();
+    }
+
+    #[test]
+    fn close_stops_a_live_job_at_its_resubmission_boundary() {
+        let gate = Arc::new((Mutex::new(false), Condvar::new()));
+        let turns = Arc::new(AtomicUsize::new(0));
+        let (started_tx, started_rx) = mpsc::channel();
+        let pool = WorkerPool::new_resumable(1, 1, |_| (), {
+            let gate = Arc::clone(&gate);
+            let turns = Arc::clone(&turns);
+            move |_, job| {
+                turns.fetch_add(1, Ordering::Relaxed);
+                started_tx.send(()).expect("report job turn");
+                let (open, changed) = &*gate;
+                let mut open = open.lock().expect("lock gate");
+                while !*open {
+                    open = changed.wait(open).expect("wait for gate");
+                }
+                JobControl::Resubmit(job)
+            }
+        })
+        .expect("create resumable pool");
+
+        pool.try_submit(()).expect("submit live job");
+        assert_eq!(started_rx.recv_timeout(Duration::from_secs(1)), Ok(()));
+        pool.close();
+        let (open, changed) = &*gate;
+        *open.lock().expect("lock gate") = true;
+        changed.notify_all();
+        pool.join();
+
+        assert_eq!(turns.load(Ordering::Relaxed), 1);
     }
 }
