@@ -61,8 +61,10 @@ Acceptance criteria are:
 - [ ] Harden disk opens against symlink replacement and path races so a granted
   root cannot be escaped between compilation, startup, and SQLite sidecar-file
   creation;
-- [ ] Add a bounded explicit transaction surface with deterministic commit,
+- [x] Add a bounded static-SQL transaction batch with deterministic commit,
   rollback, nested-transaction rejection, and handler-failure behavior;
+- [ ] Extend transactions to prepared parameters or a bounded callback form
+  without allowing other database messages to interleave;
 - [ ] Prove schema creation, CRUD, rollback, busy/contention recovery, close,
   process restart, and retained rows on Apple arm64; assemble the same program
   for Linux arm64;

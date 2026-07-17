@@ -39,8 +39,16 @@ also passes Clang assembly.
 This is the first disk-capability slice, not the final filesystem security
 contract. Static path normalization prevents absolute, empty, dot, and parent
 segments, but runtime protection against symlink replacement and SQLite
-sidecar-file path races remains open. Transactions, rollback, contention, and
-busy recovery also remain the next persistence gate.
+sidecar-file path races remains open. Prepared/dynamic transaction callbacks,
+contention, and busy recovery also remain the next persistence gate.
+
+`Database.transaction(sql)` is the first explicit transaction surface. It
+accepts one compile-time SQL batch up to 65,536 bytes and sends the complete
+batch as one database-worker message. The runtime begins a transaction, commits
+only after the batch succeeds, and relies on transaction drop for rollback on
+error. Core and native Hono tests prove complete rollback and subsequent
+connection reuse. Prepared parameters and callback transactions are not yet
+part of this surface.
 
 The HTTP transport retains at most 64 KiB of request body. `HonoRequest.json()`
 is not exposed as a general dynamic JavaScript object: the compiler records
@@ -57,8 +65,8 @@ Apple execution, and Linux-arm64 assembly. A Bun/Hono plus `bun:sqlite`
 reference test pins the same portable CRUD response contract.
 
 Before promotion to `native`, the compiler must expose typed execute results and
-the remaining value families needed by public callers; transactions need native
-tests; and the persistent actor tracer must pass end to end. Bounded
+the remaining value families needed by public callers; prepared transaction
+forms, contention evidence, and the persistent actor tracer must pass end to end. Bounded
 wildcard-origin CORS, Content-Type preflight, and OS-random version-4 IDs bound
 as prepared values are native. The adapter also maps its typed Hono blog-name
 binding to a permitted immutable startup value. The pinned upstream 404/204

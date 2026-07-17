@@ -20,8 +20,10 @@ produces and serves a native Mach-O executable from the example TSX source.
   the application receives no ambient filesystem API.
 - `examples/hono-sqlite/persistent.ts` proves schema creation, prepared JSON
   insertion, query, process termination, restart, and retained data on Apple
-  arm64. The disk-backed program also assembles for Linux arm64.
-- Runtime symlink-replacement/sidecar races, explicit transactions, rollback,
+  arm64. Its static transaction endpoints prove a failed two-statement batch
+  rolls back completely and a successful batch commits atomically. The
+  disk-backed program also assembles for Linux arm64.
+- Runtime symlink-replacement/sidecar races, prepared/callback transactions,
   contention recovery, and the persistent actor remain open.
 - Verification: `npm run test:frontend` (85/85),
   `npm run test:sqlite-native` (4/4), `cargo test --workspace`, and
