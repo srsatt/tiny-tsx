@@ -207,7 +207,7 @@ fn worker_pool_keeps_connections_alive_and_recovers_after_saturation() {
         .read_to_string(&mut body_pipeline_response)
         .expect("read body pipeline responses");
     assert!(body_pipeline_response.starts_with("HTTP/1.1 404 Not Found\r\n"));
-    assert!(body_pipeline_response.contains("not foundHTTP/1.1 200 OK\r\n"));
+    assert!(body_pipeline_response.contains("404 Not FoundHTTP/1.1 200 OK\r\n"));
     assert!(body_pipeline_response.ends_with("This is /hello"));
 
     let mut bounded = connect_with_retry(port);

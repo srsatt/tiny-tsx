@@ -15,7 +15,8 @@
       "intake": {"status": "pass", "evidence": "tests/compat/hono/examples-intake.test.mjs"},
       "nativeCompile": {"appleArm64": "pass", "linuxArm64Assembly": "pass", "evidence": "compiler/tests/e2e.rs"},
       "httpBehavior": {"status": "pass", "evidence": "compiler/tests/e2e.rs"},
-      "referenceBehavior": {"runtime": "Bun/Hono", "status": "pass", "evidence": "vendor/hono-examples/basic/src/index.test.ts"},
+      "referenceBehavior": {"runtime": "Bun/Hono", "status": "pass", "evidence": "tests/compat/hono/basic.behavior.test.ts"},
+      "releaseGates": {"native": ["test:hono-alpha-native"], "reference": ["test:hono-basic-reference"]},
       "firstUnsupportedBoundary": "Only the pinned closed registrations and specialized middleware behavior are admitted; arbitrary request bodies and middleware remain unsupported."
     },
     {
@@ -28,6 +29,7 @@
       "nativeCompile": {"appleArm64": "pass", "linuxArm64Assembly": "pass", "evidence": "compiler/tests/e2e.rs"},
       "httpBehavior": {"status": "pass", "evidence": "compiler/tests/e2e.rs"},
       "referenceBehavior": {"runtime": "Bun/Hono", "status": "pass", "evidence": "tests/compat/hono/jsx-ssr.behavior.test.ts"},
+      "releaseGates": {"native": ["test:hono-alpha-native"], "reference": ["test:hono-jsx-reference"]},
       "firstUnsupportedBoundary": "The post collection is closed at compile time; general runtime arrays, JSX state, and arbitrary route regular expressions are unsupported."
     },
     {
@@ -37,9 +39,10 @@
       "imports": ["@hono/zod-openapi", "hono", "zod"],
       "apis": ["OpenAPIHono", "createRoute", "z.object", "z.string", "z.number", "Schema.min", "Schema.openapi", "Context.req.valid", "Context.json", "app.doc"],
       "intake": {"status": "pass", "evidence": "tests/compat/zod-openapi/package-lock.json"},
-      "nativeCompile": {"appleArm64": "pass", "linuxArm64Assembly": "pending", "evidence": "tests/compat/zod-openapi/native.test.mjs"},
+      "nativeCompile": {"appleArm64": "pass", "linuxArm64Assembly": "pass", "evidence": "tests/compat/zod-openapi/native.test.mjs"},
       "httpBehavior": {"status": "pass", "evidence": "tests/compat/zod-openapi/native.test.mjs"},
       "referenceBehavior": {"runtime": "Bun/Hono", "status": "pass", "evidence": "tests/compat/zod-openapi/reference.behavior.test.ts"},
+      "releaseGates": {"native": ["test:zod-openapi"], "reference": ["test:zod-openapi-reference"]},
       "firstUnsupportedBoundary": "Only the documented closed schema/path subset and ASCII minimum-length guard are supported; general Zod and OpenAPI are not."
     },
     {
@@ -49,9 +52,10 @@
       "imports": ["hono", "@hono/node-server"],
       "apis": ["Hono", "get", "serve"],
       "intake": {"status": "pass", "evidence": "frontend/test/compatibility-audit.test.ts"},
-      "nativeCompile": {"appleArm64": "pass", "linuxArm64Assembly": "pending", "evidence": "compiler/tests/e2e.rs"},
-      "httpBehavior": {"status": "pass", "evidence": "compiler/tests/e2e.rs"},
-      "referenceBehavior": {"runtime": "Node/Hono", "status": "pending", "evidence": null},
+      "nativeCompile": {"appleArm64": "pass", "linuxArm64Assembly": "pass", "evidence": "tests/compat/hono/alpha-native.test.mjs"},
+      "httpBehavior": {"status": "pass", "evidence": "tests/compat/hono/alpha-native.test.mjs"},
+      "referenceBehavior": {"runtime": "Node/Hono", "status": "pass", "evidence": "tests/compat/node-server/reference.behavior.test.mjs"},
+      "releaseGates": {"native": ["test:hono-alpha-native"], "reference": ["test:node-server-reference"]},
       "firstUnsupportedBoundary": "The compile-time serve entry shape is supported; node-server lifecycle, TLS, and event APIs are not."
     },
     {
@@ -61,9 +65,10 @@
       "imports": ["hono", "tinytsx:serve"],
       "apis": ["Hono", "get", "serve"],
       "intake": {"status": "pass", "evidence": "frontend/test/compatibility-audit.test.ts"},
-      "nativeCompile": {"appleArm64": "pass", "linuxArm64Assembly": "pending", "evidence": "frontend/test/compatibility-audit.test.ts"},
-      "httpBehavior": {"status": "pending", "evidence": null},
+      "nativeCompile": {"appleArm64": "pass", "linuxArm64Assembly": "pass", "evidence": "tests/compat/hono/alpha-native.test.mjs"},
+      "httpBehavior": {"status": "pass", "evidence": "tests/compat/hono/alpha-native.test.mjs"},
       "referenceBehavior": {"runtime": "not-applicable", "status": "not-applicable", "evidence": null},
+      "releaseGates": {"native": ["test:hono-alpha-native"], "reference": []},
       "firstUnsupportedBoundary": "Only compile-time-known constructed fetch applications and a closed port are accepted."
     },
     {
@@ -76,6 +81,7 @@
       "nativeCompile": {"appleArm64": "pass", "linuxArm64Assembly": "pass", "evidence": "tests/compat/env/native.test.mjs"},
       "httpBehavior": {"status": "pass", "evidence": "tests/compat/env/native.test.mjs"},
       "referenceBehavior": {"runtime": "not-applicable", "status": "not-applicable", "evidence": null},
+      "releaseGates": {"native": ["test:env-native"], "reference": []},
       "firstUnsupportedBoundary": "Names are static and individually permitted; typed required Context.env strings are supported, while dynamic lookup, resource bindings, ambient enumeration, and mutation are unsupported."
     },
     {
@@ -89,6 +95,7 @@
       "nativeCompile": {"appleArm64": "pass", "linuxArm64Assembly": "pass", "evidence": "tests/compat/fs/native.test.mjs"},
       "httpBehavior": {"status": "pass", "evidence": "tests/compat/fs/native.test.mjs"},
       "referenceBehavior": {"runtime": "pinned upstream landing", "status": "pass", "evidence": "vendor/hono-examples/serve-static/src/index.ts"},
+      "releaseGates": {"native": ["test:fs-native"], "reference": ["test:fs-native"]},
       "firstUnsupportedBoundary": "The upstream landing runs unchanged and the adapter serves its pinned assets; general Hono serveStatic middleware, binary files, MIME inference, range requests, and directory indexes are unsupported."
     },
     {
@@ -101,6 +108,7 @@
       "nativeCompile": {"appleArm64": "pass", "linuxArm64Assembly": "pass", "evidence": "tests/compat/sqlite/native.test.mjs"},
       "httpBehavior": {"status": "pass", "evidence": "tests/compat/sqlite/native.test.mjs"},
       "referenceBehavior": {"runtime": "Bun/Hono with bun:sqlite", "status": "pass", "evidence": "tests/compat/sqlite/reference.behavior.test.ts"},
+      "releaseGates": {"native": ["test:sqlite-native"], "reference": ["test:sqlite-reference"]},
       "firstUnsupportedBoundary": "Prepared calls accept at most 16 selected route/JSON/UUID values and bounded wildcard-origin CORS; the disk adapter proves capability-scoped restart persistence and static-SQL commit/rollback, while general dynamic values, typed execute results, prepared/callback transactions, HTTP contention load, and symlink-race hardening are post-alpha."
     },
     {
@@ -114,6 +122,7 @@
       "nativeCompile": {"appleArm64": "adapter-pass", "linuxArm64Assembly": "adapter-pass", "evidence": "tests/compat/sqlite/native.test.mjs"},
       "httpBehavior": {"status": "adapter-pass", "evidence": "tests/compat/sqlite/native.test.mjs"},
       "referenceBehavior": {"runtime": "upstream tests", "status": "pinned", "evidence": "vendor/hono-examples/blog/src/api.test.ts"},
+      "releaseGates": {"native": ["test:sqlite-native"], "reference": ["test:sqlite-reference"]},
       "firstUnsupportedBoundary": "The adapter proves bounded in-memory CRUD, prepared body/route/UUID values, wildcard-origin CORS, a typed string environment binding, pinned success envelopes, and missing-record 404/204 behavior; a separate native adapter proves disk persistence and static transactions, while platform resource bindings and general transaction callbacks are out of scope."
     },
     {
@@ -126,7 +135,8 @@
       "intake": {"status": "pass", "evidence": "frontend/test/compatibility-audit.test.ts"},
       "nativeCompile": {"appleArm64": "pass", "linuxArm64Assembly": "pass", "evidence": "tests/compat/actors/native.test.mjs"},
       "httpBehavior": {"status": "pass", "evidence": "tests/compat/actors/native.test.mjs"},
-      "referenceBehavior": {"runtime": "Cloudflare reference", "status": "pending", "evidence": null},
+      "referenceBehavior": {"runtime": "not-applicable", "status": "not-applicable", "evidence": "doc/ACTORS.md"},
+      "releaseGates": {"native": ["test:actors-native"], "reference": []},
       "firstUnsupportedBoundary": "The adapters prove an in-memory and optional SQLite-persistent local signed-integer counter only; Cloudflare bindings, alarms, remote identity, arbitrary persistent actor behaviors, and structured messages are out of scope."
     }
   ],

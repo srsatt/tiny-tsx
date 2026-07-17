@@ -1,0 +1,9 @@
+{
+  "name": "tinytsx-node-server-reference",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@hono/node-server": "2.0.10",
+    "hono": "4.12.30"
+  }
+}

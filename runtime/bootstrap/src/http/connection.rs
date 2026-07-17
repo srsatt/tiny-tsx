@@ -123,7 +123,7 @@ pub(super) fn handle_connection(
                 stream,
                 404,
                 CONTENT_TYPE_TEXT,
-                b"not found",
+                b"404 Not Found",
                 &[],
                 connection,
             ),

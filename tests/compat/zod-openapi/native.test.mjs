@@ -27,6 +27,20 @@ test("compiles the pinned upstream Zod OpenAPI graph into native routes", () => 
   assert.equal(staticBody(hir, document?.response), expectedDocument);
 });
 
+test("assembles the pinned Zod OpenAPI graph for Linux arm64", () => {
+  const checked = spawnSync("cargo", [
+    "run", "-q", "-p", "tinytsx", "--", "check", entry,
+    "--emit-asm",
+    "--target", "aarch64-unknown-linux-gnu",
+  ], {cwd: repository, encoding: "utf8"});
+  assert.equal(checked.status, 0, checked.stderr || checked.stdout);
+
+  const assembled = spawnSync("clang", [
+    "--target=aarch64-unknown-linux-gnu", "-x", "assembler", "-c", "-o", "/dev/null", "-",
+  ], {cwd: repository, input: checked.stdout, encoding: "utf8"});
+  assert.equal(assembled.status, 0, assembled.stderr);
+});
+
 test("serves the same pinned success, rejection, and OpenAPI document natively", async (context) => {
   const directory = mkdtempSync(path.join(tmpdir(), "tinytsx-zod-openapi-"));
   const binary = path.join(directory, "server");

@@ -10,6 +10,8 @@ const manifest = JSON.parse(readFileSync(
   path.join(repository, "tests/compat/hono/examples-manifest.json"),
   "utf8",
 ));
+const workspace = JSON.parse(readFileSync(path.join(repository, "package.json"), "utf8"));
+const releaseSource = readFileSync(path.join(repository, "tools/release.mjs"), "utf8");
 
 test("uses the pinned Hono examples revision", () => {
   const revision = execFileSync(
@@ -41,11 +43,35 @@ test("records the alpha example matrix with executable evidence and boundaries",
     assert.ok(row.imports.length > 0);
     assert.ok(row.apis.length > 0);
     assert.ok(row.firstUnsupportedBoundary.length > 0);
+    assert.equal(JSON.stringify(row).includes('"pending"'), false, `${row.id} has pending evidence`);
     for (const layer of [row.intake, row.nativeCompile, row.httpBehavior, row.referenceBehavior]) {
       assert.ok(layer.status !== undefined || layer.appleArm64 !== undefined);
       if (typeof layer.evidence === "string") {
         assert.ok(statSync(path.join(repository, layer.evidence)), layer.evidence);
       }
+    }
+  }
+});
+
+test("makes every alpha example gate reachable from release verification", () => {
+  assert.match(releaseSource, /run\("npm", \["test"\]\)/);
+  const directReleaseScripts = [
+    "test",
+    ...[...releaseSource.matchAll(/run\("npm", \["run", "([^"]+)"\]\)/g)]
+      .map(match => match[1]),
+  ];
+  const reachable = reachableScripts(directReleaseScripts, workspace.scripts);
+
+  for (const row of manifest.matrix) {
+    assert.ok(row.releaseGates.native.length > 0, `${row.id} has no native release gate`);
+    if (row.referenceBehavior.status === "not-applicable") {
+      assert.deepEqual(row.releaseGates.reference, [], `${row.id} declares a reference gate`);
+    } else {
+      assert.ok(row.releaseGates.reference.length > 0, `${row.id} has no reference release gate`);
+    }
+    for (const script of [...row.releaseGates.native, ...row.releaseGates.reference]) {
+      assert.equal(typeof workspace.scripts[script], "string", `${row.id}: missing script ${script}`);
+      assert.ok(reachable.has(script), `${row.id}: ${script} is not reached by release:verify`);
     }
   }
 });
@@ -94,3 +120,16 @@ test("pins the complete jsx-ssr source graph and behavior targets", () => {
   ]);
   assert.equal(jsxSsr.behavior.missingPost.status, 404);
 });
+
+function reachableScripts(roots, scripts) {
+  const reachable = new Set();
+  const queue = [...roots];
+  while (queue.length > 0) {
+    const script = queue.shift();
+    if (reachable.has(script)) continue;
+    assert.equal(typeof scripts[script], "string", `release invokes missing script ${script}`);
+    reachable.add(script);
+    for (const match of scripts[script].matchAll(/npm run ([\w:-]+)/g)) queue.push(match[1]);
+  }
+  return reachable;
+}
