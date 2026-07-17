@@ -19,6 +19,10 @@ app.post("/seed", async context => {
   await database.exec("INSERT INTO posts (title) VALUES ('Morning')");
   return context.text("created", 201);
 });
+app.post("/bad-sql", async context => {
+  await database.exec("THIS IS NOT SQL");
+  return context.text("unreachable");
+});
 app.get("/posts", async context => context.json({posts: await posts.all()}));
 app.get("/first", async context => context.json({post: await posts.get()}));
 app.get("/posts/:title", async context => context.json({

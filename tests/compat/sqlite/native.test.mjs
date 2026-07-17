@@ -33,6 +33,8 @@ test("serializes an in-memory SQLite owner and recovers from SQL errors", async 
   await assertGet(port, "/first", 200, '{"post":{"title":"Morning","body":null}}');
   await assertGet(port, "/posts/Morning", 200, '{"post":{"title":"Morning","body":null}}');
   await assertResponse(port, "/seed", 500, "internal server error");
+  await assertResponse(port, "/bad-sql", 500, "internal server error");
+  await assertResponse(port, "/schema", 200, "ready");
   await assertMethod(port, "/posts/Morning", "DELETE", 200, "deleted");
   await assertGet(port, "/posts", 200, '{"posts":[]}');
   await assertResponse(port, "/seed", 201, "created");
@@ -45,6 +47,15 @@ test("serializes an in-memory SQLite owner and recovers from SQL errors", async 
     '{"post":{"title":"Night","body":"Good Night"}}',
   );
   await assertJson(port, "/posts", "POST", {title: "missing"}, 400, "bad request");
+  await assertRawJson(port, "/posts", "POST", "{", 400, "bad request");
+  await assertRawJson(
+    port,
+    "/posts",
+    "POST",
+    JSON.stringify({title: "large", body: "x".repeat(65_536)}),
+    413,
+    "request body too large",
+  );
   await assertJson(
     port,
     "/posts/Night",
@@ -103,10 +114,14 @@ async function assertGet(port, pathname, status, body) {
 }
 
 async function assertJson(port, pathname, method, value, status, body) {
+  return assertRawJson(port, pathname, method, JSON.stringify(value), status, body);
+}
+
+async function assertRawJson(port, pathname, method, value, status, body) {
   const response = await fetch(`http://127.0.0.1:${port}${pathname}`, {
     method,
     headers: {"content-type": "application/json"},
-    body: JSON.stringify(value),
+    body: value,
   });
   assert.equal(response.status, status);
   assert.equal(await response.text(), body);
