@@ -112,6 +112,12 @@ export function compileEntry(entryPath: string, options: CompileOptions): HirPro
   });
   const application = analyzeApplicationEntry(sourceFile);
   validateForbiddenSyntax(sourceFile, staging.computedAccesses, application !== undefined);
+  validateBuiltinOperations(
+    graph,
+    options.allowedEnvironment ?? new Set(),
+    options.allowedReadRoots ?? [],
+    options.allowedWriteRoots ?? [],
+  );
   const entryDiagnostics = ts.getPreEmitDiagnostics(program, sourceFile)
     .filter(diagnostic => !isResponseIntrinsicDiagnostic(diagnostic));
   if (entryDiagnostics.length > 0) {
@@ -124,12 +130,6 @@ export function compileEntry(entryPath: string, options: CompileOptions): HirPro
   if (typeScriptDiagnostics.length > 0) {
     throw new CompileFailure(typeScriptDiagnostics.map(fromTypeScript));
   }
-  validateBuiltinOperations(
-    graph,
-    options.allowedEnvironment ?? new Set(),
-    options.allowedReadRoots ?? [],
-    options.allowedWriteRoots ?? [],
-  );
   const getDeclarations = sourceFile.statements.filter(isGetDeclaration);
   if (getDeclarations.length === 0) {
     if (application !== undefined) {

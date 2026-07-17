@@ -13,6 +13,8 @@ interface ImportedOperation {
   operation: string;
 }
 
+type BuiltinResource = "actor" | "database" | "statement";
+
 /** Validates protected built-ins before symbolic application execution. */
 export function validateBuiltinOperations(
   graph: ModuleGraph,
@@ -45,23 +47,11 @@ export function validateBuiltinOperations(
         }
       }
     }
+    const resources = collectResourceBindings(module.sourceFile, named, namespaces);
     const visit = (node: ts.Node): void => {
-      let imported: ImportedOperation | undefined;
-      if (
-        (ts.isCallExpression(node) || ts.isNewExpression(node))
-        && ts.isIdentifier(node.expression)
-      ) {
-        imported = named.get(node.expression.text);
-      } else if (
-        ts.isCallExpression(node)
-        && ts.isPropertyAccessExpression(node.expression)
-        && ts.isIdentifier(node.expression.expression)
-      ) {
-        const specifier = namespaces.get(node.expression.expression.text);
-        if (specifier !== undefined) {
-          imported = {specifier, operation: node.expression.name.text};
-        }
-      }
+      const imported = ts.isCallExpression(node) || ts.isNewExpression(node)
+        ? importedInvocation(node, named, namespaces)
+        : undefined;
       if (imported !== undefined) {
         const invocation = ts.isCallExpression(node) || ts.isNewExpression(node) ? node : undefined;
         if (unavailableBuiltins.has(imported.specifier)) {
@@ -115,6 +105,35 @@ export function validateBuiltinOperations(
             allowedReadRoots,
             allowedWriteRoots,
           );
+        } else if (imported.specifier === "tinytsx:actors" && imported.operation === "spawn") {
+          validateActorSpawn(diagnostics, invocation, node, module.sourceFile, resources);
+        } else if (imported.specifier === "tinytsx:sqlite") {
+          addDiagnostic(
+            diagnostics,
+            "TINY1512",
+            `SQLite operation \`tinytsx:sqlite.${imported.operation}\` is outside the alpha surface`,
+            node,
+            module.sourceFile,
+            "use Database and its declared methods from `tinytsx --list-builtins`",
+          );
+        } else if (imported.specifier === "tinytsx:actors") {
+          addDiagnostic(
+            diagnostics,
+            "TINY1520",
+            `actor operation \`tinytsx:actors.${imported.operation}\` is outside the alpha surface`,
+            node,
+            module.sourceFile,
+            "use spawn and CounterActorRef from `tinytsx --list-builtins`",
+          );
+        }
+      } else if (
+        ts.isCallExpression(node)
+        && ts.isPropertyAccessExpression(node.expression)
+        && ts.isIdentifier(node.expression.expression)
+      ) {
+        const resource = resources.get(node.expression.expression.text);
+        if (resource !== undefined) {
+          validateResourceCall(diagnostics, resource, node, module.sourceFile);
         }
       }
       ts.forEachChild(node, visit);
@@ -122,6 +141,339 @@ export function validateBuiltinOperations(
     visit(module.sourceFile);
   }
   if (diagnostics.length > 0) throw new CompileFailure(diagnostics);
+}
+
+function importedInvocation(
+  invocation: ts.CallExpression | ts.NewExpression,
+  named: ReadonlyMap<string, ImportedOperation>,
+  namespaces: ReadonlyMap<string, string>,
+): ImportedOperation | undefined {
+  if (ts.isIdentifier(invocation.expression)) {
+    return named.get(invocation.expression.text);
+  }
+  if (
+    ts.isPropertyAccessExpression(invocation.expression)
+    && ts.isIdentifier(invocation.expression.expression)
+  ) {
+    const specifier = namespaces.get(invocation.expression.expression.text);
+    if (specifier !== undefined) {
+      return {specifier, operation: invocation.expression.name.text};
+    }
+  }
+  return undefined;
+}
+
+function collectResourceBindings(
+  sourceFile: ts.SourceFile,
+  named: ReadonlyMap<string, ImportedOperation>,
+  namespaces: ReadonlyMap<string, string>,
+): Map<string, BuiltinResource> {
+  const declarations: ts.VariableDeclaration[] = [];
+  const collect = (node: ts.Node): void => {
+    if (ts.isVariableDeclaration(node)) declarations.push(node);
+    ts.forEachChild(node, collect);
+  };
+  collect(sourceFile);
+
+  const resources = new Map<string, BuiltinResource>();
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const declaration of declarations) {
+      if (!ts.isIdentifier(declaration.name) || declaration.initializer === undefined) continue;
+      const name = declaration.name.text;
+      if (resources.has(name)) continue;
+      const initializer = declaration.initializer;
+      if (ts.isCallExpression(initializer) || ts.isNewExpression(initializer)) {
+        const imported = importedInvocation(initializer, named, namespaces);
+        if (imported?.specifier === "tinytsx:sqlite" && imported.operation === "Database") {
+          resources.set(name, "database");
+          changed = true;
+          continue;
+        }
+        if (imported?.specifier === "tinytsx:actors" && imported.operation === "spawn") {
+          resources.set(name, "actor");
+          changed = true;
+          continue;
+        }
+      }
+      if (
+        ts.isCallExpression(initializer)
+        && ts.isPropertyAccessExpression(initializer.expression)
+        && ts.isIdentifier(initializer.expression.expression)
+        && resources.get(initializer.expression.expression.text) === "database"
+        && initializer.expression.name.text === "prepare"
+      ) {
+        resources.set(name, "statement");
+        changed = true;
+      }
+    }
+  }
+  return resources;
+}
+
+function validateResourceCall(
+  diagnostics: Diagnostic[],
+  resource: BuiltinResource,
+  invocation: ts.CallExpression,
+  sourceFile: ts.SourceFile,
+): void {
+  const member = invocation.expression;
+  if (!ts.isPropertyAccessExpression(member)) return;
+  const operation = member.name.text;
+  if (resource === "database") {
+    if (["exec", "prepare", "transaction"].includes(operation)) {
+      const sql = invocation.arguments[0];
+      const value = sql === undefined ? undefined : staticString(sql);
+      if (
+        invocation.arguments.length !== 1
+        || value === undefined
+        || Buffer.byteLength(value, "utf8") > 65_536
+      ) {
+        addDiagnostic(
+          diagnostics,
+          "TINY1512",
+          `Database.${operation} requires one static SQL string up to 65536 bytes`,
+          invocation,
+          sourceFile,
+        );
+      }
+      return;
+    }
+    if (["close", "dispose"].includes(operation)) {
+      if (invocation.arguments.length !== 0) {
+        addDiagnostic(diagnostics, "TINY1512", `Database.${operation} does not accept arguments`, invocation, sourceFile);
+      }
+      return;
+    }
+    addDiagnostic(
+      diagnostics,
+      "TINY1512",
+      `SQLite operation \`Database.${operation}\` is outside the alpha surface`,
+      invocation,
+      sourceFile,
+      "use prepare, exec, transaction, close, or dispose from `tinytsx --list-builtins`",
+    );
+    return;
+  }
+
+  if (resource === "statement") {
+    if (["all", "get", "run"].includes(operation)) {
+      if (!validSqliteParameters(invocation.arguments)) {
+        addDiagnostic(
+          diagnostics,
+          "TINY1512",
+          `Statement.${operation} accepts one static array of at most 16 alpha parameters`,
+          invocation,
+          sourceFile,
+        );
+      }
+      return;
+    }
+    if (["close", "dispose"].includes(operation)) {
+      if (invocation.arguments.length !== 0) {
+        addDiagnostic(diagnostics, "TINY1512", `Statement.${operation} does not accept arguments`, invocation, sourceFile);
+      }
+      return;
+    }
+    addDiagnostic(
+      diagnostics,
+      "TINY1512",
+      `SQLite operation \`Statement.${operation}\` is outside the alpha surface`,
+      invocation,
+      sourceFile,
+    );
+    return;
+  }
+
+  if (["ask", "tell"].includes(operation)) {
+    const message = invocation.arguments[0];
+    if (
+      invocation.arguments.length !== 1
+      || message === undefined
+      || staticInteger(message) === undefined
+    ) {
+      addDiagnostic(
+        diagnostics,
+        "TINY1521",
+        `CounterActorRef.${operation} requires one static signed integer message`,
+        invocation,
+        sourceFile,
+      );
+    }
+    return;
+  }
+  if (["stop", "dispose"].includes(operation)) {
+    if (invocation.arguments.length !== 0) {
+      addDiagnostic(diagnostics, "TINY1521", `CounterActorRef.${operation} does not accept arguments`, invocation, sourceFile);
+    }
+    return;
+  }
+  addDiagnostic(
+    diagnostics,
+    "TINY1521",
+    `actor operation \`CounterActorRef.${operation}\` is outside the alpha surface`,
+    invocation,
+    sourceFile,
+    "use ask, tell, stop, or dispose from `tinytsx --list-builtins`",
+  );
+}
+
+function validateActorSpawn(
+  diagnostics: Diagnostic[],
+  invocation: ts.CallExpression | ts.NewExpression | undefined,
+  node: ts.Node,
+  sourceFile: ts.SourceFile,
+  resources: ReadonlyMap<string, BuiltinResource>,
+): void {
+  const arguments_ = invocation?.arguments;
+  const behavior = arguments_?.[0];
+  const initialState = arguments_?.[1];
+  const options = arguments_?.[2];
+  const validBehavior = behavior !== undefined
+    && (ts.isIdentifier(behavior) || isCounterBehavior(behavior));
+  if (
+    arguments_ === undefined
+    || arguments_.length < 2
+    || arguments_.length > 3
+    || !validBehavior
+    || initialState === undefined
+    || staticInteger(initialState) === undefined
+    || !validActorOptions(options, resources)
+  ) {
+    addDiagnostic(
+      diagnostics,
+      "TINY1520",
+      "actor spawn requires the bounded counter behavior, a static signed integer state, mailbox capacity 1..64, and optional bounded persistence",
+      node,
+      sourceFile,
+      "use spawn((context, delta) => { context.state += delta; return String(context.state) }, initialState, options)",
+    );
+  }
+}
+
+function validActorOptions(
+  options: ts.Expression | undefined,
+  resources: ReadonlyMap<string, BuiltinResource>,
+): boolean {
+  if (options === undefined) return true;
+  if (!ts.isObjectLiteralExpression(options)) return false;
+  for (const property of options.properties) {
+    if (!ts.isPropertyAssignment(property) || !ts.isIdentifier(property.name)) return false;
+    if (property.name.text === "mailboxCapacity") {
+      const capacity = staticInteger(property.initializer);
+      if (capacity === undefined || capacity < 1 || capacity > 64) return false;
+    } else if (property.name.text === "persistence") {
+      if (!validActorPersistence(property.initializer, resources)) return false;
+    } else {
+      return false;
+    }
+  }
+  return true;
+}
+
+function validActorPersistence(
+  expression: ts.Expression,
+  resources: ReadonlyMap<string, BuiltinResource>,
+): boolean {
+  if (!ts.isObjectLiteralExpression(expression) || expression.properties.length !== 2) return false;
+  let database = false;
+  let key = false;
+  for (const property of expression.properties) {
+    if (ts.isShorthandPropertyAssignment(property)) {
+      if (property.name.text !== "database") return false;
+      database = resources.get(property.name.text) === "database";
+      continue;
+    }
+    if (!ts.isPropertyAssignment(property) || !ts.isIdentifier(property.name)) return false;
+    if (property.name.text === "database") {
+      database = ts.isIdentifier(property.initializer)
+        && resources.get(property.initializer.text) === "database";
+    } else if (property.name.text === "key") {
+      const value = staticString(property.initializer);
+      key = value !== undefined && value.length > 0 && Buffer.byteLength(value, "utf8") <= 128;
+    } else {
+      return false;
+    }
+  }
+  return database && key;
+}
+
+function isCounterBehavior(expression: ts.Expression): boolean {
+  if (!ts.isArrowFunction(expression) && !ts.isFunctionExpression(expression)) return false;
+  if (expression.parameters.length !== 2 || !ts.isBlock(expression.body)) return false;
+  const context = expression.parameters[0]?.name;
+  const message = expression.parameters[1]?.name;
+  if (!context || !message || !ts.isIdentifier(context) || !ts.isIdentifier(message)) return false;
+  const [update, returned] = expression.body.statements;
+  return expression.body.statements.length === 2
+    && update !== undefined
+    && ts.isExpressionStatement(update)
+    && ts.isBinaryExpression(update.expression)
+    && update.expression.operatorToken.kind === ts.SyntaxKind.PlusEqualsToken
+    && isStateAccess(update.expression.left, context.text)
+    && ts.isIdentifier(update.expression.right)
+    && update.expression.right.text === message.text
+    && returned !== undefined
+    && ts.isReturnStatement(returned)
+    && returned.expression !== undefined
+    && ts.isCallExpression(returned.expression)
+    && ts.isIdentifier(returned.expression.expression)
+    && returned.expression.expression.text === "String"
+    && returned.expression.arguments.length === 1
+    && isStateAccess(returned.expression.arguments[0]!, context.text);
+}
+
+function isStateAccess(expression: ts.Expression, context: string): boolean {
+  return ts.isPropertyAccessExpression(expression)
+    && ts.isIdentifier(expression.expression)
+    && expression.expression.text === context
+    && expression.name.text === "state";
+}
+
+function validSqliteParameters(arguments_: ts.NodeArray<ts.Expression>): boolean {
+  if (arguments_.length === 0) return true;
+  if (arguments_.length !== 1 || !ts.isArrayLiteralExpression(arguments_[0]!)) return false;
+  const elements = arguments_[0]!.elements;
+  return elements.length <= 16 && elements.every(element => !ts.isSpreadElement(element));
+}
+
+function staticString(expression: ts.Expression): string | undefined {
+  return ts.isStringLiteral(expression) || ts.isNoSubstitutionTemplateLiteral(expression)
+    ? expression.text
+    : undefined;
+}
+
+function staticInteger(expression: ts.Expression): number | undefined {
+  let value: number;
+  if (ts.isNumericLiteral(expression)) {
+    value = Number(expression.text);
+  } else if (
+    ts.isPrefixUnaryExpression(expression)
+    && (expression.operator === ts.SyntaxKind.MinusToken || expression.operator === ts.SyntaxKind.PlusToken)
+    && ts.isNumericLiteral(expression.operand)
+  ) {
+    value = Number(expression.operand.text) * (expression.operator === ts.SyntaxKind.MinusToken ? -1 : 1);
+  } else {
+    return undefined;
+  }
+  return Number.isSafeInteger(value) ? value : undefined;
+}
+
+function addDiagnostic(
+  diagnostics: Diagnostic[],
+  code: string,
+  message: string,
+  node: ts.Node,
+  sourceFile: ts.SourceFile,
+  help?: string,
+): void {
+  diagnostics.push({
+    code,
+    message,
+    span: spanOf(node, sourceFile),
+    ...(help === undefined ? {} : {help}),
+  });
 }
 
 function validateSqliteDatabase(

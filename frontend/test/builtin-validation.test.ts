@@ -1,0 +1,82 @@
+import assert from "node:assert/strict";
+import {mkdtempSync, rmSync, writeFileSync} from "node:fs";
+import {tmpdir} from "node:os";
+import path from "node:path";
+import {after, test} from "node:test";
+import {fileURLToPath} from "node:url";
+import {CompileFailure} from "../src/diagnostics.js";
+import {compileEntry} from "../src/program.js";
+
+const directory = mkdtempSync(path.join(tmpdir(), "tinytsx-builtins-"));
+const repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
+const sdkPath = path.join(repository, "sdk/index.d.ts");
+
+after(() => rmSync(directory, {recursive: true, force: true}));
+
+test("uses a stable diagnostic for invalid environment input", () => {
+  expectCode(`
+    import {get} from "tinytsx:env";
+    get("not portable");
+    export function GET(): Response { return Response.text("ok"); }
+  `, "TINY1504");
+});
+
+test("uses a stable diagnostic for an exceeded filesystem limit", () => {
+  expectCode(`
+    import {readTextFile} from "tinytsx:fs";
+    readTextFile("asset.txt", {maxBytes: 1048577});
+    export function GET(): Response { return Response.text("ok"); }
+  `, "TINY1504", {allowedReadRoots: [directory]});
+});
+
+test("uses stable diagnostics for unsupported SQLite operations and limits", () => {
+  expectCode(`
+    import {Database} from "tinytsx:sqlite";
+    const database = new Database(":memory:");
+    database.migrate();
+    export function GET(): Response { return Response.text("ok"); }
+  `, "TINY1512");
+
+  expectCode(`
+    import {Database} from "tinytsx:sqlite";
+    const database = new Database(":memory:");
+    const statement = database.prepare("SELECT ?1");
+    statement.run([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]);
+    export function GET(): Response { return Response.text("ok"); }
+  `, "TINY1512");
+});
+
+test("uses stable diagnostics for unsupported actor configuration and calls", () => {
+  expectCode(`
+    import {spawn} from "tinytsx:actors";
+    const counter = spawn((context, delta: number) => {
+      context.state += delta;
+      return String(context.state);
+    }, 0, {mailboxCapacity: 65});
+    export function GET(): Response { return Response.text("ok"); }
+  `, "TINY1520");
+
+  expectCode(`
+    import {spawn} from "tinytsx:actors";
+    const counter = spawn((context, delta: number) => {
+      context.state += delta;
+      return String(context.state);
+    }, 0);
+    counter.restart();
+    export function GET(): Response { return Response.text("ok"); }
+  `, "TINY1521");
+});
+
+function expectCode(
+  source: string,
+  code: string,
+  options: {allowedReadRoots?: string[]} = {},
+): void {
+  const entry = path.join(directory, `${crypto.randomUUID()}.ts`);
+  writeFileSync(entry, source);
+  assert.throws(
+    () => compileEntry(entry, {sdkPath, ...options}),
+    (error: unknown) => error instanceof CompileFailure
+      && error.diagnostics.some(diagnostic => diagnostic.code === code),
+  );
+}
