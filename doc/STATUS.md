@@ -20,11 +20,12 @@ produces and serves a native Mach-O executable from the example TSX source.
   environment API, accepts at most 64 names, and bounds each UTF-8 value to 4096
   bytes. Build reports record the sorted environment permission set.
 - The Hono + `@hono/node-server` example at `examples/hono-env/server.ts` proves
-  a present value, a missing `get()` fallback, a missing `require()` 500, an
-  oversized-value 500, and compile-time denial. It is recorded as the ninth row
-  in the executable Hono example matrix.
-- Verification: `npm run test:frontend` (79/79), `npm run test:env-native`
-  (2/2), `cargo test --workspace`, and
+  typed `context.env.NAME` and explicit built-in access share the same present,
+  missing, oversized, and compile-time-denial behavior. The typed binding also
+  runs in the SQLite blog adapter and assembles for Linux arm64. It is recorded
+  as the ninth row in the executable Hono example matrix.
+- Verification: `npm run test:frontend` (84/84), `npm run test:env-native`
+  (3/3), `cargo test --workspace`, and
   `cargo clippy --workspace --all-targets -- -D warnings`.
 
 ### Filesystem capability (2026-07-17)
@@ -109,8 +110,14 @@ produces and serves a native Mach-O executable from the example TSX source.
   create/list/get/update/delete over GET/POST/PUT/DELETE, SQL-error recovery,
   post-close failure, Apple execution, and Linux-arm64 assembly; a Bun/Hono
   `bun:sqlite` test pins the same local adapter contract. Typed execute results,
-  transactions, disk capabilities, bindings, exact upstream blog
+  transactions, disk capabilities, exact upstream blog
   envelopes, and the persistent actor remain open.
+- Typed Hono `Bindings` string fields now lower through the immutable
+  `tinytsx:env` snapshot and exact `--allow-env` capability. The blog adapter's
+  `context.env.TINYTSX_BLOG_NAME` matches Bun/Hono; denied, missing, invalid,
+  oversized, Apple execution, and Linux assembly paths are covered. Platform
+  resource bindings and general mutable environment objects remain outside the
+  slice.
 - `crypto.randomUUID()` now supplies request-time blog IDs from the native OS
   cryptographic random source. The runtime sets the version-4 and RFC variant
   bits, formats lowercase ASCII, and binds the value directly into prepared

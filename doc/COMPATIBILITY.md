@@ -182,6 +182,14 @@ shape; Bun/Hono uses its real Web API as the behavior reference. The value is
 currently lowerable only as a prepared parameter, not as a general reusable
 runtime JavaScript string or broader Crypto implementation.
 
+Typed Hono `Bindings` now map closed `c.env.NAME` reads to the same immutable
+startup snapshot as `tinytsx:env.require("NAME")`. HIR retains the static name
+and required flag; compilation fails with `TINY1501` without an exact
+`--allow-env NAME`, and missing/invalid/oversized values use the recoverable
+runtime error path. The SQLite blog adapter and Bun/Hono reference both expose
+the typed blog name. This is a string environment binding, not Cloudflare KV,
+D1, R2, Durable Object, arbitrary object, mutation, or ambient enumeration.
+
 Terminal wildcard matching now covers the exact `/api/*` fallback from the
 basic example. Native tests pin Hono's behavior that the pattern matches `/api`,
 `/api/`, and deeper paths. The generated handler returns Hono's explicit status

@@ -71,6 +71,12 @@ missing value into a recoverable internal response error. Invalid UTF-8 and
 oversized values use the same bounded error path. The snapshot cannot change
 during the process lifetime.
 
+A typed Hono `Bindings` field such as `context.env.APP_NAME` maps to the same
+required snapshot value. It does not expose a separate platform object or
+ambient environment: the field name is static, requires `--allow-env APP_NAME`,
+and uses the same missing/invalid/oversized error path. Optional bindings should
+continue to use `get()` with a closed fallback in this alpha.
+
 ### `tinytsx:fs`
 
 Bounded UTF-8 `readTextFile(path, options)` only. Binary buffers, writes,

@@ -46,6 +46,6 @@ the remaining value families needed by public callers; on-disk paths must use
 separate read/write capabilities; transactions need native tests; and the exact
 Hono blog adapter plus persistent actor tracers must pass end to end. Bounded
 wildcard-origin CORS, Content-Type preflight, and OS-random version-4 IDs bound
-as prepared values are native; environment-backed bindings and upstream
-404/204 envelopes remain blog parity work rather than claims of this local CRUD
-tracer.
+as prepared values are native. The adapter also maps its typed Hono blog-name
+binding to a permitted immutable startup value. Upstream 404/204 envelopes
+remain blog parity work rather than claims of this local CRUD tracer.
