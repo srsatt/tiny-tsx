@@ -27,6 +27,7 @@ test("serves the multi-module auth/config/persistence tracer", async context => 
   const first = start(binary, port, directory);
   await waitForServer(port, first);
   await assertText(port, "/config", 200, "TinyTSX Auth");
+  await assertText(port, "/session", 200, "signed-out");
   await assertText(port, "/account/events", 500, "handled error");
   await assertText(port, "/schema", 200, "ready", {method: "POST"});
   await assertText(port, "/account/events", 201, '{"ok":true}', {
@@ -35,6 +36,19 @@ test("serves the multi-module auth/config/persistence tracer", async context => 
   });
   await assertText(port, "/account/events", 200, '{"events":[{"username":"admin"}]}', {
     headers: {authorization},
+  });
+  const session = await fetch(`http://127.0.0.1:${port}/account/session`, {
+    method: "POST",
+    headers: {authorization},
+  });
+  assert.equal(session.status, 201);
+  assert.equal(await session.text(), "signed-in");
+  assert.equal(
+    session.headers.get("set-cookie"),
+    "tinytsx_session=active; Path=/; HttpOnly; SameSite=Lax",
+  );
+  await assertText(port, "/session", 200, "active", {
+    headers: {cookie: "tinytsx_session=active"},
   });
   await assertText(port, "/failure", 500, "handled error");
   first.kill("SIGTERM");
@@ -80,8 +94,10 @@ function compilerOptions(directory) {
   return [
     "--alias", "hono=vendor/hono/src/index.ts",
     "--alias", "hono/basic-auth=vendor/hono/src/middleware/basic-auth/index.ts",
+    "--alias", "hono/cookie=vendor/hono/src/helper/cookie/index.ts",
     "--api", "hono=tests/compat/hono/api.d.ts",
     "--api", "hono/basic-auth=tests/compat/hono/basic-auth-api.d.ts",
+    "--api", "hono/cookie=tests/compat/hono/cookie-api.d.ts",
     "--allow-env", "TINYTSX_AUTH_APP_NAME",
     "--allow-read", directory,
     "--allow-write", directory,

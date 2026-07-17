@@ -13,11 +13,14 @@ export function generateCookie(
   options?: CookieOptionsApi,
 ): string;
 
-export function setCookie(
-  context: HonoContextApi,
+export function setCookie<Bindings>(
+  context: HonoContextApi<Bindings>,
   name: string,
   value: string,
   options?: CookieOptionsApi,
 ): void;
 
-export function getCookie(context: HonoContextApi, name: string): string | undefined;
+export function getCookie<Bindings>(
+  context: HonoContextApi<Bindings>,
+  name: string,
+): string | undefined;

@@ -1482,7 +1482,11 @@ function executeStatement(
       if (value.kind === "thrown") return {returned: true, value};
       assign(evaluator, expression.left, value, module, environment, instance);
     } else {
-      evaluate(evaluator, expression, module, environment, instance);
+      const value = evaluate(evaluator, expression, module, environment, instance);
+      if (value.kind === "thrown") return {returned: true, value};
+      if (value.kind === "unknown") {
+        issue(evaluator, expression, module, value.reason);
+      }
     }
     return continued();
   }
@@ -2944,6 +2948,12 @@ function evaluateCall(
     }
     if (receiver.kind === "string") {
       if (name === "toUpperCase") return {kind: "string", value: receiver.value.toUpperCase()};
+      if (name === "charAt") {
+        const index = arguments_[0];
+        return index?.kind === "number"
+          ? {kind: "string", value: receiver.value.charAt(index.value)}
+          : unknown("String.charAt index is not a number");
+      }
       if (name === "replace" || name === "replaceAll") {
         const searched = arguments_[0];
         const replacement = arguments_[1];

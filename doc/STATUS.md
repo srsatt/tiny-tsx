@@ -792,8 +792,9 @@ produces and serves a native Mach-O executable from the example TSX source.
 - `examples/hono-user-auth` separates its typed binding, upstream Basic Auth
   middleware construction, SQLite owner/statements, and server registrations
   into local modules. The native gate proves environment configuration,
-  rejected and accepted middleware paths, custom error handling, and one audit
-  row retained after process restart without network credentials.
+  rejected and accepted middleware paths, a closed HttpOnly/SameSite cookie
+  marker and named request read, custom error handling, and one audit row
+  retained after process restart without network credentials.
 - Prepared SQLite bindings now carry closed string, safe-integer, finite-real,
   boolean, and null values through typed HIR and a bounded 24-byte AArch64 ABI
   entry. Bootstrap decoding binds the values without interpolation or a managed

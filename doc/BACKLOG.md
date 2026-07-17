@@ -428,9 +428,10 @@ adds an explicit application acceptance test.
   - 2026-07-17: `examples/hono-user-auth` separates typed configuration, the
     pinned Hono Basic Auth middleware, and SQLite ownership across local modules.
     Its Apple native test covers required environment input, rejected and
-    accepted authentication, custom error handling, and a row retained across
-    process restart; the same source assembles for Linux arm64. The tracer also
-    promoted bounded closed string/integer/real/boolean/null prepared values.
+    accepted authentication, a closed HttpOnly/SameSite session marker, custom
+    error handling, and a row retained across process restart; the same source
+    assembles for Linux arm64. The tracer also promoted bounded closed
+    string/integer/real/boolean/null prepared values.
 - [ ] Generalize Request, Response, Headers, Fetch, URL, encoding, request bodies
       beyond the alpha JSON subset, abort/timeout, and portable non-macOS
       transports.

@@ -269,12 +269,13 @@ example's custom-error ordering: rejected auth logs `Error`, returns the custom
 The post-alpha user-auth tracer links configuration, authentication, storage,
 and the server from separate local modules. It combines one required typed
 environment binding, the pinned static Basic Auth guard, a custom Hono error
-handler, and an on-disk SQLite audit row retained across process restart. Closed
-prepared parameters now include bounded strings, safe integers, finite reals,
-booleans, and null without constructing a runtime JavaScript array or record.
+handler, a closed HttpOnly/SameSite cookie marker, and an on-disk SQLite audit
+row retained across process restart. Closed prepared parameters now include
+bounded strings, safe integers, finite reals, booleans, and null without
+constructing a runtime JavaScript array or record.
 Apple native HTTP and Linux-arm64 assembly are release-gated. This does not add
-dynamic credentials, password hashing, signed/session cookies, or a general
-policy engine.
+dynamic credentials or session IDs, password hashing, signed cookies, expiry,
+or a general policy engine.
 
 The pinned `hono/cookie` helper now runs unchanged for closed `setCookie`
 name/value pairs with its default path or one explicit static path. Hono's real
