@@ -81,6 +81,26 @@ produces and serves a native Mach-O executable from the example TSX source.
   allocation-instrumented bootstrap tests, workspace Clippy with warnings
   denied, and one equivalence-checked actor smoke in each instrumentation mode.
 
+### Post-hardening actor pressure evidence (2026-07-17)
+
+- A clean commit `a52fe18` reruns the eight-worker actor route with keep-alive,
+  five startup samples, and three five-second samples at concurrency 1/8/32/64.
+  The production-equivalent TinyTSX binary has allocator counting disabled.
+- TinyTSX records 6.56 MiB warm and 6.77 MiB peak RSS versus Bun at 106.45 and
+  128.73 MiB. It reaches 0.40x Bun throughput at concurrency 1/8 and 0.68x at
+  32/64; concurrency-64 p99 remains 41.94 ms versus Bun at 1.30 ms.
+- Across each mixed warm-up/load process interval, median TinyTSX pressure is
+  37.78 CPU seconds, 17.44 million Unix syscalls, and 2.97 million context
+  switches versus Bun at 24.78 seconds, 5.72 million, and 1.28 million. Request
+  totals differ, so these counters direct profiling rather than claim a
+  normalized per-request ratio.
+- A separate three-run, concurrency-64 instrumented build records median
+  TinyTSX totals of 3.05 million allocations, 17 reallocations, 463.66 MiB
+  requested, 2.03 MiB peak-live, and 8.54 KiB live at shutdown. Its atomic
+  counting overhead is explicit and does not contaminate the main comparison.
+- Raw JSON and rendered reports are the two
+  `benchmarks/results/2026-07-17-m5-max-stable-hono-actor-*` pairs.
+
 ### Installed alpha example and failure gates (2026-07-17)
 
 - Every Hono example-manifest row names native and reference scripts reachable

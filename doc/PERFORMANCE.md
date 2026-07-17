@@ -92,6 +92,25 @@ This adds the missing measurement capability, but it does not identify dominant
 CPU paths without profiles or turn short localhost runs into publication-grade
 evidence.
 
+The post-hardening eight-worker actor matrix at commit `a52fe18` is retained in
+`benchmarks/results/2026-07-17-m5-max-stable-hono-actor-keepalive-w8.*`.
+TinyTSX records 6.56 MiB warm and 6.77 MiB peak sampled RSS versus Bun at
+106.45 MiB warm and 128.73 MiB peak. It reaches 0.40x Bun throughput at
+concurrency 1/8 and 0.68x at 32/64; concurrency-64 p99 remains 41.94 ms versus
+1.30 ms. Across the mixed warm-up/load interval TinyTSX also records 37.78 CPU
+seconds, 17.44 million Unix syscalls, and 2.97 million context switches versus
+Bun at 24.78 seconds, 5.72 million, and 1.28 million respectively. Because the
+targets complete different request totals, these aggregate counters are
+profiling direction rather than normalized per-request costs.
+
+A separate instrumented concurrency-64 report records a median 3.05 million
+allocation calls, 17 reallocations, 463.66 MiB requested, 2.03 MiB peak-live,
+and 8.54 KiB live at shutdown across the one-second warm-up plus five-second
+load interval. The atomic counters are absent from the comparative matrix and
+ordinary binaries. Together, the stable throughput and elevated process
+pressure make connection/application scheduling and syscall profiles the next
+evidence step; they do not support a generic AOT-versus-JIT conclusion.
+
 ## Earlier connection-close and compatibility evidence
 
 ## Real JSX SSR result

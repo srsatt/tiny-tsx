@@ -164,6 +164,14 @@ The summary reports actor and SQLite route-rate differences against the
 same-run Hono control. They are route-level costs, not isolated operation
 benchmarks, because the response and middleware work also differ.
 
+The post-hardening actor rerun is retained as
+`2026-07-17-m5-max-stable-hono-actor-keepalive-w8.{json,md}`. It repeats the
+five-startup/three-by-five-second matrix without allocator instrumentation and
+adds process pressure plus peak-RSS evidence. The adjacent
+`stable-hono-actor-alloc` report is a separate three-run concurrency-64 probe
+with TinyTSX allocator counters enabled; use it only for allocation pressure,
+not as an uninstrumented throughput comparison.
+
 For credible comparative runs, connect the Mac to power, disable Low Power Mode,
 close unnecessary applications, and avoid indexing or builds while measuring.
 

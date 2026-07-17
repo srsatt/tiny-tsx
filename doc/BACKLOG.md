@@ -518,7 +518,8 @@ Hono” task.
     all three process configurations. The runtime already proves cross-actor
     parallelism, and an eight-message scheduling quantum now has deterministic
     one-executor evidence that a cold actor runs before a 64-message hot backlog
-    completes. Hot-mailbox throughput remains a separate P4 measurement.
+    completes. The subsequent repeated hot-mailbox P4 run retains throughput,
+    latency, CPU, syscall, context-switch, allocation, and peak-RSS evidence.
 - [x] Harden on-disk SQLite opens against symlink replacement and path races
       across compilation, startup, and sidecar-file creation.
   - 2026-07-17: all runtime connections add SQLite's native
@@ -546,6 +547,13 @@ Hono” task.
 
 - [ ] Benchmark dynamic escaping, arenas, route parameters, JSON/query branches,
       response sizes, files, SQLite, and actors under representative load.
+  - 2026-07-17: the actor slice now has an uninstrumented eight-worker
+    keep-alive matrix with five startup and three five-second load samples at
+    concurrency 1/8/32/64, plus a separate allocation-instrumented three-run
+    concurrency-64 probe. TinyTSX reaches 0.68x Bun at concurrency 32/64 with
+    6.77 MiB peak RSS, but retains 41.94 ms concurrency-64 p99 and higher
+    aggregate CPU, Unix-syscall, and context-switch pressure. The other named
+    workload families and longer sustained profiles remain open.
 - [x] Add CPU, syscall, allocation, peak-RSS, and first-launch instrumentation.
   - 2026-07-17: the macOS harness samples whole-process CPU time, Unix/Mach
     syscalls, context switches, faults, threads, and peak RSS during warm-up and
