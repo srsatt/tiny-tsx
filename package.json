@@ -13,6 +13,8 @@
     "build:ai-hono-stream": "npm ci --prefix tests/compat/ai && npm run build:frontend && TINYTSX_AI_ENTRY=tests/compat/ai/hono-stream-text-smoke.ts TINYTSX_AI_OUTPUT=dist/ai-hono-stream TINYTSX_AI_PORT=39452 node tests/compat/ai/build-native.mjs",
     "build:ai-hono-provider": "npm ci --prefix tests/compat/ai && npm run build:frontend && TINYTSX_AI_ENTRY=tests/compat/ai/hono-local-provider-smoke.ts TINYTSX_AI_OUTPUT=dist/ai-hono-provider TINYTSX_AI_PORT=39454 node tests/compat/ai/build-native.mjs",
     "build:frontend": "npm --prefix frontend run build",
+    "release:package": "node tools/release.mjs --allow-dirty",
+    "release:verify": "node tools/release.mjs",
     "benchmark:static": "python3 benchmarks/scripts/run_static.py",
     "benchmark:hono": "python3 benchmarks/scripts/run_static.py --workload hono-basic",
     "benchmark:hono-jsx-ssr": "python3 benchmarks/scripts/run_static.py --workload hono-jsx-ssr",
