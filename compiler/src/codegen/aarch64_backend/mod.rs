@@ -153,6 +153,9 @@ fn emit_config(assembly: &mut Emitter, options: &Options, program: &Program) {
         ("tinytsx_actor_operation", 0_u8),
         ("tinytsx_actor_initial_state", 1_u8),
         ("tinytsx_actor_mailbox_capacity", 2_u8),
+        ("tinytsx_actor_failure_message", 3_u8),
+        ("tinytsx_actor_restart_max", 4_u8),
+        ("tinytsx_actor_restart_within_ms", 5_u8),
     ] {
         assembly.global_function(format_args!("{name}"));
         for (index, actor) in program.actors.iter().enumerate() {
@@ -168,9 +171,19 @@ fn emit_config(assembly: &mut Emitter, options: &Options, program: &Program) {
                 0 => match actor.operation {
                     ActorOperation::Counter => 1,
                     ActorOperation::JsonMailbox => 2,
+                    ActorOperation::FallibleCounter => 3,
                 },
                 1 => actor.initial_state as u64,
-                _ => actor.mailbox_capacity as u64,
+                2 => actor.mailbox_capacity as u64,
+                3 => actor.failure_message.unwrap_or_default() as u64,
+                4 => actor
+                    .restart
+                    .as_ref()
+                    .map_or(0, |restart| restart.max_restarts as u64),
+                _ => actor
+                    .restart
+                    .as_ref()
+                    .map_or(0, |restart| restart.within_ms),
             };
             emit_immediate(assembly, "x0", value);
             asm_line!(assembly, "    ret");

@@ -430,6 +430,29 @@ test("lowers a bounded counter actor with ask, tell, and stop", () => {
   assert.deepEqual(hir.handlers[2]?.actorActions, [{kind: "stop", actor: 0}]);
 });
 
+test("lowers a bounded fallible counter restart policy", () => {
+  const entry = path.join(repository, "examples/hono-actors/restart.ts");
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+    apiAliases: {hono: path.join(repository, "tests/compat/hono/api.d.ts")},
+  });
+
+  assert.deepEqual(hir.actors, [{
+    id: 0,
+    operation: "fallibleCounter",
+    initialState: 0,
+    mailboxCapacity: 64,
+    failureMessage: 99,
+    restart: {maxRestarts: 2, withinMs: 60_000},
+  }]);
+  assert.deepEqual(hir.handlers.map(handler => {
+    const response = handler.response.kind === "text" ? handler.response.value : undefined;
+    const call = response?.kind === "concat" ? response.values[0] : undefined;
+    return call?.kind === "actorCall" ? call.message : undefined;
+  }), [0, 1, 99]);
+});
+
 test("lowers bounded primitive array and record actor messages", () => {
   const entry = path.join(repository, "examples/hono-actors/messages.ts");
   const hir = compileEntry(entry, {

@@ -3,7 +3,7 @@ use std::{
     time::Duration,
 };
 
-use super::{ApplicationPool, CallError, PostError, ReplyError};
+use super::{ApplicationPool, CallError, PostError, ReplyError, RestartPolicy};
 
 #[test]
 fn ten_thousand_idle_actors_do_not_preallocate_mailbox_slots_or_threads() {
@@ -277,6 +277,71 @@ fn panic_is_reported_and_later_messages_recover() {
 
     assert_eq!(worker.call(1), Err(CallError::Reply(ReplyError::Panicked)));
     assert_eq!(worker.call(2), Ok(2));
+    pool.join();
+}
+
+#[test]
+fn bounded_restart_reinitializes_state_after_a_panic() {
+    let pool = ApplicationPool::new(
+        1,
+        2,
+        2,
+        |_| 10_i64,
+        |state, value| {
+            if value == 0 {
+                *state = 99;
+                panic!("boom");
+            }
+            *state += value;
+            *state
+        },
+    )
+    .expect("create application pool");
+    let other = pool.spawn();
+    let worker = pool
+        .spawn_with_capacity_and_restart(
+            2,
+            Some(RestartPolicy {
+                max_restarts: 2,
+                within: Duration::from_secs(1),
+            }),
+        )
+        .expect("spawn restarting worker");
+
+    assert_eq!(other.call(5), Ok(15));
+    assert_eq!(worker.call(1), Ok(11));
+    assert_eq!(worker.call(0), Err(CallError::Reply(ReplyError::Panicked)));
+    assert_eq!(worker.call(1), Ok(11));
+    assert_eq!(other.call(1), Ok(16));
+    pool.join();
+}
+
+#[test]
+fn restart_intensity_terminates_the_logical_worker() {
+    let pool = ApplicationPool::new(
+        1,
+        2,
+        2,
+        |_| (),
+        |_, value| if value == 0 { panic!("boom") } else { value },
+    )
+    .expect("create application pool");
+    let worker = pool
+        .spawn_with_capacity_and_restart(
+            2,
+            Some(RestartPolicy {
+                max_restarts: 1,
+                within: Duration::from_secs(1),
+            }),
+        )
+        .expect("spawn restarting worker");
+
+    assert_eq!(worker.call(0), Err(CallError::Reply(ReplyError::Panicked)));
+    assert_eq!(worker.call(0), Err(CallError::Reply(ReplyError::Panicked)));
+    assert_eq!(
+        worker.call(1),
+        Err(CallError::Post(PostError::Terminated(1)))
+    );
     pool.join();
 }
 

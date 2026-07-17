@@ -12,6 +12,7 @@ const repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".
 const entry = path.join(repository, "examples/hono-actors/server.ts");
 const persistentEntry = path.join(repository, "examples/hono-actors/persistent.ts");
 const messagesEntry = path.join(repository, "examples/hono-actors/messages.ts");
+const restartEntry = path.join(repository, "examples/hono-actors/restart.ts");
 
 test("serves a local counter actor with ordered ask, tell, and idempotent stop", async context => {
   const directory = mkdtempSync(path.join(tmpdir(), "tinytsx-actors-native-"));
@@ -157,6 +158,47 @@ test("assembles bounded actor messages for Linux arm64", () => {
   assert.equal(assembled.status, 0, assembled.stderr);
 });
 
+test("restarts a fallible counter within a bounded intensity window", async context => {
+  const directory = mkdtempSync(path.join(tmpdir(), "tinytsx-actor-restart-"));
+  const binary = path.join(directory, "server");
+  const port = 39_493;
+  context.after(() => rmSync(directory, {recursive: true, force: true}));
+
+  const result = buildRestart(binary, port);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const report = JSON.parse(readFileSync(`${binary}.build.json`, "utf8"));
+  assert.equal(report.actors, 1);
+
+  const server = spawn(binary, [], {stdio: ["ignore", "pipe", "pipe"]});
+  context.after(() => server.kill("SIGTERM"));
+  await waitForServer(port, server);
+  await assertResponse(port, "/", 200, "0");
+  await assertResponse(port, "/increment", 200, "1");
+  await assertResponse(port, "/failure", 500, "internal server error");
+  await assertResponse(port, "/", 200, "0");
+  await assertResponse(port, "/increment", 200, "1");
+  await assertResponse(port, "/failure", 500, "internal server error");
+  await assertResponse(port, "/", 200, "0");
+  await assertResponse(port, "/failure", 500, "internal server error");
+  await assertResponse(port, "/", 500, "internal server error");
+});
+
+test("assembles the fallible actor restart policy for Linux arm64", () => {
+  const result = spawnSync("cargo", [
+    "run", "-q", "-p", "tinytsx", "--", "check", restartEntry,
+    "--emit-asm", "--target", "aarch64-unknown-linux-gnu",
+    "--alias", "hono=vendor/hono/src/index.ts",
+    "--api", "hono=tests/compat/hono/api.d.ts",
+  ], {cwd: repository, encoding: "utf8"});
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /tinytsx_actor_restart_max/);
+  assert.match(result.stdout, /tinytsx_actor_restart_within_ms/);
+  const assembled = spawnSync("clang", [
+    "--target=aarch64-unknown-linux-gnu", "-x", "assembler", "-c", "-o", "/dev/null", "-",
+  ], {cwd: repository, input: result.stdout, encoding: "utf8"});
+  assert.equal(assembled.status, 0, assembled.stderr);
+});
+
 function build(binary, port) {
   return spawnSync("cargo", [
     "run", "-q", "-p", "tinytsx", "--", "build", entry,
@@ -183,6 +225,16 @@ function buildPersistent(binary, port, directory) {
 function buildMessages(binary, port) {
   return spawnSync("cargo", [
     "run", "-q", "-p", "tinytsx", "--", "build", messagesEntry,
+    "--output", binary,
+    "--port", String(port),
+    "--alias", "hono=vendor/hono/src/index.ts",
+    "--api", "hono=tests/compat/hono/api.d.ts",
+  ], {cwd: repository, encoding: "utf8"});
+}
+
+function buildRestart(binary, port) {
+  return spawnSync("cargo", [
+    "run", "-q", "-p", "tinytsx", "--", "build", restartEntry,
     "--output", binary,
     "--port", String(port),
     "--alias", "hono=vendor/hono/src/index.ts",

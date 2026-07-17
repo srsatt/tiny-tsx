@@ -30,6 +30,12 @@ pub enum ReplyError {
     Disconnected,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RestartPolicy {
+    pub max_restarts: usize,
+    pub within: Duration,
+}
+
 pub struct Reply<R> {
     receiver: Receiver<Result<R, ReplyError>>,
 }
@@ -145,10 +151,24 @@ where
         &self,
         mailbox_capacity: usize,
     ) -> Result<LogicalWorker<S, M, R>, std::io::Error> {
+        self.spawn_with_capacity_and_restart(mailbox_capacity, None)
+    }
+
+    pub fn spawn_with_capacity_and_restart(
+        &self,
+        mailbox_capacity: usize,
+        restart: Option<RestartPolicy>,
+    ) -> Result<LogicalWorker<S, M, R>, std::io::Error> {
         if mailbox_capacity == 0 || mailbox_capacity > self.mailbox_capacity {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
                 "logical worker mailbox capacity is outside the pool bound",
+            ));
+        }
+        if restart.is_some_and(|policy| policy.max_restarts == 0 || policy.within.is_zero()) {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "logical worker restart policy must have a positive count and window",
             ));
         }
         let id = self.next_worker_id.fetch_add(1, Ordering::Relaxed);
@@ -158,6 +178,8 @@ where
                 (self.initialize)(id),
                 mailbox_capacity,
                 self.weak_pool.clone(),
+                Arc::clone(&self.initialize),
+                restart,
             )),
         })
     }
@@ -251,6 +273,19 @@ struct WorkerControl<S, M, R> {
     mailbox: Mutex<Mailbox<M, R>>,
     terminated: AtomicBool,
     pool: Weak<WorkerPool<Arc<WorkerControl<S, M, R>>>>,
+    initialize: Arc<dyn Fn(usize) -> S + Send + Sync>,
+    restart: Option<RestartWindow>,
+}
+
+struct RestartWindow {
+    policy: RestartPolicy,
+    attempts: Mutex<VecDeque<Instant>>,
+}
+
+enum RestartDecision {
+    NotConfigured,
+    Restarted,
+    Exhausted,
 }
 
 impl<S, M, R> WorkerControl<S, M, R> {
@@ -259,6 +294,8 @@ impl<S, M, R> WorkerControl<S, M, R> {
         state: S,
         mailbox_capacity: usize,
         pool: Weak<WorkerPool<Arc<WorkerControl<S, M, R>>>>,
+        initialize: Arc<dyn Fn(usize) -> S + Send + Sync>,
+        restart: Option<RestartPolicy>,
     ) -> Self {
         Self {
             id,
@@ -270,6 +307,11 @@ impl<S, M, R> WorkerControl<S, M, R> {
             }),
             terminated: AtomicBool::new(false),
             pool,
+            initialize,
+            restart: restart.map(|policy| RestartWindow {
+                policy,
+                attempts: Mutex::new(VecDeque::new()),
+            }),
         }
     }
 
@@ -278,6 +320,32 @@ impl<S, M, R> WorkerControl<S, M, R> {
         let mut mailbox = lock(&self.mailbox);
         for message in mailbox.messages.drain(..) {
             let _ = message.sender.send(Err(ReplyError::Terminated));
+        }
+    }
+
+    fn restart_after_panic(&self, state: &mut S) -> RestartDecision {
+        let Some(restart) = &self.restart else {
+            return RestartDecision::NotConfigured;
+        };
+        let now = Instant::now();
+        let mut attempts = lock(&restart.attempts);
+        while attempts
+            .front()
+            .is_some_and(|attempt| now.duration_since(*attempt) >= restart.policy.within)
+        {
+            attempts.pop_front();
+        }
+        if attempts.len() >= restart.policy.max_restarts {
+            return RestartDecision::Exhausted;
+        }
+        attempts.push_back(now);
+        drop(attempts);
+        match catch_unwind(AssertUnwindSafe(|| (self.initialize)(self.id))) {
+            Ok(restarted) => {
+                *state = restarted;
+                RestartDecision::Restarted
+            }
+            Err(_) => RestartDecision::Exhausted,
         }
     }
 }
@@ -320,8 +388,17 @@ where
             let mut state = lock(&self.state);
             let result = catch_unwind(AssertUnwindSafe(|| handle(&mut state, message.input)))
                 .map_err(|_| ReplyError::Panicked);
+            let restart = if matches!(&result, Err(ReplyError::Panicked)) {
+                self.restart_after_panic(&mut state)
+            } else {
+                RestartDecision::NotConfigured
+            };
             drop(state);
             let _ = message.sender.send(result);
+            if matches!(restart, RestartDecision::Exhausted) {
+                self.terminate();
+                return;
+            }
             processed += 1;
         }
     }

@@ -8,14 +8,17 @@ use std::{
 };
 
 use tinytsx_runtime_sqlite::{Connection, SqlValue};
-use tinytsx_runtime_worker::{ApplicationPool, CallError, LogicalWorker, PostError, ReplyError};
+use tinytsx_runtime_worker::{
+    ApplicationPool, CallError, LogicalWorker, PostError, ReplyError, RestartPolicy,
+};
 
 use crate::abi::{
     APPLICATION_OVERLOAD, CLIENT_DISCONNECTED, INTERNAL_ERROR, OpenAiTransport, RENDER_ERROR,
-    actor_initial_json, actor_initial_state, actor_mailbox_capacity, actor_operation,
-    actor_persistence_database, actor_persistence_key, configured_actors,
-    configured_provider_transport, configured_sqlite_database_path, configured_sqlite_databases,
-    configured_worker_modules, worker_operation,
+    actor_failure_message, actor_initial_json, actor_initial_state, actor_mailbox_capacity,
+    actor_operation, actor_persistence_database, actor_persistence_key, actor_restart_max,
+    actor_restart_within_ms, configured_actors, configured_provider_transport,
+    configured_sqlite_database_path, configured_sqlite_databases, configured_worker_modules,
+    worker_operation,
 };
 
 const APPLICATION_QUEUE_PER_EXECUTOR: usize = 64;
@@ -61,6 +64,7 @@ struct WorkerState {
     operation: u32,
     actor_operation: u32,
     actor_counter: i64,
+    actor_failure_message: i64,
     actor_json: Option<Result<Vec<u8>, u32>>,
     actor_persistence: Option<Result<ActorPersistence, u32>>,
     provider: OpenAiTransport,
@@ -179,6 +183,7 @@ pub fn initialize(executor_count: usize) -> io::Result<(usize, bool, bool)> {
                 operation: worker_operation(id),
                 actor_operation,
                 actor_counter,
+                actor_failure_message: actor.map_or(0, actor_failure_message),
                 actor_json: actor
                     .filter(|_| actor_operation == 2)
                     .map(actor_initial_json),
@@ -210,7 +215,10 @@ pub fn initialize(executor_count: usize) -> io::Result<(usize, bool, bool)> {
                 crate::filesystem::read_text(&request.path, request.max_bytes)
             }
             ApplicationMessage::ActorCounter(delta) => {
-                if state.actor_operation != 1 {
+                if state.actor_operation == 3 && delta == state.actor_failure_message {
+                    panic!("fallible counter actor failure");
+                }
+                if !matches!(state.actor_operation, 1 | 3) {
                     return Err(INTERNAL_ERROR);
                 }
                 let next = state.actor_counter.checked_add(delta).ok_or(RENDER_ERROR)?;
@@ -302,7 +310,13 @@ pub fn initialize(executor_count: usize) -> io::Result<(usize, bool, bool)> {
     )?;
     let workers = (0..worker_count).map(|_| pool.spawn()).collect();
     let actors = (0..actor_count)
-        .map(|actor| pool.spawn_with_capacity(actor_mailbox_capacity(actor)))
+        .map(|actor| {
+            let restart = (actor_operation(actor) == 3).then(|| RestartPolicy {
+                max_restarts: actor_restart_max(actor),
+                within: Duration::from_millis(actor_restart_within_ms(actor)),
+            });
+            pool.spawn_with_capacity_and_restart(actor_mailbox_capacity(actor), restart)
+        })
         .collect::<Result<Vec<_>, _>>()?;
     let databases = (0..database_count).map(|_| pool.spawn()).collect();
     let providers = if provider_enabled {

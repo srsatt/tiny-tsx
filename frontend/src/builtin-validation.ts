@@ -347,8 +347,14 @@ function validateActorSpawn(
   const behavior = arguments_?.[0];
   const initialState = arguments_?.[1];
   const options = arguments_?.[2];
+  const fallibleBehavior = behavior !== undefined && isFallibleCounterBehavior(behavior);
+  const restartConfigured = hasActorOption(options, "restart");
+  const persistenceConfigured = hasActorOption(options, "persistence");
   const validBehavior = behavior !== undefined
-    && (ts.isIdentifier(behavior) || isCounterBehavior(behavior) || isJsonMailboxBehavior(behavior));
+    && (ts.isIdentifier(behavior)
+      || isCounterBehavior(behavior)
+      || isFallibleCounterBehavior(behavior)
+      || isJsonMailboxBehavior(behavior));
   if (
     arguments_ === undefined
     || arguments_.length < 2
@@ -357,6 +363,9 @@ function validateActorSpawn(
     || initialState === undefined
     || !isStaticActorValue(initialState)
     || !validActorOptions(options, resources)
+    || behavior !== undefined
+      && !ts.isIdentifier(behavior)
+      && (fallibleBehavior !== restartConfigured || fallibleBehavior && persistenceConfigured)
   ) {
     addDiagnostic(
       diagnostics,
@@ -367,6 +376,14 @@ function validateActorSpawn(
       "use spawn((context, delta) => { context.state += delta; return String(context.state) }, initialState, options)",
     );
   }
+}
+
+function hasActorOption(options: ts.Expression | undefined, name: string): boolean {
+  return options !== undefined
+    && ts.isObjectLiteralExpression(options)
+    && options.properties.some(property => ts.isPropertyAssignment(property)
+      && ts.isIdentifier(property.name)
+      && property.name.text === name);
 }
 
 function isJsonMailboxBehavior(expression: ts.Expression): boolean {
@@ -454,11 +471,35 @@ function validActorOptions(
       if (capacity === undefined || capacity < 1 || capacity > 64) return false;
     } else if (property.name.text === "persistence") {
       if (!validActorPersistence(property.initializer, resources)) return false;
+    } else if (property.name.text === "restart") {
+      if (!validActorRestart(property.initializer)) return false;
     } else {
       return false;
     }
   }
   return true;
+}
+
+function validActorRestart(expression: ts.Expression): boolean {
+  if (!ts.isObjectLiteralExpression(expression) || expression.properties.length !== 2) return false;
+  let maxRestarts: number | undefined;
+  let withinMs: number | undefined;
+  for (const property of expression.properties) {
+    if (!ts.isPropertyAssignment(property) || !ts.isIdentifier(property.name)) return false;
+    if (property.name.text === "maxRestarts") {
+      maxRestarts = staticInteger(property.initializer);
+    } else if (property.name.text === "withinMs") {
+      withinMs = staticInteger(property.initializer);
+    } else {
+      return false;
+    }
+  }
+  return maxRestarts !== undefined
+    && maxRestarts >= 1
+    && maxRestarts <= 16
+    && withinMs !== undefined
+    && withinMs >= 1
+    && withinMs <= 60_000;
 }
 
 function validActorPersistence(
@@ -494,15 +535,48 @@ function isCounterBehavior(expression: ts.Expression): boolean {
   const context = expression.parameters[0]?.name;
   const message = expression.parameters[1]?.name;
   if (!context || !message || !ts.isIdentifier(context) || !ts.isIdentifier(message)) return false;
-  const [update, returned] = expression.body.statements;
-  return expression.body.statements.length === 2
+  return isCounterStatements(expression.body.statements, context.text, message.text);
+}
+
+function isFallibleCounterBehavior(expression: ts.Expression): boolean {
+  if (!ts.isArrowFunction(expression) && !ts.isFunctionExpression(expression)) return false;
+  if (expression.parameters.length !== 2 || !ts.isBlock(expression.body)) return false;
+  const context = expression.parameters[0]?.name;
+  const message = expression.parameters[1]?.name;
+  if (!context || !message || !ts.isIdentifier(context) || !ts.isIdentifier(message)) return false;
+  const [failure, ...counter] = expression.body.statements;
+  return failure !== undefined
+    && ts.isIfStatement(failure)
+    && failure.elseStatement === undefined
+    && ts.isBinaryExpression(failure.expression)
+    && failure.expression.operatorToken.kind === ts.SyntaxKind.EqualsEqualsEqualsToken
+    && ts.isIdentifier(failure.expression.left)
+    && failure.expression.left.text === message.text
+    && staticInteger(failure.expression.right) !== undefined
+    && ts.isThrowStatement(failure.thenStatement)
+    && failure.thenStatement.expression !== undefined
+    && ts.isCallExpression(failure.thenStatement.expression)
+    && ts.isIdentifier(failure.thenStatement.expression.expression)
+    && failure.thenStatement.expression.expression.text === "Error"
+    && failure.thenStatement.expression.arguments.length === 1
+    && ts.isStringLiteral(failure.thenStatement.expression.arguments[0]!)
+    && isCounterStatements(counter, context.text, message.text);
+}
+
+function isCounterStatements(
+  statements: readonly ts.Statement[],
+  context: string,
+  message: string,
+): boolean {
+  const [update, returned] = statements;
+  return statements.length === 2
     && update !== undefined
     && ts.isExpressionStatement(update)
     && ts.isBinaryExpression(update.expression)
     && update.expression.operatorToken.kind === ts.SyntaxKind.PlusEqualsToken
-    && isStateAccess(update.expression.left, context.text)
+    && isStateAccess(update.expression.left, context)
     && ts.isIdentifier(update.expression.right)
-    && update.expression.right.text === message.text
+    && update.expression.right.text === message
     && returned !== undefined
     && ts.isReturnStatement(returned)
     && returned.expression !== undefined
@@ -510,7 +584,7 @@ function isCounterBehavior(expression: ts.Expression): boolean {
     && ts.isIdentifier(returned.expression.expression)
     && returned.expression.expression.text === "String"
     && returned.expression.arguments.length === 1
-    && isStateAccess(returned.expression.arguments[0]!, context.text);
+    && isStateAccess(returned.expression.arguments[0]!, context);
 }
 
 function isStateAccess(expression: ts.Expression, context: string): boolean {

@@ -58,6 +58,50 @@ test("uses stable diagnostics for unsupported actor configuration and calls", ()
 
   expectCode(`
     import {spawn} from "tinytsx:actors";
+    spawn((context, delta: number) => {
+      context.state += delta;
+      return String(context.state);
+    }, 0, {restart: {maxRestarts: 2, withinMs: 1000}});
+    export function GET(): Response { return Response.text("ok"); }
+  `, "TINY1520");
+
+  expectCode(`
+    import {spawn} from "tinytsx:actors";
+    import {Database} from "tinytsx:sqlite";
+    const database = new Database(":memory:");
+    spawn((context, delta: number) => {
+      if (delta === 99) throw Error("failure");
+      context.state += delta;
+      return String(context.state);
+    }, 0, {
+      restart: {maxRestarts: 2, withinMs: 1000},
+      persistence: {database, key: "counter"},
+    });
+    export function GET(): Response { return Response.text("ok"); }
+  `, "TINY1520");
+
+  expectCode(`
+    import {spawn} from "tinytsx:actors";
+    spawn((context, delta: number) => {
+      if (delta === 99) throw Error("failure");
+      context.state += delta;
+      return String(context.state);
+    }, 0);
+    export function GET(): Response { return Response.text("ok"); }
+  `, "TINY1520");
+
+  expectCode(`
+    import {spawn} from "tinytsx:actors";
+    spawn((context, delta: number) => {
+      if (delta === 99) throw Error("failure");
+      context.state += delta;
+      return String(context.state);
+    }, 0, {restart: {maxRestarts: 17, withinMs: 1000}});
+    export function GET(): Response { return Response.text("ok"); }
+  `, "TINY1520");
+
+  expectCode(`
+    import {spawn} from "tinytsx:actors";
     const counter = spawn((context, delta: number) => {
       context.state += delta;
       return String(context.state);

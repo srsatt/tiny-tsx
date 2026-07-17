@@ -506,6 +506,8 @@ function lowerApplicationInitialization(
       initialState: actor.initialState,
       ...(actor.initialJson === undefined ? {} : {initialJson: strings.intern(actor.initialJson)}),
       mailboxCapacity: actor.mailboxCapacity,
+      ...(actor.failureMessage === undefined ? {} : {failureMessage: actor.failureMessage}),
+      ...(actor.restart === undefined ? {} : {restart: actor.restart}),
       ...(actor.persistence === undefined
         ? {}
         : {persistence: {database: actor.persistence.database.id, key: actor.persistence.key}}),

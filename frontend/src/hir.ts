@@ -61,10 +61,12 @@ export interface WorkerModule {
 
 export interface ActorModule {
   id: number;
-  operation: "counter" | "jsonMailbox";
+  operation: "counter" | "fallibleCounter" | "jsonMailbox";
   initialState: number;
   initialJson?: number;
   mailboxCapacity: number;
+  failureMessage?: number;
+  restart?: {maxRestarts: number; withinMs: number};
   persistence?: {database: number; key: string};
 }
 

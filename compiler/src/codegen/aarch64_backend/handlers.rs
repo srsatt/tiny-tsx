@@ -326,7 +326,7 @@ pub(super) fn emit_handlers(assembly: &mut Emitter, program: &Program) -> Result
                 } => {
                     emit_immediate(assembly, "x0", *actor as u64);
                     match program.actors[*actor].operation {
-                        ActorOperation::Counter => {
+                        ActorOperation::Counter | ActorOperation::FallibleCounter => {
                             emit_immediate(
                                 assembly,
                                 "x1",

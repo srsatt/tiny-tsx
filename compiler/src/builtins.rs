@@ -25,6 +25,8 @@ struct Limits {
     value_bytes: Option<usize>,
     mailbox_messages: Option<usize>,
     query_rows: Option<usize>,
+    restart_attempts: Option<usize>,
+    restart_window_ms: Option<u64>,
 }
 
 pub fn json() -> Result<String, String> {
@@ -86,6 +88,8 @@ fn manifest() -> Manifest {
                 limits: Limits {
                     mailbox_messages: Some(64),
                     value_bytes: Some(4_096),
+                    restart_attempts: Some(16),
+                    restart_window_ms: Some(60_000),
                     ..empty_limits()
                 },
             },
@@ -99,6 +103,8 @@ const fn empty_limits() -> Limits {
         value_bytes: None,
         mailbox_messages: None,
         query_rows: None,
+        restart_attempts: None,
+        restart_window_ms: None,
     }
 }
 
@@ -126,5 +132,7 @@ mod tests {
         assert_eq!(manifest().builtins[2].status, "native");
         assert_eq!(manifest().builtins[3].status, "native");
         assert_eq!(manifest().builtins[4].status, "native");
+        assert_eq!(manifest().builtins[4].limits.restart_attempts, Some(16));
+        assert_eq!(manifest().builtins[4].limits.restart_window_ms, Some(60_000));
     }
 }

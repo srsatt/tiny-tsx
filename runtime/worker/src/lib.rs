@@ -5,7 +5,9 @@
 
 mod application;
 
-pub use application::{ApplicationPool, CallError, LogicalWorker, PostError, Reply, ReplyError};
+pub use application::{
+    ApplicationPool, CallError, LogicalWorker, PostError, Reply, ReplyError, RestartPolicy,
+};
 
 use std::{
     collections::VecDeque,

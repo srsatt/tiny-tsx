@@ -114,7 +114,18 @@ pub struct ActorModule {
     pub initial_json: Option<usize>,
     pub mailbox_capacity: usize,
     #[serde(default)]
+    pub failure_message: Option<i64>,
+    #[serde(default)]
+    pub restart: Option<ActorRestart>,
+    #[serde(default)]
     pub persistence: Option<ActorPersistence>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ActorRestart {
+    pub max_restarts: usize,
+    pub within_ms: u64,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -127,6 +138,7 @@ pub struct ActorPersistence {
 #[serde(rename_all = "camelCase")]
 pub enum ActorOperation {
     Counter,
+    FallibleCounter,
     JsonMailbox,
 }
 
@@ -943,8 +955,29 @@ impl Program {
                 return Err(format!("actor {index} mailbox capacity is outside 1..=64"));
             }
             match actor.operation {
-                ActorOperation::Counter if actor.initial_json.is_some() => {
-                    return Err(format!("counter actor {index} has JSON initial state"));
+                ActorOperation::Counter
+                    if actor.initial_json.is_some()
+                        || actor.failure_message.is_some()
+                        || actor.restart.is_some() =>
+                {
+                    return Err(format!("counter actor {index} has fallible/JSON configuration"));
+                }
+                ActorOperation::FallibleCounter => {
+                    let Some(restart) = &actor.restart else {
+                        return Err(format!("fallible counter actor {index} has no restart policy"));
+                    };
+                    if actor.initial_json.is_some()
+                        || actor.failure_message.is_none()
+                        || actor.persistence.is_some()
+                        || restart.max_restarts == 0
+                        || restart.max_restarts > 16
+                        || restart.within_ms == 0
+                        || restart.within_ms > 60_000
+                    {
+                        return Err(format!(
+                            "fallible counter actor {index} has invalid restart configuration"
+                        ));
+                    }
                 }
                 ActorOperation::JsonMailbox => {
                     let Some(initial) = actor
@@ -957,6 +990,9 @@ impl Program {
                         .map_err(|error| format!("JSON actor {index} initial state {error}"))?;
                     if actor.persistence.is_some() {
                         return Err(format!("JSON actor {index} cannot use counter persistence"));
+                    }
+                    if actor.failure_message.is_some() || actor.restart.is_some() {
+                        return Err(format!("JSON actor {index} has restart configuration"));
                     }
                 }
                 ActorOperation::Counter => {}
@@ -1420,7 +1456,8 @@ impl Program {
             return Err("actor message references a missing actor".to_owned());
         };
         match actor.operation {
-            ActorOperation::Counter if message.is_some() && json_message.is_none() => Ok(()),
+            ActorOperation::Counter | ActorOperation::FallibleCounter
+                if message.is_some() && json_message.is_none() => Ok(()),
             ActorOperation::JsonMailbox if message.is_none() => {
                 let Some(message) =
                     json_message.and_then(|message| self.static_strings.get(message))
@@ -1430,7 +1467,9 @@ impl Program {
                 validate_actor_json(&message.value)
                     .map_err(|error| format!("JSON actor message {error}"))
             }
-            ActorOperation::Counter => Err("counter actor requires one integer message".to_owned()),
+            ActorOperation::Counter | ActorOperation::FallibleCounter => {
+                Err("counter actor requires one integer message".to_owned())
+            }
             ActorOperation::JsonMailbox => {
                 Err("JSON actor requires one static JSON message".to_owned())
             }

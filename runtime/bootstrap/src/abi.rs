@@ -235,6 +235,9 @@ unsafe extern "C" {
     ) -> u32;
     pub fn tinytsx_actor_operation(actor: usize) -> u32;
     pub fn tinytsx_actor_initial_state(actor: usize) -> i64;
+    pub fn tinytsx_actor_failure_message(actor: usize) -> i64;
+    pub fn tinytsx_actor_restart_max(actor: usize) -> usize;
+    pub fn tinytsx_actor_restart_within_ms(actor: usize) -> u64;
     pub fn tinytsx_actor_initial_json(
         actor: usize,
         pointer: *mut *const u8,
@@ -256,6 +259,21 @@ unsafe extern "C" fn tinytsx_handle_get(
     _writer: *mut TinyResponseWriter,
 ) -> u32 {
     OK
+}
+
+#[cfg(not(feature = "generated"))]
+unsafe extern "C" fn tinytsx_actor_failure_message(_actor: usize) -> i64 {
+    0
+}
+
+#[cfg(not(feature = "generated"))]
+unsafe extern "C" fn tinytsx_actor_restart_max(_actor: usize) -> usize {
+    0
+}
+
+#[cfg(not(feature = "generated"))]
+unsafe extern "C" fn tinytsx_actor_restart_within_ms(_actor: usize) -> u64 {
+    0
 }
 
 #[cfg(not(feature = "generated"))]
@@ -2870,6 +2888,21 @@ pub fn actor_operation(actor: usize) -> u32 {
 pub fn actor_initial_state(actor: usize) -> i64 {
     // SAFETY: The generated object returns zero for an invalid actor.
     unsafe { tinytsx_actor_initial_state(actor) }
+}
+
+pub fn actor_failure_message(actor: usize) -> i64 {
+    // SAFETY: The generated object returns zero for an invalid actor.
+    unsafe { tinytsx_actor_failure_message(actor) }
+}
+
+pub fn actor_restart_max(actor: usize) -> usize {
+    // SAFETY: The generated object returns zero for an invalid actor.
+    unsafe { tinytsx_actor_restart_max(actor) }
+}
+
+pub fn actor_restart_within_ms(actor: usize) -> u64 {
+    // SAFETY: The generated object returns zero for an invalid actor.
+    unsafe { tinytsx_actor_restart_within_ms(actor) }
 }
 
 pub fn actor_initial_json(actor: usize) -> Result<Vec<u8>, u32> {

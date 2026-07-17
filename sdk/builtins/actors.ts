@@ -8,6 +8,7 @@ export type CounterActorBehavior =
 export interface ActorOptions {
   mailboxCapacity?: number;
   persistence?: {database: Database; key: string};
+  restart?: {maxRestarts: number; withinMs: number};
 }
 
 export type ActorPrimitive = string | number | boolean | null;

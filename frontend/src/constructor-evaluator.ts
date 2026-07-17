@@ -2522,10 +2522,36 @@ function evaluateCall(
           && Buffer.byteLength(persistenceKey.value, "utf8") <= 128
           ? {database: persistenceDatabase.state, key: persistenceKey.value}
           : null;
+      const restartValue = optionFields?.get("restart");
+      const restartMax = restartValue?.kind === "record"
+        ? restartValue.fields.get("maxRestarts")
+        : undefined;
+      const restartWithin = restartValue?.kind === "record"
+        ? restartValue.fields.get("withinMs")
+        : undefined;
+      const restart = restartValue === undefined
+        ? undefined
+        : restartValue.kind === "record"
+          && restartValue.fields.size === 2
+          && restartMax?.kind === "number"
+          && Number.isSafeInteger(restartMax.value)
+          && restartMax.value >= 1
+          && restartMax.value <= 16
+          && restartWithin?.kind === "number"
+          && Number.isSafeInteger(restartWithin.value)
+          && restartWithin.value >= 1
+          && restartWithin.value <= 60_000
+          ? {maxRestarts: restartMax.value, withinMs: restartWithin.value}
+          : null;
       const counter = behavior?.kind === "closure"
         && initialState?.kind === "number"
         && Number.isSafeInteger(initialState.value)
         && isCounterActorBehavior(behavior);
+      const failureMessage = behavior?.kind === "closure"
+        && initialState?.kind === "number"
+        && Number.isSafeInteger(initialState.value)
+        ? fallibleCounterMessage(behavior)
+        : undefined;
       const initialJson = behavior?.kind === "closure" && isJsonMailboxActorBehavior(behavior)
         ? boundedActorJson(initialState)
         : undefined;
@@ -2538,10 +2564,13 @@ function evaluateCall(
         || mailboxCapacity < 1
         || mailboxCapacity > 64
         || optionFields === undefined
-        || [...optionFields.keys()].some(name => name !== "mailboxCapacity" && name !== "persistence")
+        || [...optionFields.keys()].some(name => name !== "mailboxCapacity" && name !== "persistence" && name !== "restart")
         || persistence === null
-        || (!counter && initialJson === undefined)
+        || restart === null
+        || (!counter && failureMessage === undefined && initialJson === undefined)
         || (initialJson !== undefined && persistence !== undefined)
+        || (failureMessage === undefined) !== (restart === undefined)
+        || (failureMessage !== undefined && persistence !== undefined)
       ) {
         return unknown("actor spawn requires a bounded counter or JSON-mailbox behavior and mailbox capacity up to 64");
       }
@@ -2551,10 +2580,16 @@ function evaluateCall(
         state = {
           id: evaluator.actors.size,
           key,
-          operation: counter ? "counter" : "jsonMailbox",
-          initialState: counter ? initialState.value : 0,
+          operation: failureMessage !== undefined
+            ? "fallibleCounter"
+            : counter ? "counter" : "jsonMailbox",
+          initialState: counter || failureMessage !== undefined
+            ? initialState?.kind === "number" ? initialState.value : 0
+            : 0,
           ...(initialJson === undefined ? {} : {initialJson}),
           mailboxCapacity,
+          ...(failureMessage === undefined ? {} : {failureMessage}),
+          ...(restart === undefined ? {} : {restart}),
           ...(persistence === undefined ? {} : {persistence}),
         };
         evaluator.actors.set(key, state);
@@ -2653,7 +2688,7 @@ function evaluateCall(
       if (arguments_.length < 1 || arguments_.length > 2 || message === undefined || timeoutMs === undefined) {
         return unknown("ActorRef.ask requires one closed message and optional bounded timeoutMs");
       }
-      if (receiver.state.operation === "counter") {
+      if (receiver.state.operation !== "jsonMailbox") {
         return message.kind === "number" && Number.isSafeInteger(message.value)
           ? {
             kind: "actorCall",
@@ -2678,11 +2713,11 @@ function evaluateCall(
       if (arguments_.length !== 1 || message === undefined) {
         return unknown("ActorRef.tell requires one closed message");
       }
-      const lowered = receiver.state.operation === "counter"
+      const lowered = receiver.state.operation !== "jsonMailbox"
         ? message.kind === "number" && Number.isSafeInteger(message.value) ? message.value : undefined
         : boundedActorJson(message);
       if (lowered === undefined) {
-        return unknown(receiver.state.operation === "counter"
+        return unknown(receiver.state.operation !== "jsonMailbox"
           ? "CounterActorRef.tell requires one closed integer message"
           : "ValueActorRef.tell requires one bounded closed JSON message");
       }
@@ -3362,16 +3397,52 @@ function isCounterActorBehavior(value: Value & {kind: "closure"}): boolean {
   const context = expression.parameters[0]?.name;
   const message = expression.parameters[1]?.name;
   if (!context || !message || !ts.isIdentifier(context) || !ts.isIdentifier(message)) return false;
-  const [update, returned] = body.statements;
+  return isCounterActorStatements(body.statements, context.text, message.text);
+}
+
+function fallibleCounterMessage(value: Value & {kind: "closure"}): number | undefined {
+  const expression = value.expression;
+  const body = expression.body;
+  if (expression.parameters.length !== 2 || body === undefined || !ts.isBlock(body)) return undefined;
+  const context = expression.parameters[0]?.name;
+  const message = expression.parameters[1]?.name;
+  if (!context || !message || !ts.isIdentifier(context) || !ts.isIdentifier(message)) return undefined;
+  const [failure, ...counter] = body.statements;
   if (
-    body.statements.length !== 2
+    failure === undefined
+    || !ts.isIfStatement(failure)
+    || failure.elseStatement !== undefined
+    || !ts.isBinaryExpression(failure.expression)
+    || failure.expression.operatorToken.kind !== ts.SyntaxKind.EqualsEqualsEqualsToken
+    || !ts.isIdentifier(failure.expression.left)
+    || failure.expression.left.text !== message.text
+    || !ts.isThrowStatement(failure.thenStatement)
+    || failure.thenStatement.expression === undefined
+    || !ts.isCallExpression(failure.thenStatement.expression)
+    || !ts.isIdentifier(failure.thenStatement.expression.expression)
+    || failure.thenStatement.expression.expression.text !== "Error"
+    || failure.thenStatement.expression.arguments.length !== 1
+    || !ts.isStringLiteral(failure.thenStatement.expression.arguments[0]!)
+    || !isCounterActorStatements(counter, context.text, message.text)
+  ) return undefined;
+  return closedIntegerLiteral(failure.expression.right);
+}
+
+function isCounterActorStatements(
+  statements: readonly ts.Statement[],
+  context: string,
+  message: string,
+): boolean {
+  const [update, returned] = statements;
+  if (
+    statements.length !== 2
     || update === undefined
     || !ts.isExpressionStatement(update)
     || !ts.isBinaryExpression(update.expression)
     || update.expression.operatorToken.kind !== ts.SyntaxKind.PlusEqualsToken
-    || !isActorStateAccess(update.expression.left, context.text)
+    || !isActorStateAccess(update.expression.left, context)
     || !ts.isIdentifier(update.expression.right)
-    || update.expression.right.text !== message.text
+    || update.expression.right.text !== message
     || returned === undefined
     || !ts.isReturnStatement(returned)
     || returned.expression === undefined
@@ -3381,7 +3452,18 @@ function isCounterActorBehavior(value: Value & {kind: "closure"}): boolean {
     && ts.isIdentifier(result.expression)
     && result.expression.text === "String"
     && result.arguments.length === 1
-    && isActorStateAccess(result.arguments[0]!, context.text);
+    && isActorStateAccess(result.arguments[0]!, context);
+}
+
+function closedIntegerLiteral(expression: ts.Expression): number | undefined {
+  const value = ts.isNumericLiteral(expression)
+    ? Number(expression.text)
+    : ts.isPrefixUnaryExpression(expression)
+      && expression.operator === ts.SyntaxKind.MinusToken
+      && ts.isNumericLiteral(expression.operand)
+      ? -Number(expression.operand.text)
+      : undefined;
+  return value !== undefined && Number.isSafeInteger(value) ? value : undefined;
 }
 
 function isJsonMailboxActorBehavior(value: Value & {kind: "closure"}): boolean {

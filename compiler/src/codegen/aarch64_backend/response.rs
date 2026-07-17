@@ -235,7 +235,7 @@ fn emit_handler_text_expression(
             asm_line!(assembly, "    ldr x0, [sp, #16]");
             emit_immediate(assembly, "x1", *actor as u64);
             match program.actors[*actor].operation {
-                ActorOperation::Counter => {
+                ActorOperation::Counter | ActorOperation::FallibleCounter => {
                     emit_immediate(
                         assembly,
                         "x2",

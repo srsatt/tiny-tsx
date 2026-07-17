@@ -117,10 +117,12 @@ export interface WorkerState {
 export interface ActorState {
   id: number;
   key: string;
-  operation: "counter" | "jsonMailbox";
+  operation: "counter" | "fallibleCounter" | "jsonMailbox";
   initialState: number;
   initialJson?: string;
   mailboxCapacity: number;
+  failureMessage?: number;
+  restart?: {maxRestarts: number; withinMs: number};
   persistence?: {database: DatabaseState; key: string};
 }
 
