@@ -857,6 +857,35 @@ test("applies the upstream poweredBy middleware after the root handler", () => {
   assert.deepEqual(hir.handlers[0]?.headers, [{name: "X-Powered-By", value: "Hono"}]);
 });
 
+test("lowers bounded upstream CORS headers and preflight", () => {
+  const entry = path.join(repository, "tests/compat/hono/cors-smoke.ts");
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    aliases: {
+      hono: path.join(repository, "vendor/hono/src/index.ts"),
+      "hono/cors": path.join(repository, "vendor/hono/src/middleware/cors/index.ts"),
+    },
+    apiAliases: {
+      hono: path.join(repository, "tests/compat/hono/api.d.ts"),
+      "hono/cors": path.join(repository, "tests/compat/hono/cors-api.d.ts"),
+    },
+  });
+
+  const get = hir.handlers.find(handler => handler.method === "GET" && handler.path === "/posts");
+  assert.deepEqual(get?.headers, [{name: "Access-Control-Allow-Origin", value: "*"}]);
+  const preflight = hir.handlers.find(handler =>
+    handler.method === "OPTIONS" && handler.path === "/posts"
+  );
+  assert.equal(preflight?.response.kind === "text" ? preflight.response.status : undefined, 204);
+  assert.deepEqual(preflight?.headers, [
+    {name: "Access-Control-Allow-Origin", value: "*"},
+    {
+      name: "Access-Control-Allow-Methods",
+      value: "GET,HEAD,PUT,POST,DELETE,PATCH",
+    },
+  ]);
+});
+
 test("lowers the upstream response-time middleware into a native elapsed header", () => {
   const entry = path.join(repository, "tests/compat/hono/response-time-smoke.ts");
   const options = {

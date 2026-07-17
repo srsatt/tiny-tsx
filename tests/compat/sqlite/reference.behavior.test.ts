@@ -1,6 +1,7 @@
 import {Database} from "bun:sqlite";
 import {describe, expect, test} from "bun:test";
 import {Hono} from "../../../vendor/hono/src/index.ts";
+import {cors} from "../../../vendor/hono/src/middleware/cors/index.ts";
 
 const database = new Database(":memory:");
 database.exec("CREATE TABLE posts (title TEXT PRIMARY KEY, body TEXT)");
@@ -12,6 +13,8 @@ const updatePost = database.query("UPDATE posts SET body = ?1 WHERE title = ?2")
 const deletePost = database.query("DELETE FROM posts WHERE title = ?1");
 const latestPost = database.query("SELECT title, body FROM posts ORDER BY rowid DESC LIMIT 1");
 const app = new Hono();
+
+app.use("/posts/*", cors({allowHeaders: ["Content-Type"]}));
 
 app.get("/posts", context => context.json({posts: posts.all()}));
 app.get("/posts/:title", context => context.json({
@@ -58,6 +61,27 @@ describe("bounded SQLite Hono adapter reference", () => {
       body: "deleted",
     });
     expect(await json("GET", "/posts/Night")).toEqual({status: 200, body: {post: null}});
+  });
+
+  test("matches the native default-origin CORS and preflight contract", async () => {
+    const response = await app.request("/posts");
+    expect(response.headers.get("access-control-allow-origin")).toBe("*");
+
+    const preflight = await app.request("/posts", {
+      method: "OPTIONS",
+      headers: {
+        origin: "https://example.com",
+        "access-control-request-headers": "Content-Type",
+        "access-control-request-method": "POST",
+      },
+    });
+    expect(preflight.status).toBe(204);
+    expect(preflight.headers.get("access-control-allow-origin")).toBe("*");
+    expect(preflight.headers.get("access-control-allow-methods")).toBe(
+      "GET,HEAD,PUT,POST,DELETE,PATCH",
+    );
+    expect(preflight.headers.get("access-control-allow-headers")).toBe("Content-Type");
+    expect(preflight.headers.get("vary")).toBe("Access-Control-Request-Headers");
   });
 });
 

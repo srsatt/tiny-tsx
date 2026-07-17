@@ -381,7 +381,7 @@ function summarizeRoutes(
   if (routes?.kind !== "array") {
     return [];
   }
-  return routes.items.flatMap((candidateRoute, routeIndex) => {
+  const summarized = routes.items.flatMap((candidateRoute, routeIndex) => {
     if (candidateRoute.kind !== "record") {
       return [];
     }
@@ -428,22 +428,30 @@ function summarizeRoutes(
         ? parameterValidations(middleware)
         : {parameterValidations: installedValidations}),
     };
-    if (response?.kind === "routeChoice") {
-      return [
+    const selectedRoutes = response?.kind === "routeChoice"
+      ? [
         ...[...response.cases].map(([key, selected]) => ({
           ...route,
           path: specializeRoutePath(path.value, response.name, key),
           response: selected,
         })),
         {...route, response: response.fallback},
-      ];
-    }
-    return [{...route, ...(response === undefined ? {} : {response})}];
+      ]
+      : [{...route, ...(response === undefined ? {} : {response})}];
+    const cors = middleware.map(closedCors).find(candidate => candidate !== undefined);
+    return cors === undefined || response === undefined || !isSupportedHttpMethod(method.value)
+      || method.value === "OPTIONS"
+      ? selectedRoutes
+      : [...selectedRoutes, corsPreflightRoute(route, cors)];
   });
+  return summarized.filter((route, index, all) =>
+    all.findIndex(candidate => candidate.method === route.method && candidate.path === route.path)
+      === index
+  );
 }
 
 function isSupportedHttpMethod(method: string): boolean {
-  return ["GET", "POST", "PUT", "DELETE"].includes(method);
+  return ["GET", "POST", "PUT", "DELETE", "OPTIONS"].includes(method);
 }
 
 function parameterValidations(
@@ -612,6 +620,11 @@ function evaluateRouteHandler(
       });
       middlewareContext.fields.set("#res", cloneResponse(response));
       middlewareContext.fields.set("finalized", {kind: "boolean", value: true});
+      const cors = closedCors(middlewareHandler);
+      if (cors !== undefined) {
+        applyCorsHeaders(response, cors);
+        continue;
+      }
       const tag = closedEntityTag(middlewareHandler, response);
       if (tag !== undefined && entityTag === undefined) {
         response.headers.set("etag", {name: "ETag", value: tag});
@@ -725,6 +738,116 @@ function evaluateRouteHandler(
           notModified: evaluatedResponse(entityTag.notModified, []),
         },
       }),
+  };
+}
+
+interface ClosedCors {
+  allowMethods: string[];
+  allowHeaders: string[];
+  exposeHeaders: string[];
+  credentials: boolean;
+  maxAge?: number;
+}
+
+function closedCors(middleware: Value & {kind: "closure"}): ClosedCors | undefined {
+  const module = middleware.module.path.replaceAll("\\", "/");
+  if (
+    !module.endsWith("/middleware/cors/index.ts")
+    || !ts.isFunctionExpression(middleware.expression)
+    || middleware.expression.name?.text !== "cors"
+  ) {
+    return undefined;
+  }
+  const options = middleware.environment.get("opts");
+  if (options?.kind !== "record") return undefined;
+  const origin = options.fields.get("origin");
+  const allowMethods = closedStringArray(options.fields.get("allowMethods"));
+  const allowHeaders = closedStringArray(options.fields.get("allowHeaders"));
+  const exposeHeaders = closedStringArray(options.fields.get("exposeHeaders"));
+  const credentials = options.fields.get("credentials");
+  const maxAge = options.fields.get("maxAge");
+  if (
+    origin?.kind !== "string"
+    || origin.value !== "*"
+    || allowMethods === undefined
+    || allowHeaders === undefined
+    || exposeHeaders === undefined
+    || credentials !== undefined && credentials.kind !== "undefined"
+      && credentials.kind !== "boolean"
+    || maxAge !== undefined && maxAge.kind !== "undefined"
+      && (maxAge.kind !== "number" || !Number.isSafeInteger(maxAge.value) || maxAge.value < 0)
+  ) {
+    return undefined;
+  }
+  return {
+    allowMethods,
+    allowHeaders,
+    exposeHeaders,
+    credentials: credentials?.kind === "boolean" && credentials.value,
+    ...(maxAge?.kind === "number" ? {maxAge: maxAge.value} : {}),
+  };
+}
+
+function closedStringArray(value: Value | undefined): string[] | undefined {
+  if (value?.kind !== "array" || value.items.some(item => item.kind !== "string")) {
+    return undefined;
+  }
+  return value.items.map(item => item.kind === "string" ? item.value : "");
+}
+
+function applyCorsHeaders(response: Value & {kind: "response"}, cors: ClosedCors): void {
+  response.headers.set("access-control-allow-origin", {
+    name: "Access-Control-Allow-Origin",
+    value: "*",
+  });
+  if (cors.credentials) {
+    response.headers.set("access-control-allow-credentials", {
+      name: "Access-Control-Allow-Credentials",
+      value: "true",
+    });
+  }
+  if (cors.exposeHeaders.length > 0) {
+    response.headers.set("access-control-expose-headers", {
+      name: "Access-Control-Expose-Headers",
+      value: cors.exposeHeaders.join(","),
+    });
+  }
+}
+
+function corsPreflightRoute(
+  route: Omit<EvaluatedRoute, "response">,
+  cors: ClosedCors,
+): EvaluatedRoute {
+  const headers: Array<{name: string; value: string}> = [{
+    name: "Access-Control-Allow-Origin",
+    value: "*",
+  }];
+  if (cors.credentials) {
+    headers.push({name: "Access-Control-Allow-Credentials", value: "true"});
+  }
+  if (cors.exposeHeaders.length > 0) {
+    headers.push({name: "Access-Control-Expose-Headers", value: cors.exposeHeaders.join(",")});
+  }
+  if (cors.allowMethods.length > 0) {
+    headers.push({name: "Access-Control-Allow-Methods", value: cors.allowMethods.join(",")});
+  }
+  if (cors.allowHeaders.length > 0) {
+    headers.push({name: "Access-Control-Allow-Headers", value: cors.allowHeaders.join(",")});
+    headers.push({name: "Vary", value: "Access-Control-Request-Headers"});
+  }
+  if (cors.maxAge !== undefined) {
+    headers.push({name: "Access-Control-Max-Age", value: String(cors.maxAge)});
+  }
+  return {
+    ...route,
+    method: "OPTIONS",
+    response: {
+      kind: "text",
+      body: "",
+      status: 204,
+      contentType: "",
+      headers,
+    },
   };
 }
 

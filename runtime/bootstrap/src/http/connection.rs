@@ -40,7 +40,7 @@ pub(super) fn handle_connection(
         let Some((method, target, version)) = parse_request_line(&head) else {
             return write_terminal_response(stream, 400, b"bad request");
         };
-        if !matches!(method, b"GET" | b"POST" | b"PUT" | b"DELETE") {
+        if !matches!(method, b"GET" | b"POST" | b"PUT" | b"DELETE" | b"OPTIONS") {
             return write_terminal_response(stream, 405, b"method not allowed");
         }
 

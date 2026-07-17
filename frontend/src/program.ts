@@ -411,7 +411,7 @@ function lowerApplicationInitialization(
       rejected: lowerGuardedResponse(validation.rejected, route.path, strings, workers, span),
     }));
     return {
-      method: route.method as "GET" | "POST" | "PUT" | "DELETE",
+      method: route.method as "GET" | "POST" | "PUT" | "DELETE" | "OPTIONS",
       path: route.path,
       ...responseHeaders,
       ...(basicAuthorization === undefined ? {} : {basicAuthorization}),
@@ -486,8 +486,8 @@ function lowerApplicationInitialization(
 
 function isSupportedHttpMethod(
   method: string,
-): method is "GET" | "POST" | "PUT" | "DELETE" {
-  return ["GET", "POST", "PUT", "DELETE"].includes(method);
+): method is "GET" | "POST" | "PUT" | "DELETE" | "OPTIONS" {
+  return ["GET", "POST", "PUT", "DELETE", "OPTIONS"].includes(method);
 }
 
 function emptyMemoryReport(): MemoryReport {

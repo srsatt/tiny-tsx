@@ -26,6 +26,7 @@ test("serializes an in-memory SQLite owner and recovers from SQL errors", async 
   await waitForServer(port, server);
 
   await assertResponse(port, "/schema", 200, "ready");
+  await assertCors(port);
   await assertGet(port, "/posts", 200, '{"posts":[]}');
   await assertGet(port, "/first", 200, '{"post":null}');
   await assertResponse(port, "/seed", 201, "created");
@@ -77,7 +78,9 @@ test("assembles the SQLite owner tracer for Linux arm64", () => {
     "run", "-q", "-p", "tinytsx", "--", "check", entry,
     "--emit-asm", "--target", "aarch64-unknown-linux-gnu",
     "--alias", "hono=vendor/hono/src/index.ts",
+    "--alias", "hono/cors=vendor/hono/src/middleware/cors/index.ts",
     "--api", "hono=tests/compat/hono/api.d.ts",
+    "--api", "hono/cors=tests/compat/hono/cors-api.d.ts",
   ], {cwd: repository, encoding: "utf8"});
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /tinytsx_sqlite_execute_batch/);
@@ -93,7 +96,9 @@ function build(binary, port) {
     "--output", binary,
     "--port", String(port),
     "--alias", "hono=vendor/hono/src/index.ts",
+    "--alias", "hono/cors=vendor/hono/src/middleware/cors/index.ts",
     "--api", "hono=tests/compat/hono/api.d.ts",
+    "--api", "hono/cors=tests/compat/hono/cors-api.d.ts",
   ], {cwd: repository, encoding: "utf8"});
 }
 
@@ -125,6 +130,31 @@ async function assertRawJson(port, pathname, method, value, status, body) {
   });
   assert.equal(response.status, status);
   assert.equal(await response.text(), body);
+}
+
+async function assertCors(port) {
+  const response = await fetch(`http://127.0.0.1:${port}/posts`);
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("access-control-allow-origin"), "*");
+  assert.deepEqual(await response.json(), {posts: []});
+
+  const preflight = await fetch(`http://127.0.0.1:${port}/posts`, {
+    method: "OPTIONS",
+    headers: {
+      origin: "https://example.com",
+      "access-control-request-headers": "Content-Type",
+      "access-control-request-method": "POST",
+    },
+  });
+  assert.equal(preflight.status, 204);
+  assert.equal(preflight.headers.get("access-control-allow-origin"), "*");
+  assert.equal(
+    preflight.headers.get("access-control-allow-methods"),
+    "GET,HEAD,PUT,POST,DELETE,PATCH",
+  );
+  assert.equal(preflight.headers.get("access-control-allow-headers"), "Content-Type");
+  assert.equal(preflight.headers.get("vary"), "Access-Control-Request-Headers");
+  assert.equal(await preflight.text(), "");
 }
 
 async function waitForServer(port, server) {

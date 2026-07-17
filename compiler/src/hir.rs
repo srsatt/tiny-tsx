@@ -511,11 +511,14 @@ impl Program {
         }
         if self.handlers.is_empty()
             || self.handlers.iter().any(|handler| {
-                !matches!(handler.method.as_str(), "GET" | "POST" | "PUT" | "DELETE")
+                !matches!(
+                    handler.method.as_str(),
+                    "GET" | "POST" | "PUT" | "DELETE" | "OPTIONS"
+                )
             })
         {
             return Err(
-                "HIR must contain at least one GET/POST/PUT/DELETE handler and no other methods"
+                "HIR must contain at least one GET/POST/PUT/DELETE/OPTIONS handler and no other methods"
                     .to_owned(),
             );
         }

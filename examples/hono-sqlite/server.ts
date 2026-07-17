@@ -1,5 +1,6 @@
 import {serve} from "@hono/node-server";
 import {Hono} from "hono";
+import {cors} from "hono/cors";
 import {Database} from "tinytsx:sqlite";
 
 const database = new Database(":memory:");
@@ -10,6 +11,8 @@ const createPost = database.prepare("INSERT INTO posts (title, body) VALUES (?1,
 const updatePost = database.prepare("UPDATE posts SET body = ?1 WHERE title = ?2");
 const latestPost = database.prepare("SELECT title, body FROM posts ORDER BY rowid DESC LIMIT 1");
 const app = new Hono();
+
+app.use("/posts/*", cors({allowHeaders: ["Content-Type"]}));
 
 app.post("/schema", async context => {
   await database.exec("CREATE TABLE IF NOT EXISTS posts (title TEXT PRIMARY KEY, body TEXT)");
