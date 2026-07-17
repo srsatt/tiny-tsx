@@ -6,6 +6,24 @@ use std::{
 use super::{ApplicationPool, CallError, PostError, ReplyError};
 
 #[test]
+fn ten_thousand_idle_actors_do_not_preallocate_mailbox_slots_or_threads() {
+    let pool = ApplicationPool::new(2, 64, 64, |_| (), |_, value: usize| value)
+        .expect("create application pool");
+    let actors = (0..10_000).map(|_| pool.spawn()).collect::<Vec<_>>();
+
+    assert_eq!(pool.executor_count(), 2);
+    assert_eq!(actors.first().map(|actor| actor.id()), Some(0));
+    assert_eq!(actors.last().map(|actor| actor.id()), Some(9_999));
+    assert!(actors.iter().all(|actor| {
+        let mailbox = super::lock(&actor.control.mailbox);
+        mailbox.messages.capacity() == 0 && mailbox.capacity == 64
+    }));
+
+    drop(actors);
+    pool.join();
+}
+
+#[test]
 fn preserves_order_and_isolated_worker_state() {
     let pool = ApplicationPool::new(
         2,

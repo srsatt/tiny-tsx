@@ -201,7 +201,7 @@ impl<S, M, R> WorkerControl<S, M, R> {
             id,
             state: Mutex::new(state),
             mailbox: Mutex::new(Mailbox {
-                messages: VecDeque::with_capacity(mailbox_capacity),
+                messages: VecDeque::new(),
                 capacity: mailbox_capacity,
                 scheduled: false,
             }),

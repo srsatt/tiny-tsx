@@ -50,7 +50,11 @@ Every actor has one FIFO mailbox. The default and release maximum capacity is
 64 queued messages; `mailboxCapacity` may lower it to a compile-time integer in
 the range 1 through 64. A single drain owns the actor state, while separate
 actors may run on different application-executor threads. Actor count does not
-change the executor thread count.
+change the executor thread count. Idle actors allocate no message-slot buffer;
+the deque grows only when the first message is posted while its logical capacity
+remains bounded. A native structural regression creates 10,000 idle actors,
+pins two executors and sequential identities, and verifies zero allocated
+mailbox slots before disposal.
 
 `ask(message)` enqueues in FIFO order, waits for that message's reply, and
 renders the reply into request-owned response memory. `tell(message)` enqueues
@@ -87,6 +91,6 @@ assembles for Linux arm64.
 
 Before actors can carry general application state, TinyTSX still needs bounded
 copying for primitives, closed records, and bounded arrays; per-actor scale and
-fairness measurements; timeout/cancellation policy; panic and isolation tests;
-and persistence for arbitrary actor behaviors outside the counter
-specialization.
+fairness measurements (the 10,000-actor structural test is not an RSS result);
+timeout/cancellation policy; panic and isolation tests; and persistence for
+arbitrary actor behaviors outside the counter specialization.

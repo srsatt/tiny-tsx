@@ -59,6 +59,12 @@ check, empty prepared query, and JSON envelope through one application owner.
 Neither result covers actor supervision, disk I/O, writes, contention, or
 non-empty SQLite result copying.
 
+Idle logical actors now allocate their mailbox deque lazily instead of reserving
+the full 64-message bound at spawn. A native regression proves 10,000 idle
+actors retain zero message-slot capacity and use the configured two executors.
+This is structural allocation evidence, not a published bytes-per-actor or peak
+RSS measurement; those controlled 1,000/10,000-actor runs remain required.
+
 ## Earlier connection-close and compatibility evidence
 
 ## Real JSX SSR result

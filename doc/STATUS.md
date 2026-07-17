@@ -845,6 +845,16 @@ produces and serves a native Mach-O executable from the example TSX source.
 - Non-terminal catch-alls, non-trailing optional parameters, and general regular
   expression constraints remain unsupported.
 
+### Lazy idle actor mailboxes (2026-07-17)
+
+- Logical actors no longer reserve the complete 64-message deque at spawn; idle
+  mailbox storage is allocated only on the first post while the capacity check
+  remains unchanged.
+- A native worker-runtime test creates and disposes 10,000 actors, verifies
+  sequential identities, two fixed executors, and zero idle message slots.
+  Bytes-per-actor RSS and hot-mailbox fairness still require controlled
+  performance runs before broader scale claims.
+
 Verification:
 
 ```bash

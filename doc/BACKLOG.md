@@ -470,6 +470,10 @@ adds an explicit application acceptance test.
 - [ ] Measure 1,000 and 10,000 idle/local actors, publish bytes per actor and
       thread count, and prove cross-actor parallelism and fairness under a hot
       mailbox before raising the documented actor-count limit.
+  - 2026-07-17: idle mailboxes no longer preallocate all 64 message slots. A
+    native structural test creates and disposes 10,000 actors with zero idle
+    deque capacity and two fixed executors. Controlled RSS/bytes-per-actor and
+    hot-mailbox fairness measurements remain open.
 - [ ] Harden on-disk SQLite opens against symlink replacement and path races
       across compilation, startup, and sidecar-file creation.
   - 2026-07-17: all runtime connections add SQLite's native
