@@ -424,8 +424,9 @@ produces and serves a native Mach-O executable from the example TSX source.
   length. The complete array-spread/apply case copies three values into a
   distinct native argument buffer and checks callback argument length/order and
   call count. The complete subtraction case executes five checks using runtime
-  local and closed record-property slots. The other eight cases remain
-  syntax-only and are not conformance results.
+  local and closed record-property slots. The complete record-membership case
+  compares the queried property bytes against its native field-name table. The
+  other seven cases remain syntax-only and are not conformance results.
 - The dedicated native API suite currently covers Request method/path/query
   views, allocation-free form-decoded query-name presence, elapsed-header
   formatting, and exact-fit, OOM, and invalid response-writer behavior. Query

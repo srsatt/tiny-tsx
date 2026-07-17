@@ -62,6 +62,19 @@ pub fn emit(program: &Test262Program, target: Target) -> Result<String, String> 
             Test262Assertion::NumericSubtractionProgram { operations, .. } => {
                 emit_numeric_subtraction_program(&mut assembly, index, operations)
             }
+            Test262Assertion::RecordMembershipProgram {
+                fields,
+                property,
+                expected,
+                ..
+            } => emit_record_membership_program(
+                &mut assembly,
+                target,
+                index,
+                fields,
+                property,
+                *expected,
+            ),
         }
     }
     writeln!(assembly, "    mov w0, #0").unwrap();
@@ -74,8 +87,24 @@ pub fn emit(program: &Test262Program, target: Target) -> Result<String, String> 
     for (index, assertion) in program.assertions.iter().enumerate() {
         let Test262Assertion::SameValueString {
             actual, expected, ..
-        } = assertion
-        else {
+        } = assertion else {
+            if let Test262Assertion::RecordMembershipProgram {
+                fields, property, ..
+            } = assertion
+            {
+                writeln!(assembly, ".p2align 3").unwrap();
+                writeln!(assembly, "Ltinytsx_test262_membership_property_{index}:").unwrap();
+                emit_bytes(&mut assembly, property.as_bytes());
+                for (field_index, field) in fields.iter().enumerate() {
+                    writeln!(assembly, ".p2align 3").unwrap();
+                    writeln!(
+                        assembly,
+                        "Ltinytsx_test262_membership_field_{index}_{field_index}:"
+                    )
+                    .unwrap();
+                    emit_bytes(&mut assembly, field.as_bytes());
+                }
+            }
             continue;
         };
         writeln!(assembly, ".p2align 3").unwrap();
@@ -86,6 +115,54 @@ pub fn emit(program: &Test262Program, target: Target) -> Result<String, String> 
         emit_bytes(&mut assembly, expected.as_bytes());
     }
     Ok(assembly)
+}
+
+fn emit_record_membership_program(
+    assembly: &mut String,
+    target: Target,
+    assertion_index: usize,
+    fields: &[String],
+    property: &str,
+    expected: bool,
+) {
+    let done = format!("Ltinytsx_test262_membership_{assertion_index}_done");
+    emit_immediate(assembly, "x9", 0);
+    for (field_index, field) in fields.iter().enumerate() {
+        if field.len() != property.len() {
+            continue;
+        }
+        let next = format!("Ltinytsx_test262_membership_{assertion_index}_{field_index}_next");
+        let matched = format!("Ltinytsx_test262_membership_{assertion_index}_{field_index}_matched");
+        emit_address(
+            assembly,
+            target,
+            "x0",
+            &format!("Ltinytsx_test262_membership_property_{assertion_index}"),
+        );
+        emit_address(
+            assembly,
+            target,
+            "x1",
+            &format!("Ltinytsx_test262_membership_field_{assertion_index}_{field_index}"),
+        );
+        emit_immediate(assembly, "x2", property.len() as u64);
+        writeln!(assembly, "{matched}:").unwrap();
+        writeln!(assembly, "    cbz x2, {done}").unwrap();
+        writeln!(assembly, "    ldrb w3, [x0], #1").unwrap();
+        writeln!(assembly, "    ldrb w4, [x1], #1").unwrap();
+        writeln!(assembly, "    cmp w3, w4").unwrap();
+        writeln!(assembly, "    b.ne {next}").unwrap();
+        writeln!(assembly, "    sub x2, x2, #1").unwrap();
+        writeln!(assembly, "    b {matched}").unwrap();
+        writeln!(assembly, "{next}:").unwrap();
+    }
+    writeln!(assembly, "    b Ltinytsx_test262_membership_{assertion_index}_checked").unwrap();
+    writeln!(assembly, "{done}:").unwrap();
+    emit_immediate(assembly, "x9", 1);
+    writeln!(assembly, "Ltinytsx_test262_membership_{assertion_index}_checked:").unwrap();
+    emit_immediate(assembly, "x10", u64::from(expected));
+    writeln!(assembly, "    cmp x9, x10").unwrap();
+    writeln!(assembly, "    b.ne Ltinytsx_test262_fail").unwrap();
 }
 
 fn emit_numeric_subtraction_program(

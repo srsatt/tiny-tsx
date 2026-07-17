@@ -200,10 +200,11 @@ npm run test:native-api
 npm run test:wasm
 ```
 
-Test262 evidence is recorded per case. Six complete cases currently execute as
+Test262 evidence is recorded per case. Seven complete cases currently execute as
 standalone native Mach-O assertion programs: `typeof undefined`, `typeof
 bigint`, the bounded `for`/throw/catch counter, and the bounded dense-array
-`unshift`, array-spread/apply, and numeric-subtraction programs. Eight other
+`unshift`, array-spread/apply, numeric-subtraction, and record-membership
+programs. Seven other
 allowlisted cases remain syntax-only and are not
 reported as semantic conformance. Three complete selected URLSearchParams WPT
 files execute natively. See `doc/COMPATIBILITY.md` for pins, test layers, and

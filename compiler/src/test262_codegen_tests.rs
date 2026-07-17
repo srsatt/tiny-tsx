@@ -108,3 +108,20 @@ fn emits_runtime_numeric_binding_loads_and_subtraction() {
     assert!(assembly.contains("ldr x9, [sp, #0]"));
     assert!(assembly.contains("sub x9, x9, x10"));
 }
+
+#[test]
+fn emits_runtime_record_field_name_membership() {
+    let mut program = program(Target::LinuxArm64);
+    program.assertions = vec![Test262Assertion::RecordMembershipProgram {
+        fields: vec!["fooProp".to_owned()],
+        property: "fooProp".to_owned(),
+        expected: true,
+        span: span(),
+    }];
+
+    let assembly = emit(&program, Target::LinuxArm64).unwrap();
+
+    assert!(assembly.contains("Ltinytsx_test262_membership_property_0:"));
+    assert!(assembly.contains("Ltinytsx_test262_membership_field_0_0:"));
+    assert!(assembly.contains("ldrb w3, [x0], #1"));
+}

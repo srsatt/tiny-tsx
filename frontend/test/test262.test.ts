@@ -114,3 +114,18 @@ test("lowers the complete pinned numeric subtraction/GetValue Test262 case", () 
     },
   ]);
 });
+
+test("lowers the complete pinned closed-record membership Test262 case", () => {
+  const program = compileTest262Entry(path.join(
+    repository,
+    "vendor/test262/test/language/expressions/in/S8.12.6_A1.js",
+  ));
+
+  assert.deepEqual(program.assertions, [{
+    kind: "recordMembershipProgram",
+    fields: ["fooProp"],
+    property: "fooProp",
+    expected: true,
+    span: program.assertions[0]?.span,
+  }]);
+});

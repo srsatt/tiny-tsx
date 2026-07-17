@@ -49,6 +49,12 @@ pub enum Test262Assertion {
         operations: Vec<NumericSubtractionOperation>,
         span: SourceSpan,
     },
+    RecordMembershipProgram {
+        fields: Vec<String>,
+        property: String,
+        expected: bool,
+        span: SourceSpan,
+    },
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -145,11 +151,28 @@ impl Test262Program {
                 Test262Assertion::NumericSubtractionProgram {
                     slots, operations, ..
                 } => validate_numeric_subtraction(*slots, operations)?,
+                Test262Assertion::RecordMembershipProgram {
+                    fields, property, ..
+                } => validate_record_membership(fields, property)?,
                 _ => {}
             }
         }
         Ok(())
     }
+}
+
+fn validate_record_membership(fields: &[String], property: &str) -> Result<(), String> {
+    if fields.is_empty() || fields.len() > 16 || property.is_empty() || property.len() > 256 {
+        return Err("Test262 record membership exceeds its closed field limits".to_owned());
+    }
+    let mut unique = std::collections::HashSet::new();
+    if fields
+        .iter()
+        .any(|field| field.is_empty() || field.len() > 256 || !unique.insert(field))
+    {
+        return Err("Test262 record membership fields must be unique bounded names".to_owned());
+    }
+    Ok(())
 }
 
 fn validate_numeric_subtraction(

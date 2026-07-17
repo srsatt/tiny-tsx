@@ -468,6 +468,12 @@ property operands at runtime, subtract, and branch to a failing process status
 on mismatch. This is exact integer/GetValue evidence; ordinary application
 functions still lack general numeric parameters, locals, and return values.
 
+The complete pinned closed-record membership program constructs a bounded
+field-name table in the native artifact and compares the queried property bytes
+against it at runtime before checking the expected boolean. It proves the exact
+own-field `in` assertion; prototype traversal, deletion, dynamic records, and
+ordinary application-code membership remain outside the claim.
+
 The allowlisted `language/expressions/typeof/undefined.js` case is the first
 `mode: native` Test262 entry. `tinytsx test262 <case> --output <binary>` parses
 the untouched upstream source and lowers its two top-level

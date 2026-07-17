@@ -33,6 +33,10 @@ fn compiles_and_runs_native_test262_programs() {
             "numeric-subtraction",
             "vendor/test262/test/language/expressions/subtraction/S11.6.2_A2.1_T1.js",
         ),
+        (
+            "record-membership",
+            "vendor/test262/test/language/expressions/in/S8.12.6_A1.js",
+        ),
     ] {
         compile_and_run(&root, &directory.join(name), case);
     }
