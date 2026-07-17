@@ -77,6 +77,20 @@ implementation: dynamic bodies, runtime-selected header names, arbitrary
 dynamic header values, general init objects, iteration, body consumption, and
 streams remain pending.
 
+The [Fetch `BodyInit` extraction
+algorithm](https://fetch.spec.whatwg.org/#bodyinit-safely-extract) assigns
+`text/plain;charset=UTF-8` to a string body, while a `ReadableStream` has no
+inferred type. Response initialization retains an explicit `Content-Type` from
+`ResponseInit` and only synthesizes the body type when that header is absent.
+The pinned upstream
+`fetch/api/response/response-init-contenttype.any.js` file records those exact
+assertions. Hono's post-`next()` `Context.header()` path constructs
+`new Response(c.res.body, c.res)`: the stream itself adds no new type, while the
+original response header supplied as init remains. TinyTSX therefore preserves
+`text/plain;charset=UTF-8`. Bun 1.3.13 omits the original string-body header and
+its HTTP adapter emits `application/octet-stream`; that measured Bun deviation
+is visible in the benchmark contract and is not copied into TinyTSX.
+
 An explicit no-content-type ABI value supports Hono's closed redirect response.
 The HTTP writer emits `302 Found`, `Location`, and `Content-Length: 0` without
 inventing `application/octet-stream` or another `Content-Type` header.
@@ -104,6 +118,14 @@ The selected `fetch/api/response/response-init-001.any.js` source is pinned at
 the same WPT revision. Only its status-propagation idea for the closed 201 case
 is marked native-derived. The wider status/statusText/default/SameObject cases
 in that file are not executed or claimed.
+
+The selected `fetch/api/response/response-init-contenttype.any.js` source is
+also pinned by revision and digest. Its string-body default and explicit-header
+retention are classified as `native-derived`: the exact Hono response-time
+middleware forces the finalized-response stream clone and native HTTP asserts
+the retained text type. Blob, buffer, FormData, URLSearchParams, and standalone
+ReadableStream construction in the upstream file remain outside the native
+claim.
 
 The complete pinned `url/urlsearchparams-get.any.js`,
 `url/urlsearchparams-has.any.js`, and

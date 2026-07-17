@@ -25,7 +25,9 @@ Both verify status, content length, response bytes, powered-by behavior, and a
 numeric response-time header before collecting samples. Target-specific content
 types are recorded instead of hidden: after the example's response-time
 middleware clones the body, TinyTSX preserves `text/plain;charset=UTF-8` while
-Bun 1.3.13 serves the stream as `application/octet-stream`.
+Bun 1.3.13 serves the stream as `application/octet-stream`. The pinned Fetch
+WPT requires the TinyTSX value for the original string body; the Bun value is a
+visible reference-runtime deviation, not the portable contract.
 
 This is deliberately not presented as a general TypeScript performance result.
 TinyTSX uses the worker count selected with `--workers`; the harness uses

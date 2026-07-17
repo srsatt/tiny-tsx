@@ -57,7 +57,7 @@ cannot pass without it.
 
 Acceptance criteria are, in order:
 
-- [ ] Resolve the Hono response-clone `Content-Type` difference from Fetch/WPT
+- [x] Resolve the Hono response-clone `Content-Type` difference from Fetch/WPT
   evidence and update the affected native/reference contract;
 - [ ] Finish and test stable `TINY15xx` diagnostics for unavailable built-ins,
   denied capabilities, exceeded alpha limits, and unsupported actor/SQLite
@@ -131,7 +131,7 @@ prominent.
 - [ ] For every alpha example, build a native server, exercise success and error
       HTTP paths, compare portable behavior with Bun or another declared
       reference, and assemble the Linux-arm64 output in cross-host tests.
-- [ ] Resolve the known Hono response-clone Content-Type difference with direct
+- [x] Resolve the known Hono response-clone Content-Type difference with direct
       Web-platform evidence and pin the decision in every affected contract.
 - [x] Replace the open-ended “broader Hono tests” task with an explicit allowlist
       of upstream Hono behavior files exercised by the alpha matrix.

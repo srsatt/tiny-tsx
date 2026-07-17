@@ -68,9 +68,13 @@ startup here without sacrificing throughput for a fully closed SSR page.
 
 The response status, six body bytes, content length, powered-by header, and
 numeric response-time header agree. Content type does not: TinyTSX returns
-`text/plain;charset=UTF-8`; Bun returns `application/octet-stream` after Hono's
-response-time middleware clones the finalized body as a stream. The harness
-records this difference instead of calling the wire responses identical.
+`text/plain;charset=UTF-8`; Bun 1.3.13 returns `application/octet-stream`.
+Fetch assigns the text type when the original string body is extracted, and
+Hono's later stream-body clone retains it through the response init headers.
+The pinned WPT `response-init-contenttype.any.js` source and native Hono E2E
+enforce TinyTSX's standard behavior. Bun omits the initial header, so its server
+adapter chooses the binary type. The harness records this runtime deviation
+instead of calling the wire responses identical.
 
 ## Results
 
@@ -251,11 +255,10 @@ run both cover that correction. Raw reports are
 
 ### P0 — make the comparison semantically and mechanically fair
 
-1. **Resolve response-clone content type semantics.** Add a direct WPT-derived
-   `Response` clone/body-stream test and decide whether TinyTSX follows the Web
-   standard, Bun compatibility, or exposes the difference explicitly. Exit:
-   the choice is documented and both the Hono E2E and benchmark contract enforce
-   it.
+1. **Resolve response-clone content type semantics — complete.** TinyTSX follows
+   Fetch/WPT for string-body type synthesis and header retention through Hono's
+   stream clone. The pinned WPT source, native response-time E2E, and explicit
+   Bun 1.3.13 benchmark difference enforce the decision.
 2. **Implement the reusable worker pool and bounded HTTP dispatch.** Make
    `--workers` real, preserve per-request arenas, and define overload behavior.
    Exit: concurrency and saturation behavior are proven independently of HTTP,

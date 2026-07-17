@@ -31,6 +31,23 @@ produces and serves a native Mach-O executable from the example TSX source.
   a successful remote Linux run is still required before the Linux artifact is
   marked verified.
 
+### Fetch-standard response content type (2026-07-17)
+
+- The Fetch BodyInit algorithm and pinned WPT
+  `response-init-contenttype.any.js` establish that a string response starts
+  with `Content-Type: text/plain;charset=UTF-8`, while a stream adds no inferred
+  type and explicit init headers remain authoritative.
+- Hono's exact post-`next()` response-time path turns the finalized response
+  body into a stream but supplies the prior response as init, so the original
+  text type remains. The renamed native response-time E2E exercises that path
+  and asserts both the content type and numeric timing header.
+- Bun 1.3.13 was reproduced with no header on `new Response("Hono!!")`; its HTTP
+  adapter subsequently emits `application/octet-stream`. TinyTSX keeps the
+  Web-standard value, while the benchmark harness records Bun's target-specific
+  deviation rather than declaring the wire responses identical.
+- Verification: `npm run test:wpt-intake`, the focused compiler E2E, and
+  `npm run test:benchmarks`.
+
 ### Persistent counter actor (2026-07-17)
 
 - `spawn(..., {persistence: {database, key}})` connects the bounded `i64`
@@ -273,8 +290,9 @@ produces and serves a native Mach-O executable from the example TSX source.
   1/8/32/64/128 show TinyTSX at 0.97–0.99x Bun throughput. Median startup is
   9.77 ms versus 19.91 ms; idle RSS is 5.84 MiB versus 41.73 MiB; post-warm-up
   RSS is 6.09 MiB versus 70.41 MiB. Both plateau near 31k requests/second under
-  connection-close HTTP. The response Content-Type difference and ordered next
-  experiments are recorded in `doc/PERFORMANCE.md`.
+  connection-close HTTP. The Fetch/WPT decision for the visible Bun response
+  Content-Type deviation and ordered next experiments are recorded in
+  `doc/PERFORMANCE.md`.
 - Hono and Test262 are shallow Git submodules pinned respectively to Hono
   `v4.12.30` (`b2ae3a22`) and Test262 `f2d14356`.
 - The complete upstream Hono basic example is pinned as a third shallow

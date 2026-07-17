@@ -243,6 +243,16 @@ body. The complete 34-module evaluation now retains 21 routes, closes 16
 concrete responses, applies timing to the 15 successful/non-finalization paths,
 and reports no initialization diagnostics.
 
+The clone's `Content-Type` follows Fetch rather than Bun-specific server
+behavior. Fetch assigns `text/plain;charset=UTF-8` to a string `BodyInit`; when
+Hono later constructs `new Response(c.res.body, c.res)`, the stream adds no
+inferred type but the init headers retain the original text type. The pinned
+WPT `response-init-contenttype.any.js` source and the focused native
+response-time E2E enforce that decision. Bun 1.3.13 omits the initial string
+type and consequently serves `application/octet-stream`; benchmarks keep that
+reference difference explicit instead of treating it as portable Hono
+behavior.
+
 The basic example's exact `basicAuth` options are also specialized from upstream
 source. Closed `in` checks and `users.unshift()` build the credential list; HIR
 retains it as a Basic Authorization request guard. The zero-dependency runtime

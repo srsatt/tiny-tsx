@@ -68,7 +68,7 @@ WORKLOADS = {
             "bun": "application/octet-stream",
         },
         "response_differences": [
-            "Content-Type differs after Hono's response-time middleware clones the finalized body: TinyTSX preserves text/plain;charset=UTF-8; Bun 1.3.13 serves the cloned stream as application/octet-stream."
+            "Bun 1.3.13 diverges from Fetch/WPT for a string BodyInit: it omits the required text/plain;charset=UTF-8 header, so its server adapter emits application/octet-stream after Hono clones the finalized body. TinyTSX preserves the Web-standard text type."
         ],
         "path": "/",
         "scope": "complete pinned 34-module Hono basic application, GET / with poweredBy and response-time middleware; HTTP/1.1; connection close; localhost",
