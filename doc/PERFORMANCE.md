@@ -1,31 +1,65 @@
 # Performance evidence and roadmap
 
-Last updated: 2026-07-15
+Last updated: 2026-07-17
 
 ## Current conclusion
 
-TinyTSX is compelling for footprint and startup, and its lack of a JIT has not
-created a throughput penalty in either complete Hono workload. On the pinned
-Hono basic application it delivers 97–99% of Bun's request rate across
-concurrency 1–128. On the byte-identical 881-byte JSX SSR root page it ranges
-from 90% to 114% of Bun across concurrency 1–64. Both servers plateau near
-32,000 requests/second because every request opens a new TCP connection;
-transport cost still masks much of the application-code difference.
+TinyTSX is compelling for deployment and resident footprint, but the final
+eight-worker keep-alive comparison does not show throughput or tail-latency
+parity with Bun. Across the Hono basic, counter actor, and SQLite-owner routes,
+TinyTSX stays at 6.6–7.9 MiB after warm-up versus Bun at 70–124 MiB. Repeated
+startup is close at 22.6–23.8 ms versus Bun at 20.3–21.4 ms.
+
+TinyTSX reaches 0.24–0.36x Bun throughput at concurrency 1–8 and 0.41–0.69x at
+concurrency 32–64. Its ratio improves rather than collapsing under load, but
+the bounded persistent-connection affinity produces 37–46 ms p99 at
+concurrency 64 versus Bun at 0.8–1.2 ms. This makes socket fairness a clearer
+near-term optimization target than attributing the result to the absence of a
+JIT.
 
 The honest claim is therefore:
 
-- **yes for footprint:** JSX SSR uses 5.83 MiB idle and 5.98 MiB after warm-up
-  versus Bun's 42.03 MiB and 98.19 MiB;
-- **yes for normal repeated startup:** JSX SSR is 7.14 ms median versus Bun's
-  19.32 ms;
-- **parity under load:** JSX SSR is between 10% behind and 14% ahead in these
-  short samples, with near-identical latency at concurrency 64;
-- **not yet answered for CPU-heavy dynamic work:** the measured route has a
-  six-byte closed body and connection-close HTTP dominates the request cost.
+- **yes for footprint:** Bun uses 5.3–7.0x the idle RSS and 9.0–18.6x the warm
+  RSS across the release workloads;
+- **startup is a tie in practical terms:** TinyTSX is 1.3–3.5 ms slower in this
+  run, despite earlier warm-launch experiments favoring TinyTSX;
+- **no throughput-parity claim:** TinyTSX reaches 41–69% of Bun at concurrency
+  32–64 for these exact keep-alive routes;
+- **actors remain inexpensive:** the TinyTSX actor route is 12–13% below its
+  Hono control at concurrency 8–64, while the paired Bun Worker route is
+  27–31% below Bun's control;
+- **SQLite ownership is visible:** the serialized TinyTSX SQLite route is
+  23–26% below its control at concurrency 32–64, versus 2–3% for Bun's
+  synchronous SQLite route.
 
-Raw samples and the generated report are in
-`benchmarks/results/2026-07-15-m5-max-hono-complete-load.{json,md}` and
-`benchmarks/results/2026-07-15-m5-max-hono-jsx-ssr-load.{json,md}`.
+The release summary is
+`benchmarks/results/2026-07-17-m5-max-alpha-release-summary.md`; its adjacent
+basic, actor, and SQLite JSON/Markdown reports retain every sample. Earlier
+connection-close, JSX, streaming, Worker, and AI-provider evidence below is
+historical and remains useful for identifying which boundary a workload
+measures.
+
+## Alpha release comparison
+
+All three workloads use commit `0e8f53e`, one server process, eight TinyTSX
+workers, keep-alive, five startup samples, and three five-second load samples at
+concurrency 1, 8, 32, and 64. Target and concurrency order alternate, and the
+harness rejects incorrect responses before recording samples.
+
+| Workload | Tiny/Bun RPS c1 | c8 | c32 | c64 | Tiny/Bun warm RSS |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Hono basic | 0.28x | 0.28x | 0.54x | 0.55x | 6.64 / 123.61 MiB |
+| Counter actor | 0.33x | 0.36x | 0.65x | 0.69x | 6.59 / 108.08 MiB |
+| SQLite owner | 0.28x | 0.24x | 0.41x | 0.43x | 7.86 / 70.39 MiB |
+
+The control-relative percentages are end-to-end route differences rather than
+isolated primitive costs. The actor path performs a zero-delta copied-message
+ask through one persistent owner. The SQLite path performs one in-memory schema
+check, empty prepared query, and JSON envelope through one application owner.
+Neither result covers actor supervision, disk I/O, writes, contention, or
+non-empty SQLite result copying.
+
+## Earlier connection-close and compatibility evidence
 
 ## Real JSX SSR result
 

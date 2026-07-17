@@ -113,6 +113,24 @@ samples, reducing systematic warm-up, JIT, and thermal-order bias. Idle RSS is
 measured after one correctness request; post-warm-up RSS is measured after one
 second at the maximum requested concurrency.
 
+## Alpha release comparison
+
+The repeated eight-worker keep-alive release comparison is retained in
+`results/2026-07-17-m5-max-alpha-release-summary.md`, with adjacent raw JSON and
+rendered reports for `hono-basic`, `hono-actor`, and `hono-sqlite`. Each point is
+the median of three five-second samples; startup uses five samples. Run the same
+matrix with:
+
+```bash
+python3 benchmarks/scripts/run_static.py --workload hono-basic --keep-alive --workers 8
+python3 benchmarks/scripts/run_static.py --workload hono-actor --keep-alive --workers 8
+python3 benchmarks/scripts/run_static.py --workload hono-sqlite --keep-alive --workers 8
+```
+
+The summary reports actor and SQLite route-rate differences against the
+same-run Hono control. They are route-level costs, not isolated operation
+benchmarks, because the response and middleware work also differ.
+
 For credible comparative runs, connect the Mac to power, disable Low Power Mode,
 close unnecessary applications, and avoid indexing or builds while measuring.
 

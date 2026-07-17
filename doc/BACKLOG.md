@@ -85,7 +85,7 @@ Acceptance criteria are, in order:
 - [ ] Complete one successful Linux-arm64 CI release run, install the resulting
   archive outside the checkout, and retain its checksum, artifact manifest,
   version report, and HTTP-contract evidence;
-- [ ] Repeat the controlled TinyTSX/Bun release benchmark and publish startup,
+- [x] Repeat the controlled TinyTSX/Bun release benchmark and publish startup,
   idle/warm RSS, throughput, median/p99 latency, binary size, and the measured
   actor/SQLite overhead;
 - [ ] After the Linux and benchmark artifacts land, rerun the complete
@@ -312,7 +312,7 @@ Do not tag `0.1.0-alpha.1` until all of these are true:
       evidence.
 - [x] Security/resource limits and known issues for files, SQLite, actors,
       network transport, and request memory are documented and tested.
-- [ ] A repeated release benchmark records startup, idle/warm RSS, throughput,
+- [x] A repeated release benchmark records startup, idle/warm RSS, throughput,
       median/p99 latency, binary size, and actor/SQLite overhead without making
       claims broader than the measured workloads.
 

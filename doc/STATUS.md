@@ -9,6 +9,27 @@ produces and serves a native Mach-O executable from the example TSX source.
 
 ## Alpha implementation evidence
 
+### Repeated alpha release benchmark (2026-07-17)
+
+- The final controlled comparison uses the Hono basic control, one persistent
+  counter owner, and one in-memory SQLite owner on the same commit and machine:
+  eight TinyTSX workers, keep-alive, five startup samples, and three five-second
+  samples at concurrency 1/8/32/64. Response equivalence is checked before
+  measurements are accepted and every raw sample is retained.
+- TinyTSX stays at 6.59–7.86 MiB warm RSS versus Bun at 70.39–123.61 MiB. Its
+  self-contained executable is 2.23 MiB; Bun's shareable runtime is 60.15 MiB.
+  Repeated startup is close at 22.62–23.80 ms versus 20.32–21.36 ms.
+- TinyTSX reaches 0.41–0.69x Bun throughput at concurrency 32–64. The actor
+  route is 12–13% below TinyTSX's Hono control at concurrency 8–64; the SQLite
+  route is 23–26% below it at concurrency 32–64. These are route-level deltas,
+  not isolated operation costs.
+- Concurrency-64 p99 is 36.96–46.33 ms for TinyTSX versus 0.82–1.22 ms for Bun,
+  retaining connection fairness as the measured optimization priority. The
+  summary and raw artifacts are under
+  `benchmarks/results/2026-07-17-m5-max-alpha-*`.
+- Verification: `npm run test:benchmarks` (17/17) plus all three controlled
+  equivalence-checked benchmark runs.
+
 ### Installed alpha example and failure gates (2026-07-17)
 
 - Every Hono example-manifest row names native and reference scripts reachable
