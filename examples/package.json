@@ -1,0 +1,11 @@
+{
+  "name": "tinytsx-alpha-examples",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@hono/node-server": "2.0.10",
+    "@hono/zod-openapi": "1.5.1",
+    "hono": "4.12.30",
+    "zod": "4.4.3"
+  }
+}

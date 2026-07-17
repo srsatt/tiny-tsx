@@ -26,6 +26,7 @@ if (!allowDirty) {
 
 run("npm", ["run", "build:frontend"]);
 run("cargo", ["build", "--release", "-p", "tinytsx"]);
+run("npm", ["run", "test:release-runtime"]);
 
 const releaseRoot = path.join(root, "dist", "release");
 const name = `tinytsx-${version}-${target}`;
@@ -39,10 +40,13 @@ const resources = path.join(staging, "lib", "tinytsx");
 for (const file of ["Cargo.toml", "Cargo.lock", "LICENSE", "CHANGELOG.md", "THIRD_PARTY_NOTICES.md"]) {
   cpSync(path.join(root, file), path.join(resources, file));
 }
-for (const directory of ["compiler", "runtime", "sdk", "doc"]) {
+for (const directory of ["compiler", "runtime", "sdk", "doc", "examples"]) {
   cpSync(path.join(root, directory), path.join(resources, directory), {
     recursive: true,
-    filter: source => !source.split(path.sep).includes("target"),
+    filter: source => {
+      const parts = source.split(path.sep);
+      return !parts.includes("target") && !parts.includes("node_modules");
+    },
   });
 }
 mkdirSync(path.join(resources, "frontend"), {recursive: true});
@@ -55,6 +59,10 @@ cpSync(
   path.join(resources, "frontend", "node_modules", "typescript"),
   {recursive: true},
 );
+
+run("npm", ["run", "test:release-installed"], {
+  env: {...process.env, TINYTSX_RELEASE_ROOT: staging},
+});
 
 const versionOutput = run(path.join(staging, "bin", "tinytsx"), ["--version"], {encoding: "utf8"}).stdout.trim();
 if (!versionOutput.startsWith(`tinytsx ${version};`)) fail(`unexpected version output: ${versionOutput}`);

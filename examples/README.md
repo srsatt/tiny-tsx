@@ -1,0 +1,29 @@
+# TinyTSX alpha examples
+
+These examples ship inside `lib/tinytsx/examples` in the alpha archive. Copy
+the directory to a writable project, install its compile-time packages, and
+build with the installed `tinytsx` binary:
+
+```sh
+cp -R "$TINYTSX_HOME/examples" ./tinytsx-examples
+cd tinytsx-examples
+npm ci
+```
+
+The generated servers have no npm or JavaScript runtime dependency.
+
+| Example | Build command | Contract |
+| --- | --- | --- |
+| `hono-node-server/server.ts` | `tinytsx build hono-node-server/server.ts --output server --release` | Hono with the compatible `@hono/node-server` entry |
+| `tiny-serve/server.ts` | `tinytsx build tiny-serve/server.ts --output server --release` | The same entry through Hono-neutral `tinytsx:serve` |
+| `hono-zod-openapi/server.ts` | `tinytsx build hono-zod-openapi/server.ts --output server --release` | Pinned `OpenAPIHono`, `createRoute`, and `z` path validation/document generation |
+| `hono-static/server.ts` | `tinytsx build hono-static/server.ts --allow-read "$PWD/hono-static/assets" --output server --release` | Capability-scoped UTF-8 file reads |
+| `hono-sqlite/server.ts` | `tinytsx build hono-sqlite/server.ts --allow-env TINYTSX_BLOG_NAME --output server --release` | Bounded in-memory SQLite CRUD and JSON input |
+| `hono-sqlite/persistent.ts` | `tinytsx build hono-sqlite/persistent.ts --allow-read "$PWD/state" --allow-write "$PWD/state" --output server --release` | Capability-scoped on-disk SQLite and static transactions |
+| `hono-actors/server.ts` | `tinytsx build hono-actors/server.ts --output server --release` | Local bounded counter actor |
+| `hono-actors/persistent.ts` | `tinytsx build hono-actors/persistent.ts --allow-read "$PWD/state" --allow-write "$PWD/state" --output server --release` | SQLite-backed counter persistence |
+
+Create the `state` directory before building a persistent example. Each source
+file demonstrates only the bounded contract described in `doc/ALPHA.md`; it is
+not evidence of general TypeScript, Hono, Node.js, Zod, SQLite, or actor
+compatibility.

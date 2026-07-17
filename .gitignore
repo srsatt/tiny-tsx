@@ -1,5 +1,6 @@
 /target/
 /node_modules/
+/examples/node_modules/
 /tests/compat/ai/node_modules/
 /tests/compat/node-server/node_modules/
 /tests/compat/zod-openapi/node_modules/
