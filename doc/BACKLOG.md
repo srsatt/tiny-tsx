@@ -99,13 +99,13 @@ example are explicitly post-alpha. Database opens now reject paths containing
 symlinks, but the remaining directory and sidecar boundary stays prominent in
 the alpha documents.
 
-### Next-goal handoff
+### Release handoff
 
-The next action is **Publish `0.1.0-alpha.1`**. It is deliberately outside the
-implementation goal: attach both already-verified archives, checksums, and
-schema-v2 manifests to a release, then create `v0.1.0-alpha.1` from the attested
-commit. Do not add implementation changes during that action; any change
-creates a new candidate that must repeat both native gates.
+Publishing `0.1.0-alpha.1` remains a separate release action: attach both
+already-verified archives, checksums, and schema-v2 manifests, then create
+`v0.1.0-alpha.1` from the attested commit. Do not mix that action with later
+implementation work; any source change creates a new candidate that must repeat
+both native gates.
 
 The goal is complete only when:
 
@@ -319,9 +319,10 @@ Do not tag `0.1.0-alpha.1` until all of these are true:
 
 ### Next development milestone — real-world server stability
 
-This milestone is intentionally **not started by this backlog update**. The
-release/tag action above remains separate, and the next implementation goal
-should explicitly select this milestone before changing code.
+This milestone is in progress. The release/tag action above remains separate;
+the dated evidence under P1-P3 records what has already landed, while unchecked
+items remain part of the post-alpha contract only after their complete native
+tests pass.
 
 The objective is to move from the narrow alpha contract to a dependable
 server-side subset that can run a broader Hono application under sustained
@@ -357,6 +358,30 @@ AI SDK expansion, WASM embedding, distributed actors, and production garbage
 collection are research tracks below. They may provide tracers or design
 evidence, but they do not block this milestone unless a later backlog change
 adds an explicit application acceptance test.
+
+#### Next-goal handoff
+
+The next bounded implementation goal is **finish the local actor message and
+persistence core, then measure it**. Execute it in this order:
+
+1. admit copied, bounded actor messages containing primitives, closed records,
+   and bounded arrays; reject dynamic identity, transfer, cycles, excessive
+   depth, and oversized payloads at the earliest deterministic boundary;
+2. run those messages through the public `tinytsx:actors` API on Apple arm64
+   and Linux-arm64 assembly, proving FIFO ordering, isolation, saturation,
+   stop/caller-detach behavior, and disposal without one native thread per
+   actor;
+3. finish the remaining on-disk SQLite directory and journal/WAL sidecar race
+   model before expanding actor persistence beyond the counter tracer;
+4. add the structured-message example to the Hono matrix and release gate, then
+   publish actor throughput, latency, CPU, allocation, and peak-RSS evidence at
+   idle scale and under a hot mailbox.
+
+This goal does not include general JavaScript object identity, arbitrary actor
+behaviors, distributed actors, a managed heap, callback transactions, or a new
+release tag. After it is green, choose the next upstream Hono example by its
+first unsupported boundary; do not start from an open-ended “support more
+Hono” task.
 
 ### P1 — Compatibility and language depth
 
