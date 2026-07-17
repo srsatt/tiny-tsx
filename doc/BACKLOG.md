@@ -366,9 +366,10 @@ The current stabilization pass has landed the complete native Test262
 allowlist, the multi-module Hono user-auth tracer, copied structured actor
 messages, protected SQLite ownership, actor pressure evidence, and bounded live
 HTTP-connection resubmission. The bounded Hono Body Limit tracer has also
-landed. Their implementation and evidence are recorded under P1-P4. No next
-implementation slice is selected in this backlog; select one explicitly before
-implementation begins.
+landed. Their implementation and evidence are recorded under P1-P4. The next
+Hono candidate is groomed below, but it is not selected as an implementation
+goal; select it or another bounded slice explicitly before implementation
+begins.
 
 Do not reopen the completed alpha foundations as broad projects. File reading,
 SQLite, and local actors already have public bounded built-ins. Their next work
@@ -378,11 +379,22 @@ named upstream tracer.
 
 The groomed candidates, in recommended dependency order, are:
 
-1. **One further upstream Hono tracer:** choose one
-   exact example or behavior file from the pinned tree and promote only its
-   first unsupported language, Web API, or built-in boundary. Prefer a tracer
-   that extends the user-auth application rather than an isolated synthetic
-   feature.
+1. **Pinned Hono Request ID middleware:** use
+   `vendor/hono/src/middleware/request-id/request-id.ts` and the default,
+   caller-provided, invalid-input, length-limit, and custom-header cases in
+   `index.test.ts` at pinned Hono revision
+   `b2ae3a2204a48ce15a26448fd746d39745eb1837`. Admit only the default UUID
+   generator plus closed, non-empty header names and closed limits from 1 to
+   1,024 bytes. Prove that a valid incoming ID is borrowed safely for the
+   request, a missing/empty/invalid/oversized ID is replaced by UUIDv4, and the
+   exact selected value is shared by `c.get('requestId')` and the response
+   header. Keep custom generators, empty/dynamic header names, dynamic or
+   out-of-range limits, arbitrary context-variable maps, and multiple or
+   route-scoped Request ID policies out of scope. Require unchanged upstream
+   TypeScript and published-package JavaScript intake, Bun/Hono reference
+   behavior, Apple-arm64 HTTP execution, Linux-arm64 assembly, installed-
+   archive reachability, bounded-failure tests, manifest/declaration updates,
+   and compatibility/lifetime documentation.
 2. **SQLite result depth:** add typed execute results and only the dynamic value
    forms required by the selected application while retaining single-owner,
    non-interleaving execution.
@@ -505,6 +517,29 @@ explicitly promoted into a later goal.
     status/body reference behavior, and the installed archive example are all
     release-gated. TinyTSX follows the pinned Fetch/WPT string-body content type;
     Bun 1.3.13's missing header remains an explicit reference difference.
+- [ ] Compile the pinned upstream Hono `requestId` middleware unchanged for its
+      default UUID generator and closed configuration.
+  - Pin the tracer to Hono revision
+    `b2ae3a2204a48ce15a26448fd746d39745eb1837`,
+    `src/middleware/request-id/request-id.ts`, and the named behavior cases in
+    `src/middleware/request-id/index.test.ts`; do not substitute a
+    compiler-owned middleware implementation.
+  - Admit `requestId()` and closed options with a non-empty static header name
+    and a static 1–1,024-byte limit. Accept only non-empty incoming ASCII
+    alphanumeric, underscore, hyphen, and equals IDs within that limit;
+    otherwise generate UUIDv4 with the already-supported Web API.
+  - Preserve one request-local value across middleware state,
+    `c.get('requestId')`, and the emitted response header without adding a
+    general dynamic context map or managed heap. Document whether accepted
+    input is borrowed and where generated/header bytes are owned.
+  - Reject custom generators, empty or dynamic header names, dynamic or
+    out-of-range limits, multiple conflicting policies, and unsupported
+    route-scoped middleware with stable compile-time diagnostics.
+  - Require unchanged upstream TypeScript and published-package JavaScript
+    intake, Bun/Hono reference tests, Apple-arm64 native HTTP behavior for
+    generated/accepted/replaced IDs, Linux-arm64 assembly, manifest/intake
+    coverage, installed-release reachability, and compatibility/Web API
+    documentation before checking this item.
 - [ ] Add optional/multi-segment route parameters, general constraints,
       non-terminal catch-alls, and broader request-dependent handlers.
   - 2026-07-17: one or more contiguous trailing `:name?` parameters now expand
