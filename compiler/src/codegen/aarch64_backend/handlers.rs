@@ -8,10 +8,13 @@ use super::super::{
     assembly::asm_line,
 };
 use super::response::emit_handler_response;
+use super::sqlite::{
+    address_parameters, emit_parameters, expression_parameter_count, parameter_frame_size,
+};
 
 pub(super) fn emit_handlers(assembly: &mut Emitter, program: &Program) -> Result<(), String> {
     assembly.global_function(format_args!("tinytsx_handle_get"));
-    let frame_size = program
+    let value_frame_size = program
         .handlers
         .iter()
         .map(|handler| match &handler.response {
@@ -27,6 +30,33 @@ pub(super) fn emit_handlers(assembly: &mut Emitter, program: &Program) -> Result
         .into_iter()
         .max()
         .unwrap_or(32);
+    let sqlite_parameter_count = program
+        .handlers
+        .iter()
+        .map(|handler| {
+            let actions = handler
+                .sqlite_actions
+                .iter()
+                .map(|action| match action {
+                    SqliteAction::Exec { parameters, .. } => parameters.len(),
+                    SqliteAction::Close { .. } => 0,
+                })
+                .max()
+                .unwrap_or(0);
+            let response = match &handler.response {
+                HandlerResponse::Text { value, .. } => expression_parameter_count(value),
+                HandlerResponse::Stream { chunks, .. } => chunks
+                    .iter()
+                    .map(expression_parameter_count)
+                    .max()
+                    .unwrap_or(0),
+                HandlerResponse::Html { .. } => 0,
+            };
+            actions.max(response)
+        })
+        .max()
+        .unwrap_or(0);
+    let frame_size = value_frame_size.max(parameter_frame_size(sqlite_parameter_count));
     emit_prologue(assembly, frame_size);
     preserve_request_context(assembly);
     let return_label = "Ltinytsx_handle_get_return";
@@ -212,31 +242,30 @@ pub(super) fn emit_handlers(assembly: &mut Emitter, program: &Program) -> Result
                 SqliteAction::Exec {
                     database,
                     sql,
-                    parameter_segment,
+                    parameters,
                 } => {
-                    emit_immediate(assembly, "x0", *database as u64);
-                    if parameter_segment.is_some() {
-                        asm_line!(assembly, "    ldr x1, [sp, #24]");
-                    } else {
+                    if parameters.is_empty() {
+                        emit_immediate(assembly, "x0", *database as u64);
                         assembly.address("x1", format_args!("Ltinytsx_string_{sql}"));
-                    }
-                    if parameter_segment.is_some() {
-                        assembly.address("x2", format_args!("Ltinytsx_string_{sql}"));
-                    }
-                    emit_immediate(
-                        assembly,
-                        if parameter_segment.is_some() {
-                            "x3"
-                        } else {
-                            "x2"
-                        },
-                        program.static_strings[*sql].value.len() as u64,
-                    );
-                    if let Some(segment) = parameter_segment {
-                        emit_immediate(assembly, "x4", *segment as u64);
-                        assembly.call(format_args!("tinytsx_sqlite_execute_path"));
-                    } else {
+                        emit_immediate(
+                            assembly,
+                            "x2",
+                            program.static_strings[*sql].value.len() as u64,
+                        );
                         assembly.call(format_args!("tinytsx_sqlite_execute_batch"));
+                    } else {
+                        emit_parameters(assembly, program, parameters);
+                        emit_immediate(assembly, "x0", *database as u64);
+                        asm_line!(assembly, "    ldr x1, [sp, #24]");
+                        assembly.address("x2", format_args!("Ltinytsx_string_{sql}"));
+                        emit_immediate(
+                            assembly,
+                            "x3",
+                            program.static_strings[*sql].value.len() as u64,
+                        );
+                        address_parameters(assembly, "x4");
+                        emit_immediate(assembly, "x5", parameters.len() as u64);
+                        assembly.call(format_args!("tinytsx_sqlite_execute_params"));
                     }
                 }
                 SqliteAction::Close { database } => {

@@ -4,6 +4,7 @@ use super::super::{
     aarch64::{Emitter, HANDLER_SCRATCH_BASE, emit_immediate},
     assembly::asm_line,
 };
+use super::sqlite::{address_parameters, emit_parameters};
 use super::values::emit_value_expression;
 
 pub(super) fn emit_handler_response(
@@ -185,41 +186,43 @@ fn emit_handler_text_expression(
             database,
             sql,
             mode,
-            parameter_segment,
+            parameters,
             ..
         } => {
-            asm_line!(assembly, "    ldr x0, [sp, #16]");
-            if parameter_segment.is_some() {
+            if parameters.is_empty() {
+                asm_line!(assembly, "    ldr x0, [sp, #16]");
+                emit_immediate(assembly, "x1", *database as u64);
+                assembly.address("x2", format_args!("Ltinytsx_string_{sql}"));
+                emit_immediate(
+                    assembly,
+                    "x3",
+                    program.static_strings[*sql].value.len() as u64,
+                );
+                emit_immediate(
+                    assembly,
+                    "x4",
+                    u64::from(matches!(mode, SqliteQueryMode::First)),
+                );
+                assembly.call(format_args!("tinytsx_sqlite_query_json"));
+            } else {
+                emit_parameters(assembly, program, parameters);
+                asm_line!(assembly, "    ldr x0, [sp, #16]");
                 asm_line!(assembly, "    ldr x1, [sp, #24]");
                 emit_immediate(assembly, "x2", *database as u64);
                 assembly.address("x3", format_args!("Ltinytsx_string_{sql}"));
-            } else {
-                emit_immediate(assembly, "x1", *database as u64);
-                assembly.address("x2", format_args!("Ltinytsx_string_{sql}"));
-            }
-            emit_immediate(
-                assembly,
-                if parameter_segment.is_some() {
-                    "x4"
-                } else {
-                    "x3"
-                },
-                program.static_strings[*sql].value.len() as u64,
-            );
-            emit_immediate(
-                assembly,
-                if parameter_segment.is_some() {
-                    "x5"
-                } else {
-                    "x4"
-                },
-                u64::from(matches!(mode, SqliteQueryMode::First)),
-            );
-            if let Some(segment) = parameter_segment {
-                emit_immediate(assembly, "x6", *segment as u64);
-                assembly.call(format_args!("tinytsx_sqlite_query_json_path"));
-            } else {
-                assembly.call(format_args!("tinytsx_sqlite_query_json"));
+                emit_immediate(
+                    assembly,
+                    "x4",
+                    program.static_strings[*sql].value.len() as u64,
+                );
+                emit_immediate(
+                    assembly,
+                    "x5",
+                    u64::from(matches!(mode, SqliteQueryMode::First)),
+                );
+                address_parameters(assembly, "x6");
+                emit_immediate(assembly, "x7", parameters.len() as u64);
+                assembly.call(format_args!("tinytsx_sqlite_query_json_params"));
             }
         }
         ValueExpression::FetchStatus { url, .. } => {

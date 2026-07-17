@@ -136,6 +136,13 @@ pub struct TinyRequest {
 }
 
 #[repr(C)]
+pub struct TinySqlParameter {
+    pub kind: usize,
+    pub value: usize,
+    pub pointer: *const u8,
+}
+
+#[repr(C)]
 pub struct TinyResponseWriter {
     pub start: *mut u8,
     pub cursor: *mut u8,
@@ -415,7 +422,33 @@ pub unsafe extern "C" fn tinytsx_sqlite_execute_path(
     };
     // SAFETY: Generated code supplies a static SQL view for the duration of the call.
     let sql = unsafe { slice::from_raw_parts(sql, sql_len) };
-    crate::application::sqlite_execute(database, sql, parameter)
+    let parameter = match String::from_utf8(parameter) {
+        Ok(parameter) => tinytsx_runtime_sqlite::SqlValue::Text(parameter),
+        Err(_) => return BAD_REQUEST,
+    };
+    crate::application::sqlite_execute(database, sql, vec![parameter])
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tinytsx_sqlite_execute_params(
+    database: usize,
+    request: *const TinyRequest,
+    sql: *const u8,
+    sql_len: usize,
+    parameters: *const TinySqlParameter,
+    parameter_count: usize,
+) -> u32 {
+    if sql.is_null() && sql_len != 0 {
+        return INTERNAL_ERROR;
+    }
+    let parameters = match unsafe { decode_sqlite_parameters(request, parameters, parameter_count) }
+    {
+        Ok(parameters) => parameters,
+        Err(status) => return status,
+    };
+    // SAFETY: Generated code supplies a static SQL view for the duration of the call.
+    let sql = unsafe { slice::from_raw_parts(sql, sql_len) };
+    crate::application::sqlite_execute(database, sql, parameters)
 }
 
 #[unsafe(no_mangle)]
@@ -431,7 +464,7 @@ pub unsafe extern "C" fn tinytsx_sqlite_query_json(
     }
     // SAFETY: Generated code supplies a static SQL view for the duration of the call.
     let sql = unsafe { slice::from_raw_parts(sql, sql_len) };
-    match crate::application::sqlite_query_json(database, sql, first != 0, None) {
+    match crate::application::sqlite_query_json(database, sql, first != 0, Vec::new()) {
         Ok(output) => unsafe { tinytsx_html_write_static(writer, output.as_ptr(), output.len()) },
         Err(status) => {
             // SAFETY: The writer was validated above.
@@ -460,13 +493,122 @@ pub unsafe extern "C" fn tinytsx_sqlite_query_json_path(
     };
     // SAFETY: Generated code supplies a static SQL view for the duration of the call.
     let sql = unsafe { slice::from_raw_parts(sql, sql_len) };
-    match crate::application::sqlite_query_json(database, sql, first != 0, Some(parameter)) {
+    let parameter = match String::from_utf8(parameter) {
+        Ok(parameter) => tinytsx_runtime_sqlite::SqlValue::Text(parameter),
+        Err(_) => return BAD_REQUEST,
+    };
+    match crate::application::sqlite_query_json(database, sql, first != 0, vec![parameter]) {
         Ok(output) => unsafe { tinytsx_html_write_static(writer, output.as_ptr(), output.len()) },
         Err(status) => {
             // SAFETY: The writer was validated above.
             unsafe { (*writer).status = status };
             status
         }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tinytsx_sqlite_query_json_params(
+    writer: *mut TinyResponseWriter,
+    request: *const TinyRequest,
+    database: usize,
+    sql: *const u8,
+    sql_len: usize,
+    first: u32,
+    parameters: *const TinySqlParameter,
+    parameter_count: usize,
+) -> u32 {
+    if writer.is_null() || (sql.is_null() && sql_len != 0) {
+        return INTERNAL_ERROR;
+    }
+    let parameters = match unsafe { decode_sqlite_parameters(request, parameters, parameter_count) }
+    {
+        Ok(parameters) => parameters,
+        Err(status) => return status,
+    };
+    // SAFETY: Generated code supplies a static SQL view for the duration of the call.
+    let sql = unsafe { slice::from_raw_parts(sql, sql_len) };
+    match crate::application::sqlite_query_json(database, sql, first != 0, parameters) {
+        Ok(output) => unsafe { tinytsx_html_write_static(writer, output.as_ptr(), output.len()) },
+        Err(status) => {
+            // SAFETY: The writer was validated above.
+            unsafe { (*writer).status = status };
+            status
+        }
+    }
+}
+
+unsafe fn decode_sqlite_parameters(
+    request: *const TinyRequest,
+    parameters: *const TinySqlParameter,
+    parameter_count: usize,
+) -> Result<Vec<tinytsx_runtime_sqlite::SqlValue>, u32> {
+    if request.is_null() || parameter_count > 16 || (parameters.is_null() && parameter_count != 0) {
+        return Err(INTERNAL_ERROR);
+    }
+    let parameters = if parameter_count == 0 {
+        &[]
+    } else {
+        // SAFETY: Generated code supplies `parameter_count` initialized stack entries.
+        unsafe { slice::from_raw_parts(parameters, parameter_count) }
+    };
+    let needs_json = parameters.iter().any(|parameter| parameter.kind == 2);
+    let json = if needs_json {
+        // SAFETY: The request and body view remain valid during dispatch.
+        let body = unsafe { &(*request).body };
+        if body.ptr.is_null() && body.len != 0 {
+            return Err(BAD_REQUEST);
+        }
+        // SAFETY: The body view is borrowed from the connection-owned request bytes.
+        let body = unsafe { slice::from_raw_parts(body.ptr, body.len) };
+        Some(serde_json::from_slice::<serde_json::Value>(body).map_err(|_| BAD_REQUEST)?)
+    } else {
+        None
+    };
+    let object = json.as_ref().and_then(serde_json::Value::as_object);
+    let mut output = Vec::with_capacity(parameter_count);
+    for parameter in parameters {
+        match parameter.kind {
+            1 => {
+                let value = unsafe { decoded_request_path_segment(request, parameter.value) }?;
+                output.push(tinytsx_runtime_sqlite::SqlValue::Text(
+                    String::from_utf8(value).map_err(|_| BAD_REQUEST)?,
+                ));
+            }
+            2 => {
+                if parameter.pointer.is_null() || parameter.value == 0 || parameter.value > 128 {
+                    return Err(INTERNAL_ERROR);
+                }
+                // SAFETY: Generated field names point at immutable static strings.
+                let field = unsafe { slice::from_raw_parts(parameter.pointer, parameter.value) };
+                let field = std::str::from_utf8(field).map_err(|_| INTERNAL_ERROR)?;
+                let value = object
+                    .and_then(|object| object.get(field))
+                    .ok_or(BAD_REQUEST)?;
+                output.push(json_sql_value(value)?);
+            }
+            _ => return Err(INTERNAL_ERROR),
+        }
+    }
+    Ok(output)
+}
+
+fn json_sql_value(value: &serde_json::Value) -> Result<tinytsx_runtime_sqlite::SqlValue, u32> {
+    use tinytsx_runtime_sqlite::SqlValue;
+    match value {
+        serde_json::Value::Null => Ok(SqlValue::Null),
+        serde_json::Value::Number(value) => value
+            .as_i64()
+            .map(SqlValue::Integer)
+            .or_else(|| {
+                value
+                    .as_f64()
+                    .filter(|value| value.is_finite())
+                    .map(SqlValue::Real)
+            })
+            .ok_or(BAD_REQUEST),
+        serde_json::Value::String(value) => Ok(SqlValue::Text(value.clone())),
+        _ => Err(BAD_REQUEST),
     }
 }
 

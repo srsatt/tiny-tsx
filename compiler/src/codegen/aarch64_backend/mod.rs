@@ -9,6 +9,7 @@ mod data;
 mod functions;
 mod handlers;
 mod response;
+mod sqlite;
 mod values;
 
 #[cfg(test)]

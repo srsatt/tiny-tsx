@@ -4,6 +4,7 @@ export interface HonoRequestApi {
   param(name: string): string;
   query(name: string): string | undefined;
   header(name: string): string | undefined;
+  json<T = unknown>(): Promise<T>;
 }
 
 export interface HonoContextApi {

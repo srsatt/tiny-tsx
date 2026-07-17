@@ -1,8 +1,9 @@
 use super::{
     BAD_REQUEST, CONTENT_TYPE_HTML, CONTENT_TYPE_NONE, CONTENT_TYPE_TEXT, INTERNAL_ERROR,
     MAX_DYNAMIC_HEADER_BYTES, MAX_RESPONSE_HEADERS, MAX_STREAM_CHUNKS, OK, OpenAiTransport,
-    REQUEST_OOM, RequestArena, TinyHeader, TinyResponseWriter, TinyStringView, render, request,
-    request_with_headers, tinytsx_html_write_fetch_status, tinytsx_html_write_path_segment,
+    REQUEST_OOM, RequestArena, TinyHeader, TinyResponseWriter, TinySqlParameter, TinyStringView,
+    decode_sqlite_parameters, render, request, request_with_body, request_with_headers,
+    tinytsx_html_write_fetch_status, tinytsx_html_write_path_segment,
     tinytsx_html_write_query_parameter, tinytsx_html_write_request_header,
     tinytsx_html_write_static, tinytsx_request_basic_auth_equals, tinytsx_request_if_none_match,
     tinytsx_request_method_equals, tinytsx_request_path_equals, tinytsx_request_path_matches,
@@ -46,6 +47,93 @@ fn request_without_query_exposes_an_empty_query_view() {
     assert_eq!(view(&request.method), b"POST");
     assert_eq!(view(&request.path), b"/users");
     assert_eq!(view(&request.query), b"");
+}
+
+#[test]
+fn sqlite_parameters_decode_route_and_closed_json_values_in_order() {
+    use tinytsx_runtime_sqlite::SqlValue;
+
+    let body = br#"{"title":"Hello","count":3,"score":1.5,"nothing":null}"#;
+    let request = request_with_body(b"POST", b"/posts/hello%20world", &[], body);
+    let fields = [b"title".as_slice(), b"count", b"score", b"nothing"];
+    let parameters = [
+        TinySqlParameter {
+            kind: 1,
+            value: 1,
+            pointer: std::ptr::null(),
+        },
+        TinySqlParameter {
+            kind: 2,
+            value: fields[0].len(),
+            pointer: fields[0].as_ptr(),
+        },
+        TinySqlParameter {
+            kind: 2,
+            value: fields[1].len(),
+            pointer: fields[1].as_ptr(),
+        },
+        TinySqlParameter {
+            kind: 2,
+            value: fields[2].len(),
+            pointer: fields[2].as_ptr(),
+        },
+        TinySqlParameter {
+            kind: 2,
+            value: fields[3].len(),
+            pointer: fields[3].as_ptr(),
+        },
+    ];
+
+    let decoded =
+        unsafe { decode_sqlite_parameters(&request, parameters.as_ptr(), parameters.len()) }
+            .expect("decode supported SQLite parameters");
+
+    assert_eq!(
+        decoded,
+        vec![
+            SqlValue::Text("hello world".into()),
+            SqlValue::Text("Hello".into()),
+            SqlValue::Integer(3),
+            SqlValue::Real(1.5),
+            SqlValue::Null,
+        ]
+    );
+}
+
+#[test]
+fn sqlite_parameters_reject_malformed_missing_and_structured_json_values() {
+    let field = b"title";
+    let parameter = TinySqlParameter {
+        kind: 2,
+        value: field.len(),
+        pointer: field.as_ptr(),
+    };
+
+    for body in [
+        b"{".as_slice(),
+        br#"{}"#,
+        br#"{"title":true}"#,
+        br#"{"title":[]}"#,
+        br#"{"title":{}}"#,
+    ] {
+        let request = request_with_body(b"POST", b"/posts", &[], body);
+        assert_eq!(
+            unsafe { decode_sqlite_parameters(&request, &parameter, 1) },
+            Err(BAD_REQUEST),
+            "{}",
+            String::from_utf8_lossy(body)
+        );
+    }
+}
+
+#[test]
+fn sqlite_parameters_accept_an_empty_parameter_list_without_a_pointer() {
+    let request = request(b"GET", b"/posts");
+
+    assert_eq!(
+        unsafe { decode_sqlite_parameters(&request, std::ptr::null(), 0) },
+        Ok(Vec::new())
+    );
 }
 
 #[test]

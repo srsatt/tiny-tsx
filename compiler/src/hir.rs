@@ -138,12 +138,19 @@ pub enum SqliteAction {
     Exec {
         database: usize,
         sql: usize,
-        #[serde(rename = "parameterSegment")]
-        parameter_segment: Option<usize>,
+        #[serde(default)]
+        parameters: Vec<SqliteParameter>,
     },
     Close {
         database: usize,
     },
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum SqliteParameter {
+    RouteParameter { segment: usize },
+    RequestJsonField { field: usize },
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -331,8 +338,8 @@ pub enum ValueExpression {
         database: usize,
         sql: usize,
         mode: SqliteQueryMode,
-        #[serde(rename = "parameterSegment")]
-        parameter_segment: Option<usize>,
+        #[serde(default)]
+        parameters: Vec<SqliteParameter>,
         span: SourceSpan,
     },
     FetchStatus {
@@ -540,19 +547,12 @@ impl Program {
                     SqliteAction::Exec {
                         database,
                         sql,
-                        parameter_segment,
+                        parameters,
                     } => {
                         if *sql >= self.static_strings.len() {
                             return Err("SQLite action references a missing SQL string".to_owned());
                         }
-                        if parameter_segment.is_some_and(|segment| {
-                            !handler_path_has_parameter_segment(&handler.path, segment)
-                        }) {
-                            return Err(
-                                "SQLite action parameter does not reference a route parameter"
-                                    .to_owned(),
-                            );
-                        }
+                        self.validate_sqlite_parameters(parameters, &handler.path)?;
                         database
                     }
                     SqliteAction::Close { database } => database,
@@ -784,6 +784,35 @@ impl Program {
         Ok(())
     }
 
+    fn validate_sqlite_parameters(
+        &self,
+        parameters: &[SqliteParameter],
+        route_pattern: &str,
+    ) -> Result<(), String> {
+        if parameters.len() > 16 {
+            return Err("SQLite operation exceeds the compiled 16-parameter limit".to_owned());
+        }
+        for parameter in parameters {
+            match parameter {
+                SqliteParameter::RouteParameter { segment }
+                    if !handler_path_has_parameter_segment(route_pattern, *segment) =>
+                {
+                    return Err("SQLite parameter does not reference a route parameter".to_owned());
+                }
+                SqliteParameter::RequestJsonField { field }
+                    if self
+                        .static_strings
+                        .get(*field)
+                        .is_none_or(|field| field.value.is_empty() || field.value.len() > 128) =>
+                {
+                    return Err("SQLite JSON parameter has an invalid field name".to_owned());
+                }
+                _ => {}
+            }
+        }
+        Ok(())
+    }
+
     fn validate_handler_response(
         &self,
         response: &HandlerResponse,
@@ -948,7 +977,7 @@ impl Program {
             ValueExpression::SqliteQuery {
                 database,
                 sql,
-                parameter_segment,
+                parameters,
                 ..
             } => {
                 if *database >= self.sqlite_databases.len() {
@@ -960,13 +989,7 @@ impl Program {
                 if sql.value.len() > 65_536 {
                     return Err("SQLite query exceeds the native SQL limit".to_owned());
                 }
-                if parameter_segment.is_some_and(|segment| {
-                    !handler_path_has_parameter_segment(route_pattern, segment)
-                }) {
-                    return Err(
-                        "SQLite query parameter does not reference a route parameter".to_owned(),
-                    );
-                }
+                self.validate_sqlite_parameters(parameters, route_pattern)?;
                 Ok(())
             }
             ValueExpression::FetchStatus { url, .. } => {

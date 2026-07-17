@@ -30,6 +30,8 @@ export type Value =
   | {kind: "record"; fields: Map<string, Value>}
   | {kind: "headers"; entries: Map<string, {name: string; value: ResponseHeaderValue}>}
   | {kind: "request"; routePattern: string; method: string}
+  | {kind: "requestJson"}
+  | {kind: "requestJsonField"; name: string}
   | {kind: "fetchResponse"; url: string}
   | {kind: "fetchStatus"; url: string}
   | {kind: "clockNow"}
@@ -43,7 +45,7 @@ export type Value =
   | {kind: "actorCall"; actor: ActorState; message: number}
   | {kind: "database"; state: DatabaseState}
   | {kind: "statement"; state: StatementState}
-  | {kind: "sqliteQuery"; statement: StatementState; mode: "all" | "first"; parameter?: string}
+  | {kind: "sqliteQuery"; statement: StatementState; mode: "all" | "first"; parameters: SqliteParameter[]}
   | {kind: "queryParameter"; name: string; fallback?: string}
   | {kind: "queryPredicate"; name: string; test: "truthy" | "empty" | "present"}
   | {kind: "runtimeString"; parts: RuntimeStringPart[]}
@@ -85,7 +87,7 @@ export type RuntimeStringPart =
   | {kind: "environmentVariable"; name: string; required: boolean; fallback: string | undefined}
   | {kind: "fileText"; path: string; maxBytes: number}
   | {kind: "actorCall"; actor: ActorState; message: number}
-  | {kind: "sqliteQuery"; statement: StatementState; mode: "all" | "first"; parameter?: string}
+  | {kind: "sqliteQuery"; statement: StatementState; mode: "all" | "first"; parameters: SqliteParameter[]}
   | {kind: "queryParameter"; name: string; fallback: string | undefined; escapeHtml: boolean}
   | {kind: "fetchStatus"; url: string}
   | {kind: "elapsedMilliseconds"}
@@ -119,6 +121,10 @@ export interface StatementState {
   database: DatabaseState;
   sql: string;
 }
+
+export type SqliteParameter =
+  | {kind: "routeParameter"; name: string}
+  | {kind: "requestJsonField"; name: string};
 
 export type ResponseHeaderValue = string | RuntimeStringPart[];
 
@@ -170,6 +176,9 @@ export function readProperty(value: Value, name: string): Value {
   }
   if (value.kind === "request" && name === "method") {
     return {kind: "string", value: value.method};
+  }
+  if (value.kind === "requestJson") {
+    return {kind: "requestJsonField", name};
   }
   if (value.kind === "request" && name === "path") {
     return value.routePattern.includes(":") || value.routePattern.includes("*")
@@ -282,6 +291,7 @@ export function truthiness(value: Value): boolean | undefined {
     case "thrown":
     case "headers":
     case "request":
+    case "requestJson":
     case "clockNow":
     case "closure":
     case "reference":
@@ -300,6 +310,7 @@ export function truthiness(value: Value): boolean | undefined {
     case "workerCall": return undefined;
     case "actorCall": return undefined;
     case "sqliteQuery": return undefined;
+    case "requestJsonField": return undefined;
     case "openAiProvider":
     case "openAiModel": return true;
     case "openAiChatText": return undefined;
@@ -332,6 +343,7 @@ export function typeOf(value: Value): string {
     case "runtimeHtml": return "string";
     case "routeChoice": return "object";
     case "requestHeader": return "string";
+    case "requestJsonField": return "string";
     case "environmentVariable": return "string";
     case "fileText": return "string";
     case "fetchStatus": return "number";
@@ -392,7 +404,7 @@ export function runtimeStringParts(value: Value): RuntimeStringPart[] | undefine
       kind: "sqliteQuery",
       statement: value.statement,
       mode: value.mode,
-      ...(value.parameter === undefined ? {} : {parameter: value.parameter}),
+      parameters: value.parameters,
     }];
     case "queryParameter": return [{
       kind: "queryParameter",

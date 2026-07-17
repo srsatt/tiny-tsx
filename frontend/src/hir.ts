@@ -76,8 +76,12 @@ export type ActorAction =
   | {kind: "stop"; actor: number};
 
 export type SqliteAction =
-  | {kind: "exec"; database: number; sql: number; parameterSegment?: number}
+  | {kind: "exec"; database: number; sql: number; parameters?: SqliteParameter[]}
   | {kind: "close"; database: number};
+
+export type SqliteParameter =
+  | {kind: "routeParameter"; segment: number}
+  | {kind: "requestJsonField"; field: number};
 
 export type ValueExpression =
   | {
@@ -141,7 +145,7 @@ export type ValueExpression =
       database: number;
       sql: number;
       mode: "all" | "first";
-      parameterSegment?: number;
+      parameters: SqliteParameter[];
       span: SourceSpan;
     }
   | {

@@ -133,6 +133,7 @@ test("lowers a bounded in-memory SQLite owner and effects", () => {
     const posts = database.prepare("SELECT title FROM posts");
     const post = database.prepare("SELECT title FROM posts WHERE title = ?1");
     const deletePost = database.prepare("DELETE FROM posts WHERE title = ?1");
+    const createPost = database.prepare("INSERT INTO posts (title, body) VALUES (?1, ?2)");
     const app = new Hono();
     app.post("/schema", async context => {
       await database.exec("CREATE TABLE posts (id INTEGER PRIMARY KEY, title TEXT)");
@@ -149,6 +150,11 @@ test("lowers a bounded in-memory SQLite owner and effects", () => {
     app.post("/delete/:title", async context => {
       await deletePost.run([context.req.param("title")]);
       return context.text("deleted");
+    });
+    app.post("/posts", async context => {
+      const input = await context.req.json() as {title: string; body: string};
+      await createPost.run([input.title, input.body]);
+      return context.text("created", 201);
     });
     serve({fetch: app.fetch});
   `);
@@ -169,24 +175,30 @@ test("lowers a bounded in-memory SQLite owner and effects", () => {
       kind: "concat",
       values: [
         {kind: "stringLiteral", string: 3, span: hir.handlers[2]?.span},
-        {kind: "sqliteQuery", database: 0, sql: 4, mode: "all", span: hir.handlers[2]?.span},
+        {kind: "sqliteQuery", database: 0, sql: 4, mode: "all", parameters: [], span: hir.handlers[2]?.span},
         {kind: "stringLiteral", string: 5, span: hir.handlers[2]?.span},
       ],
       span: hir.handlers[2]?.span,
     },
   );
-  assert.equal(
+  assert.deepEqual(
     hir.handlers[3]?.response.kind === "text"
       && hir.handlers[3].response.value.kind === "concat"
       ? hir.handlers[3].response.value.values[1]?.kind === "sqliteQuery"
-        ? hir.handlers[3].response.value.values[1].parameterSegment
+        ? hir.handlers[3].response.value.values[1].parameters
         : undefined
       : undefined,
-    1,
+    [{kind: "routeParameter", segment: 1}],
   );
-  assert.equal(hir.handlers[4]?.sqliteActions?.[0]?.kind === "exec"
-    ? hir.handlers[4].sqliteActions[0].parameterSegment
-    : undefined, 1);
+  assert.deepEqual(hir.handlers[4]?.sqliteActions?.[0]?.kind === "exec"
+    ? hir.handlers[4].sqliteActions[0].parameters
+    : undefined, [{kind: "routeParameter", segment: 1}]);
+  const jsonParameters = hir.handlers[5]?.sqliteActions?.[0]?.kind === "exec"
+    ? hir.handlers[5].sqliteActions[0].parameters
+    : undefined;
+  assert.deepEqual(jsonParameters?.map(parameter => parameter.kind === "requestJsonField"
+    ? hir.staticStrings[parameter.field]?.value
+    : undefined), ["title", "body"]);
 });
 
 test("requires an explicit read root for filesystem access", () => {

@@ -3,13 +3,15 @@ import {Hono} from "hono";
 import {Database} from "tinytsx:sqlite";
 
 const database = new Database(":memory:");
-const posts = database.prepare("SELECT title FROM posts ORDER BY title");
-const post = database.prepare("SELECT title FROM posts WHERE title = ?1");
+const posts = database.prepare("SELECT title, body FROM posts ORDER BY title");
+const post = database.prepare("SELECT title, body FROM posts WHERE title = ?1");
 const deletePost = database.prepare("DELETE FROM posts WHERE title = ?1");
+const createPost = database.prepare("INSERT INTO posts (title, body) VALUES (?1, ?2)");
+const latestPost = database.prepare("SELECT title, body FROM posts ORDER BY rowid DESC LIMIT 1");
 const app = new Hono();
 
 app.post("/schema", async context => {
-  await database.exec("CREATE TABLE IF NOT EXISTS posts (title TEXT PRIMARY KEY)");
+  await database.exec("CREATE TABLE IF NOT EXISTS posts (title TEXT PRIMARY KEY, body TEXT)");
   return context.text("ready");
 });
 app.post("/seed", async context => {
@@ -24,6 +26,11 @@ app.get("/posts/:title", async context => context.json({
 app.post("/delete/:title", async context => {
   await deletePost.run([context.req.param("title")]);
   return context.text("deleted");
+});
+app.post("/posts", async context => {
+  const input = await context.req.json() as {title: string; body: string};
+  await createPost.run([input.title, input.body]);
+  return context.json({post: await latestPost.get()}, 201);
 });
 app.post("/close", context => {
   database.close();

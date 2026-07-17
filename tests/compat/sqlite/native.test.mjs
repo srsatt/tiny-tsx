@@ -29,13 +29,21 @@ test("serializes an in-memory SQLite owner and recovers from SQL errors", async 
   await assertGet(port, "/posts", 200, '{"posts":[]}');
   await assertGet(port, "/first", 200, '{"post":null}');
   await assertResponse(port, "/seed", 201, "created");
-  await assertGet(port, "/posts", 200, '{"posts":[{"title":"Morning"}]}');
-  await assertGet(port, "/first", 200, '{"post":{"title":"Morning"}}');
-  await assertGet(port, "/posts/Morning", 200, '{"post":{"title":"Morning"}}');
+  await assertGet(port, "/posts", 200, '{"posts":[{"title":"Morning","body":null}]}');
+  await assertGet(port, "/first", 200, '{"post":{"title":"Morning","body":null}}');
+  await assertGet(port, "/posts/Morning", 200, '{"post":{"title":"Morning","body":null}}');
   await assertResponse(port, "/seed", 500, "internal server error");
   await assertResponse(port, "/delete/Morning", 200, "deleted");
   await assertGet(port, "/posts", 200, '{"posts":[]}');
   await assertResponse(port, "/seed", 201, "created");
+  await assertJsonPost(
+    port,
+    "/posts",
+    {title: "Night", body: "Good Night"},
+    201,
+    '{"post":{"title":"Night","body":"Good Night"}}',
+  );
+  await assertJsonPost(port, "/posts", {title: "missing"}, 400, "bad request");
   await assertResponse(port, "/schema", 200, "ready");
   await assertResponse(port, "/close", 200, "closed");
   await assertResponse(port, "/close", 200, "closed");
@@ -75,6 +83,16 @@ async function assertResponse(port, pathname, status, body) {
 
 async function assertGet(port, pathname, status, body) {
   const response = await fetch(`http://127.0.0.1:${port}${pathname}`);
+  assert.equal(response.status, status);
+  assert.equal(await response.text(), body);
+}
+
+async function assertJsonPost(port, pathname, value, status, body) {
+  const response = await fetch(`http://127.0.0.1:${port}${pathname}`, {
+    method: "POST",
+    headers: {"content-type": "application/json"},
+    body: JSON.stringify(value),
+  });
   assert.equal(response.status, status);
   assert.equal(await response.text(), body);
 }

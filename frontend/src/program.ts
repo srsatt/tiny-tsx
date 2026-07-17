@@ -429,9 +429,11 @@ function lowerApplicationInitialization(
             kind: "exec" as const,
             database: action.database.id,
             sql: strings.intern(action.sql!),
-            ...(action.parameter === undefined
+            ...(action.parameters === undefined
               ? {}
-              : {parameterSegment: routeParameterSegment(route.path, action.parameter)}),
+              : {parameters: action.parameters.map(parameter => parameter.kind === "routeParameter"
+                ? {kind: "routeParameter" as const, segment: routeParameterSegment(route.path, parameter.name)}
+                : {kind: "requestJsonField" as const, field: strings.intern(parameter.name)})}),
           }
           : {kind: "close" as const, database: action.database.id})}),
       ...(response.stderr === undefined
@@ -703,9 +705,9 @@ function lowerRuntimeString(
           database: part.statement.database.id,
           sql: strings.intern(part.statement.sql),
           mode: part.mode,
-          ...(part.parameter === undefined
-            ? {}
-            : {parameterSegment: routeParameterSegment(routePath, part.parameter)}),
+          parameters: part.parameters.map(parameter => parameter.kind === "routeParameter"
+            ? {kind: "routeParameter" as const, segment: routeParameterSegment(routePath, parameter.name)}
+            : {kind: "requestJsonField" as const, field: strings.intern(parameter.name)}),
           span,
         };
       }

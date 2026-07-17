@@ -37,6 +37,7 @@ import {
   type RuntimeStringPart,
   type ActorState,
   type DatabaseState,
+  type SqliteParameter,
   type StreamState,
   valuesEqual,
 } from "./symbolic-value.js";
@@ -120,7 +121,7 @@ export interface EvaluatedDatabaseAction {
   kind: "exec" | "close";
   database: DatabaseState;
   sql?: string;
-  parameter?: string;
+  parameters?: SqliteParameter[];
 }
 
 interface EvaluatedRouteChoice {
@@ -1476,7 +1477,7 @@ function sameResponseHeaderValue(left: ResponseHeaderValue, right: ResponseHeade
         && candidate.statement.database.key === part.statement.database.key
         && candidate.statement.sql === part.statement.sql
         && candidate.mode === part.mode
-        && candidate.parameter === part.parameter;
+        && sameSqliteParameters(candidate.parameters, part.parameters);
     }
     return candidate?.kind === part.kind && candidate.name === part.name;
   });
@@ -2072,24 +2073,24 @@ function evaluateCall(
       return UNDEFINED;
     }
     if (receiver.kind === "statement" && (name === "all" || name === "get")) {
-      const parameter = sqliteRouteParameter(arguments_);
-      return parameter !== undefined
+      const parameters = sqliteParameters(arguments_);
+      return parameters !== undefined
         ? {
           kind: "sqliteQuery",
           statement: receiver.state,
           mode: name === "all" ? "all" : "first",
-          ...(parameter === null ? {} : {parameter}),
+          parameters,
         }
-        : unknown(`Statement.${name} accepts at most one route-parameter value`);
+        : unknown(`Statement.${name} accepts up to 16 route or JSON-field values`);
     }
     if (receiver.kind === "statement" && name === "run") {
-      const parameter = sqliteRouteParameter(arguments_);
-      if (parameter === undefined) return unknown("Statement.run accepts at most one route-parameter value");
+      const parameters = sqliteParameters(arguments_);
+      if (parameters === undefined) return unknown("Statement.run accepts up to 16 route or JSON-field values");
       appendDatabaseAction(evaluator, instance, {
         kind: "exec",
         database: receiver.state.database,
         sql: receiver.state.sql,
-        ...(parameter === null ? {} : {parameter}),
+        ...(parameters.length === 0 ? {} : {parameters}),
       });
       return UNDEFINED;
     }
@@ -2247,6 +2248,11 @@ function evaluateCall(
       return routeParameterNames(receiver.routePattern).includes(key.value)
         ? {kind: "routeParameter", name: key.value}
         : UNDEFINED;
+    }
+    if (receiver.kind === "request" && name === "json") {
+      return arguments_.length === 0
+        ? {kind: "requestJson"}
+        : unknown("request.json does not accept arguments");
     }
     if (receiver.kind === "request" && name === "valid") {
       const target = arguments_[0];
@@ -2797,14 +2803,30 @@ function appendDatabaseAction(
   evaluator.databaseActions.set(instance, actions);
 }
 
-function sqliteRouteParameter(arguments_: Value[]): string | null | undefined {
-  if (arguments_.length === 0) return null;
+function sqliteParameters(arguments_: Value[]): SqliteParameter[] | undefined {
+  if (arguments_.length === 0) return [];
   const parameters = arguments_[0];
-  if (arguments_.length !== 1 || parameters?.kind !== "array" || parameters.items.length !== 1) {
+  if (arguments_.length !== 1 || parameters?.kind !== "array" || parameters.items.length > 16) {
     return undefined;
   }
-  const parameter = parameters.items[0];
-  return parameter?.kind === "routeParameter" ? parameter.name : undefined;
+  const output: SqliteParameter[] = [];
+  for (const parameter of parameters.items) {
+    if (parameter.kind === "routeParameter") {
+      output.push({kind: "routeParameter", name: parameter.name});
+    } else if (parameter.kind === "requestJsonField") {
+      output.push({kind: "requestJsonField", name: parameter.name});
+    } else {
+      return undefined;
+    }
+  }
+  return output;
+}
+
+function sameSqliteParameters(left: SqliteParameter[], right: SqliteParameter[]): boolean {
+  return left.length === right.length && left.every((parameter, index) => {
+    const candidate = right[index];
+    return candidate?.kind === parameter.kind && candidate.name === parameter.name;
+  });
 }
 
 function environmentBuiltinOperation(
@@ -4263,7 +4285,7 @@ function appendRuntimeJsonValue(
       kind: "sqliteQuery",
       statement: value.statement,
       mode: value.mode,
-      ...(value.parameter === undefined ? {} : {parameter: value.parameter}),
+      parameters: value.parameters,
     });
     return true;
   }
