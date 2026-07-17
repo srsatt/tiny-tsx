@@ -6,7 +6,7 @@ const USAGE: &str = "\
 TinyTSX native TSX compiler
 
 Usage:
-  tinytsx check <entry.tsx> [--emit-hir | --emit-asm] [--target triple] [--alias specifier=path] [--api specifier=path] [--allow-env name]... [--allow-read root]...
+  tinytsx check <entry.tsx> [--emit-hir | --emit-asm] [--target triple] [--alias specifier=path] [--api specifier=path] [--allow-env name]... [--allow-read root]... [--allow-write root]...
   tinytsx build <entry.tsx> [options]
   tinytsx run <entry.tsx> [options]
   tinytsx test262 <case.js> [--output path]
@@ -116,6 +116,7 @@ fn parse_build_options(
         api_aliases: Vec::new(),
         allowed_environment: Vec::new(),
         allowed_read_roots: Vec::new(),
+        allowed_write_roots: Vec::new(),
         target: Target::default_for_host(),
     };
     let mut index = 0;
@@ -150,6 +151,9 @@ fn parse_build_options(
                 .push(option_value(arguments, &mut index)?.to_owned()),
             "--allow-read" => options
                 .allowed_read_roots
+                .push(option_value(arguments, &mut index)?.to_owned()),
+            "--allow-write" => options
+                .allowed_write_roots
                 .push(option_value(arguments, &mut index)?.to_owned()),
             "--target" => {
                 options.target = option_value(arguments, &mut index)?.parse()?;
@@ -191,6 +195,7 @@ fn parse_build_options(
     }
     validate_environment_capabilities(&mut options.allowed_environment)?;
     validate_read_capabilities(&mut options.allowed_read_roots)?;
+    validate_write_capabilities(&mut options.allowed_write_roots)?;
     Ok(options)
 }
 
@@ -219,6 +224,7 @@ fn check(arguments: &[String]) -> Result<(), String> {
     let mut api_aliases = Vec::new();
     let mut allowed_environment = Vec::new();
     let mut allowed_read_roots = Vec::new();
+    let mut allowed_write_roots = Vec::new();
     let mut target = Target::default_for_host();
 
     let mut index = 0;
@@ -233,6 +239,9 @@ fn check(arguments: &[String]) -> Result<(), String> {
             }
             "--allow-read" => {
                 allowed_read_roots.push(option_value(arguments, &mut index)?.to_owned())
+            }
+            "--allow-write" => {
+                allowed_write_roots.push(option_value(arguments, &mut index)?.to_owned())
             }
             "--target" => target = option_value(arguments, &mut index)?.parse()?,
             option if option.starts_with('-') => {
@@ -250,12 +259,14 @@ fn check(arguments: &[String]) -> Result<(), String> {
     let entry = entry.ok_or_else(|| format!("check requires an entry module\n\n{USAGE}"))?;
     validate_environment_capabilities(&mut allowed_environment)?;
     validate_read_capabilities(&mut allowed_read_roots)?;
+    validate_write_capabilities(&mut allowed_write_roots)?;
     let mut compilation = frontend::compile(
         entry,
         &aliases,
         &api_aliases,
         &allowed_environment,
         &allowed_read_roots,
+        &allowed_write_roots,
     )?;
     compilation.retarget(target)?;
 
@@ -317,6 +328,26 @@ fn validate_read_capabilities(roots: &mut Vec<String>) -> Result<(), String> {
             .into_os_string()
             .into_string()
             .map_err(|_| "TINY1502: read roots must be valid UTF-8".to_owned())?;
+    }
+    roots.sort();
+    roots.dedup();
+    Ok(())
+}
+
+fn validate_write_capabilities(roots: &mut Vec<String>) -> Result<(), String> {
+    if roots.len() > 16 {
+        return Err("at most 16 filesystem write roots may be granted".to_owned());
+    }
+    for root in roots.iter_mut() {
+        let canonical = std::fs::canonicalize(&*root)
+            .map_err(|error| format!("TINY1511: cannot grant write root `{root}`: {error}"))?;
+        if !canonical.is_dir() {
+            return Err(format!("TINY1511: write root `{root}` is not a directory"));
+        }
+        *root = canonical
+            .into_os_string()
+            .into_string()
+            .map_err(|_| "TINY1511: write roots must be valid UTF-8".to_owned())?;
     }
     roots.sort();
     roots.dedup();

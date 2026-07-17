@@ -49,6 +49,7 @@ export interface CompileOptions {
   apiAliases?: Readonly<Record<string, string>>;
   allowedEnvironment?: ReadonlySet<string>;
   allowedReadRoots?: readonly string[];
+  allowedWriteRoots?: readonly string[];
 }
 
 export function compileEntry(entryPath: string, options: CompileOptions): HirProgram {
@@ -127,6 +128,7 @@ export function compileEntry(entryPath: string, options: CompileOptions): HirPro
     graph,
     options.allowedEnvironment ?? new Set(),
     options.allowedReadRoots ?? [],
+    options.allowedWriteRoots ?? [],
   );
   const getDeclarations = sourceFile.statements.filter(isGetDeclaration);
   if (getDeclarations.length === 0) {
@@ -148,6 +150,12 @@ export function compileEntry(entryPath: string, options: CompileOptions): HirPro
           validateLoweredEnvironmentCapabilities(
             lowered,
             options.allowedEnvironment ?? new Set(),
+            sourceFile,
+          );
+          validateLoweredSqliteCapabilities(
+            lowered,
+            options.allowedReadRoots ?? [],
+            options.allowedWriteRoots ?? [],
             sourceFile,
           );
           return lowered;
@@ -856,6 +864,42 @@ function validateLoweredEnvironmentCapabilities(
     span: spanOf(sourceFile, sourceFile),
     help: `re-run with \`--allow-env ${name}\``,
   })));
+}
+
+function validateLoweredSqliteCapabilities(
+  program: HirProgram,
+  readRoots: readonly string[],
+  writeRoots: readonly string[],
+  sourceFile: ts.SourceFile,
+): void {
+  for (const database of program.sqliteDatabases) {
+    if (database.path === ":memory:") continue;
+    const portable = database.path.length > 0
+      && database.path.length <= 4096
+      && !database.path.includes("\0")
+      && !path.isAbsolute(database.path)
+      && database.path.split(/[\\/]/).every(component =>
+        component !== "" && component !== "." && component !== ".."
+      );
+    if (!portable) {
+      throw tinyError(
+        "TINY1510",
+        `SQLite path \`${database.path}\` must be a static normalized relative path`,
+        sourceFile,
+        "use a path such as `state/application.db` without empty, dot, or parent segments",
+      );
+    }
+    const roots = readRoots.filter(root => writeRoots.includes(root));
+    if (roots.length !== 1) {
+      throw tinyError(
+        "TINY1511",
+        `SQLite path \`${database.path}\` requires exactly one shared read/write root`,
+        sourceFile,
+        "re-run with matching `--allow-read <root>` and `--allow-write <root>` capabilities",
+      );
+    }
+    database.path = path.join(roots[0]!, database.path);
+  }
 }
 
 function collectEnvironmentIds(expression: ValueExpression, output: Set<number>): void {

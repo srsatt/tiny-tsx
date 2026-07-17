@@ -68,7 +68,7 @@ export interface ActorModule {
 
 export interface SqliteDatabase {
   id: number;
-  path: ":memory:";
+  path: string;
 }
 
 export type ActorAction =

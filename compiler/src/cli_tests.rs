@@ -43,3 +43,12 @@ fn rejects_missing_filesystem_roots_before_compilation() {
     .unwrap_err();
     assert!(error.contains("TINY1502"));
 }
+
+#[test]
+fn rejects_missing_filesystem_write_roots_before_compilation() {
+    let error = run(["build", "app.tsx", "--allow-write", "/tinytsx/not-present"]
+        .into_iter()
+        .map(Into::into))
+    .unwrap_err();
+    assert!(error.contains("TINY1511"));
+}

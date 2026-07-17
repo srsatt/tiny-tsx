@@ -12,7 +12,8 @@ use tinytsx_runtime_worker::{ApplicationPool, CallError, LogicalWorker, PostErro
 use crate::abi::{
     APPLICATION_OVERLOAD, INTERNAL_ERROR, OpenAiTransport, RENDER_ERROR, actor_initial_state,
     actor_mailbox_capacity, actor_operation, configured_actors, configured_provider_transport,
-    configured_sqlite_databases, configured_worker_modules, worker_operation,
+    configured_sqlite_database_path, configured_sqlite_databases, configured_worker_modules,
+    worker_operation,
 };
 
 const APPLICATION_QUEUE_PER_EXECUTOR: usize = 64;
@@ -78,6 +79,14 @@ pub fn initialize(executor_count: usize) -> io::Result<(usize, bool, bool)> {
     let filesystem_enabled = crate::filesystem::enabled();
     let actor_count = configured_actors();
     let database_count = configured_sqlite_databases();
+    let database_paths = (0..database_count)
+        .map(|database| {
+            configured_sqlite_database_path(database)
+                .map_err(|_| io::Error::other("invalid generated SQLite database path"))
+                .and_then(|path| String::from_utf8(path)
+                    .map_err(|_| io::Error::other("SQLite database path is not UTF-8")))
+        })
+        .collect::<io::Result<Vec<_>>>()?;
     if worker_count == 0
         && !provider_enabled
         && !filesystem_enabled
@@ -107,7 +116,8 @@ pub fn initialize(executor_count: usize) -> io::Result<(usize, bool, bool)> {
             sqlite: id
                 .checked_sub(worker_count + actor_count)
                 .filter(|database| *database < database_count)
-                .map(|_| tinytsx_runtime_sqlite::open(":memory:").map_err(|_| RENDER_ERROR)),
+                .and_then(|database| database_paths.get(database))
+                .map(|path| tinytsx_runtime_sqlite::open(path).map_err(|_| RENDER_ERROR)),
         },
         |state, message| match message {
             ApplicationMessage::Worker(mut input) => match state.operation {

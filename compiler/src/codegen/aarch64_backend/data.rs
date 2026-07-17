@@ -146,6 +146,11 @@ pub(super) fn emit_static_data(
             emit_bytes(assembly, root.as_bytes());
         }
     }
+    for (index, database) in program.sqlite_databases.iter().enumerate() {
+        asm_line!(assembly, ".p2align 3");
+        asm_line!(assembly, "Ltinytsx_sqlite_database_path_data_{index}:");
+        emit_bytes(assembly, database.path.as_bytes());
+    }
     Ok(())
 }
 

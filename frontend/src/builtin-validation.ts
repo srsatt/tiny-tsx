@@ -18,6 +18,7 @@ export function validateBuiltinOperations(
   graph: ModuleGraph,
   allowedEnvironment: ReadonlySet<string>,
   allowedReadRoots: readonly string[],
+  allowedWriteRoots: readonly string[],
 ): void {
   const diagnostics: Diagnostic[] = [];
   for (const module of graph.modules) {
@@ -105,6 +106,15 @@ export function validateBuiltinOperations(
             module.sourceFile,
             allowedReadRoots,
           );
+        } else if (imported.specifier === "tinytsx:sqlite" && imported.operation === "Database") {
+          validateSqliteDatabase(
+            diagnostics,
+            invocation,
+            node,
+            module.sourceFile,
+            allowedReadRoots,
+            allowedWriteRoots,
+          );
         }
       }
       ts.forEachChild(node, visit);
@@ -112,6 +122,48 @@ export function validateBuiltinOperations(
     visit(module.sourceFile);
   }
   if (diagnostics.length > 0) throw new CompileFailure(diagnostics);
+}
+
+function validateSqliteDatabase(
+  diagnostics: Diagnostic[],
+  invocation: ts.CallExpression | ts.NewExpression | undefined,
+  node: ts.Node,
+  sourceFile: ts.SourceFile,
+  allowedReadRoots: readonly string[],
+  allowedWriteRoots: readonly string[],
+): void {
+  const argument = invocation?.arguments?.[0];
+  const database = argument !== undefined && ts.isStringLiteral(argument) ? argument.text : undefined;
+  if (invocation?.arguments?.length !== 1 || database === undefined) {
+    diagnostics.push({
+      code: "TINY1510",
+      message: "`tinytsx:sqlite.Database` requires one static path string",
+      span: spanOf(node, sourceFile),
+    });
+    return;
+  }
+  if (database === ":memory:") return;
+  const portable = database.length > 0
+    && Buffer.byteLength(database, "utf8") <= 4096
+    && !database.includes("\0")
+    && !path.isAbsolute(database)
+    && database.split(/[\\/]/).every(component =>
+      component !== "" && component !== "." && component !== ".."
+    );
+  if (!portable) {
+    diagnostics.push({
+      code: "TINY1510",
+      message: `SQLite path \`${database}\` must be a static normalized relative path`,
+      span: spanOf(argument ?? node, sourceFile),
+    });
+  } else if (allowedReadRoots.length === 0 || allowedWriteRoots.length === 0) {
+    diagnostics.push({
+      code: "TINY1511",
+      message: `SQLite path \`${database}\` requires explicit read and write capabilities`,
+      span: spanOf(argument ?? node, sourceFile),
+      help: "re-run with matching `--allow-read <root>` and `--allow-write <root>`",
+    });
+  }
 }
 
 function validateFilesystemCall(

@@ -29,6 +29,7 @@ pub struct Options {
     pub api_aliases: Vec<String>,
     pub allowed_environment: Vec<String>,
     pub allowed_read_roots: Vec<String>,
+    pub allowed_write_roots: Vec<String>,
     pub target: Target,
 }
 
@@ -63,6 +64,7 @@ struct BuildReport<'a> {
 struct BuildPermissions<'a> {
     environment: &'a [String],
     read: &'a [String],
+    write: &'a [String],
 }
 
 pub fn execute(options: &Options) -> Result<PathBuf, String> {
@@ -73,6 +75,7 @@ pub fn execute(options: &Options) -> Result<PathBuf, String> {
         &options.api_aliases,
         &options.allowed_environment,
         &options.allowed_read_roots,
+        &options.allowed_write_roots,
     )?;
     compilation.retarget(options.target)?;
     let port = if options.port_explicit {
@@ -303,6 +306,7 @@ fn write_report(
         permissions: BuildPermissions {
             environment: &options.allowed_environment,
             read: &options.allowed_read_roots,
+            write: &options.allowed_write_roots,
         },
     };
     let json = serde_json::to_string_pretty(&report)
@@ -358,6 +362,10 @@ fn print_summary(
         "Filesystem:          {} read root(s); request-time reads {}",
         options.allowed_read_roots.len(),
         if filesystem { "enabled" } else { "disabled" },
+    );
+    println!(
+        "SQLite writes:       {} write root(s)",
+        options.allowed_write_roots.len()
     );
     println!("Request memory:      {} bytes", options.request_memory);
     println!(

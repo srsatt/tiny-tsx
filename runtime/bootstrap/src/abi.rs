@@ -182,6 +182,11 @@ unsafe extern "C" {
     ) -> u32;
     pub fn tinytsx_config_actors() -> usize;
     pub fn tinytsx_config_sqlite_databases() -> usize;
+    pub fn tinytsx_config_sqlite_database_path(
+        index: usize,
+        pointer: *mut *const u8,
+        length: *mut usize,
+    ) -> u32;
     pub fn tinytsx_actor_operation(actor: usize) -> u32;
     pub fn tinytsx_actor_initial_state(actor: usize) -> i64;
     pub fn tinytsx_actor_mailbox_capacity(actor: usize) -> usize;
@@ -257,6 +262,15 @@ unsafe extern "C" fn tinytsx_config_actors() -> usize {
 #[cfg(not(feature = "generated"))]
 unsafe extern "C" fn tinytsx_config_sqlite_databases() -> usize {
     0
+}
+
+#[cfg(not(feature = "generated"))]
+unsafe extern "C" fn tinytsx_config_sqlite_database_path(
+    _index: usize,
+    _pointer: *mut *const u8,
+    _length: *mut usize,
+) -> u32 {
+    INTERNAL_ERROR
 }
 
 #[cfg(not(feature = "generated"))]
@@ -2271,6 +2285,21 @@ pub fn configured_actors() -> usize {
 pub fn configured_sqlite_databases() -> usize {
     // SAFETY: The generated object always provides the configuration function.
     unsafe { tinytsx_config_sqlite_databases() }
+}
+
+pub fn configured_sqlite_database_path(index: usize) -> Result<Vec<u8>, u32> {
+    let mut pointer = ptr::null();
+    let mut length = 0;
+    // SAFETY: The generated object writes one immutable static path view.
+    let status = unsafe { tinytsx_config_sqlite_database_path(index, &mut pointer, &mut length) };
+    if status != OK {
+        return Err(status);
+    }
+    if pointer.is_null() || length == 0 || length > 4096 {
+        return Err(INTERNAL_ERROR);
+    }
+    // SAFETY: Successful generated configuration points at `length` static bytes.
+    Ok(unsafe { slice::from_raw_parts(pointer, length) }.to_vec())
 }
 
 pub fn actor_operation(actor: usize) -> u32 {

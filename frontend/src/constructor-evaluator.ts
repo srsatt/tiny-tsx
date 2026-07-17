@@ -3754,13 +3754,13 @@ function evaluateExpression(
       const databasePath = arguments_[0] === undefined
         ? UNDEFINED
         : evaluate(evaluator, arguments_[0], module, environment, instance);
-      if (arguments_.length !== 1 || databasePath.kind !== "string" || databasePath.value !== ":memory:") {
-        return unknown("Database currently requires the capability-free :memory: path");
+      if (arguments_.length !== 1 || databasePath.kind !== "string") {
+        return unknown("Database requires one static path string");
       }
       const key = `${module.path}:${expression.getStart(module.sourceFile)}`;
       let state = evaluator.databases.get(key);
       if (state === undefined) {
-        state = {id: evaluator.databases.size, key, path: ":memory:"};
+        state = {id: evaluator.databases.size, key, path: databasePath.value};
         evaluator.databases.set(key, state);
       }
       return {kind: "database", state};

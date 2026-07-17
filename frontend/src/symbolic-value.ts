@@ -117,7 +117,7 @@ export interface ActorState {
 export interface DatabaseState {
   id: number;
   key: string;
-  path: ":memory:";
+  path: string;
 }
 
 export interface StatementState {

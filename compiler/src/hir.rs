@@ -723,10 +723,8 @@ impl Program {
                     database.id
                 ));
             }
-            if database.path != ":memory:" {
-                return Err(format!(
-                    "SQLite database {index} requires the capability-free :memory: path"
-                ));
+            if database.path.is_empty() || database.path.len() > 4096 || database.path.contains('\0') {
+                return Err(format!("SQLite database {index} path is outside the bounded contract"));
             }
         }
         for (index, constant) in self.constants.iter().enumerate() {

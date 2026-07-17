@@ -219,6 +219,38 @@ test("lowers a bounded in-memory SQLite owner and effects", () => {
     : parameter.kind), ["body", "routeParameter"]);
 });
 
+test("requires matching read/write capabilities for an on-disk SQLite owner", () => {
+  const entry = write("sqlite-disk.ts", `
+    import {Database} from "tinytsx:sqlite";
+    import {serve} from "tinytsx:serve";
+    import {Hono} from "hono";
+    const database = new Database("state.db");
+    const app = new Hono();
+    app.post("/schema", async context => {
+      await database.exec("CREATE TABLE IF NOT EXISTS values_table (value TEXT)");
+      return context.text("ready");
+    });
+    serve({fetch: app.fetch});
+  `);
+  const compile = (allowedWriteRoots: string[]) => compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+    apiAliases: {hono: path.join(repository, "tests/compat/hono/api.d.ts")},
+    allowedReadRoots: [directory],
+    allowedWriteRoots,
+  });
+
+  assert.throws(
+    () => compile([]),
+    (error: unknown) => error instanceof CompileFailure
+      && error.diagnostics.some(diagnostic => diagnostic.code === "TINY1511"),
+  );
+  assert.deepEqual(compile([directory]).sqliteDatabases, [{
+    id: 0,
+    path: path.join(directory, "state.db"),
+  }]);
+});
+
 test("requires an explicit read root for filesystem access", () => {
   const entry = write("fs-capability.ts", `
     import {readTextFile} from "tinytsx:fs";
