@@ -23,6 +23,15 @@
       "evidenceMarker": "builds_and_serves_a_hono_json_post_response"
     },
     {
+      "upstreamPath": "fetch/api/response/response-init-contenttype.any.js",
+      "localPath": "tests/compat/wpt/upstream/response-init-contenttype.any.js",
+      "sha256": "0812b00fb59a414652e82cea3b9f858204edb4646f6d9cb724a87c375fd3898e",
+      "status": "native-derived",
+      "coverage": "String BodyInit defaults to text/plain;charset=UTF-8 and Hono's finalized-response clone retains that header; the other BodyInit cases are not claimed",
+      "nativeEvidence": "compiler/tests/e2e.rs",
+      "evidenceMarker": "response_time_clone_preserves_fetch_wpt_string_content_type"
+    },
+    {
       "upstreamPath": "url/urlsearchparams-has.any.js",
       "localPath": "tests/compat/wpt/upstream/urlsearchparams-has.any.js",
       "sha256": "6c6d0464e9a2cd80ab4999e63812d39cf03506c0bdfd99a5a5c147f3ee4e7941",

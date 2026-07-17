@@ -674,7 +674,7 @@ fn builds_and_serves_the_upstream_powered_by_middleware() {
 }
 
 #[test]
-fn builds_and_serves_the_upstream_response_time_middleware() {
+fn response_time_clone_preserves_fetch_wpt_string_content_type() {
     build_and_serve_with_options(
         "tests/compat/hono/response-time-smoke.ts",
         ExpectedResponse {
