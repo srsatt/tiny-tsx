@@ -316,6 +316,47 @@ Do not tag `0.1.0-alpha.1` until all of these are true:
 
 ## Ordered post-alpha backlog
 
+### Next development milestone — real-world server stability
+
+This milestone is intentionally **not started by this backlog update**. The
+release/tag action above remains separate, and the next implementation goal
+should explicitly select this milestone before changing code.
+
+The objective is to move from the narrow alpha contract to a dependable
+server-side subset that can run a broader Hono application under sustained
+load. It is not a promise of general JavaScript or npm compatibility.
+
+Work in four tracer-driven slices:
+
+1. close the language/runtime gaps exposed by the remaining native Test262
+   programs and the selected Hono application;
+2. run a multi-module Hono user-auth/configuration application and promote only
+   the Web APIs and Hono behavior it proves necessary;
+3. generalize actor messages and harden SQLite ownership/persistence for that
+   application;
+4. repeat native target, failure, load, and TinyTSX/Bun evidence before naming
+   a release candidate.
+
+The milestone is complete only when:
+
+- [ ] every newly admitted language feature has a complete native Test262 or
+      project-owned semantic test; syntax-only parsing is not sufficient;
+- [ ] the selected Hono application builds and runs on Apple arm64 and Linux
+      arm64, with success, malformed-input, denied-capability, overload, and
+      shutdown paths in the release suite;
+- [ ] actor and SQLite resources remain bounded, disposable, isolated, and
+      recoverable under saturation, restart, and persistent-state tests;
+- [ ] the compatibility, standard-library, persistence, actor, and performance
+      documents describe the same executable contract;
+- [ ] controlled TinyTSX/Bun measurements cover startup, RSS, throughput,
+      median/p99 latency, CPU, allocation, and sustained-load behavior without
+      claims beyond the measured applications.
+
+AI SDK expansion, WASM embedding, distributed actors, and production garbage
+collection are research tracks below. They may provide tracers or design
+evidence, but they do not block this milestone unless a later backlog change
+adds an explicit application acceptance test.
+
 ### P1 — Compatibility and language depth
 
 - [ ] Promote remaining syntax-only Test262 cases only when their complete
@@ -365,7 +406,7 @@ Do not tag `0.1.0-alpha.1` until all of these are true:
 - [ ] Continue expanding the explicit upstream Hono behavior allowlist and
       example matrix; never replace it with a blanket compatibility claim.
 
-### P3 — Actors, AI, persistence, and managed memory
+### P3 — Actors and persistence depth
 
 - [ ] Extend actor message copying to an explicit structured subset of
       primitives, closed records, and bounded arrays; preserve isolation and
@@ -384,12 +425,6 @@ Do not tag `0.1.0-alpha.1` until all of these are true:
 - [ ] Add actor supervision trees, restart intensity, monitors/links, registries,
       persistence snapshots, and remote/distributed actors only from separate
       evidence-driven proposals.
-- [ ] Add deterministic AI invalid-schema and multi-step/tool-call behavior.
-- [ ] Add heap ABI descriptors, roots, safepoints/stack maps, and write barriers,
-      then compare established conservative and precise per-worker collectors.
-      Do not implement a production collector from scratch.
-- [ ] Expose the optional no-WASI WASM profile through an explicit built-in only
-      after capability, packaging, and actor-isolation contracts are complete.
 
 ### P4 — Performance evidence
 
@@ -398,6 +433,19 @@ Do not tag `0.1.0-alpha.1` until all of these are true:
 - [ ] Add CPU, syscall, allocation, peak-RSS, and first-launch instrumentation.
 - [ ] Run controlled longer-duration comparisons before publishing performance
       claims and optimize only from profiles.
+
+### P5 — Research tracks outside the release critical path
+
+- [ ] Add deterministic AI invalid-schema and multi-step/tool-call behavior,
+      using the pinned AI SDK only as an evidence source rather than promising
+      general package compatibility.
+- [ ] Add heap ABI descriptors, roots, safepoints/stack maps, and write barriers,
+      then compare established conservative and precise per-worker collectors.
+      Do not implement a production collector from scratch.
+- [ ] Expose the optional no-WASI WASM profile through an explicit built-in only
+      after capability, packaging, and actor-isolation contracts are complete.
+- [ ] Evaluate distributed actors only after local actor scale, fairness,
+      supervision, persistence, and failure semantics have executable evidence.
 
 ## Completed foundation
 
