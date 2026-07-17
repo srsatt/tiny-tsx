@@ -591,12 +591,13 @@ promoted into a later goal.
         buffered request bytes, HTTP body framing, pipelining order, overload
         behavior, and graceful shutdown. The reusable worker pool atomically
         rotates a live job behind its bounded queue; HTTP retains the connection
-        parser across eight-request turns and the 100-request lifetime cap.
-        Three repeated concurrency-64 actor runs reach 66.7k requests/second,
-        retaining 93.9% of the committed ~71.0k baseline while reducing p99
-        from 41.94 to 7.52 ms. TinyTSX open descriptors return from 68 peak to 4
-        at the interval end. The basic, actor, SQLite, and user-auth Hono suites
-        pass on Apple arm64 and assemble for Linux arm64.
+        parser across sixteen-request turns and the 100-request lifetime cap.
+        Three repeated concurrency-64 actor runs reach 67.0k requests/second,
+        retaining 94.4% of the committed ~71.0k baseline while reducing p99
+        from 41.94 to 13.72 ms. Repeated basic and SQLite runs record 12.46 and
+        16.16 ms p99, respectively. TinyTSX open descriptors return from 68 peak
+        to 4 at every interval end. The basic, actor, SQLite, and user-auth Hono
+        suites pass on Apple arm64 and assemble for Linux arm64.
 
 ### P5 — Research tracks outside the release critical path
 

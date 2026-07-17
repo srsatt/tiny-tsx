@@ -16,12 +16,13 @@ the original connection-affinity policy produced 37–46 ms p99 at concurrency
 64 versus Bun at 0.8–1.2 ms.
 
 A subsequent actor-only profile drove bounded live-connection rotation. The
-same eight-worker concurrency-64 actor point now reaches 66,702 requests/second
-(93.9% of its committed pre-change baseline and 0.75x Bun) while p99 falls from
-41.94 to 7.52 ms. Peak RSS is 6.75 MiB and open descriptors return from 68 peak
-to 4 at the interval end. This validates the scheduling change for the measured
-actor route; the basic and SQLite load matrices and longer controlled runs have
-not yet been repeated, so it is not a general tail-latency claim.
+same eight-worker concurrency-64 actor point now reaches 67,001 requests/second
+(94.4% of its committed pre-change baseline and 0.71x Bun) while p99 falls from
+41.94 to 13.72 ms. Repeated basic and SQLite points also fall to 12.46 and
+16.16 ms p99. Peak RSS remains 6.80–7.91 MiB and open descriptors return from
+68 peak to 4 at every interval end. This validates the scheduling change for
+the three measured routes; longer controlled runs have not yet been repeated,
+so it is not a general tail-latency claim.
 
 The honest claim is therefore:
 
@@ -128,17 +129,23 @@ experiments were rejected.
 
 The accepted design retains each socket, bounded parser buffer, and lifetime
 request count while atomically rotating the live connection behind queued work
-after eight requests. The worker-pool operation keeps the external queue bound
+after sixteen requests. The worker-pool operation keeps the external queue bound
 and cannot reject a resubmission merely because that queue is full. Shutdown
 stops the connection at its next turn boundary.
 
-The clean commit `05c526b` comparison uses three five-second samples at
-concurrency 64 with eight workers and keep-alive. TinyTSX records 66,702
-requests/second, 0.131 ms p50, 7.524 ms p99, 6.75 MiB peak RSS, and open file
-descriptors at 4/68/4 start/peak/end. Bun records 88,841 requests/second,
-0.590 ms p50, 1.756 ms p99, 111.20 MiB peak RSS, and 6/70/6 descriptors. The
-raw samples are retained in
-`benchmarks/results/2026-07-17-m5-max-actor-fair-keepalive-w8.*`.
+The clean commit `eed2a92` comparison uses three five-second samples at
+concurrency 64 with eight workers and keep-alive:
+
+| Workload | TinyTSX req/s | Tiny/Bun | Tiny p99 | Bun p99 | Tiny/Bun peak RSS |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Hono basic | 73,293 | 0.56x | 12.456 ms | 1.149 ms | 6.88 / 118.89 MiB |
+| Counter actor | 67,001 | 0.71x | 13.719 ms | 1.497 ms | 6.80 / 111.48 MiB |
+| SQLite owner | 56,722 | 0.45x | 16.163 ms | 1.089 ms | 7.91 / 66.14 MiB |
+
+TinyTSX open descriptors are 4/68/4 start/peak/end for all three workloads.
+The raw samples are retained in the adjacent
+`benchmarks/results/2026-07-17-m5-max-{basic,actor,sqlite}-fair-keepalive-w8.*`
+reports.
 
 ## Earlier connection-close and compatibility evidence
 
@@ -437,6 +444,6 @@ run both cover that correction. Raw reports are
     and repeated days/machines. Publish no general performance claim before
     these gates pass.
 
-The next performance tasks are route/response-size coverage, repetition of the
-basic and SQLite matrices with connection rotation, and longer controlled runs.
-The accepted actor result is still not publication-grade evidence.
+The next performance tasks are route/response-size coverage, normalized
+CPU/syscall profiling, and longer controlled runs. The accepted three-route
+result is still not publication-grade evidence.

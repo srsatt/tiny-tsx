@@ -109,14 +109,15 @@ produces and serves a native Mach-O executable from the example TSX source.
   takes the queue head, preserving the configured queue bound even when it is
   full. Pool close prevents another resubmission after the active turn.
 - HTTP connections now retain their socket, bounded parser buffer, and
-  completed-request count across eight-request turns. They still close after
-  100 requests or five idle seconds. A bootstrap regression test sends nine
-  pipelined requests in one write and proves the ninth survives resubmission
-  with the correct eight keep-alive responses and final close.
+  completed-request count across sixteen-request turns. They still close after
+  100 requests or five idle seconds. A bootstrap regression test sends
+  seventeen pipelined requests in one write and proves the seventeenth survives
+  resubmission with the correct sixteen keep-alive responses and final close.
 - The acceptance comparison uses three five-second concurrency-64 runs, eight
-  workers, and keep-alive. TinyTSX reaches 66,702 requests/second (93.9% of the
-  committed ~71.0k baseline) while p99 falls from 41.94 to 7.52 ms. Peak RSS is
-  6.75 MiB; sampled descriptors return from 68 peak to 4, matching the start.
+  workers, and keep-alive. TinyTSX reaches 67,001 requests/second (94.4% of the
+  committed ~71.0k baseline) while p99 falls from 41.94 to 13.72 ms. The paired
+  basic and SQLite reruns record 12.46 and 16.16 ms p99. Peak RSS remains
+  6.80–7.91 MiB; sampled descriptors return from 68 peak to 4 in every run.
 - Verification: 17 worker tests, 56 bootstrap tests, both crates under Clippy
   with warnings denied, Hono alpha 10/10, actor 6/6, SQLite 5/5, and user-auth
   2/2 across Apple execution and Linux-arm64 assembly. Raw evidence is in
@@ -798,7 +799,7 @@ produces and serves a native Mach-O executable from the example TSX source.
   escapes, and no managed sites; GC remains disabled.
 - HTTP/1.1 connections retain their owned socket and parser buffer for up to
   100 requests or five idle seconds, but now rotate behind queued work after
-  each eight-request executor turn. A 16 KiB parser preserves pipelined bytes,
+  each sixteen-request executor turn. A 16 KiB parser preserves pipelined bytes,
   consumes validated bodies up to 64 KiB, rejects duplicate Content-Length or
   transfer encoding, and closes deterministically on framing or application
   failures.

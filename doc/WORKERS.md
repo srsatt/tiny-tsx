@@ -74,7 +74,7 @@ response and closes that connection. A rejected connection must not consume a
 request arena. Each accepted connection owns its socket, parser buffer, and
 completed-request count until close.
 
-HTTP/1.1 keep-alive processes at most eight requests in one executor turn, then
+HTTP/1.1 keep-alive processes at most sixteen requests in one executor turn, then
 atomically rotates the same owned connection behind queued work. The socket is
 not closed and already-read pipelined bytes remain in the connection's bounded
 buffer across turns. Request bodies use validated `Content-Length` framing up
