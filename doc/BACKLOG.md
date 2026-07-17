@@ -567,12 +567,12 @@ promoted into a later goal.
     workload families and longer sustained profiles remain open.
 - [x] Add CPU, syscall, allocation, peak-RSS, and first-launch instrumentation.
   - 2026-07-17: the macOS harness samples whole-process CPU time, Unix/Mach
-    syscalls, context switches, faults, threads, and peak RSS during warm-up and
-    load, and reports the first fresh-process launch separately from the startup
-    median. TinyTSX allocator counters are a benchmark-only opt-in Cargo feature
-    because their atomics change the measured path; ordinary comparisons and
-    production binaries do not include them, and no Bun allocation ratio is
-    claimed.
+    syscalls, context switches, faults, threads, open-file-descriptor
+    start/peak/end counts, and peak RSS during warm-up and load, and reports the
+    first fresh-process launch separately from the startup median. TinyTSX
+    allocator counters are a benchmark-only opt-in Cargo feature because their
+    atomics change the measured path; ordinary comparisons and production
+    binaries do not include them, and no Bun allocation ratio is claimed.
 - [ ] Run controlled longer-duration comparisons before publishing performance
       claims and optimize only from profiles.
   - 2026-07-17: a symbolized five-second macOS sample during a ten-second,
@@ -587,13 +587,16 @@ promoted into a later goal.
     71.0k to 41.9k requests/second. A cap of 32 reached 28.10 ms p99 and 63.3k
     requests/second. Neither experiment was retained because reconnect churn
     trades too much throughput for latency.
-  - [ ] Design bounded live-connection resubmission that preserves the socket,
+  - [x] Design bounded live-connection resubmission that preserves the socket,
         buffered request bytes, HTTP body framing, pipelining order, overload
-        behavior, and graceful shutdown. Prove bounded queue/FD ownership and
-        no leak under disconnects. Accept it only if three repeated
-        concurrency-64 actor runs improve p99 to at most 25 ms while retaining
-        at least 90% of the committed baseline throughput, then rerun the basic,
-        actor, SQLite, and user-auth Hono native matrices.
+        behavior, and graceful shutdown. The reusable worker pool atomically
+        rotates a live job behind its bounded queue; HTTP retains the connection
+        parser across eight-request turns and the 100-request lifetime cap.
+        Three repeated concurrency-64 actor runs reach 66.7k requests/second,
+        retaining 93.9% of the committed ~71.0k baseline while reducing p99
+        from 41.94 to 7.52 ms. TinyTSX open descriptors return from 68 peak to 4
+        at the interval end. The basic, actor, SQLite, and user-auth Hono suites
+        pass on Apple arm64 and assemble for Linux arm64.
 
 ### P5 — Research tracks outside the release critical path
 

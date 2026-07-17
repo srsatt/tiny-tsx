@@ -234,9 +234,10 @@ samples through `oha`. See `benchmarks/README.md` for methodology and limitation
 The present bootstrap accepts GET and POST requests over bounded HTTP/1.1
 keep-alive on a configurable fixed native worker pool. One acceptor submits
 owned connections to a bounded queue with 64 waiting slots per worker;
-saturation returns HTTP 503. A live connection stays on one executor, closes
-after 100 requests or five idle seconds, and reuses that worker's request arena
-for every response.
+saturation returns HTTP 503. A live connection keeps its socket and parser
+buffer while rotating behind queued work after every eight requests. It closes
+after 100 requests or five idle seconds, and each turn uses the current
+executor's reusable request arena.
 
 ---
 

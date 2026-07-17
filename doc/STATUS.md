@@ -70,8 +70,9 @@ produces and serves a native Mach-O executable from the example TSX source.
 
 - Benchmark reports preserve the first fresh-process launch separately from the
   startup median and use macOS `libproc` counters for CPU time, Unix/Mach
-  syscalls, context switches, faults, threads, and resident size. A background
-  sampler captures peak RSS every 20 ms throughout warm-up and load.
+  syscalls, context switches, faults, threads, open file descriptors, and
+  resident size. A background sampler captures peak RSS, threads, and
+  descriptor counts every 20 ms throughout warm-up and load.
 - TinyTSX allocation counting is compiled only when the harness receives
   `--allocation-metrics`. It records allocation/reallocation calls, requested
   bytes, and live/peak-live bytes, labels its atomic overhead, and is absent
@@ -100,6 +101,26 @@ produces and serves a native Mach-O executable from the example TSX source.
   counting overhead is explicit and does not contaminate the main comparison.
 - Raw JSON and rendered reports are the two
   `benchmarks/results/2026-07-17-m5-max-stable-hono-actor-*` pairs.
+
+### Bounded HTTP connection turns (2026-07-17)
+
+- The reusable native worker pool accepts resumable handlers. A yielded owned
+  job atomically rotates behind already queued work while the current executor
+  takes the queue head, preserving the configured queue bound even when it is
+  full. Pool close prevents another resubmission after the active turn.
+- HTTP connections now retain their socket, bounded parser buffer, and
+  completed-request count across eight-request turns. They still close after
+  100 requests or five idle seconds. A bootstrap regression test sends nine
+  pipelined requests in one write and proves the ninth survives resubmission
+  with the correct eight keep-alive responses and final close.
+- The acceptance comparison uses three five-second concurrency-64 runs, eight
+  workers, and keep-alive. TinyTSX reaches 66,702 requests/second (93.9% of the
+  committed ~71.0k baseline) while p99 falls from 41.94 to 7.52 ms. Peak RSS is
+  6.75 MiB; sampled descriptors return from 68 peak to 4, matching the start.
+- Verification: 17 worker tests, 56 bootstrap tests, both crates under Clippy
+  with warnings denied, Hono alpha 10/10, actor 6/6, SQLite 5/5, and user-auth
+  2/2 across Apple execution and Linux-arm64 assembly. Raw evidence is in
+  `benchmarks/results/2026-07-17-m5-max-actor-fair-keepalive-w8.*`.
 
 ### Bounded actor ask deadlines (2026-07-17)
 
@@ -775,10 +796,12 @@ produces and serves a native Mach-O executable from the example TSX source.
   served the exact 23-byte body over chunked HTTP. Its report has 101 sites: 78
   compile-time, 13 static, 10 request-lifetime, 34 with aliases, 23 response
   escapes, and no managed sites; GC remains disabled.
-- HTTP/1.1 connections now stay on one executor for up to 100 requests or five
-  idle seconds. A 16 KiB parser preserves pipelined bytes, consumes validated
-  bodies up to 1 MiB, rejects duplicate Content-Length/transfer encoding, and
-  closes deterministically on framing or application failures.
+- HTTP/1.1 connections retain their owned socket and parser buffer for up to
+  100 requests or five idle seconds, but now rotate behind queued work after
+  each eight-request executor turn. A 16 KiB parser preserves pipelined bytes,
+  consumes validated bodies up to 64 KiB, rejects duplicate Content-Length or
+  transfer encoding, and closes deterministically on framing or application
+  failures.
 - Every HTTP executor now allocates its configured response arena once and
   reuses the same pointer for subsequent requests. Native Hono E2E covers two
   pipelined routes, body framing, the 100-request cap, malformed/oversized close,

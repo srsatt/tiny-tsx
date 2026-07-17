@@ -4,18 +4,24 @@ Last updated: 2026-07-17
 
 ## Current conclusion
 
-TinyTSX is compelling for deployment and resident footprint, but the final
-eight-worker keep-alive comparison does not show throughput or tail-latency
-parity with Bun. Across the Hono basic, counter actor, and SQLite-owner routes,
+TinyTSX is compelling for deployment and resident footprint, but the alpha
+eight-worker keep-alive comparison does not show throughput parity with Bun.
+Across the Hono basic, counter actor, and SQLite-owner routes,
 TinyTSX stays at 6.6–7.9 MiB after warm-up versus Bun at 70–124 MiB. Repeated
 startup is close at 22.6–23.8 ms versus Bun at 20.3–21.4 ms.
 
 TinyTSX reaches 0.24–0.36x Bun throughput at concurrency 1–8 and 0.41–0.69x at
 concurrency 32–64. Its ratio improves rather than collapsing under load, but
-the bounded persistent-connection affinity produces 37–46 ms p99 at
-concurrency 64 versus Bun at 0.8–1.2 ms. This makes socket fairness a clearer
-near-term optimization target than attributing the result to the absence of a
-JIT.
+the original connection-affinity policy produced 37–46 ms p99 at concurrency
+64 versus Bun at 0.8–1.2 ms.
+
+A subsequent actor-only profile drove bounded live-connection rotation. The
+same eight-worker concurrency-64 actor point now reaches 66,702 requests/second
+(93.9% of its committed pre-change baseline and 0.75x Bun) while p99 falls from
+41.94 to 7.52 ms. Peak RSS is 6.75 MiB and open descriptors return from 68 peak
+to 4 at the interval end. This validates the scheduling change for the measured
+actor route; the basic and SQLite load matrices and longer controlled runs have
+not yet been repeated, so it is not a general tail-latency claim.
 
 The honest claim is therefore:
 
@@ -84,7 +90,8 @@ remain P4 measurements.
 
 The comparison harness now records the first fresh-process launch separately
 from the startup median and samples whole-process CPU time, Unix/Mach syscalls,
-context switches, faults, thread count, and peak RSS during warm-up and load.
+context switches, faults, thread count, open descriptors, and peak RSS during
+warm-up and load.
 An opt-in TinyTSX runtime feature also counts allocator calls, requested bytes,
 and live/peak-live bytes; it is excluded from ordinary builds and explicitly
 labels its atomic measurement overhead. Bun allocation ratios are not claimed.
@@ -110,6 +117,28 @@ load interval. The atomic counters are absent from the comparative matrix and
 ordinary binaries. Together, the stable throughput and elevated process
 pressure make connection/application scheduling and syscall profiles the next
 evidence step; they do not support a generic AOT-versus-JIT conclusion.
+
+### Bounded live-connection rotation
+
+A symbolized actor profile showed HTTP executors synchronously waiting on one
+single-owner actor while excess keep-alive connections sat behind each
+executor's 100-request connection turn. Closing connections after 8 or 32
+requests improved p99 but lost too much throughput to reconnect churn, so those
+experiments were rejected.
+
+The accepted design retains each socket, bounded parser buffer, and lifetime
+request count while atomically rotating the live connection behind queued work
+after eight requests. The worker-pool operation keeps the external queue bound
+and cannot reject a resubmission merely because that queue is full. Shutdown
+stops the connection at its next turn boundary.
+
+The clean commit `05c526b` comparison uses three five-second samples at
+concurrency 64 with eight workers and keep-alive. TinyTSX records 66,702
+requests/second, 0.131 ms p50, 7.524 ms p99, 6.75 MiB peak RSS, and open file
+descriptors at 4/68/4 start/peak/end. Bun records 88,841 requests/second,
+0.590 ms p50, 1.756 ms p99, 111.20 MiB peak RSS, and 6/70/6 descriptors. The
+raw samples are retained in
+`benchmarks/results/2026-07-17-m5-max-actor-fair-keepalive-w8.*`.
 
 ## Earlier connection-close and compatibility evidence
 
@@ -230,8 +259,10 @@ application execution scales.
 ## Fixed-worker keep-alive matrix
 
 The same exact-source/Bun response gate was rerun with persistent HTTP/1.1
-connections. TinyTSX closes each connection after 100 requests or five idle
-seconds and keeps a live connection on one executor for its bounded turn.
+connections. At the time of this historical matrix, TinyTSX closed each
+connection after 100 requests or five idle seconds and kept a live connection
+on one executor for its complete lifetime turn. The bounded-rotation result
+above supersedes that scheduling policy.
 
 | Workers | Warm RSS | RPS c8 | RPS c32 | RPS c64 | c64 vs 1 worker | p99 c64 |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -406,7 +437,6 @@ run both cover that correction. Raw reports are
     and repeated days/machines. Publish no general performance claim before
     these gates pass.
 
-The next performance task is connection fairness instrumentation, followed by
-route/response-size coverage and longer controlled runs. The compatibility
-track can now move to Worker syntax sugar without pretending these previews are
-publication-grade performance claims.
+The next performance tasks are route/response-size coverage, repetition of the
+basic and SQLite matrices with connection rotation, and longer controlled runs.
+The accepted actor result is still not publication-grade evidence.

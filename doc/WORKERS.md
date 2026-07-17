@@ -24,6 +24,7 @@ The zero-dependency runtime library exposes the following semantic operations:
 
 ```text
 new(worker_count, queue_capacity, initialize_worker, handle_job)
+new_resumable(worker_count, queue_capacity, initialize_worker, handle_turn)
 try_submit(job) -> accepted | full(job) | closed(job)
 close()
 join()
@@ -40,6 +41,13 @@ The pool guarantees:
 5. panic containment around each job so later jobs remain serviceable;
 6. deterministic close: reject new jobs, drain accepted jobs, then join;
 7. ownership of a rejected job is returned to the caller.
+
+A resumable handler returns `complete` or `resubmit(job)`. Resubmission
+atomically rotates the live job behind already queued work while taking the
+next job for the current executor. It cannot fail because the external queue is
+full, does not grow the queue beyond `queue_capacity`, and stops at the next
+turn boundary after `close()`. If no other job is waiting, the current executor
+continues immediately.
 
 The pool does not know about TCP, Hono, JavaScript modules, request arenas, or
 garbage collection.
@@ -63,14 +71,16 @@ capacity is 64 waiting connections per worker; it is never unbounded.
 
 When `try_submit` reports a full queue, the acceptor writes a minimal HTTP 503
 response and closes that connection. A rejected connection must not consume a
-request arena. Each accepted connection stays on one executor thread through
-parsing, rendering, response writing, and close.
+request arena. Each accepted connection owns its socket, parser buffer, and
+completed-request count until close.
 
-HTTP/1.1 keep-alive reuses the same worker job instead of re-enqueueing each
-request on the connection. Pipelined bytes stay in a bounded connection buffer;
-request bodies are consumed by validated `Content-Length` framing up to 1 MiB.
-A connection closes on explicit `Connection: close`, invalid/ambiguous framing,
-request OOM/internal failure, 100 completed requests, or five idle seconds.
+HTTP/1.1 keep-alive processes at most eight requests in one executor turn, then
+atomically rotates the same owned connection behind queued work. The socket is
+not closed and already-read pipelined bytes remain in the connection's bounded
+buffer across turns. Request bodies use validated `Content-Length` framing up
+to 64 KiB. A connection closes on explicit `Connection: close`, invalid or
+ambiguous framing, request OOM/internal failure, 100 completed requests, five
+idle seconds, or pool shutdown after its active turn.
 
 ## JavaScript-facing Worker subset
 
@@ -149,10 +159,13 @@ logical workers in one compiled application are the next semantics slice.
 
 The native pool is complete only when tests prove parallel execution, FIFO
 queueing, full/closed job recovery, worker-local state, panic recovery, and
-draining shutdown. HTTP integration additionally requires:
+draining shutdown. Resumable-pool tests also prove atomic rotation behind a
+full bounded queue and termination at a close boundary. HTTP integration
+additionally requires:
 
 - native E2E coverage with `--workers` greater than one;
 - simultaneous slow connections completing in parallel;
 - controlled 503 behavior at saturation and recovery afterward;
+- pipelined body/head preservation across a resubmitted turn;
 - response isolation across concurrent routes;
-- RSS and load results for 1, 2, 4, and 8 workers.
+- RSS, open-descriptor, and load results for 1, 2, 4, and 8 workers.

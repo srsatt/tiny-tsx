@@ -1,0 +1,388 @@
+{
+  "schemaVersion": 2,
+  "timestamp": "2026-07-17T13:56:13+00:00",
+  "workload": "hono-actor",
+  "scope": "one persistent signed counter actor behind a pinned Hono ask/reply route; zero-delta reads through bounded copied messages; HTTP/1.1; localhost",
+  "limitations": [
+    "TinyTSX uses its local actor mailbox while Bun uses one Worker-owned counter; the zero-delta route measures ownership/message overhead without persistence, mutation contention, supervision, or distributed actors.",
+    "TinyTSX bounds each connection at 100 requests and reconnects; the Bun host may retain a connection longer."
+  ],
+  "responseDifferences": [],
+  "environment": {
+    "machine": "Model Name: MacBook Pro; Model Identifier: Mac17,6; Chip: Apple M5 Max; Total Number of Cores: 18 (6 Super and 12 Performance); Memory: 128 GB",
+    "os": "macOS 26.5.2",
+    "architecture": "arm64",
+    "rustVersion": "rustc 1.96.0 (ac68faa20 2026-05-25)",
+    "bunVersion": "1.3.13",
+    "ohaVersion": "oha 1.15.0",
+    "commit": "05c526b",
+    "dirty": false,
+    "powerAndBackgroundState": "not controlled"
+  },
+  "configuration": {
+    "runs": 3,
+    "startupRuns": 3,
+    "durationSeconds": 5,
+    "concurrency": [
+      64
+    ],
+    "workers": 8,
+    "requestMemoryBytes": 262144,
+    "keepAlive": true,
+    "supportProcess": false,
+    "processSampleIntervalMs": 20,
+    "allocationInstrumentation": "disabled"
+  },
+  "correctness": {
+    "path": "/",
+    "status": 200,
+    "contentTypes": {
+      "tinytsx": "text/plain; charset=UTF-8",
+      "bun": "text/plain; charset=UTF-8"
+    },
+    "contentLength": 1,
+    "framings": {
+      "tinytsx": "1",
+      "bun": "1"
+    },
+    "bodyUtf8": "0",
+    "headers": {},
+    "numericHeaders": []
+  },
+  "targets": {
+    "tinytsx": {
+      "artifactBytes": 2355160,
+      "runtimeExecutableBytes": 2355160,
+      "startupSamplesMs": [
+        452.084958,
+        20.584709,
+        21.2145
+      ],
+      "idleRssSamplesBytes": [
+        6651904,
+        6684672,
+        6668288
+      ],
+      "postWarmupRssSamplesBytes": [
+        6963200,
+        6930432,
+        6914048
+      ],
+      "resourceSamples": [
+        {
+          "wallSeconds": 6.276816083001904,
+          "userCpuSeconds": 2.4431375,
+          "systemCpuSeconds": 13.734034833333332,
+          "cpuSeconds": 16.17717233333333,
+          "cpuUtilizationPercent": 257.72895237670485,
+          "peakRssBytes": 7143424,
+          "pageFaults": 32,
+          "pageIns": 0,
+          "copyOnWriteFaults": 0,
+          "machSyscalls": 749038,
+          "unixSyscalls": 6760382,
+          "contextSwitches": 1115550,
+          "peakThreads": 17,
+          "openFileDescriptorsStart": 4,
+          "openFileDescriptorsPeak": 68,
+          "openFileDescriptorsEnd": 4,
+          "diskBytesRead": 0,
+          "diskBytesWritten": 0,
+          "instructions": 66149486140,
+          "cycles": 68536976190
+        },
+        {
+          "wallSeconds": 6.26679508300731,
+          "userCpuSeconds": 2.4861455,
+          "systemCpuSeconds": 14.286759083333331,
+          "cpuSeconds": 16.772904583333332,
+          "cpuUtilizationPercent": 267.64724809358773,
+          "peakRssBytes": 7077888,
+          "pageFaults": 24,
+          "pageIns": 0,
+          "copyOnWriteFaults": 0,
+          "machSyscalls": 779991,
+          "unixSyscalls": 7032933,
+          "contextSwitches": 1163133,
+          "peakThreads": 17,
+          "openFileDescriptorsStart": 4,
+          "openFileDescriptorsPeak": 68,
+          "openFileDescriptorsEnd": 4,
+          "diskBytesRead": 0,
+          "diskBytesWritten": 0,
+          "instructions": 68846734705,
+          "cycles": 70864615878
+        },
+        {
+          "wallSeconds": 6.258540999988327,
+          "userCpuSeconds": 2.4895151666666666,
+          "systemCpuSeconds": 14.196720583333333,
+          "cpuSeconds": 16.686235749999998,
+          "cpuUtilizationPercent": 266.6154260239107,
+          "peakRssBytes": 7061504,
+          "pageFaults": 27,
+          "pageIns": 0,
+          "copyOnWriteFaults": 0,
+          "machSyscalls": 780703,
+          "unixSyscalls": 7037288,
+          "contextSwitches": 1162784,
+          "peakThreads": 17,
+          "openFileDescriptorsStart": 4,
+          "openFileDescriptorsPeak": 68,
+          "openFileDescriptorsEnd": 4,
+          "diskBytesRead": 0,
+          "diskBytesWritten": 0,
+          "instructions": 68883329980,
+          "cycles": 70593611453
+        }
+      ],
+      "allocationSamples": [],
+      "throughput": {
+        "64": {
+          "samples": [
+            {
+              "requests_per_second": 65084.67790591095,
+              "success_rate": 1.0,
+              "p50_ms": 0.132125,
+              "p95_ms": 6.649249999999999,
+              "p99_ms": 8.066125,
+              "max_ms": 18.745667,
+              "total_seconds": 5.005556,
+              "status_codes": {
+                "200": 325785
+              }
+            },
+            {
+              "requests_per_second": 66911.4612856591,
+              "success_rate": 1.0,
+              "p50_ms": 0.130416,
+              "p95_ms": 6.528625,
+              "p99_ms": 7.355167,
+              "max_ms": 18.981375000000003,
+              "total_seconds": 5.006646,
+              "status_codes": {
+                "200": 335002
+              }
+            },
+            {
+              "requests_per_second": 66702.03208466402,
+              "success_rate": 1.0,
+              "p50_ms": 0.13054200000000002,
+              "p95_ms": 6.564,
+              "p99_ms": 7.52375,
+              "max_ms": 25.19625,
+              "total_seconds": 5.005124875,
+              "status_codes": {
+                "200": 333852
+              }
+            }
+          ],
+          "median": {
+            "requests_per_second": 66702.03208466402,
+            "p50_ms": 0.13054200000000002,
+            "p95_ms": 6.564,
+            "p99_ms": 7.52375,
+            "max_ms": 18.981375000000003
+          }
+        }
+      },
+      "firstLaunchMs": 452.084958,
+      "startupMedianMs": 21.2145,
+      "idleRssMedianBytes": 6668288,
+      "postWarmupRssMedianBytes": 6930432,
+      "resourceMedian": {
+        "wallSeconds": 6.26679508300731,
+        "userCpuSeconds": 2.4861455,
+        "systemCpuSeconds": 14.196720583333333,
+        "cpuSeconds": 16.686235749999998,
+        "cpuUtilizationPercent": 266.6154260239107,
+        "peakRssBytes": 7077888.0,
+        "pageFaults": 27.0,
+        "pageIns": 0.0,
+        "copyOnWriteFaults": 0.0,
+        "machSyscalls": 779991.0,
+        "unixSyscalls": 7032933.0,
+        "contextSwitches": 1162784.0,
+        "peakThreads": 17.0,
+        "openFileDescriptorsStart": 4.0,
+        "openFileDescriptorsPeak": 68.0,
+        "openFileDescriptorsEnd": 4.0,
+        "diskBytesRead": 0.0,
+        "diskBytesWritten": 0.0,
+        "instructions": 68846734705.0,
+        "cycles": 70593611453.0
+      },
+      "allocationMedian": {}
+    },
+    "bun": {
+      "artifactBytes": 923,
+      "runtimeExecutableBytes": 63072928,
+      "startupSamplesMs": [
+        22.86975,
+        20.076417,
+        20.069292
+      ],
+      "idleRssSamplesBytes": [
+        46137344,
+        46448640,
+        46301184
+      ],
+      "postWarmupRssSamplesBytes": [
+        110133248,
+        111230976,
+        110723072
+      ],
+      "resourceSamples": [
+        {
+          "wallSeconds": 6.265520124987233,
+          "userCpuSeconds": 3.4744580416666664,
+          "systemCpuSeconds": 4.473599166666666,
+          "cpuSeconds": 7.948057208333333,
+          "cpuUtilizationPercent": 126.85390916926515,
+          "peakRssBytes": 116473856,
+          "pageFaults": 4293,
+          "pageIns": 0,
+          "copyOnWriteFaults": 0,
+          "machSyscalls": 1472253,
+          "unixSyscalls": 1581807,
+          "contextSwitches": 344487,
+          "peakThreads": 17,
+          "openFileDescriptorsStart": 6,
+          "openFileDescriptorsPeak": 70,
+          "openFileDescriptorsEnd": 6,
+          "diskBytesRead": 0,
+          "diskBytesWritten": 0,
+          "instructions": 57223581807,
+          "cycles": 33534032418
+        },
+        {
+          "wallSeconds": 6.2633521250099875,
+          "userCpuSeconds": 3.53553625,
+          "systemCpuSeconds": 4.592314916666666,
+          "cpuSeconds": 8.127851166666666,
+          "cpuUtilizationPercent": 129.76838926573532,
+          "peakRssBytes": 117817344,
+          "pageFaults": 4356,
+          "pageIns": 0,
+          "copyOnWriteFaults": 0,
+          "machSyscalls": 1607728,
+          "unixSyscalls": 1725238,
+          "contextSwitches": 348904,
+          "peakThreads": 17,
+          "openFileDescriptorsStart": 6,
+          "openFileDescriptorsPeak": 70,
+          "openFileDescriptorsEnd": 6,
+          "diskBytesRead": 0,
+          "diskBytesWritten": 0,
+          "instructions": 61599594148,
+          "cycles": 34202103047
+        },
+        {
+          "wallSeconds": 6.270790292008314,
+          "userCpuSeconds": 3.4719361666666666,
+          "systemCpuSeconds": 4.512184291666666,
+          "cpuSeconds": 7.984120458333333,
+          "cpuUtilizationPercent": 127.32239616605483,
+          "peakRssBytes": 116604928,
+          "pageFaults": 4291,
+          "pageIns": 0,
+          "copyOnWriteFaults": 0,
+          "machSyscalls": 1505491,
+          "unixSyscalls": 1611869,
+          "contextSwitches": 346839,
+          "peakThreads": 17,
+          "openFileDescriptorsStart": 6,
+          "openFileDescriptorsPeak": 70,
+          "openFileDescriptorsEnd": 6,
+          "diskBytesRead": 0,
+          "diskBytesWritten": 0,
+          "instructions": 58162250176,
+          "cycles": 33660211397
+        }
+      ],
+      "allocationSamples": [],
+      "throughput": {
+        "64": {
+          "samples": [
+            {
+              "requests_per_second": 87325.03089308081,
+              "success_rate": 1.0,
+              "p50_ms": 0.60025,
+              "p95_ms": 1.284417,
+              "p99_ms": 1.840542,
+              "max_ms": 4.1038749999999995,
+              "total_seconds": 5.003719959,
+              "status_codes": {
+                "200": 436950
+              }
+            },
+            {
+              "requests_per_second": 94902.4758272377,
+              "success_rate": 1.0,
+              "p50_ms": 0.5550419999999999,
+              "p95_ms": 1.155083,
+              "p99_ms": 1.496417,
+              "max_ms": 3.304291,
+              "total_seconds": 5.003009625,
+              "status_codes": {
+                "200": 474798
+              }
+            },
+            {
+              "requests_per_second": 88841.110169296,
+              "success_rate": 1.0,
+              "p50_ms": 0.589541,
+              "p95_ms": 1.288083,
+              "p99_ms": 1.75625,
+              "max_ms": 7.565709,
+              "total_seconds": 5.002537667,
+              "status_codes": {
+                "200": 444431
+              }
+            }
+          ],
+          "median": {
+            "requests_per_second": 88841.110169296,
+            "p50_ms": 0.589541,
+            "p95_ms": 1.284417,
+            "p99_ms": 1.75625,
+            "max_ms": 4.1038749999999995
+          }
+        }
+      },
+      "firstLaunchMs": 22.86975,
+      "startupMedianMs": 20.076417,
+      "idleRssMedianBytes": 46301184,
+      "postWarmupRssMedianBytes": 110723072,
+      "resourceMedian": {
+        "wallSeconds": 6.265520124987233,
+        "userCpuSeconds": 3.4744580416666664,
+        "systemCpuSeconds": 4.512184291666666,
+        "cpuSeconds": 7.984120458333333,
+        "cpuUtilizationPercent": 127.32239616605483,
+        "peakRssBytes": 116604928.0,
+        "pageFaults": 4293.0,
+        "pageIns": 0.0,
+        "copyOnWriteFaults": 0.0,
+        "machSyscalls": 1505491.0,
+        "unixSyscalls": 1611869.0,
+        "contextSwitches": 346839.0,
+        "peakThreads": 17.0,
+        "openFileDescriptorsStart": 6.0,
+        "openFileDescriptorsPeak": 70.0,
+        "openFileDescriptorsEnd": 6.0,
+        "diskBytesRead": 0.0,
+        "diskBytesWritten": 0.0,
+        "instructions": 58162250176.0,
+        "cycles": 33660211397.0
+      },
+      "allocationMedian": {}
+    }
+  },
+  "comparisons": {
+    "64": {
+      "tinytsxToBunRps": 0.7508014246732887,
+      "tinytsxToBunP99": 4.283985765124555
+    }
+  }
+}
