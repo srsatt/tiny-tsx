@@ -21,15 +21,29 @@ runtime errors, and a failed operation does not poison the connection. The core
 unit suite covers prepared insertion, all value families, bounded queries,
 malformed SQL recovery, and row/byte/parameter limits.
 
-The first `native-partial` public slice lowers a compile-time `:memory:`
-`Database`, closed `exec(sql)` effects, zero-parameter prepared `all()`/`get()`
-queries, bounded JSON row encoding, and idempotent `close`/`dispose`. Each
-connection is owned by one logical application worker on the fixed executor.
-The Hono owner tracer proves empty/list/first query results, schema creation,
-persistent mutation, constraint failure recovery, repeated close, post-close
-failure, Apple execution, and Linux-arm64 assembly.
+The `native-partial` public slice lowers a compile-time `:memory:` `Database`,
+closed `exec(sql)` effects, prepared `run()`/`all()`/`get()` calls, bounded JSON
+row encoding, and idempotent `close`/`dispose`. A prepared call accepts at most
+16 selected values from named route parameters and a closed request JSON
+object. Parameters use SQLite binding rather than SQL interpolation.
 
-Before promotion to `native`, the compiler must lower positional values and
-typed execute results; on-disk paths must use separate read/write capabilities;
-transactions need native tests; and the Hono blog plus persistent actor tracers
-must pass end to end.
+The HTTP transport retains at most 64 KiB of request body. `HonoRequest.json()`
+is not exposed as a general dynamic JavaScript object: the compiler records
+only statically selected fields and the bootstrap parses those fields at the
+SQLite ABI boundary. JSON null, signed integer, finite number, and string map to
+SQLite values. A missing field, malformed JSON, boolean, array, nested object,
+or unsupported value returns HTTP 400; an oversized body returns HTTP 413.
+
+Each connection is owned by one logical application worker on the fixed
+executor. The Hono owner tracer now proves schema creation, create/list/get/
+update/delete, mixed body/route binding, malformed and oversized bodies,
+constraint and malformed-SQL recovery, repeated close, post-close failure,
+Apple execution, and Linux-arm64 assembly. A Bun/Hono plus `bun:sqlite`
+reference test pins the same portable CRUD response contract.
+
+Before promotion to `native`, the compiler must expose typed execute results and
+the remaining value families needed by public callers; on-disk paths must use
+separate read/write capabilities; transactions need native tests; and the exact
+Hono blog adapter plus persistent actor tracers must pass end to end. CORS,
+UUIDs, environment-backed bindings, and upstream 404/204 envelopes remain blog
+parity work rather than claims of this local CRUD tracer.

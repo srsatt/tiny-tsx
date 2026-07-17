@@ -20,6 +20,12 @@ alpha critical path:
 1. Body Limit, as part of bounded JSON request bodies for the blog tracer.
 2. CORS, for the same portable blog/API contract.
 
+The transport and request API now provide the bounded body foundation: a
+64-KiB cap and statically selected `HonoRequest.json()` fields used by prepared
+SQLite parameters. The configurable upstream Body Limit middleware, including
+its custom `onError` behavior, remains partial. Hono `put()` and `delete()` now
+join the existing closed `get()` and `post()` route slice.
+
 All other missing helpers and middleware are explicitly post-alpha or out of
 scope. In particular, alpha does not need compression, cache storage,
 WebSockets, JWT/JWK, proxying, SSG, platform adapter detection, or Bun/Node

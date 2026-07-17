@@ -46,26 +46,28 @@ The alpha profiles are:
 - pinned upstream Hono source, not a compiler-owned Hono replacement;
 - built-in TinyTSX backend modules with no npm runtime dependency.
 
-## Next implementation slice
+## Current implementation slice
 
-The next goal should finish one vertical persistence slice before widening the
-language or standard-library surface: carry a bounded JSON request body through
-upstream Hono into prepared SQLite parameters, then use that path for the blog
-CRUD tracer.
+Finish one vertical persistence slice before widening the language or
+standard-library surface. The bounded JSON-to-prepared-SQLite foundation and a
+local Hono CRUD adapter are now green; the remaining work is exact upstream
+blog parity.
 
-Acceptance criteria for that goal are:
+Acceptance criteria are:
 
-- accept a closed JSON object no larger than 64 KiB and bind at most 16 selected
+- [x] Accept a closed JSON object no larger than 64 KiB and bind at most 16 selected
   fields and route parameters without SQL interpolation;
-- support SQLite `null`, integer, finite number, and text values in this slice;
+- [x] Support SQLite `null`, integer, finite number, and text values in this slice;
   reject missing fields, booleans, arrays, nested objects, non-finite numbers,
   oversized input, and unsupported values with a recoverable client error;
-- exercise create, list, get, update, and delete through a native Hono server,
+- [x] Exercise create, list, get, update, and delete through a native Hono server,
   including malformed-body, missing-field, malformed-SQL, and not-found paths;
-- compare the portable HTTP behavior with the same application under Bun and
+- [x] Compare the portable local-adapter HTTP behavior with Hono under Bun and
   assemble the Linux-arm64 output in the compatibility suite;
-- update `doc/PERSISTENCE.md`, `doc/COMPATIBILITY.md`, `doc/STATUS.md`, and the
+- [x] Update `doc/PERSISTENCE.md`, `doc/COMPATIBILITY.md`, `doc/STATUS.md`, and the
   machine-readable Hono example matrix with the exact supported boundary.
+- [ ] Match the pinned upstream response envelopes and missing-post 404/204
+  behavior, then add CORS, UUID generation, and environment-backed bindings.
 
 This slice does not complete A5. On-disk capabilities, transactions,
 contention, restart persistence, and the persistent actor remain separate
@@ -103,7 +105,7 @@ follow-up goals after the in-memory CRUD contract is green.
 - [ ] Use the pinned upstream `blog` routes and behavior as the CRUD contract for
       a Hono + `tinytsx:sqlite` example. Clearly distinguish any TinyTSX binding
       adapter from unchanged upstream source.
-- [ ] Add bounded JSON request bodies and closed-shape JSON parsing required by
+- [x] Add bounded JSON request bodies and closed-shape JSON parsing required by
       the blog tracer, with native success, malformed-input, and limit tests.
 - [ ] Add the minimum upstream Hono CORS middleware behavior required by the
       blog tracer and compare its portable response headers with Bun.
@@ -207,7 +209,7 @@ follow-up goals after the in-memory CRUD contract is green.
 - [ ] Specify and declare `tinytsx:sqlite` with database open/close, prepared
       statements, positional binding, bounded query rows, execute results, and
       explicit transactions.
-- [ ] Finish the in-memory prepared-parameter slice described above before
+- [x] Finish the in-memory prepared-parameter slice described above before
       adding transactions or on-disk databases; keep request JSON decoding in
       the bounded bootstrap/runtime boundary rather than a general JS object
       heap.

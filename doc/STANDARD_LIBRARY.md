@@ -98,11 +98,12 @@ observe an atomic file replacement.
 ### `tinytsx:sqlite`
 
 The current `native-partial` slice is a single-owner `:memory:` database with
-closed `exec(sql)` effects, zero-parameter prepared `all()`/`get()` JSON results,
-and idempotent `close`/`dispose`, serialized through one logical application
-worker. SQL is capped at 65,536 bytes; results at 1,024 rows and 1 MiB; and the
-vendored runtime is described in `doc/PERSISTENCE.md`. Positional values,
-execute-result values, transactions, and on-disk read/write capabilities remain
+closed `exec(sql)` effects, prepared `run()`/`all()`/`get()` calls, and
+idempotent `close`/`dispose`, serialized through one logical application
+worker. Calls bind at most 16 compile-time-selected route or bounded JSON-body
+values. SQL is capped at 65,536 bytes; results at 1,024 rows and 1 MiB; and the
+vendored runtime is described in `doc/PERSISTENCE.md`. General dynamic values,
+typed execute results, transactions, and on-disk read/write capabilities remain
 required before promotion to `native`.
 
 ### `tinytsx:actors`

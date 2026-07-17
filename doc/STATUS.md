@@ -102,11 +102,15 @@ produces and serves a native Mach-O executable from the example TSX source.
   covers prepared values, result row/byte limits, malformed SQL recovery, and
   null/integer/finite-real/text/blob mapping. The first `native-partial`
   integration lowers `:memory:` database owners, closed `exec` effects,
-  zero-parameter prepared `all`/`get` queries as bounded JSON, and idempotent
-  close through that worker. Its Hono test proves empty/list/first results,
-  schema creation, retained mutation, SQL-error recovery, post-close failure,
-  Apple execution, and Linux-arm64 assembly. Positional parameters, typed
-  execute results, transactions, disk capabilities, and the blog remain open.
+  prepared `run`/`all`/`get` with up to 16 selected route or bounded JSON-body
+  values, bounded JSON results, and idempotent close through that worker. The
+  transport retains at most 64 KiB and returns 400/413 for malformed,
+  unsupported, missing, or oversized body input. Its Hono test proves
+  create/list/get/update/delete over GET/POST/PUT/DELETE, SQL-error recovery,
+  post-close failure, Apple execution, and Linux-arm64 assembly; a Bun/Hono
+  `bun:sqlite` test pins the same local adapter contract. Typed execute results,
+  transactions, disk capabilities, CORS, UUIDs, bindings, exact upstream blog
+  envelopes, and the persistent actor remain open.
 - Verification: `npm run test:frontend` (82/82),
   `npm run test:zod-openapi-reference` (1/1),
   `npm run test:zod-openapi` (2/2),
@@ -117,6 +121,7 @@ produces and serves a native Mach-O executable from the example TSX source.
   `cargo test -p tinytsx builtins` (1/1),
   `npm run test:actors-native` (2/2),
   `cargo test -p tinytsx-runtime-sqlite` (4/4),
+  `npm run test:sqlite-reference` (1/1),
   `npm run test:sqlite-native` (2/2), and
   `cargo clippy --workspace --all-targets -- -D warnings`.
 

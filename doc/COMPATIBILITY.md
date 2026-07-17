@@ -150,6 +150,21 @@ construction, `Object.entries`, array destructuring, and `for...of` produce
 HTTP. The selected WPT Response-init source is retained as native-derived
 provenance for only this status-propagation case, not full Response conformance.
 
+Native method dispatch now also admits the exact upstream Hono `put()` and
+`delete()` registration paths used by the pinned blog contract. The local
+SQLite adapter exercises create, list, get, update, and delete through upstream
+Hono routing. A Bun/Hono plus `bun:sqlite` test pins the same response bodies and
+statuses. This evidence covers four closed HTTP methods, not arbitrary Hono
+`on()` method sets, HEAD/OPTIONS synthesis, or a general native router.
+
+The first request-body slice retains at most 64 KiB and recognizes
+`await c.req.json()` only when statically selected fields flow directly into a
+prepared SQLite call. The bootstrap parses the body once at that ABI boundary,
+binds up to 16 route/body values without interpolation, and rejects malformed,
+missing, boolean, array, nested-object, or oversized input with a recoverable
+client response. It does not construct a general runtime record, implement
+arbitrary JSON access, or complete Hono's configurable Body Limit middleware.
+
 Terminal wildcard matching now covers the exact `/api/*` fallback from the
 basic example. Native tests pin Hono's behavior that the pattern matches `/api`,
 `/api/`, and deeper paths. The generated handler returns Hono's explicit status
