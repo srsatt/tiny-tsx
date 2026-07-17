@@ -237,29 +237,31 @@ pinned blog success envelopes plus missing-record 404/204 behavior.
 
 ### A6 — Make the alpha release installable
 
-- [ ] Remove compile-time source-checkout discovery from the released compiler.
+- [x] Remove compile-time source-checkout discovery from the released compiler.
       Define an installed resource layout for frontend JavaScript, TypeScript,
       SDK declarations, runtime link inputs, licenses, and built-in metadata.
-- [ ] Decide whether alpha bundles the frontend/runtime assets or declares Node,
+- [x] Decide whether alpha bundles the frontend/runtime assets or declares Node,
       TypeScript, Rust, Clang, libcurl, and SQLite as prerequisites. A release
       must fail with actionable diagnostics when a declared prerequisite is
       missing.
-- [ ] Add `tinytsx --version` and report compiler version, HIR version, target,
+- [x] Add `tinytsx --version` and report compiler version, HIR version, target,
       runtime ABI version, built-ins, and pinned compatibility revisions.
-- [ ] Set the workspace/package version to `0.1.0-alpha.1`, add a changelog and
+- [x] Set the workspace/package version to `0.1.0-alpha.1`, add a changelog and
       third-party notices, and ensure generated reports carry the same version.
-- [ ] Add a reproducible `release:verify` command that starts from a clean tree,
+- [x] Add a reproducible `release:verify` command that starts from a clean tree,
       builds release artifacts, runs the alpha example matrix, checks reports,
       and fails on uncommitted generated changes.
-- [ ] Produce installable Apple-arm64 and Linux-arm64 archives with checksums and
-      an explicit artifact manifest. Verify each archive from a clean directory,
-      outside the repository checkout.
+- [x] Produce an installable Apple-arm64 archive with checksum and explicit
+      artifact manifest; build and execute an application from a clean directory
+      outside the checkout using only its installed resources.
+- [ ] Produce and execute the equivalent Linux-arm64 archive on Linux arm64;
+      cross-assembly on macOS is not sufficient evidence.
 - [ ] Add native Apple-arm64 and Linux-arm64 CI/release jobs. Cross-assembled ELF
       evidence does not replace executing the Linux archive on Linux.
 - [ ] Verify startup, graceful shutdown, malformed input recovery, request OOM,
       worker/actor saturation, filesystem denial, SQLite contention, and clean
       resource disposal in release builds.
-- [ ] Publish one short getting-started path that installs the archive, builds a
+- [x] Publish one short getting-started path that installs the archive, builds a
       Hono application using files/SQLite/actors, and exercises it with `curl`.
 
 ## Alpha exit gate

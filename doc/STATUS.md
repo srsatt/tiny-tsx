@@ -9,6 +9,23 @@ produces and serves a native Mach-O executable from the example TSX source.
 
 ## Alpha implementation evidence
 
+### Installable alpha archive (2026-07-17)
+
+- Workspace, frontend, and SDK versions are `0.1.0-alpha.1`. `tinytsx
+  --version` reports compiler, HIR 2, runtime ABI 1, host target, built-in schema,
+  and pinned Hono/Hono-examples/Test262 revisions; native build reports carry
+  the same version boundary.
+- Release binaries find read-only assets at `../lib/tinytsx` or an explicit
+  `TINYTSX_HOME`. Release builds no longer discover the source checkout through
+  `CARGO_MANIFEST_DIR`; debug builds retain that convenience for development.
+- `npm run release:verify` requires a clean tree, runs the root and
+  `@hono/zod-openapi` native/reference gates, rejects generated tracked changes,
+  stages the installed layout, builds and executes an application from a
+  temporary directory, then writes an archive, SHA-256, and JSON manifest.
+- The verified Apple-arm64 archive is 5.1 MiB; its generated manifest and
+  `.sha256` file carry the artifact-specific digest. Linux-arm64 archive
+  execution and native release CI remain open platform gates.
+
 ### Persistent counter actor (2026-07-17)
 
 - `spawn(..., {persistence: {database, key}})` connects the bounded `i64`
