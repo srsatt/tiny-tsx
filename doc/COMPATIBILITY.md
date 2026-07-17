@@ -182,6 +182,17 @@ assembly, and the installed archive cover this boundary. This is fixed
 per-action response lowering, not general result-object identity, mutation,
 iteration, storage, or dynamic property access.
 
+The first prepared callback transaction admits one zero-argument async block
+with 1–16 awaited `Statement.run` expression statements belonging to the same
+database. It carries at most 64 aggregate parameters and 65,536 aggregate SQL
+bytes as one owner message. The native Hono tracer commits an item plus its
+audit row, then makes the second write of another request violate a uniqueness
+constraint and proves the first write was rolled back; a later transaction
+still succeeds. Apple arm64 executes these paths and Linux arm64 assembles the
+same descriptor ABI. Queries, callback values, visible step results, control
+flow, nested or mixed-database transactions, and an interactive transaction
+object remain unsupported.
+
 The first request-body slice retains at most 64 KiB and recognizes
 `await c.req.json()` only when statically selected fields flow directly into a
 prepared SQLite call. The bootstrap parses the body once at that ABI boundary,

@@ -11,8 +11,9 @@ First developer preview of TinyTSX's zero-JavaScript native server compiler.
   and local/persistent counter-actor slices described in `doc/ALPHA.md`.
 - Stable `TINY15xx` diagnostics for built-in capabilities, static limits, and
   unsupported SQLite/actor operations. SQLite `run()` returns bounded typed
-  changes/row-id results; actors include bounded deadlines, hard-reset waiter
-  detachment, and one explicit restart-intensity form.
+  changes/row-id results and admits one atomic prepared-write callback
+  transaction; actors include bounded deadlines, hard-reset waiter detachment,
+  and one explicit restart-intensity form.
 - Native Apple-arm64 and Linux-arm64 builds, allowlist execution, installed
   archive examples, checksums, and source-commit manifests.
 

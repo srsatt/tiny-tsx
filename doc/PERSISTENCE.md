@@ -24,7 +24,8 @@ malformed SQL recovery, and row/byte/parameter limits.
 The native alpha public slice lowers a compile-time `:memory:` or
 capability-scoped on-disk `Database`, closed `exec(sql)` effects, prepared
 `run()`/`all()`/`get()` calls, static-SQL transactions, bounded JSON row
-encoding, and idempotent `close`/`dispose`. `exec()` and `transaction()` return
+encoding, one bounded prepared-write callback transaction, and idempotent
+`close`/`dispose`. `exec()` and both `transaction()` forms return
 `Promise<void>`; `Statement.run()` returns an immutable `RunResult` with a
 numeric `changes` count and `lastInsertRowId: string | null`. The decimal string
 preserves the complete signed SQLite `i64` domain rather than rounding through
@@ -75,7 +76,7 @@ This is still an application capability boundary, not an OS sandbox against
 code running as the same effective user. Roots writable through unusual ACLs,
 mount changes, privileged attackers, network filesystems with weaker Unix
 semantics, and out-of-process same-UID mutation are unsupported; deploy those
-cases behind an OS sandbox or dedicated service account. Prepared/dynamic
+cases behind an OS sandbox or dedicated service account. General dynamic
 transaction callbacks and HTTP-level contention load are also post-alpha. The
 native SQLite core holds a competing writer through the one-second busy timeout,
 observes a recoverable error, releases the lock, and proves the second
@@ -87,7 +88,26 @@ batch as one database-worker message. The runtime begins a transaction, commits
 only after the batch succeeds, and relies on transaction drop for rollback on
 error. Core and native Hono tests prove complete rollback and subsequent
 connection reuse. Prepared parameters and callback transactions are not yet
-part of this surface.
+part of the static batch surface.
+
+`Database.transaction(async () => {...})` adds one exact prepared-write form.
+The zero-argument callback block contains 1–16 awaited `Statement.run(...)`
+expression statements from the receiving database. Its aggregate SQL text is
+limited to 65,536 bytes and its aggregate parameter count to 64. The generated
+ABI describes every SQL/parameter view in one call; the bootstrap copies and
+decodes all steps before posting one database-owner message. The owner opens one
+SQLite transaction, executes the prepared steps in order, and commits only
+after all succeed. Dropping the transaction after any error rolls every step
+back, and no other request can interleave on that connection.
+
+The project-owned Hono tracer commits an item and audit row from route and JSON
+values. Its failure path makes the audit insert violate a unique constraint and
+proves the earlier item insert is absent, then executes another successful
+transaction to prove connection reuse. The core unit test pins commit and
+rollback, Apple arm64 executes the HTTP behavior, and Linux arm64 assembles the
+same transaction-step ABI. Callback arguments or returned values, query steps,
+visible per-step results, `Database.exec` steps, branches or loops, nesting,
+mixed databases, and an interactive transaction object are not admitted.
 
 The HTTP transport retains at most 64 KiB of request body. `HonoRequest.json()`
 is not exposed as a general dynamic JavaScript object: the compiler records
@@ -107,9 +127,9 @@ The manifest classifies this bounded surface as `native`. The multi-module
 user-auth tracer additionally proves a closed string parameter written to an
 on-disk database and observed after process restart. It now also returns both
 fields from an inserted row and proves a zero-change update yields
-`lastInsertRowId: null`. Additional caller-provided dynamic values,
-prepared/callback transaction forms, arbitrary result-object operations, and
-HTTP contention load remain post-alpha. Bounded wildcard-origin CORS,
+`lastInsertRowId: null`. Additional caller-provided dynamic values, broader
+callback transaction forms, arbitrary result-object operations, and HTTP
+contention load remain post-alpha. Bounded wildcard-origin CORS,
 Content-Type preflight, and OS-random version-4 IDs bound as prepared values are
 native. The adapter also maps its typed Hono blog-name binding to a permitted
 immutable startup value. The pinned upstream 404/204 envelopes match through

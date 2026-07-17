@@ -148,7 +148,20 @@
       "httpBehavior": {"status": "pass", "evidence": "tests/compat/sqlite/native.test.mjs"},
       "referenceBehavior": {"runtime": "Bun/Hono with bun:sqlite", "status": "pass", "evidence": "tests/compat/sqlite/reference.behavior.test.ts"},
       "releaseGates": {"native": ["test:sqlite-native"], "reference": ["test:sqlite-reference"]},
-      "firstUnsupportedBoundary": "Prepared calls accept at most 16 selected route/JSON/UUID values, immutable run results expose numeric changes plus an exact decimal row ID or null, and bounded wildcard-origin CORS is native; the disk adapter proves capability-scoped restart persistence, static-SQL commit/rollback, and the documented cross-UID Unix path/sidecar policy, while general dynamic values, arbitrary result-object operations, prepared/callback transactions, HTTP contention load, and same-UID or unusual-filesystem mutation are unsupported."
+      "firstUnsupportedBoundary": "Prepared calls accept at most 16 selected route/JSON/UUID values, immutable run results expose numeric changes plus an exact decimal row ID or null, and bounded wildcard-origin CORS is native; the disk adapter proves capability-scoped restart persistence, static-SQL commit/rollback, and the documented cross-UID Unix path/sidecar policy, while general dynamic values, arbitrary result-object operations, transaction callbacks beyond the selected prepared-write shape, HTTP contention load, and same-UID or unusual-filesystem mutation are unsupported."
+    },
+    {
+      "id": "tinytsx-sqlite-callback-transaction",
+      "provenance": "tinytsx-local",
+      "entry": "examples/hono-sqlite/callback-transaction.ts",
+      "imports": ["hono", "@hono/node-server", "tinytsx:sqlite"],
+      "apis": ["Hono", "get", "post", "Context.req.json", "Context.req.param", "Context.json", "serve", "Database", "Database.exec", "Database.prepare", "Database.transaction(callback)", "Statement.run", "Statement.get"],
+      "intake": {"status": "pass", "evidence": "frontend/test/compatibility-audit.test.ts"},
+      "nativeCompile": {"appleArm64": "pass", "linuxArm64Assembly": "pass", "evidence": "tests/compat/sqlite/native.test.mjs"},
+      "httpBehavior": {"status": "pass", "evidence": "tests/compat/sqlite/native.test.mjs"},
+      "referenceBehavior": {"runtime": "not-applicable", "status": "not-applicable", "evidence": "doc/PERSISTENCE.md"},
+      "releaseGates": {"native": ["test:sqlite-native"], "reference": []},
+      "firstUnsupportedBoundary": "The callback is a zero-argument async block containing 1-16 awaited same-database Statement.run calls, with 64 aggregate parameters and 65536 aggregate SQL bytes; queries, result use, control flow, nested or mixed-database transactions, Database.exec steps, and an interactive transaction object are unsupported."
     },
     {
       "id": "upstream-blog",
@@ -162,7 +175,7 @@
       "httpBehavior": {"status": "adapter-pass", "evidence": "tests/compat/sqlite/native.test.mjs"},
       "referenceBehavior": {"runtime": "upstream tests", "status": "pinned", "evidence": "vendor/hono-examples/blog/src/api.test.ts"},
       "releaseGates": {"native": ["test:sqlite-native"], "reference": ["test:sqlite-reference"]},
-      "firstUnsupportedBoundary": "The adapter proves bounded in-memory CRUD, prepared body/route/UUID values, wildcard-origin CORS, a typed string environment binding, pinned success envelopes, and missing-record 404/204 behavior; a separate native adapter proves disk persistence and static transactions, while platform resource bindings and general transaction callbacks are out of scope."
+      "firstUnsupportedBoundary": "The adapter proves bounded in-memory CRUD, prepared body/route/UUID values, wildcard-origin CORS, a typed string environment binding, pinned success envelopes, and missing-record 404/204 behavior; separate native tracers prove disk persistence, static transactions, and the selected prepared-write callback, while platform resource bindings and broader transaction callbacks are out of scope."
     },
     {
       "id": "tinytsx-actors-messages",

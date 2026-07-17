@@ -36,6 +36,7 @@ test("records the example matrix with executable evidence and boundaries", () =>
     "tinytsx-user-auth",
     "upstream-serve-static",
     "tinytsx-sqlite-owner",
+    "tinytsx-sqlite-callback-transaction",
     "upstream-blog",
     "tinytsx-actors-messages",
     "tinytsx-actors-restart",

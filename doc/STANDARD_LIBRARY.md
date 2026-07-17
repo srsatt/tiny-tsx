@@ -128,8 +128,9 @@ observe an atomic file replacement.
 The native alpha module is a single-owner `:memory:` or capability-scoped
 on-disk database. It provides closed `exec(sql)` effects, prepared
 `run()`/`all()`/`get()` calls, static-SQL `transaction(sql)` batches, and
+one bounded prepared-write `transaction(async () => {...})` callback, plus
 idempotent `close`/`dispose`, serialized through one logical application
-worker. `exec()` and `transaction()` resolve to `Promise<void>`;
+worker. `exec()` and both transaction forms resolve to `Promise<void>`;
 `Statement.run()` resolves to a closed immutable `RunResult` containing a
 numeric `changes` count and `lastInsertRowId: string | null`. The row ID uses a
 decimal string so every signed SQLite `i64` remains exact outside JavaScript's
@@ -142,11 +143,13 @@ and null). SQL is capped at 65,536 bytes; results at 1,024 rows and 1 MiB;
 and the vendored runtime is described in `doc/PERSISTENCE.md`. One handler may
 contain at most 16 SQLite actions/result slots; the generated writer owns fixed
 result storage, so returning these fields does not introduce a general object
-heap. On-disk paths
+heap. A prepared callback contains 1–16 awaited same-database `Statement.run`
+steps with at most 64 aggregate parameters and 65,536 aggregate SQL bytes. It
+is sent as one owner message and commits or rolls back as a unit. On-disk paths
 require one matching canonical read/write root plus the service-owned runtime
-directory/file policy above. General dynamic values, prepared/callback
-transactions, arbitrary result inspection, and retaining result objects beyond
-the response are post-alpha.
+directory/file policy above. Transaction queries, callback arguments/results,
+control flow, nested or mixed-database callbacks, arbitrary result inspection,
+and retaining result objects beyond the response are post-alpha.
 
 ### `tinytsx:actors`
 

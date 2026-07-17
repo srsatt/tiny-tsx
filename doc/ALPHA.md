@@ -40,7 +40,8 @@ syntax fails compilation; the produced server never interprets JavaScript.
 
 The executable Hono matrix consists of the pinned complete `basic` and
 `jsx-ssr` examples plus the published-package `@hono/zod-openapi`, static-file,
-blog/SQLite, environment, bounded Body Limit, bounded Request ID, and
+blog/SQLite, prepared callback-transaction, environment, bounded Body Limit,
+bounded Request ID, and
 local/persistent-counter tracers recorded in
 `tests/compat/hono/examples-manifest.json`.
 `@hono/node-server` and `tinytsx:serve` share one AOT entry contract. This does
@@ -60,7 +61,9 @@ The protected backend modules are:
 - `tinytsx:env`: at most 64 static names, 4 KiB UTF-8 per immutable value;
 - `tinytsx:fs`: static UTF-8 text reads, 4 KiB paths and 1 MiB files;
 - `tinytsx:sqlite`: one serialized owner, 64 KiB static SQL, 16 admitted public
-  parameters, 1,024 result rows, 1 MiB results, and one-second busy timeout;
+  parameters per call, 1–16 prepared callback-transaction steps with at most 64
+  aggregate parameters, 1,024 result rows, 1 MiB results, and one-second busy
+  timeout;
 - `tinytsx:actors`: compile-time counter actors with 1–64 mailbox entries,
   optional SQLite-backed counter persistence, and one bounded non-persistent
   restart-intensity form;

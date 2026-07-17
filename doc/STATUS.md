@@ -9,6 +9,25 @@ produces and serves a native Mach-O executable from the example TSX source.
 
 ## Alpha implementation evidence
 
+### Bounded prepared transaction callbacks (2026-07-17)
+
+- `Database.transaction` now accepts one exact zero-argument async callback
+  containing 1–16 awaited `Statement.run` expressions from the same database.
+  The complete owner message is bounded to 64 aggregate parameters and 65,536
+  aggregate SQL bytes; the static-SQL overload remains unchanged.
+- The SQLite owner opens one transaction, executes every prepared step in
+  order, and commits only after all succeed. Apple native HTTP proves an item
+  and audit row commit together, a second-step uniqueness failure rolls the
+  first insert back, and a later transaction succeeds. Linux arm64 assembles
+  the same stack-descriptor ABI.
+- The SDK, built-in manifest, Hono example matrix, persistence contract, and
+  compatibility boundary reject transaction queries, callback arguments or
+  results, visible step results, control flow, nesting, mixed databases,
+  `Database.exec` steps, and an interactive transaction object.
+- Verification: 125 frontend tests, 10 SQLite runtime tests, 60 bootstrap
+  tests, 90 compiler tests, 182 Rust workspace tests, SQLite native/assembly
+  7/7, Hono intake 8/8, and workspace Clippy with warnings denied.
+
 ### Bounded actor restart intensity (2026-07-17)
 
 - The actor SDK admits one exact non-persistent fallible counter and a closed
@@ -344,7 +363,7 @@ produces and serves a native Mach-O executable from the example TSX source.
   disk-backed program also assembles for Linux arm64.
 - Runtime database opens now use `SQLITE_OPEN_NOFOLLOW`, and a Unix regression
   test rejects a database-file symlink. Later post-alpha evidence below adds the
-  service-owned directory and sidecar policy; prepared/callback transactions
+  service-owned directory and sidecar policy; broader callback transactions
   and HTTP-level contention load remain open. Core native evidence holds a
   competing writer through the bounded busy timeout and proves the second
   connection recovers after the lock is released; the persistent counter actor
@@ -476,8 +495,8 @@ produces and serves a native Mach-O executable from the example TSX source.
   post-close failure, Apple execution, and Linux-arm64 assembly; a Bun/Hono
   `bun:sqlite` test pins the same local adapter contract. Static-SQL
   transactions, disk capabilities/restart, and the persistent counter are now
-  native; typed execute results and prepared/callback transactions are
-  post-alpha.
+  native. Typed run results and the exact prepared-write callback are also
+  native; arbitrary result use and broader callback transactions are post-alpha.
 - Typed Hono `Bindings` string fields now lower through the immutable
   `tinytsx:env` snapshot and exact `--allow-env` capability. The blog adapter's
   `context.env.TINYTSX_BLOG_NAME` matches Bun/Hono; denied, missing, invalid,

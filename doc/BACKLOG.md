@@ -97,8 +97,9 @@ Runtime SQLite directory/sidecar-race hardening, prepared/callback transactions,
 general actor messages, actor-scale/fairness work, and the combined user-auth
 example were explicitly post-alpha. Later sections record the disk ownership,
 bounded value-message, scale/fairness, and auth work that has since landed;
-typed `Statement.run()` results have also landed. Callback transactions and the
-explicitly documented OS-sandbox boundaries remain open.
+typed `Statement.run()` results and the exact prepared-write callback have also
+landed; broader callback forms and the explicitly documented OS-sandbox
+boundaries remain open.
 
 ### Release handoff
 
@@ -370,8 +371,10 @@ landed, followed by the bounded Hono Request ID tracer and immutable typed
 SQLite `Statement.run()` results. Hard-reset cancellation now also detaches an
 actor HTTP waiter without retracting accepted work, and the exact fallible
 counter has bounded restart intensity. Their implementation and evidence are
-recorded under P1-P4. Select the next bounded slice explicitly before its
-implementation begins.
+recorded under P1-P4. The exact prepared-write transaction callback has now
+also landed with atomic rollback evidence. The next bounded slice is the P4
+release-stability evidence pass; actor supervision and broader SQLite values
+remain separate proposals.
 
 Do not reopen the completed alpha foundations as broad projects. File reading,
 SQLite, and local actors already have public bounded built-ins. Their next work
@@ -392,7 +395,7 @@ The groomed candidates, in recommended dependency order, are:
    is green. A new release candidate remains a separate explicitly selected
    goal.
 
-#### Selected tracer — bounded prepared transaction callback
+#### Selected tracer — bounded prepared transaction callback (landed 2026-07-17)
 
 The next P3 slice is the project-owned
 `examples/hono-sqlite/callback-transaction.ts` tracer. It overloads
@@ -416,6 +419,13 @@ callback, nested transactions, statements from another database, more general
 control flow, manual `BEGIN`/`COMMIT`, or an interactive transaction object.
 Static-SQL `Database.transaction(sql)` remains supported unchanged. Broader
 dynamic values and callback forms require separate tracers.
+
+The complete tracer is now green: frontend and compiler HIR tests pin the
+closed shape and aggregate limits; the SQLite core commits or rolls back every
+prepared step; Apple native HTTP proves commit, second-step rollback, and
+connection reuse; Linux arm64 assembles the descriptor ABI; and the SDK,
+manifest, examples, persistence contract, and release matrix expose the same
+boundary. The next selected work is the P4 release-stability evidence pass.
 
 Before implementation, the selected goal must be copied into the active goal
 with: its exact tracer/source revision; admitted and rejected boundaries; Apple
@@ -662,7 +672,15 @@ explicitly promoted into a later goal.
     `changes` is numeric and `lastInsertRowId` is an exact decimal string or
     null. Fixed per-handler result slots preserve single-owner ordering without
     a general heap. Broader dynamic values, arbitrary result operations, and
-    callback transactions remain open.
+    callback transaction shapes remain open.
+  - 2026-07-17: one zero-argument async callback may contain 1–16 awaited
+    same-database `Statement.run` expressions, bounded to 64 aggregate
+    parameters and 65,536 aggregate SQL bytes. Generated code posts every step
+    as one owner message; core and Apple Hono tests prove commit, second-step
+    rollback, and later connection reuse, while Linux arm64 assembles the same
+    ABI. Queries, callback values, visible step results, control flow, nesting,
+    mixed databases, `Database.exec` steps, and broader dynamic values remain
+    open.
 - [ ] Add actor supervision trees, restart intensity, monitors/links, registries,
       persistence snapshots, and remote/distributed actors only from separate
       evidence-driven proposals.
