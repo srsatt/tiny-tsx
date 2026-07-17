@@ -423,8 +423,9 @@ produces and serves a native Mach-O executable from the example TSX source.
   returned lengths, signed element movement, out-of-range `undefined`, and final
   length. The complete array-spread/apply case copies three values into a
   distinct native argument buffer and checks callback argument length/order and
-  call count. The other nine cases remain syntax-only and are not conformance
-  results.
+  call count. The complete subtraction case executes five checks using runtime
+  local and closed record-property slots. The other eight cases remain
+  syntax-only and are not conformance results.
 - The dedicated native API suite currently covers Request method/path/query
   views, allocation-free form-decoded query-name presence, elapsed-header
   formatting, and exact-fit, OOM, and invalid response-writer behavior. Query
@@ -566,9 +567,9 @@ produces and serves a native Mach-O executable from the example TSX source.
   and a native E2E verifies numeric `X-Response-Time: <n>ms` output. The timing
   header also survives `prettyJSON()` cloning of a query-conditional body. The
   complete 34-module trace retains 21 symbolic registrations.
-- The pinned Test262 syntax allowlist now also includes `Date.now()` returning a
-  number and reference-based numeric subtraction. These are intake provenance,
-  not native Test262 execution claims.
+- The pinned `Date.now()` Test262 case remains syntax-only. The reference-based
+  numeric subtraction case now executes all five checks natively against
+  bounded local and closed record-property slots.
 - Closed `basicAuth` options now execute through upstream Hono factory code and
   lower into a native Basic Authorization request guard. The dependency-free
   runtime parses Base64 credentials from borrowed headers. Native E2Es cover 401

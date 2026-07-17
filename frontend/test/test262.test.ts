@@ -64,3 +64,53 @@ test("lowers the complete pinned array spread/apply Test262 case", () => {
     span: program.assertions[0]?.span,
   }]);
 });
+
+test("lowers the complete pinned numeric subtraction/GetValue Test262 case", () => {
+  const program = compileTest262Entry(path.join(
+    repository,
+    "vendor/test262/test/language/expressions/subtraction/S11.6.2_A2.1_T1.js",
+  ));
+
+  const assertion = program.assertions[0];
+  assert.equal(assertion?.kind, "numericSubtractionProgram");
+  if (assertion?.kind !== "numericSubtractionProgram") return;
+  assert.equal(assertion.slots, 4);
+  assert.deepEqual(assertion.operations.map(({span: _span, ...operation}) => operation), [
+    {
+      kind: "assertSubtract",
+      left: {kind: "literal", value: 1},
+      right: {kind: "literal", value: 1},
+      expected: 0,
+    },
+    {kind: "set", slot: 0, value: 1},
+    {
+      kind: "assertSubtract",
+      left: {kind: "slot", slot: 0},
+      right: {kind: "literal", value: 1},
+      expected: 0,
+    },
+    {kind: "set", slot: 1, value: 1},
+    {
+      kind: "assertSubtract",
+      left: {kind: "literal", value: 1},
+      right: {kind: "slot", slot: 1},
+      expected: 0,
+    },
+    {kind: "set", slot: 0, value: 1},
+    {kind: "set", slot: 1, value: 1},
+    {
+      kind: "assertSubtract",
+      left: {kind: "slot", slot: 0},
+      right: {kind: "slot", slot: 1},
+      expected: 0,
+    },
+    {kind: "set", slot: 2, value: 1},
+    {kind: "set", slot: 3, value: 1},
+    {
+      kind: "assertSubtract",
+      left: {kind: "slot", slot: 2},
+      right: {kind: "slot", slot: 3},
+      expected: 0,
+    },
+  ]);
+});

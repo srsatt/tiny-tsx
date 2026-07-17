@@ -44,6 +44,11 @@ pub enum Test262Assertion {
         expected_calls: usize,
         span: SourceSpan,
     },
+    NumericSubtractionProgram {
+        slots: usize,
+        operations: Vec<NumericSubtractionOperation>,
+        span: SourceSpan,
+    },
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -66,6 +71,29 @@ pub enum ArrayUnshiftOperation {
         expected: i64,
         span: SourceSpan,
     },
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum NumericSubtractionOperation {
+    Set {
+        slot: usize,
+        value: i64,
+        span: SourceSpan,
+    },
+    AssertSubtract {
+        left: NumericOperand,
+        right: NumericOperand,
+        expected: i64,
+        span: SourceSpan,
+    },
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum NumericOperand {
+    Literal { value: i64 },
+    Slot { slot: usize },
 }
 
 impl Test262Program {
@@ -114,11 +142,48 @@ impl Test262Program {
                             .to_owned(),
                     );
                 }
+                Test262Assertion::NumericSubtractionProgram {
+                    slots, operations, ..
+                } => validate_numeric_subtraction(*slots, operations)?,
                 _ => {}
             }
         }
         Ok(())
     }
+}
+
+fn validate_numeric_subtraction(
+    slots: usize,
+    operations: &[NumericSubtractionOperation],
+) -> Result<(), String> {
+    if slots == 0 || slots > 16 || operations.is_empty() {
+        return Err("Test262 subtraction requires 1-16 slots and operations".to_owned());
+    }
+    let mut assertions = 0;
+    for operation in operations {
+        match operation {
+            NumericSubtractionOperation::Set { slot, .. } if *slot >= slots => {
+                return Err("Test262 subtraction set references a missing slot".to_owned());
+            }
+            NumericSubtractionOperation::AssertSubtract { left, right, .. } => {
+                validate_numeric_operand(left, slots)?;
+                validate_numeric_operand(right, slots)?;
+                assertions += 1;
+            }
+            _ => {}
+        }
+    }
+    if assertions == 0 {
+        return Err("Test262 subtraction requires an assertion".to_owned());
+    }
+    Ok(())
+}
+
+fn validate_numeric_operand(operand: &NumericOperand, slots: usize) -> Result<(), String> {
+    if matches!(operand, NumericOperand::Slot { slot } if *slot >= slots) {
+        return Err("Test262 subtraction operand references a missing slot".to_owned());
+    }
+    Ok(())
 }
 
 fn validate_array_unshift(

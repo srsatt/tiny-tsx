@@ -1,12 +1,16 @@
 use std::fmt::Write;
 
 use crate::target::Target;
-use crate::test262_hir::{ArrayUnshiftOperation, Test262Assertion, Test262Program};
+use crate::test262_hir::{
+    ArrayUnshiftOperation, NumericOperand, NumericSubtractionOperation, Test262Assertion,
+    Test262Program,
+};
 
 const ARRAY_STACK_BYTES: usize = 144;
 const ARRAY_DATA_OFFSET: usize = 16;
 const SPREAD_SOURCE_OFFSET: usize = 16;
 const SPREAD_ARGUMENTS_OFFSET: usize = 80;
+const NUMERIC_STACK_BYTES: usize = 128;
 
 pub fn emit(program: &Test262Program, target: Target) -> Result<String, String> {
     program.validate()?;
@@ -55,6 +59,9 @@ pub fn emit(program: &Test262Program, target: Target) -> Result<String, String> 
                 expected_arguments,
                 *expected_calls,
             ),
+            Test262Assertion::NumericSubtractionProgram { operations, .. } => {
+                emit_numeric_subtraction_program(&mut assembly, index, operations)
+            }
         }
     }
     writeln!(assembly, "    mov w0, #0").unwrap();
@@ -79,6 +86,52 @@ pub fn emit(program: &Test262Program, target: Target) -> Result<String, String> 
         emit_bytes(&mut assembly, expected.as_bytes());
     }
     Ok(assembly)
+}
+
+fn emit_numeric_subtraction_program(
+    assembly: &mut String,
+    assertion_index: usize,
+    operations: &[NumericSubtractionOperation],
+) {
+    let fail = format!("Ltinytsx_test262_subtraction_{assertion_index}_fail");
+    let pass = format!("Ltinytsx_test262_subtraction_{assertion_index}_pass");
+    writeln!(assembly, "    sub sp, sp, #{NUMERIC_STACK_BYTES}").unwrap();
+    for operation in operations {
+        match operation {
+            NumericSubtractionOperation::Set { slot, value, .. } => {
+                emit_immediate(assembly, "x9", *value as u64);
+                writeln!(assembly, "    str x9, [sp, #{}]", slot * 8).unwrap();
+            }
+            NumericSubtractionOperation::AssertSubtract {
+                left,
+                right,
+                expected,
+                ..
+            } => {
+                emit_numeric_operand(assembly, "x9", left);
+                emit_numeric_operand(assembly, "x10", right);
+                writeln!(assembly, "    sub x9, x9, x10").unwrap();
+                emit_immediate(assembly, "x10", *expected as u64);
+                writeln!(assembly, "    cmp x9, x10").unwrap();
+                writeln!(assembly, "    b.ne {fail}").unwrap();
+            }
+        }
+    }
+    writeln!(assembly, "    add sp, sp, #{NUMERIC_STACK_BYTES}").unwrap();
+    writeln!(assembly, "    b {pass}").unwrap();
+    writeln!(assembly, "{fail}:").unwrap();
+    writeln!(assembly, "    add sp, sp, #{NUMERIC_STACK_BYTES}").unwrap();
+    writeln!(assembly, "    b Ltinytsx_test262_fail").unwrap();
+    writeln!(assembly, "{pass}:").unwrap();
+}
+
+fn emit_numeric_operand(assembly: &mut String, register: &str, operand: &NumericOperand) {
+    match operand {
+        NumericOperand::Literal { value } => emit_immediate(assembly, register, *value as u64),
+        NumericOperand::Slot { slot } => {
+            writeln!(assembly, "    ldr {register}, [sp, #{}]", slot * 8).unwrap();
+        }
+    }
 }
 
 fn emit_array_spread_apply_program(

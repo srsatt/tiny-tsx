@@ -320,9 +320,10 @@ Do not tag `0.1.0-alpha.1` until all of these are true:
 
 - [ ] Promote remaining syntax-only Test262 cases only when their complete
       assertion programs execute natively.
-  - 2026-07-17: the complete pinned array-spread/apply program was promoted to
-    native mode; its argument length/order and callback count execute in the
-    generated binary. Nine syntax-only cases remain.
+  - 2026-07-17: the complete pinned array-spread/apply and subtraction/GetValue
+    programs were promoted to native mode. Their assertions execute against
+    copied array arguments and runtime numeric binding/property slots. Eight
+    syntax-only cases remain.
 - [ ] Expand ordinary functions to locals, branches, closures, additional native
       types, and general typed expressions/statements.
   - 2026-07-17: immutable string locals and strict string-equality branches now

@@ -8,6 +8,11 @@ import {
   lowerArraySpreadApplyProgram,
   type ArraySpreadApplyProgramAssertion,
 } from "./test262-array-spread.js";
+import {
+  isNumericSubtractionProgram,
+  lowerNumericSubtractionProgram,
+  type NumericSubtractionProgramAssertion,
+} from "./test262-subtraction.js";
 
 export interface Test262Program {
   version: 3;
@@ -20,7 +25,8 @@ export type Test262Assertion =
   | SameValueStringAssertion
   | ForThrowCounterAssertion
   | ArrayUnshiftProgramAssertion
-  | ArraySpreadApplyProgramAssertion;
+  | ArraySpreadApplyProgramAssertion
+  | NumericSubtractionProgramAssertion;
 
 export interface SameValueStringAssertion {
   kind: "sameValueString";
@@ -85,6 +91,8 @@ export function compileTest262Entry(entryPath: string): Test262Program {
     ? sourceFile.statements.map(statement => lowerSameValueAssertion(statement, sourceFile))
     : isArraySpreadApplyProgram(sourceFile)
       ? [lowerArraySpreadApplyProgram(sourceFile)]
+    : isNumericSubtractionProgram(sourceFile)
+      ? [lowerNumericSubtractionProgram(sourceFile)]
     : isEmptyArrayDeclaration(sourceFile.statements[0])
       ? [lowerArrayUnshiftProgram(sourceFile)]
       : [lowerForThrowCounter(sourceFile)];

@@ -461,6 +461,13 @@ count. This is evidence for that exact closed numeric spread/apply program; it
 does not claim general iterators, arrays, function apply, or runtime spread in
 ordinary application code.
 
+The complete pinned subtraction/GetValue program also runs natively. Its four
+numeric bindings—including two closed record-property slots—are initialized in
+bounded stack storage. All five source-ordered checks load literal, local, and
+property operands at runtime, subtract, and branch to a failing process status
+on mismatch. This is exact integer/GetValue evidence; ordinary application
+functions still lack general numeric parameters, locals, and return values.
+
 The allowlisted `language/expressions/typeof/undefined.js` case is the first
 `mode: native` Test262 entry. `tinytsx test262 <case> --output <binary>` parses
 the untouched upstream source and lowers its two top-level

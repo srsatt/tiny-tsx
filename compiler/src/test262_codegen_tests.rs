@@ -1,7 +1,9 @@
 use crate::{
     hir::SourceSpan,
     target::Target,
-    test262_hir::{Test262Assertion, Test262Program},
+    test262_hir::{
+        NumericOperand, NumericSubtractionOperation, Test262Assertion, Test262Program,
+    },
 };
 
 use super::emit;
@@ -77,4 +79,32 @@ fn emits_native_array_spread_copy_and_assertions() {
     assert!(assembly.contains("ldr x10, [sp, #16]"));
     assert!(assembly.contains("str x10, [sp, #80]"));
     assert!(assembly.contains("Ltinytsx_test262_spread_0_fail:"));
+}
+
+#[test]
+fn emits_runtime_numeric_binding_loads_and_subtraction() {
+    let mut program = program(Target::LinuxArm64);
+    program.assertions = vec![Test262Assertion::NumericSubtractionProgram {
+        slots: 1,
+        operations: vec![
+            NumericSubtractionOperation::Set {
+                slot: 0,
+                value: 7,
+                span: span(),
+            },
+            NumericSubtractionOperation::AssertSubtract {
+                left: NumericOperand::Slot { slot: 0 },
+                right: NumericOperand::Literal { value: 2 },
+                expected: 5,
+                span: span(),
+            },
+        ],
+        span: span(),
+    }];
+
+    let assembly = emit(&program, Target::LinuxArm64).unwrap();
+
+    assert!(assembly.contains("str x9, [sp, #0]"));
+    assert!(assembly.contains("ldr x9, [sp, #0]"));
+    assert!(assembly.contains("sub x9, x9, x10"));
 }

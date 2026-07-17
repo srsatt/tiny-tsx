@@ -29,6 +29,10 @@ fn compiles_and_runs_native_test262_programs() {
             "array-spread-apply",
             "vendor/test262/test/language/expressions/array/spread-sngl-literal.js",
         ),
+        (
+            "numeric-subtraction",
+            "vendor/test262/test/language/expressions/subtraction/S11.6.2_A2.1_T1.js",
+        ),
     ] {
         compile_and_run(&root, &directory.join(name), case);
     }

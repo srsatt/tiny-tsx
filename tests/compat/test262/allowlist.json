@@ -63,7 +63,7 @@
     {
       "path": "test/language/expressions/subtraction/S11.6.2_A2.1_T1.js",
       "feature": "numeric-subtraction",
-      "mode": "syntax"
+      "mode": "native"
     },
     {
       "path": "test/language/expressions/in/S8.12.6_A1.js",
