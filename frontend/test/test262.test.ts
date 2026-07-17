@@ -191,3 +191,17 @@ test("lowers the complete pinned Error message-property Test262 case", () => {
     span: program.assertions[0]?.span,
   }]);
 });
+
+test("lowers the complete pinned RegExp test/exec Test262 case", () => {
+  const program = compileTest262Entry(path.join(
+    repository,
+    "vendor/test262/test/built-ins/RegExp/prototype/test/S15.10.6.3_A1_T1.js",
+  ));
+
+  assert.deepEqual(program.assertions, [{
+    kind: "regexpTestProgram",
+    input: "123",
+    alternatives: ["1", "12"],
+    span: program.assertions[0]?.span,
+  }]);
+});

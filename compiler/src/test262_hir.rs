@@ -86,6 +86,12 @@ pub enum Test262Assertion {
         configurable: bool,
         span: SourceSpan,
     },
+    #[serde(rename = "regexpTestProgram")]
+    RegExpTestProgram {
+        input: String,
+        alternatives: Vec<String>,
+        span: SourceSpan,
+    },
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -226,6 +232,23 @@ impl Test262Program {
                 {
                     return Err(
                         "Test262 Error requires a 1-256 byte message and the standard message descriptor"
+                            .to_owned(),
+                    );
+                }
+                Test262Assertion::RegExpTestProgram {
+                    input,
+                    alternatives,
+                    ..
+                } if input.len() > 256
+                    || !input.is_ascii()
+                    || alternatives.is_empty()
+                    || alternatives.len() > 8
+                    || alternatives.iter().any(|alternative| {
+                        alternative.is_empty() || alternative.len() > 64 || !alternative.is_ascii()
+                    }) =>
+                {
+                    return Err(
+                        "Test262 RegExp requires an ASCII input up to 256 bytes and 1-8 literal alternatives up to 64 bytes"
                             .to_owned(),
                     );
                 }

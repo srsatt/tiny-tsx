@@ -433,7 +433,9 @@ produces and serves a native Mach-O executable from the example TSX source.
   identity, standard descriptor flags, construction count, and instance
   prototype in bounded native storage. The complete Error case copies its own
   bounded message bytes and verifies the standard property descriptor. The
-  other three cases remain syntax-only and are not conformance results.
+  complete RegExp case runs independent bounded native literal-alternative
+  searches for `test` and `exec` presence. The other two cases remain
+  syntax-only and are not conformance results.
 - The dedicated native API suite currently covers Request method/path/query
   views, allocation-free form-decoded query-name presence, elapsed-header
   formatting, and exact-fit, OOM, and invalid response-writer behavior. Query

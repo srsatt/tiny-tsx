@@ -200,15 +200,16 @@ npm run test:native-api
 npm run test:wasm
 ```
 
-Test262 evidence is recorded per case. Eleven complete cases currently execute as
-standalone native Mach-O assertion programs: `typeof undefined`, `typeof
+Test262 evidence is recorded per case. Twelve complete cases currently execute
+as standalone native Mach-O assertion programs: `typeof undefined`, `typeof
 bigint`, the bounded `for`/throw/catch counter, and the bounded dense-array
 `unshift`, array-spread/apply, numeric-subtraction, and record-membership
 programs, plus the direct string throw/catch, `Date.now()` type, and closed class
-constructor cases and the bounded own `Error.message` case. Three other
-allowlisted cases remain syntax-only and are not reported as semantic
-conformance. Three complete selected URLSearchParams WPT
-files execute natively. See `doc/COMPATIBILITY.md` for pins, test layers, and
+constructor cases, the bounded own `Error.message` case, and literal-alternative
+RegExp `test`/`exec` equivalence. Two other allowlisted cases remain syntax-only
+and are not reported as semantic conformance. Three complete selected
+URLSearchParams WPT files execute natively. See `doc/COMPATIBILITY.md` for pins,
+test layers, and
 the deliberately narrower boundaries of each result.
 
 `npm run test:wasm` exercises a separate optional no-WASI interpreter profile.

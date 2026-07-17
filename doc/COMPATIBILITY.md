@@ -506,6 +506,14 @@ the exact constructor/helper observations in the upstream program; ordinary
 application Error objects, stacks, subclasses, causes, and general descriptor
 reflection remain unsupported.
 
+The complete pinned RegExp `test`/`exec` program now executes through a
+dependency-free native matcher. The frontend admits bounded ASCII literal
+alternatives, and generated AArch64 searches the runtime input bytes twice—once
+for `test()` and once for `exec() !== null`—before comparing the presence
+results required by the upstream assertion. The current `/1|12/` evidence does
+not cover flags, escapes, character classes, quantifiers, captures, Unicode,
+match arrays, `lastIndex`, or ordinary application RegExp values.
+
 The allowlisted `language/expressions/typeof/undefined.js` case is the first
 `mode: native` Test262 entry. `tinytsx test262 <case> --output <binary>` parses
 the untouched upstream source and lowers its two top-level

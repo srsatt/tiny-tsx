@@ -122,6 +122,25 @@ fn emits_owned_error_message_and_descriptor_checks() {
 }
 
 #[test]
+fn emits_bounded_regexp_test_and_exec_matchers() {
+    let mut program = program(Target::LinuxArm64);
+    program.assertions = vec![Test262Assertion::RegExpTestProgram {
+        input: "123".to_owned(),
+        alternatives: vec!["1".to_owned(), "12".to_owned()],
+        span: span(),
+    }];
+
+    let assembly = emit(&program, Target::LinuxArm64).unwrap();
+
+    assert!(assembly.contains("Ltinytsx_test262_regexp_input_0:"));
+    assert!(assembly.contains("Ltinytsx_test262_regexp_alternative_0_1:"));
+    assert!(assembly.contains("Ltinytsx_test262_regexp_0_0_1_scan:"));
+    assert!(assembly.contains("Ltinytsx_test262_regexp_0_1_1_scan:"));
+    assert!(assembly.contains("ldrb w6, [x3], #1"));
+    assert!(assembly.contains("str x9, [sp, #8]"));
+}
+
+#[test]
 fn emits_runtime_numeric_binding_loads_and_subtraction() {
     let mut program = program(Target::LinuxArm64);
     program.assertions = vec![Test262Assertion::NumericSubtractionProgram {

@@ -53,6 +53,10 @@ fn compiles_and_runs_native_test262_programs() {
             "error-message",
             "vendor/test262/test/built-ins/Error/message_property.js",
         ),
+        (
+            "regexp-test-exec",
+            "vendor/test262/test/built-ins/RegExp/prototype/test/S15.10.6.3_A1_T1.js",
+        ),
     ] {
         compile_and_run(&root, &directory.join(name), case);
     }

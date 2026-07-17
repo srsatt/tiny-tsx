@@ -124,6 +124,11 @@ pub fn emit(program: &Test262Program, target: Target) -> Result<String, String> 
                 *enumerable,
                 *configurable,
             ),
+            Test262Assertion::RegExpTestProgram {
+                input,
+                alternatives,
+                ..
+            } => emit_regexp_test_program(&mut assembly, target, index, input, alternatives),
         }
     }
     writeln!(assembly, "    mov w0, #0").unwrap();
@@ -164,10 +169,116 @@ pub fn emit(program: &Test262Program, target: Target) -> Result<String, String> 
                 writeln!(assembly, "Ltinytsx_test262_error_message_{index}:").unwrap();
                 emit_bytes(&mut assembly, message.as_bytes());
             }
+            Test262Assertion::RegExpTestProgram {
+                input,
+                alternatives,
+                ..
+            } => {
+                writeln!(assembly, ".p2align 3").unwrap();
+                writeln!(assembly, "Ltinytsx_test262_regexp_input_{index}:").unwrap();
+                emit_bytes(&mut assembly, input.as_bytes());
+                for (alternative_index, alternative) in alternatives.iter().enumerate() {
+                    writeln!(assembly, ".p2align 3").unwrap();
+                    writeln!(
+                        assembly,
+                        "Ltinytsx_test262_regexp_alternative_{index}_{alternative_index}:"
+                    )
+                    .unwrap();
+                    emit_bytes(&mut assembly, alternative.as_bytes());
+                }
+            }
             _ => {}
         }
     }
     Ok(assembly)
+}
+
+fn emit_regexp_test_program(
+    assembly: &mut String,
+    target: Target,
+    assertion_index: usize,
+    input: &str,
+    alternatives: &[String],
+) {
+    let fail = format!("Ltinytsx_test262_regexp_{assertion_index}_fail");
+    let pass = format!("Ltinytsx_test262_regexp_{assertion_index}_pass");
+    writeln!(assembly, "    sub sp, sp, #16").unwrap();
+
+    emit_regexp_literal_match(
+        assembly,
+        target,
+        assertion_index,
+        0,
+        input.len(),
+        alternatives,
+    );
+    writeln!(assembly, "    str x9, [sp]").unwrap();
+    emit_regexp_literal_match(
+        assembly,
+        target,
+        assertion_index,
+        1,
+        input.len(),
+        alternatives,
+    );
+    writeln!(assembly, "    str x9, [sp, #8]").unwrap();
+    writeln!(assembly, "    ldr x10, [sp]").unwrap();
+    writeln!(assembly, "    cmp x9, x10").unwrap();
+    writeln!(assembly, "    b.ne {fail}").unwrap();
+    writeln!(assembly, "    b {pass}").unwrap();
+
+    writeln!(assembly, "{fail}:").unwrap();
+    writeln!(assembly, "    add sp, sp, #16").unwrap();
+    writeln!(assembly, "    b Ltinytsx_test262_fail").unwrap();
+    writeln!(assembly, "{pass}:").unwrap();
+    writeln!(assembly, "    add sp, sp, #16").unwrap();
+}
+
+fn emit_regexp_literal_match(
+    assembly: &mut String,
+    target: Target,
+    assertion_index: usize,
+    run: usize,
+    input_len: usize,
+    alternatives: &[String],
+) {
+    let done = format!("Ltinytsx_test262_regexp_{assertion_index}_{run}_done");
+    emit_immediate(assembly, "x9", 0);
+    for (alternative_index, alternative) in alternatives.iter().enumerate() {
+        if alternative.len() > input_len {
+            continue;
+        }
+        let scan =
+            format!("Ltinytsx_test262_regexp_{assertion_index}_{run}_{alternative_index}_scan");
+        let compare =
+            format!("Ltinytsx_test262_regexp_{assertion_index}_{run}_{alternative_index}_compare");
+        let next =
+            format!("Ltinytsx_test262_regexp_{assertion_index}_{run}_{alternative_index}_next");
+        let input_label = format!("Ltinytsx_test262_regexp_input_{assertion_index}");
+        let alternative_label =
+            format!("Ltinytsx_test262_regexp_alternative_{assertion_index}_{alternative_index}");
+        emit_address(assembly, target, "x0", &input_label);
+        emit_address(assembly, target, "x1", &alternative_label);
+        emit_immediate(assembly, "x2", (input_len - alternative.len() + 1) as u64);
+        writeln!(assembly, "{scan}:").unwrap();
+        writeln!(assembly, "    mov x3, x0").unwrap();
+        writeln!(assembly, "    mov x4, x1").unwrap();
+        emit_immediate(assembly, "x5", alternative.len() as u64);
+        writeln!(assembly, "{compare}:").unwrap();
+        writeln!(assembly, "    ldrb w6, [x3], #1").unwrap();
+        writeln!(assembly, "    ldrb w7, [x4], #1").unwrap();
+        writeln!(assembly, "    cmp w6, w7").unwrap();
+        writeln!(assembly, "    b.ne {next}").unwrap();
+        writeln!(assembly, "    subs x5, x5, #1").unwrap();
+        writeln!(assembly, "    b.ne {compare}").unwrap();
+        emit_immediate(assembly, "x9", 1);
+        writeln!(assembly, "    b {done}").unwrap();
+        writeln!(assembly, "{next}:").unwrap();
+        writeln!(assembly, "    add x0, x0, #1").unwrap();
+        writeln!(assembly, "    subs x2, x2, #1").unwrap();
+        writeln!(assembly, "    b.ne {scan}").unwrap();
+    }
+    writeln!(assembly, "{done}:").unwrap();
 }
 
 fn emit_error_message_program(

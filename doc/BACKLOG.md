@@ -363,10 +363,11 @@ adds an explicit application acceptance test.
       assertion programs execute natively.
   - 2026-07-17: the complete pinned array-spread/apply, subtraction/GetValue,
     closed-record membership, direct string throw/catch, `Date.now()` type,
-    closed class-constructor, and own `Error.message` programs were promoted to
-    native mode. Their assertions execute against copied arguments, numeric
-    slots, runtime field-name bytes, native abrupt completion, the portable host
-    clock, and bounded class/error identities. Three syntax-only cases remain.
+    closed class-constructor, own `Error.message`, and literal-alternative RegExp
+    programs were promoted to native mode. Their assertions execute against
+    copied arguments, numeric slots, runtime field-name bytes, native abrupt
+    completion, the portable host clock, bounded class/error identities, and a
+    dependency-free native matcher. Two syntax-only cases remain.
 - [ ] Expand ordinary functions to locals, branches, closures, additional native
       types, and general typed expressions/statements.
   - 2026-07-17: immutable string locals and strict string-equality branches now
@@ -395,6 +396,10 @@ adds an explicit application acceptance test.
     compile error. The exact Test262 Error constructor now owns a bounded copied
     message with standard descriptor flags; general Error objects, finally,
     Promise, and async remain open.
+  - 2026-07-17: the exact Test262 RegExp case now executes two independently
+    generated bounded ASCII literal-alternative searches and compares native
+    `test`/`exec` presence results. Flags, captures, Unicode, and ordinary
+    application RegExp remain open.
 
 ### P2 — Web and Hono breadth
 

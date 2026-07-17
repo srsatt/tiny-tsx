@@ -18,7 +18,7 @@
     {
       "path": "test/built-ins/RegExp/prototype/test/S15.10.6.3_A1_T1.js",
       "feature": "regular-expressions",
-      "mode": "syntax"
+      "mode": "native"
     },
     {
       "path": "test/language/expressions/async-function/expression-returns-promise.js",

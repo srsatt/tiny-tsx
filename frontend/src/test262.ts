@@ -38,6 +38,11 @@ import {
   lowerErrorMessageProgram,
   type ErrorMessageProgramAssertion,
 } from "./test262-error.js";
+import {
+  isRegExpTestProgram,
+  lowerRegExpTestProgram,
+  type RegExpTestProgramAssertion,
+} from "./test262-regexp.js";
 
 export interface Test262Program {
   version: 3;
@@ -56,7 +61,8 @@ export type Test262Assertion =
   | ThrowCatchProgramAssertion
   | DateNowTypeProgramAssertion
   | ClassConstructorProgramAssertion
-  | ErrorMessageProgramAssertion;
+  | ErrorMessageProgramAssertion
+  | RegExpTestProgramAssertion;
 
 export interface SameValueStringAssertion {
   kind: "sameValueString";
@@ -117,8 +123,10 @@ export function compileTest262Entry(entryPath: string): Test262Program {
     throw tinyError("TINY2601", "Test262 metadata block is required", sourceFile, undefined, sourceFile);
   }
 
-  const assertions = isErrorMessageProgram(sourceFile)
-    ? [lowerErrorMessageProgram(sourceFile)]
+  const assertions = isRegExpTestProgram(sourceFile)
+    ? [lowerRegExpTestProgram(sourceFile)]
+    : isErrorMessageProgram(sourceFile)
+      ? [lowerErrorMessageProgram(sourceFile)]
     : isClassConstructorProgram(sourceFile)
       ? [lowerClassConstructorProgram(sourceFile)]
     : isDateNowTypeProgram(sourceFile)
