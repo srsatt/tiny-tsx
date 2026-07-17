@@ -117,6 +117,21 @@ export type ValueExpression =
       span: SourceSpan;
     }
   | {
+      kind: "throwValue";
+      value: ValueExpression;
+      span: SourceSpan;
+    }
+  | {
+      kind: "tryCatch";
+      tryValue: ValueExpression;
+      catchValue: ValueExpression;
+      span: SourceSpan;
+    }
+  | {
+      kind: "caughtException";
+      span: SourceSpan;
+    }
+  | {
       kind: "concat";
       values: ValueExpression[];
       span: SourceSpan;

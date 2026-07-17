@@ -455,6 +455,15 @@ fn builds_and_serves_lambda_lifted_function_captures() {
 }
 
 #[test]
+fn builds_and_serves_native_string_throw_and_catch() {
+    build_and_serve(
+        "examples/function-exceptions/server.ts",
+        "bad",
+        "text/plain; charset=UTF-8",
+    );
+}
+
+#[test]
 fn builds_and_serves_the_pinned_hono_basic_route() {
     build_and_serve_with_options(
         "tests/compat/hono/basic-smoke.ts",

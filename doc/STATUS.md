@@ -562,7 +562,9 @@ produces and serves a native Mach-O executable from the example TSX source.
 - Closed throw completion now reaches an explicitly installed upstream
   `onError()` closure. The basic `/error` route serves `Custom Error Message`
   with status 500 and logs `Error: Error has occurred` to native stderr per
-  request. General try/catch and runtime exceptions remain unsupported.
+  request. Separately, ordinary functions now propagate bounded thrown strings
+  through the native `x2` completion flag and consume them in same-function
+  `try/catch`; uncaught handler completion is rejected before code generation.
 - The exact response-time middleware now lowers `Date.now() - start` into an
   elapsed-header HIR recipe. Generated code measures around the native response,
   and a native E2E verifies numeric `X-Response-Time: <n>ms` output. The timing

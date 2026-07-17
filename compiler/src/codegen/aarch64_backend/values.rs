@@ -12,6 +12,7 @@ pub(super) fn emit_value_expression(
     scratch_base: usize,
     label_scope: &str,
     conditional_index: &mut usize,
+    caught_exception_offset: Option<usize>,
 ) -> Result<(), String> {
     match expression {
         ValueExpression::StringLiteral { string, .. } => {
@@ -21,6 +22,7 @@ pub(super) fn emit_value_expression(
                 "x1",
                 program.static_strings[*string].value.len() as u64,
             );
+            asm_line!(assembly, "    mov x2, #0");
         }
         ValueExpression::Constant { constant, .. } => {
             let ConstantValue::String { value } = &program.constants[*constant].value else {
@@ -29,15 +31,20 @@ pub(super) fn emit_value_expression(
             assembly.address("x0", format_args!("Ltinytsx_constant_{constant}"));
             asm_line!(assembly, "    add x0, x0, #5");
             emit_immediate(assembly, "x1", value.len() as u64);
+            asm_line!(assembly, "    mov x2, #0");
         }
         ValueExpression::Parameter { parameter, .. } => {
             asm_line!(assembly, "    ldp x0, x1, [sp, #{}]", 16 + parameter * 16);
+            asm_line!(assembly, "    mov x2, #0");
         }
         ValueExpression::DirectCall {
             function,
             arguments,
             ..
         } => {
+            let call_index = *conditional_index;
+            *conditional_index += 1;
+            let end = format!("Ltinytsx_{label_scope}_call_{call_index}_end");
             let nested_scratch = scratch_base + arguments.len() * 16;
             for (index, argument) in arguments.iter().enumerate() {
                 emit_value_expression(
@@ -47,7 +54,9 @@ pub(super) fn emit_value_expression(
                     nested_scratch,
                     label_scope,
                     conditional_index,
+                    caught_exception_offset,
                 )?;
+                asm_line!(assembly, "    cbnz x2, {end}");
                 asm_line!(
                     assembly,
                     "    stp x0, x1, [sp, #{}]",
@@ -66,6 +75,7 @@ pub(super) fn emit_value_expression(
                 );
             }
             assembly.call(format_args!("tinytsx_function_{function}"));
+            asm_line!(assembly, "{end}:");
         }
         ValueExpression::StringEqualConditional {
             left,
@@ -86,7 +96,9 @@ pub(super) fn emit_value_expression(
                 nested_scratch,
                 label_scope,
                 conditional_index,
+                caught_exception_offset,
             )?;
+            asm_line!(assembly, "    cbnz x2, {end}");
             asm_line!(assembly, "    stp x0, x1, [sp, #{scratch_base}]");
             emit_value_expression(
                 assembly,
@@ -95,7 +107,9 @@ pub(super) fn emit_value_expression(
                 nested_scratch,
                 label_scope,
                 conditional_index,
+                caught_exception_offset,
             )?;
+            asm_line!(assembly, "    cbnz x2, {end}");
             asm_line!(assembly, "    mov x3, x1");
             asm_line!(assembly, "    mov x2, x0");
             asm_line!(assembly, "    ldp x0, x1, [sp, #{scratch_base}]");
@@ -112,6 +126,7 @@ pub(super) fn emit_value_expression(
                 scratch_base,
                 label_scope,
                 conditional_index,
+                caught_exception_offset,
             )?;
             asm_line!(assembly, "    b {end}");
             asm_line!(assembly, "{not_equal}:");
@@ -122,8 +137,59 @@ pub(super) fn emit_value_expression(
                 scratch_base,
                 label_scope,
                 conditional_index,
+                caught_exception_offset,
             )?;
             asm_line!(assembly, "{end}:");
+        }
+        ValueExpression::ThrowValue { value, .. } => {
+            emit_value_expression(
+                assembly,
+                value,
+                program,
+                scratch_base,
+                label_scope,
+                conditional_index,
+                caught_exception_offset,
+            )?;
+            asm_line!(assembly, "    mov x2, #1");
+        }
+        ValueExpression::TryCatch {
+            try_value,
+            catch_value,
+            ..
+        } => {
+            let catch_index = *conditional_index;
+            *conditional_index += 1;
+            let end = format!("Ltinytsx_{label_scope}_catch_{catch_index}_end");
+            let nested_scratch = scratch_base + 16;
+            emit_value_expression(
+                assembly,
+                try_value,
+                program,
+                nested_scratch,
+                label_scope,
+                conditional_index,
+                caught_exception_offset,
+            )?;
+            asm_line!(assembly, "    cbz x2, {end}");
+            asm_line!(assembly, "    stp x0, x1, [sp, #{scratch_base}]");
+            emit_value_expression(
+                assembly,
+                catch_value,
+                program,
+                nested_scratch,
+                label_scope,
+                conditional_index,
+                Some(scratch_base),
+            )?;
+            asm_line!(assembly, "{end}:");
+        }
+        ValueExpression::CaughtException { .. } => {
+            let Some(offset) = caught_exception_offset else {
+                return Err("caught exception value has no native catch slot".to_owned());
+            };
+            asm_line!(assembly, "    ldp x0, x1, [sp, #{offset}]");
+            asm_line!(assembly, "    mov x2, #0");
         }
         ValueExpression::Concat { .. }
         | ValueExpression::RouteParameter { .. }

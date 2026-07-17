@@ -167,6 +167,12 @@ fn scratch_slots(expression: &ValueExpression) -> usize {
                 .max()
                 .unwrap_or(0)
         }
+        ValueExpression::ThrowValue { value, .. } => scratch_slots(value),
+        ValueExpression::TryCatch {
+            try_value,
+            catch_value,
+            ..
+        } => 1 + scratch_slots(try_value).max(scratch_slots(catch_value)),
         ValueExpression::Concat { values, .. } => {
             values.iter().map(scratch_slots).max().unwrap_or(0)
         }

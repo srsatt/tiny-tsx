@@ -81,6 +81,7 @@ pub(super) fn emit_value_function(
         scratch_base,
         &format!("function_{id}"),
         &mut conditional_index,
+        None,
     )?;
     emit_epilogue(assembly, frame_size);
     Ok(())

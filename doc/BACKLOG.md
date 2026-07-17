@@ -339,8 +339,14 @@ Do not tag `0.1.0-alpha.1` until all of these are true:
       infinities with complete semantics evidence.
 - [ ] Replace whole-module forbidden-syntax rejection with request/initialization
       reachability and specialize remaining closed-shape Hono object rest.
+  - 2026-07-17: exception syntax is no longer rejected module-wide. Unreachable
+    exception code is ignored, while reachable functions must lower to the
+    native string-completion subset. Other forbidden syntax remains open.
 - [ ] Add native RegExp, exceptions, Promise/async scheduling, and additional
       allowlisted Test262 coverage.
+  - 2026-07-17: ordinary native functions can throw strings across direct calls
+    and consume them in same-function `try/catch`; uncaught completion is a
+    compile error. Error objects, finally, Promise, and async remain open.
 
 ### P2 — Web and Hono breadth
 

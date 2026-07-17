@@ -325,6 +325,56 @@ test("lambda-lifts closed local function values and immutable captures", () => {
   );
 });
 
+test("lowers thrown strings across direct calls into native try/catch", () => {
+  const hir = compileSource(`
+    function risky(value: string): string {
+      if (value === "bad") throw "bad";
+      return value;
+    }
+    function recover(value: string): string {
+      try {
+        return risky(value);
+      } catch (error: any) {
+        return error;
+      }
+    }
+    export function GET(request: Request): Response {
+      return Response.text(recover("bad"));
+    }
+  `);
+
+  assert.deepEqual(hir.functions.map(func => [func.name, func.body.kind]), [
+    ["recover", "tryCatch"],
+    ["risky", "stringEqualConditional"],
+  ]);
+  const recovery = hir.functions[0]?.body;
+  assert.equal(recovery?.kind === "tryCatch" ? recovery.tryValue.kind : undefined, "directCall");
+  assert.equal(recovery?.kind === "tryCatch" ? recovery.catchValue.kind : undefined, "caughtException");
+  const risky = hir.functions[1]?.body;
+  assert.equal(
+    risky?.kind === "stringEqualConditional" ? risky.whenEqual.kind : undefined,
+    "throwValue",
+  );
+});
+
+test("ignores unsupported exception syntax outside the reachable function graph", () => {
+  const hir = compileSource(`
+    function unused(): string {
+      try {
+        throw new Error("unused");
+      } catch {
+        return "unused";
+      }
+    }
+    export function GET(request: Request): Response {
+      return Response.text("reachable");
+    }
+  `);
+
+  assert.equal(hir.statistics.functions, 0);
+  assert.equal(hir.handlers[0]?.response.kind, "text");
+});
+
 test("lowers a closed class field and immediate method call", () => {
   const hir = compileSource(`
     const MESSAGE = "Hono!!";
@@ -372,7 +422,6 @@ test("rejects inheritance outside the closed class slice", () => {
 for (const [name, source, code] of [
   ["any component props", `function Bad(value: any): JSX.Element { return <p>Bad</p>; }`, "TINY1102"],
   ["async", `async function Bad(): Promise<void> {}`, "TINY1003"],
-  ["unstaged exceptions", `function Bad(): never { throw Error("bad"); }`, "TINY1006"],
   ["computed properties", `const key = "x"; const value = ({x: 1})[key];`, "TINY1004"],
   ["event attributes", `function Bad(): JSX.Element { return <button onClick="x">Bad</button>; }`, "TINY1204"],
 ] as const) {

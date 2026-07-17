@@ -378,6 +378,7 @@ fn emit_handler_text_expression(
                 HANDLER_SCRATCH_BASE,
                 &format!("handler_{handler_index}"),
                 conditional_index,
+                None,
             )?;
             asm_line!(assembly, "    mov x2, x1");
             asm_line!(assembly, "    mov x1, x0");

@@ -337,6 +337,20 @@ pub enum ValueExpression {
         when_not_equal: Box<ValueExpression>,
         span: SourceSpan,
     },
+    ThrowValue {
+        value: Box<ValueExpression>,
+        span: SourceSpan,
+    },
+    TryCatch {
+        #[serde(rename = "tryValue")]
+        try_value: Box<ValueExpression>,
+        #[serde(rename = "catchValue")]
+        catch_value: Box<ValueExpression>,
+        span: SourceSpan,
+    },
+    CaughtException {
+        span: SourceSpan,
+    },
     Concat {
         values: Vec<ValueExpression>,
         span: SourceSpan,
@@ -794,6 +808,7 @@ impl Program {
             }
         }
         self.validate_function_cycles()?;
+        self.validate_handler_exceptions()?;
         Ok(())
     }
 
@@ -801,6 +816,15 @@ impl Program {
         &self,
         expression: &ValueExpression,
         parameter_count: usize,
+    ) -> Result<(), String> {
+        self.validate_expression_context(expression, parameter_count, false)
+    }
+
+    fn validate_expression_context(
+        &self,
+        expression: &ValueExpression,
+        parameter_count: usize,
+        caught_exception_available: bool,
     ) -> Result<(), String> {
         match expression {
             ValueExpression::StringLiteral { string, .. } => {
@@ -833,7 +857,11 @@ impl Program {
                     return Err("direct call argument count does not match its function".to_owned());
                 }
                 for argument in arguments {
-                    self.validate_expression(argument, parameter_count)?;
+                    self.validate_expression_context(
+                        argument,
+                        parameter_count,
+                        caught_exception_available,
+                    )?;
                 }
             }
             ValueExpression::StringEqualConditional {
@@ -843,10 +871,30 @@ impl Program {
                 when_not_equal,
                 ..
             } => {
-                self.validate_expression(left, parameter_count)?;
-                self.validate_expression(right, parameter_count)?;
-                self.validate_expression(when_equal, parameter_count)?;
-                self.validate_expression(when_not_equal, parameter_count)?;
+                self.validate_expression_context(left, parameter_count, caught_exception_available)?;
+                self.validate_expression_context(right, parameter_count, caught_exception_available)?;
+                self.validate_expression_context(when_equal, parameter_count, caught_exception_available)?;
+                self.validate_expression_context(when_not_equal, parameter_count, caught_exception_available)?;
+            }
+            ValueExpression::ThrowValue { value, .. } => {
+                self.validate_expression_context(value, parameter_count, caught_exception_available)?;
+            }
+            ValueExpression::TryCatch {
+                try_value,
+                catch_value,
+                ..
+            } => {
+                self.validate_expression_context(
+                    try_value,
+                    parameter_count,
+                    caught_exception_available,
+                )?;
+                self.validate_expression_context(catch_value, parameter_count, true)?;
+            }
+            ValueExpression::CaughtException { .. } => {
+                if !caught_exception_available {
+                    return Err("caught exception value is outside a catch expression".to_owned());
+                }
             }
             ValueExpression::Concat { .. }
             | ValueExpression::RouteParameter { .. }
@@ -1235,6 +1283,17 @@ impl Program {
                 self.visit_expression_functions(when_equal, state)?;
                 self.visit_expression_functions(when_not_equal, state)?;
             }
+            ValueExpression::ThrowValue { value, .. } => {
+                self.visit_expression_functions(value, state)?;
+            }
+            ValueExpression::TryCatch {
+                try_value,
+                catch_value,
+                ..
+            } => {
+                self.visit_expression_functions(try_value, state)?;
+                self.visit_expression_functions(catch_value, state)?;
+            }
             ValueExpression::WorkerCall { input, .. } => {
                 self.visit_expression_functions(input, state)?;
             }
@@ -1242,6 +1301,109 @@ impl Program {
         }
         Ok(())
     }
+
+    fn validate_handler_exceptions(&self) -> Result<(), String> {
+        let mut memo = vec![None; self.functions.len()];
+        for handler in &self.handlers {
+            for response in handler_responses(handler) {
+                if self.response_may_throw(response, &mut memo) {
+                    return Err(format!(
+                        "handler {} {} may complete with an uncaught native exception",
+                        handler.method, handler.path
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn response_may_throw(
+        &self,
+        response: &HandlerResponse,
+        memo: &mut [Option<bool>],
+    ) -> bool {
+        match response {
+            HandlerResponse::Html { .. } => false,
+            HandlerResponse::Text { value, .. } => self.expression_may_throw(value, memo),
+            HandlerResponse::Stream { chunks, .. } => {
+                chunks.iter().any(|chunk| self.expression_may_throw(chunk, memo))
+            }
+        }
+    }
+
+    fn function_may_throw(&self, id: usize, memo: &mut [Option<bool>]) -> bool {
+        if let Some(result) = memo[id] {
+            return result;
+        }
+        let result = self.expression_may_throw(&self.functions[id].body, memo);
+        memo[id] = Some(result);
+        result
+    }
+
+    fn expression_may_throw(
+        &self,
+        expression: &ValueExpression,
+        memo: &mut [Option<bool>],
+    ) -> bool {
+        match expression {
+            ValueExpression::ThrowValue { .. } => true,
+            ValueExpression::TryCatch { catch_value, .. } => {
+                self.expression_may_throw(catch_value, memo)
+            }
+            ValueExpression::DirectCall {
+                function,
+                arguments,
+                ..
+            } => {
+                arguments
+                    .iter()
+                    .any(|argument| self.expression_may_throw(argument, memo))
+                    || self.function_may_throw(*function, memo)
+            }
+            ValueExpression::StringEqualConditional {
+                left,
+                right,
+                when_equal,
+                when_not_equal,
+                ..
+            } => [left, right, when_equal, when_not_equal]
+                .into_iter()
+                .any(|value| self.expression_may_throw(value, memo)),
+            ValueExpression::Concat { values, .. } => values
+                .iter()
+                .any(|value| self.expression_may_throw(value, memo)),
+            ValueExpression::QueryConditional {
+                when_present,
+                when_absent,
+                ..
+            } => {
+                self.expression_may_throw(when_present, memo)
+                    || self.expression_may_throw(when_absent, memo)
+            }
+            ValueExpression::WorkerCall { input, .. } => self.expression_may_throw(input, memo),
+            _ => false,
+        }
+    }
+}
+
+fn handler_responses(handler: &Handler) -> Vec<&HandlerResponse> {
+    let mut responses = vec![&handler.response];
+    if let Some(authorization) = &handler.basic_authorization {
+        responses.push(&authorization.rejected.response);
+    }
+    if let Some(entity_tag) = &handler.entity_tag {
+        responses.push(&entity_tag.not_modified.response);
+    }
+    if let Some(existence) = &handler.sqlite_existence {
+        responses.push(&existence.missing.response);
+    }
+    responses.extend(
+        handler
+            .parameter_validations
+            .iter()
+            .map(|validation| &validation.rejected.response),
+    );
+    responses
 }
 
 fn response_uses_openai(response: &HandlerResponse) -> bool {
@@ -1276,6 +1438,12 @@ fn expression_uses_filesystem(expression: &ValueExpression) -> bool {
         } => [left, right, when_equal, when_not_equal]
             .into_iter()
             .any(|value| expression_uses_filesystem(value)),
+        ValueExpression::ThrowValue { value, .. } => expression_uses_filesystem(value),
+        ValueExpression::TryCatch {
+            try_value,
+            catch_value,
+            ..
+        } => expression_uses_filesystem(try_value) || expression_uses_filesystem(catch_value),
         ValueExpression::QueryConditional {
             when_present,
             when_absent,
@@ -1325,6 +1493,15 @@ fn collect_environment_ids(expression: &ValueExpression, ids: &mut BTreeSet<usiz
             collect_environment_ids(when_equal, ids);
             collect_environment_ids(when_not_equal, ids);
         }
+        ValueExpression::ThrowValue { value, .. } => collect_environment_ids(value, ids),
+        ValueExpression::TryCatch {
+            try_value,
+            catch_value,
+            ..
+        } => {
+            collect_environment_ids(try_value, ids);
+            collect_environment_ids(catch_value, ids);
+        }
         ValueExpression::QueryConditional {
             when_present,
             when_absent,
@@ -1354,6 +1531,12 @@ fn expression_uses_openai(expression: &ValueExpression) -> bool {
         } => [left, right, when_equal, when_not_equal]
             .into_iter()
             .any(|value| expression_uses_openai(value)),
+        ValueExpression::ThrowValue { value, .. } => expression_uses_openai(value),
+        ValueExpression::TryCatch {
+            try_value,
+            catch_value,
+            ..
+        } => expression_uses_openai(try_value) || expression_uses_openai(catch_value),
         ValueExpression::QueryConditional {
             when_present,
             when_absent,

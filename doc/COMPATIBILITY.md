@@ -290,8 +290,8 @@ When source explicitly installs `onError()`, a closed thrown `Error` is carried
 as abrupt completion into that upstream closure. Closed Error stringification
 feeds `console.error`, HIR records the request-time stderr line, and native code
 logs it before returning the custom 500 response. This admits only exceptions
-fully consumed during application specialization; standalone throw and all
-try/catch syntax remain rejected.
+fully consumed during application specialization. It remains separate from the
+ordinary native string-exception function subset described below.
 
 The complete example's deliberate `@ts-ignore` route returns a truthy string
 instead of a `Response`. Hono stores that invalid value in the Context and its
@@ -549,6 +549,21 @@ call site. This gives closed callbacks native execution without allocating a
 closure object. Explicit parameters plus captures remain bounded to four
 pointer/length values.
 
+Ordinary native functions may throw a supported string expression from a
+terminal branch or function body and catch it in a same-function `try/catch`.
+The native function ABI returns the string in `x0`/`x1` and a completion flag in
+`x2`; direct calls propagate abrupt completion without evaluating later
+arguments. A catch stores the thrown pointer/length pair in bounded frame space
+and exposes it through its catch binding. The compiler analyzes the complete
+function graph and rejects any handler whose response may end with an uncaught
+exception. `finally`, rethrowing/escaping catch values, Error objects, stack
+traces, arbitrary thrown types, and async rejection remain unsupported.
+
+Exception syntax is now checked after reachability for ordinary entry modules:
+unused functions may contain unsupported exception forms without blocking a
+build, while reachable functions must lower to the explicit HIR above. Other
+whole-module forbidden-syntax checks have not yet moved to this model.
+
 This does not introduce a JavaScript call stack or object model. Mutable or
 non-string locals, general boolean/numeric conditions, optional/default/rest
 parameters, escaping or identity-observable closures, transitive captures,
@@ -638,7 +653,8 @@ Web API implementation.
 4. Rest/spread forms used by `hono/tiny`.
 5. RegExp and required String, Array, Object, Map, and encoding operations.
 6. Request, Response, Headers, and URL native APIs.
-7. Exceptions, Promise, async/await, and the native task executor.
+7. Error objects, broader exceptions, Promise, async/await, and the native task
+   executor.
 8. Middleware, request bodies, and broader Hono conformance.
 
 The order may change when the module audit proves that a smaller dependency

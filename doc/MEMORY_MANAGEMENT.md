@@ -74,6 +74,10 @@ lambda-lifted into ordinary native functions, and captures become explicit
 pointer/length arguments. Escaping closures or identity-observable function
 values still cross the managed-heap decision gate above.
 
+Bounded string exceptions use the same non-owning pointer/length representation
+as native function values plus one completion register. Catch storage is one
+bounded frame slot; no Error object, stack trace, or heap allocation is created.
+
 No production tracing collector should be written from scratch as part of the
 worker milestone.
 

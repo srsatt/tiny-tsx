@@ -73,6 +73,15 @@ fn emits_assemblable_lambda_lifted_closure_for_linux_arm64() {
     assert_assembles_as_elf(&assembly, "function-closure");
 }
 
+#[test]
+fn emits_assemblable_string_exceptions_for_linux_arm64() {
+    let assembly = compile_linux("examples/function-exceptions/server.ts", &[]);
+
+    assert!(assembly.contains("catch_"));
+    assert!(assembly.contains("mov x2, #1"));
+    assert_assembles_as_elf(&assembly, "function-exceptions");
+}
+
 fn compile_linux(entry: &str, extra_arguments: &[&str]) -> String {
     let compiler = env!("CARGO_BIN_EXE_tinytsx");
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..");

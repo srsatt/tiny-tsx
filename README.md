@@ -772,8 +772,9 @@ Reject the following at compile time:
 * CommonJS `require`;
 * decorators;
 * getters and setters;
-* exceptions;
-* `try`, `catch`, and `finally`;
+* Error objects and arbitrary thrown values outside the bounded native string
+  completion subset;
+* `finally` and exception forms outside same-function string `try`/`catch`;
 * generators;
 * symbols;
 * arbitrary `BigInt`;

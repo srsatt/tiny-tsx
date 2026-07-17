@@ -28,6 +28,10 @@ interface FunctionContext {
   captures: Capture[];
 }
 
+type FunctionCompletion =
+  | {kind: "return"; expression: ts.Expression}
+  | {kind: "throw"; expression: ts.Expression};
+
 export class FunctionLowerer {
   readonly #functions: Array<HirFunction | undefined> = [];
   readonly #ids = new Map<LoweredFunction, number>();
@@ -36,6 +40,7 @@ export class FunctionLowerer {
   readonly #locals = new Map<ts.VariableDeclaration, {function: number; value: ValueExpression}>();
   readonly #closures = new Map<ts.VariableDeclaration, ClosureBinding>();
   readonly #contexts = new Map<number, FunctionContext>();
+  readonly #caught = new Map<ts.VariableDeclaration, number>();
   readonly #fields = new Map<number, ReadonlyMap<string, number>>();
   readonly #constants: ReadonlyMap<string, Constant>;
 
@@ -62,6 +67,16 @@ export class FunctionLowerer {
     if (ts.isIdentifier(value)) {
       const declaration = this.resolveDeclaration(value);
       if (declaration !== undefined && ts.isVariableDeclaration(declaration)) {
+        const caughtIn = this.#caught.get(declaration);
+        if (caughtIn !== undefined) {
+          if (caughtIn !== currentFunction) {
+            throw tinyError("TINY1325", "caught values cannot escape their native catch block", value);
+          }
+          return {
+            kind: "caughtException",
+            span: spanOf(value, value.getSourceFile()),
+          };
+        }
         const local = this.#locals.get(declaration);
         if (local !== undefined) {
           if (local.function !== currentFunction) {
@@ -303,14 +318,17 @@ export class FunctionLowerer {
     try {
       const remaining = statements.slice(index);
       if (remaining.length === 1) {
-        const returned = returnExpression(remaining[0]!);
-        if (returned !== undefined) return this.lower(returned, currentFunction);
+        const completion = functionCompletion(remaining[0]!);
+        if (completion !== undefined) return this.lowerCompletion(completion, currentFunction);
         if (ts.isIfStatement(remaining[0]!)) {
           return this.lowerConditional(remaining[0] as ts.IfStatement, undefined, currentFunction);
         }
+        if (ts.isTryStatement(remaining[0]!)) {
+          return this.lowerTryCatch(remaining[0] as ts.TryStatement, currentFunction);
+        }
       }
       if (remaining.length === 2 && ts.isIfStatement(remaining[0]!)) {
-        const fallback = returnExpression(remaining[1]!);
+        const fallback = functionCompletion(remaining[1]!);
         if (fallback !== undefined) {
           return this.lowerConditional(remaining[0] as ts.IfStatement, fallback, currentFunction);
         }
@@ -449,7 +467,7 @@ export class FunctionLowerer {
 
   private lowerConditional(
     statement: ts.IfStatement,
-    fallback: ts.Expression | undefined,
+    fallback: FunctionCompletion | undefined,
     currentFunction: number,
   ): ValueExpression {
     const condition = unwrap(statement.expression);
@@ -462,24 +480,74 @@ export class FunctionLowerer {
     ) {
       throw tinyError("TINY1322", "native branches require strict string equality", condition);
     }
-    const thenExpression = returnExpression(statement.thenStatement);
-    const elseExpression = statement.elseStatement === undefined
+    const thenCompletion = functionCompletion(statement.thenStatement);
+    const elseCompletion = statement.elseStatement === undefined
       ? fallback
-      : returnExpression(statement.elseStatement);
-    if (thenExpression === undefined || elseExpression === undefined) {
-      throw tinyError("TINY1322", "both native branch paths must return a string", statement);
+      : functionCompletion(statement.elseStatement);
+    if (thenCompletion === undefined || elseCompletion === undefined) {
+      throw tinyError("TINY1322", "both native branch paths must return or throw a string", statement);
     }
     const equal = condition.operatorToken.kind === ts.SyntaxKind.EqualsEqualsEqualsToken;
     const left = this.lower(condition.left, currentFunction);
     const right = this.lower(condition.right, currentFunction);
-    const thenValue = this.lower(thenExpression, currentFunction);
-    const elseValue = this.lower(elseExpression, currentFunction);
+    const thenValue = this.lowerCompletion(thenCompletion, currentFunction);
+    const elseValue = this.lowerCompletion(elseCompletion, currentFunction);
     return {
       kind: "stringEqualConditional",
       left,
       right,
       whenEqual: equal ? thenValue : elseValue,
       whenNotEqual: equal ? elseValue : thenValue,
+      span: spanOf(statement, statement.getSourceFile()),
+    };
+  }
+
+  private lowerCompletion(
+    completion: FunctionCompletion,
+    currentFunction: number,
+  ): ValueExpression {
+    const value = this.lower(completion.expression, currentFunction);
+    return completion.kind === "return"
+      ? value
+      : {
+          kind: "throwValue",
+          value,
+          span: spanOf(completion.expression, completion.expression.getSourceFile()),
+        };
+  }
+
+  private lowerTryCatch(
+    statement: ts.TryStatement,
+    currentFunction: number,
+  ): ValueExpression {
+    if (
+      statement.finallyBlock !== undefined
+      || statement.catchClause?.variableDeclaration === undefined
+      || !ts.isIdentifier(statement.catchClause.variableDeclaration.name)
+    ) {
+      throw tinyError(
+        "TINY1326",
+        "native try/catch requires one identifier binding and no finally block",
+        statement,
+      );
+    }
+    const tryValue = this.lowerFunctionBody(statement.tryBlock.statements, currentFunction, statement.tryBlock);
+    const binding = statement.catchClause.variableDeclaration;
+    this.#caught.set(binding, currentFunction);
+    let catchValue: ValueExpression;
+    try {
+      catchValue = this.lowerFunctionBody(
+        statement.catchClause.block.statements,
+        currentFunction,
+        statement.catchClause.block,
+      );
+    } finally {
+      this.#caught.delete(binding);
+    }
+    return {
+      kind: "tryCatch",
+      tryValue,
+      catchValue,
       span: spanOf(statement, statement.getSourceFile()),
     };
   }
@@ -613,11 +681,16 @@ function unwrap(expression: ts.Expression): ts.Expression {
   return current;
 }
 
-function returnExpression(statement: ts.Statement): ts.Expression | undefined {
-  if (ts.isReturnStatement(statement)) return statement.expression;
+function functionCompletion(statement: ts.Statement): FunctionCompletion | undefined {
+  if (ts.isReturnStatement(statement) && statement.expression !== undefined) {
+    return {kind: "return", expression: statement.expression};
+  }
+  if (ts.isThrowStatement(statement) && statement.expression !== undefined) {
+    return {kind: "throw", expression: statement.expression};
+  }
   if (ts.isBlock(statement) && statement.statements.length === 1) {
     const [only] = statement.statements;
-    return only === undefined ? undefined : returnExpression(only);
+    return only === undefined ? undefined : functionCompletion(only);
   }
   return undefined;
 }
