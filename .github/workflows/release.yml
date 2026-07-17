@@ -1,0 +1,47 @@
+name: alpha release
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-aarch64:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-14
+            target: aarch64-apple-darwin
+          - runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: oven-sh/setup-bun@v2
+      - name: Install Linux native prerequisites
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y clang libcurl4-openssl-dev
+      - name: Install frontend dependencies
+        run: npm ci --prefix frontend
+      - name: Verify native alpha archive
+        run: npm run release:verify
+      - name: Check artifact target
+        shell: bash
+        run: test -f "dist/release/tinytsx-0.1.0-alpha.1-${{ matrix.target }}.tar.gz"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tinytsx-0.1.0-alpha.1-${{ matrix.target }}
+          path: |
+            dist/release/tinytsx-0.1.0-alpha.1-${{ matrix.target }}.tar.gz
+            dist/release/tinytsx-0.1.0-alpha.1-${{ matrix.target }}.tar.gz.sha256
+            dist/release/tinytsx-0.1.0-alpha.1-${{ matrix.target }}.manifest.json
+          if-no-files-found: error
