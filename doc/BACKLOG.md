@@ -577,6 +577,16 @@ explicitly promoted into a later goal.
     without retracting the accepted FIFO message; the public Hono tracer proves
     a successful bounded ask. Automatic HTTP-disconnect cancellation, restart
     policy, and supervision remain open.
+  - Selected next tracer (2026-07-17): detach an `actor.ask()` HTTP waiter after
+    a hard client reset without retracting its accepted mailbox message. Use the
+    one-worker SQLite-backed counter with an externally held write lock: reset
+    the requesting socket while the actor is waiting, require a static health
+    route to respond before the lock is released, then release it and require
+    the accepted increment to become visible. Add a deterministic generic
+    cancellation test, Apple-arm64 HTTP execution, Linux-arm64 assembly, and
+    bounded polling evidence. Clean TCP half-close, arbitrary `AbortSignal`
+    sources, cancellation of SQLite/fetch/file operations, message retraction,
+    restart, and supervision remain outside this tracer.
 - [x] Measure 1,000 and 10,000 idle/local actors, publish bytes per actor and
       thread count, and prove cross-actor parallelism and fairness under a hot
       mailbox before raising the documented actor-count limit.
