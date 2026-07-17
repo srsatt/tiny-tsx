@@ -19,7 +19,7 @@ use super::{
 };
 
 const MAX_REQUESTS_PER_CONNECTION: usize = 100;
-const REQUESTS_PER_TURN: usize = 8;
+const REQUESTS_PER_TURN: usize = 16;
 const CONNECTION_IO_TIMEOUT: Duration = Duration::from_secs(5);
 const OVERLOAD_HEAD_TIMEOUT: Duration = Duration::from_millis(10);
 
@@ -245,8 +245,8 @@ mod tests {
         let (server, _) = listener.accept().expect("accept test connection");
 
         let mut requests = Vec::new();
-        for index in 0..9 {
-            let connection = if index == 8 { "close" } else { "keep-alive" };
+        for index in 0..17 {
+            let connection = if index == 16 { "close" } else { "keep-alive" };
             write!(
                 requests,
                 "GET /{index} HTTP/1.1\r\nHost: localhost\r\nConnection: {connection}\r\n\r\n"
@@ -275,14 +275,14 @@ mod tests {
                 .windows(b"HTTP/1.1 200".len())
                 .filter(|window| *window == b"HTTP/1.1 200")
                 .count(),
-            9
+            17
         );
         assert_eq!(
             responses
                 .windows(b"Connection: keep-alive".len())
                 .filter(|window| *window == b"Connection: keep-alive")
                 .count(),
-            8
+            16
         );
         assert!(responses.ends_with(b"Connection: close\r\n\r\n"));
     }
