@@ -169,7 +169,14 @@ handler waits in `ask()` detaches the response waiter within the runtime's
 not retract accepted work. Clean half-close and general `AbortSignal`
 cancellation are not implemented.
 
-Dynamic request-derived messages, arbitrary behaviors, supervision, value
+One exact non-persistent counter behavior may throw on a closed integer
+sentinel and declare `restart: {maxRestarts, withinMs}`. The bounds are 1–16
+restarts in a 1–60,000 ms rolling window. An admitted failure resets only that
+actor to its declared initial state; exceeding the intensity terminates it and
+cancels queued replies. Persistent recovery, backoff, manual restart,
+supervision, links, monitors, and registries are not implemented.
+
+Dynamic request-derived messages, arbitrary behaviors, general supervision, value
 identity/transfer, and general persistence are not native. The optional
 SQLite-backed counter persistence specialization has process-restart evidence;
 value-mailbox persistence is rejected.

@@ -99,6 +99,34 @@ proves the cold actor runs by the first quantum boundary while hot work remains.
 Separate barrier evidence proves distinct actors execute in parallel when two
 executors are configured.
 
+## Bounded restart policy
+
+One exact non-persistent counter form may declare a closed failure sentinel and
+rolling restart intensity:
+
+```ts
+const counter = spawn((context, delta: number) => {
+  if (delta === 99) throw Error("counter failure");
+  context.state += delta;
+  return String(context.state);
+}, 0, {restart: {maxRestarts: 2, withinMs: 60_000}});
+```
+
+`maxRestarts` is a compile-time integer from 1 through 16 and `withinMs` is a
+compile-time window from 1 through 60,000 milliseconds. The sentinel is one
+compile-time safe integer. The throwing caller receives the existing bounded
+internal-error response. If capacity remains in the rolling window, only that
+logical actor reruns its initializer, resets to the declared initial state, and
+continues queued messages. Other actors and executor threads are unchanged.
+The next failure after the configured intensity is exhausted terminates the
+actor and cancels its queued replies.
+
+This is panic containment plus reinitialization for the exact source shape
+above, not evaluation of arbitrary actor code. Persistence is rejected because
+its recovery source and disk/memory reconciliation require a separate policy.
+There is no backoff, manual restart, supervisor, child hierarchy, link, monitor,
+registry, snapshot, or distributed identity.
+
 ## Stop and failures
 
 `stop()` and `dispose()` are idempotent. Stopping rejects new messages and
@@ -117,8 +145,9 @@ message is not retracted and may still update actor state. A clean read-side EOF
 is deliberately not cancellation because valid raw HTTP clients may half-close
 their request stream while still awaiting the response. This narrow transport
 policy does not expose an `AbortSignal`, cancel SQLite/fetch/file operations, or
-make messages interruptible. Automatic restart, supervision trees, message
-retraction, and general durable snapshots remain outside this slice. Optional
+make messages interruptible. Supervision trees, message retraction, and general
+durable snapshots remain outside this slice; restart is limited to the exact
+bounded policy above. Optional
 counter persistence restores state after a process restart; it does not restart
 a failed actor in-process.
 
@@ -153,6 +182,12 @@ lock, then observes the detached increment at state 4.
 a primitive, a bounded array, and a nested closed record through native Hono
 HTTP routes on Apple arm64 and assembles the same paths for Linux arm64. Stable
 diagnostic tests reject dynamic messages and exceeded array/string limits.
+
+`examples/hono-actors/restart.ts` proves two failures reset a fallible counter
+from state 1 to its declared state 0. A third failure inside the 60-second
+window exhausts the intensity and terminates only that actor. Apple native HTTP
+checks the complete sequence and Linux arm64 assembles the restart
+configuration functions.
 
 Before actors can carry general request-derived application state, TinyTSX
 still needs a runtime expression/value representation for dynamic messages;

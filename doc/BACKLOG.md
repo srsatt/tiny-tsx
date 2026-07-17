@@ -368,9 +368,10 @@ messages, protected SQLite ownership, actor pressure evidence, and bounded live
 HTTP-connection resubmission. The bounded Hono Body Limit tracer has also
 landed, followed by the bounded Hono Request ID tracer and immutable typed
 SQLite `Statement.run()` results. Hard-reset cancellation now also detaches an
-actor HTTP waiter without retracting accepted work. Their implementation and
-evidence are recorded under P1-P4. Select the next bounded slice explicitly
-before its implementation begins.
+actor HTTP waiter without retracting accepted work, and the exact fallible
+counter has bounded restart intensity. Their implementation and evidence are
+recorded under P1-P4. Select the next bounded slice explicitly before its
+implementation begins.
 
 Do not reopen the completed alpha foundations as broad projects. File reading,
 SQLite, and local actors already have public bounded built-ins. Their next work
@@ -380,12 +381,12 @@ named upstream tracer.
 
 The groomed candidates, in recommended dependency order, are:
 
-1. **Actor restart policy:** select one failure-producing application behavior,
-   then specify bounded restart intensity and state reset/recovery separately
-   from supervision, links, distributed actors, snapshots, or a managed heap.
-2. **SQLite transaction/value depth:** add only the prepared/callback
+1. **SQLite transaction/value depth:** add only the prepared/callback
    transaction and dynamic value forms required by a selected application while
    retaining single-owner, non-interleaving execution.
+2. **Actor supervision proposal:** select a real parent/child tracer before
+   defining child startup, restart escalation, or failure observation; keep
+   links, monitors, registries, persistence, and distribution separate.
 3. **Release-stability evidence:** finish the named P4 workload families and a
    longer controlled TinyTSX/Bun run only after the selected functional slice
    is green. A new release candidate remains a separate explicitly selected
@@ -587,18 +588,20 @@ explicitly promoted into a later goal.
     `test:actors-native`. Clean TCP half-close, arbitrary `AbortSignal` sources,
     cancellation of SQLite/fetch/file operations, message retraction, restart,
     and supervision remain outside this tracer.
-  - Selected next tracer (2026-07-17): admit one exact non-persistent counter
+  - 2026-07-17: the source tree now admits one exact non-persistent counter
     behavior whose first statement throws a closed `Error` for one
     compile-time integer sentinel, followed by the existing checked counter
     update/reply. A closed `restart: {maxRestarts, withinMs}` policy allows 1–16
     initializer resets in a 1–60,000 ms rolling window; each failed caller gets
     the existing internal-error envelope, queued messages continue against the
     reset initial state, and the next failure beyond the limit terminates that
-    actor and cancels its queue. Require generic reset/intensity tests, stable
-    `TINY1520` rejections, Apple Hono state/reset/termination behavior, Linux
-    assembly, manifest/SDK/docs updates, and no cross-actor state change.
-    Persistent restart recovery, backoff, manual restart, supervision, links,
-    monitors, registries, snapshots, and distributed identity remain separate.
+    actor and cancels its queue. Generic worker tests prove reset, cross-actor
+    isolation, and intensity termination; stable `TINY1520` diagnostics reject
+    unsupported forms. The named Hono tracer executes on Apple arm64 and
+    assembles for Linux arm64, and the SDK, manifest, and compatibility docs pin
+    the same boundary. Persistent restart recovery, backoff, manual restart,
+    supervision, links, monitors, registries, snapshots, and distributed
+    identity remain separate.
 - [x] Measure 1,000 and 10,000 idle/local actors, publish bytes per actor and
       thread count, and prove cross-actor parallelism and fairness under a hot
       mailbox before raising the documented actor-count limit.

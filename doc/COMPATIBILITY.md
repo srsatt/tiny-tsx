@@ -819,6 +819,17 @@ waiter and preserves FIFO effects. Clean TCP half-close is not treated as
 cancellation, and this does not add Web `AbortSignal`, message retraction,
 interruptible actor behavior, or cancellation for SQLite, fetch, or files.
 
+The first bounded restart shape extends only the native counter specialization.
+An initial `if (message === <integer>) throw Error(<closed string>)` precedes
+the existing checked state update and string reply. Closed restart options
+allow 1–16 resets in a 1–60,000 ms rolling window. Generic worker tests prove
+panic reinitialization, isolation from another actor, and termination when the
+window is exhausted. Apple Hono HTTP proves two failures reset state 1 to 0 and
+a third terminates the actor; Linux arm64 assembles the same configuration.
+This does not evaluate general failure branches or add persistence recovery,
+backoff, manual restart, supervisors, links, monitors, registries, snapshots,
+or distributed actors.
+
 ## Compatibility order
 
 1. ESM runtime graph loading and aggregate diagnostics.

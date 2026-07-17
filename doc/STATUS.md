@@ -9,6 +9,29 @@ produces and serves a native Mach-O executable from the example TSX source.
 
 ## Alpha implementation evidence
 
+### Bounded actor restart intensity (2026-07-17)
+
+- The actor SDK admits one exact non-persistent fallible counter and a closed
+  `restart: {maxRestarts, withinMs}` policy bounded to 1–16 restarts in a
+  1–60,000 ms rolling window. Its compile-time integer sentinel throws one
+  closed `Error` before the existing counter update.
+- A contained panic now reruns only that logical worker's initializer. The
+  failed caller receives the existing internal-error envelope, queued work
+  continues from the declared initial state, and exceeding the intensity
+  terminates the actor and cancels its queue. A second actor remains unchanged.
+- Apple native HTTP proves two failures reset state 1 to 0 and the third failure
+  terminates the actor. Linux-arm64 assembly carries the failure sentinel,
+  restart count, and window. Persistence recovery, backoff, manual restart,
+  supervision, links, monitors, registries, and snapshots remain explicit
+  boundaries.
+- Verification: 124 frontend tests, 20 worker tests, 60 bootstrap tests, 180
+  Rust workspace tests, Hono intake 8/8, actor native/assembly 8/8, the focused
+  built-in manifest test, and workspace Clippy with warnings denied. A
+  dirty-tree release-package rehearsal also passed all 4 installed-package
+  tests and produced the smoke-verified alpha archive with SHA-256
+  `44f8cab4f6669614a0aec5ec94bac7370b66b50e0f210bc1edb859e4c13ce1c5`;
+  the final tag-ready package still requires a clean source tree.
+
 ### Bounded actor hard-reset cancellation (2026-07-17)
 
 - Pending `actor.ask()` reply waits now check the HTTP connection's pending
@@ -22,8 +45,8 @@ produces and serves a native Mach-O executable from the example TSX source.
   task heap or per-request monitor thread.
 - The internal disconnect status closes the dead HTTP connection without a
   response write. General `AbortSignal`, clean-close propagation, message
-  retraction, cancellation of other built-ins, restart, and supervision remain
-  explicit boundaries.
+  retraction, cancellation of other built-ins, restart beyond the exact
+  fallible-counter policy, and supervision remain explicit boundaries.
 - Verification: 18 worker tests, 60 bootstrap tests, 178 Rust workspace tests,
   actor native/assembly 6/6 across Apple arm64 and Linux arm64, and workspace
   Clippy with warnings denied.

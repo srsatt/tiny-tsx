@@ -38,6 +38,7 @@ test("records the example matrix with executable evidence and boundaries", () =>
     "tinytsx-sqlite-owner",
     "upstream-blog",
     "tinytsx-actors-messages",
+    "tinytsx-actors-restart",
     "upstream-durable-objects-counter",
   ];
   assert.deepEqual(manifest.matrix.map(row => row.id), required);

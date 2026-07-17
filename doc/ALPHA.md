@@ -61,8 +61,9 @@ The protected backend modules are:
 - `tinytsx:fs`: static UTF-8 text reads, 4 KiB paths and 1 MiB files;
 - `tinytsx:sqlite`: one serialized owner, 64 KiB static SQL, 16 admitted public
   parameters, 1,024 result rows, 1 MiB results, and one-second busy timeout;
-- `tinytsx:actors`: compile-time counter actors with 1–64 mailbox entries and
-  optional SQLite-backed counter persistence;
+- `tinytsx:actors`: compile-time counter actors with 1–64 mailbox entries,
+  optional SQLite-backed counter persistence, and one bounded non-persistent
+  restart-intensity form;
 - `tinytsx:serve`: one compile-time fetch application and closed port.
 
 Environment and filesystem/database access are default-deny. Use
