@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import {once} from "node:events";
 import {mkdtempSync, readFileSync, realpathSync, rmSync} from "node:fs";
+import net from "node:net";
 import {tmpdir} from "node:os";
 import path from "node:path";
 import {spawn, spawnSync} from "node:child_process";
@@ -78,6 +80,28 @@ test("retains a SQLite-backed counter across process restart", async context => 
   await waitForServer(port, second);
   await assertResponse(port, "/", 200, "2");
   await assertResponse(port, "/increment", 200, "3");
+
+  const locker = holdWriteLock(path.join(directory, "actors.db"));
+  context.after(() => locker.kill("SIGTERM"));
+  await waitForOutput(locker, "locked\n");
+
+  const resetClient = net.createConnection({host: "127.0.0.1", port});
+  await once(resetClient, "connect");
+  resetClient.write(
+    "GET /increment HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
+  );
+  await new Promise(resolve => setTimeout(resolve, 100));
+  resetClient.resetAndDestroy();
+
+  const healthStarted = performance.now();
+  try {
+    await assertResponseWithin(port, "/health", 200, "ok", 500);
+    assert.ok(performance.now() - healthStarted < 500);
+  } finally {
+    locker.stdin.end();
+    await once(locker, "exit");
+  }
+  await waitForResponse(port, "/", 200, "4");
 });
 
 test("assembles the persistent actor tracer for Linux arm64", () => {
@@ -150,6 +174,7 @@ function buildPersistent(binary, port, directory) {
     "--port", String(port),
     "--alias", "hono=vendor/hono/src/index.ts",
     "--api", "hono=tests/compat/hono/api.d.ts",
+    "--workers", "1",
     "--allow-read", directory,
     "--allow-write", directory,
   ], {cwd: repository, encoding: "utf8"});
@@ -169,6 +194,49 @@ async function assertResponse(port, pathname, status, body) {
   const response = await fetch(`http://127.0.0.1:${port}${pathname}`);
   assert.equal(response.status, status);
   assert.equal(await response.text(), body);
+}
+
+async function assertResponseWithin(port, pathname, status, body, timeoutMs) {
+  const response = await fetch(`http://127.0.0.1:${port}${pathname}`, {
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  assert.equal(response.status, status);
+  assert.equal(await response.text(), body);
+}
+
+async function waitForResponse(port, pathname, status, body) {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    try {
+      await assertResponseWithin(port, pathname, status, body, 500);
+      return;
+    } catch {
+      await new Promise(resolve => setTimeout(resolve, 20));
+    }
+  }
+  throw new Error(`native actor response did not become ${status} ${body}`);
+}
+
+function holdWriteLock(database) {
+  return spawn("python3", ["-c", [
+    "import sqlite3, sys",
+    "connection = sqlite3.connect(sys.argv[1], timeout=1)",
+    "connection.execute('BEGIN EXCLUSIVE')",
+    "print('locked', flush=True)",
+    "sys.stdin.read()",
+    "connection.rollback()",
+    "connection.close()",
+  ].join("\n"), database], {stdio: ["pipe", "pipe", "pipe"]});
+}
+
+async function waitForOutput(process, expected) {
+  let output = "";
+  process.stdout.setEncoding("utf8");
+  for await (const chunk of process.stdout) {
+    output += chunk;
+    if (output.includes(expected)) return;
+    if (process.exitCode !== null) break;
+  }
+  throw new Error(`process exited before output ${JSON.stringify(expected)}: ${output}`);
 }
 
 async function waitForServer(port, server, pathname = "/") {

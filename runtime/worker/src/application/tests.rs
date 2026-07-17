@@ -118,7 +118,11 @@ fn a_hot_mailbox_yields_to_another_actor_after_one_quantum() {
         .position(|message| *message == ("cold", 0))
         .expect("cold actor executed");
     assert!(cold_index <= super::MAILBOX_DRAIN_QUANTUM);
-    assert!(order[cold_index + 1..].iter().any(|message| message.0 == "hot"));
+    assert!(
+        order[cold_index + 1..]
+            .iter()
+            .any(|message| message.0 == "hot")
+    );
 
     pool.join();
 }
@@ -181,6 +185,42 @@ fn dropping_a_reply_does_not_cancel_an_accepted_message() {
 }
 
 #[test]
+fn cancelling_a_reply_wait_detaches_without_retracting_the_accepted_message() {
+    let release = Arc::new(Barrier::new(2));
+    let handler_release = Arc::clone(&release);
+    let pool = ApplicationPool::new(
+        1,
+        2,
+        2,
+        |_| 0_i64,
+        move |state, delta| {
+            if delta == 2 {
+                handler_release.wait();
+            }
+            *state += delta;
+            *state
+        },
+    )
+    .expect("create application pool");
+    let actor = pool.spawn();
+    let reply = actor.try_post(2).expect("accept cancellable message");
+    let polls = std::cell::Cell::new(0);
+
+    assert_eq!(
+        reply.receive_with_cancellation(None, Duration::from_millis(5), || {
+            polls.set(polls.get() + 1);
+            polls.get() == 2
+        }),
+        Err(ReplyError::Cancelled),
+    );
+    assert_eq!(polls.get(), 2);
+
+    release.wait();
+    assert_eq!(actor.call(0), Ok(2));
+    pool.join();
+}
+
+#[test]
 fn a_timed_out_call_detaches_without_retracting_the_accepted_message() {
     let (started_tx, started_rx) = mpsc::sync_channel(1);
     let release = Arc::new(Barrier::new(2));
@@ -207,8 +247,15 @@ fn a_timed_out_call_detaches_without_retracting_the_accepted_message() {
         .expect("blocking message started");
 
     assert_eq!(
-        actor.call_timeout(2, Duration::from_millis(10)),
-        Err(CallError::Reply(ReplyError::TimedOut)),
+        actor
+            .try_post(2)
+            .expect("accept timed message")
+            .receive_with_cancellation(
+                Some(Duration::from_millis(10)),
+                Duration::from_millis(2),
+                || false,
+            ),
+        Err(ReplyError::TimedOut),
     );
 
     release.wait();

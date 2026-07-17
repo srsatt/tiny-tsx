@@ -10,6 +10,7 @@ const counter = spawn((context, delta: number) => {
 }, 0, {persistence: {database, key: "primary-counter"}});
 const app = new Hono();
 
+app.get("/health", context => context.text("ok"));
 app.get("/", async context => context.text(await counter.ask(0)));
 app.get("/increment", async context => context.text(await counter.ask(1)));
 

@@ -1,6 +1,8 @@
 use std::{
+    cell::Cell,
     ffi::c_void,
     io::{self, Write},
+    net::TcpStream,
     os::raw::{c_char, c_long},
     ptr, slice,
     sync::OnceLock,
@@ -16,6 +18,7 @@ pub const RENDER_ERROR: u32 = 3;
 pub const INTERNAL_ERROR: u32 = 4;
 pub const NOT_FOUND: u32 = 5;
 pub const APPLICATION_OVERLOAD: u32 = 6;
+pub const CLIENT_DISCONNECTED: u32 = 7;
 
 pub const CONTENT_TYPE_NONE: u16 = 0;
 pub const CONTENT_TYPE_HTML: u16 = 1;
@@ -61,6 +64,31 @@ unsafe extern "C" {
 }
 
 static CURL_READY: OnceLock<bool> = OnceLock::new();
+
+thread_local! {
+    static CLIENT_STREAM: Cell<*const TcpStream> = const { Cell::new(ptr::null()) };
+}
+
+struct ClientStreamGuard(*const TcpStream);
+
+impl Drop for ClientStreamGuard {
+    fn drop(&mut self) {
+        CLIENT_STREAM.with(|stream| stream.set(self.0));
+    }
+}
+
+fn client_reset() -> bool {
+    CLIENT_STREAM.with(|stream| {
+        let stream = stream.get();
+        if stream.is_null() {
+            return false;
+        }
+        // SAFETY: `render_with_client` keeps the borrowed stream alive and
+        // restores this thread-local pointer before returning.
+        let stream = unsafe { &*stream };
+        matches!(stream.take_error(), Ok(Some(_)) | Err(_))
+    })
+}
 
 pub(crate) struct OpenAiTransport {
     handle: *mut c_void,
@@ -433,7 +461,7 @@ pub unsafe extern "C" fn tinytsx_actor_ask_counter(
     if writer.is_null() {
         return INTERNAL_ERROR;
     }
-    match crate::application::ask_actor(actor, message, timeout_ms) {
+    match crate::application::ask_actor(actor, message, timeout_ms, client_reset) {
         Ok(output) => unsafe { tinytsx_html_write_static(writer, output.as_ptr(), output.len()) },
         Err(status) => {
             // SAFETY: the writer was validated above.
@@ -461,7 +489,7 @@ pub unsafe extern "C" fn tinytsx_actor_ask_json(
     }
     // SAFETY: Generated static message bytes are valid for the synchronous copy.
     let message = unsafe { slice::from_raw_parts(message, message_len) };
-    match crate::application::ask_actor_json(actor, message, timeout_ms) {
+    match crate::application::ask_actor_json(actor, message, timeout_ms, client_reset) {
         Ok(output) => unsafe { tinytsx_html_write_static(writer, output.as_ptr(), output.len()) },
         Err(status) => {
             // SAFETY: the writer was validated above.
@@ -2737,6 +2765,16 @@ pub fn render<'a>(request: &TinyRequest, arena: &'a mut RequestArena) -> Rendere
         stream_chunk_count: writer.stream_chunk_count,
         stream_chunks: writer.stream_chunks,
     }
+}
+
+pub fn render_with_client<'a>(
+    request: &TinyRequest,
+    arena: &'a mut RequestArena,
+    stream: &TcpStream,
+) -> RenderedResponse<'a> {
+    let previous = CLIENT_STREAM.with(|current| current.replace(stream));
+    let _guard = ClientStreamGuard(previous);
+    render(request, arena)
 }
 
 pub fn configured_port() -> u16 {

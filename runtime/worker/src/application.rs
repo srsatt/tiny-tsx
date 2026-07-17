@@ -6,7 +6,7 @@ use std::{
         atomic::{AtomicBool, AtomicUsize, Ordering},
         mpsc::{self, Receiver, SyncSender},
     },
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use crate::{SubmitError, WorkerPool};
@@ -26,6 +26,7 @@ pub enum ReplyError {
     Panicked,
     Terminated,
     TimedOut,
+    Cancelled,
     Disconnected,
 }
 
@@ -45,6 +46,44 @@ impl<R> Reply<R> {
             Ok(result) => result,
             Err(mpsc::RecvTimeoutError::Timeout) => Err(ReplyError::TimedOut),
             Err(mpsc::RecvTimeoutError::Disconnected) => Err(ReplyError::Disconnected),
+        }
+    }
+
+    pub fn receive_with_cancellation(
+        self,
+        timeout: Option<Duration>,
+        poll_interval: Duration,
+        mut cancelled: impl FnMut() -> bool,
+    ) -> Result<R, ReplyError> {
+        assert!(
+            !poll_interval.is_zero(),
+            "reply poll interval must be positive"
+        );
+        let started = Instant::now();
+        loop {
+            if cancelled() {
+                return Err(ReplyError::Cancelled);
+            }
+            let wait = timeout.map_or(poll_interval, |timeout| {
+                timeout
+                    .saturating_sub(started.elapsed())
+                    .min(poll_interval)
+            });
+            if wait.is_zero() {
+                return Err(ReplyError::TimedOut);
+            }
+            match self.receiver.recv_timeout(wait) {
+                Ok(result) => return result,
+                Err(mpsc::RecvTimeoutError::Timeout)
+                    if timeout.is_some_and(|timeout| started.elapsed() >= timeout) =>
+                {
+                    return Err(ReplyError::TimedOut);
+                }
+                Err(mpsc::RecvTimeoutError::Timeout) => {}
+                Err(mpsc::RecvTimeoutError::Disconnected) => {
+                    return Err(ReplyError::Disconnected);
+                }
+            }
         }
     }
 }

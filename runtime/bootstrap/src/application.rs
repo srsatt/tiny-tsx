@@ -4,22 +4,24 @@ use std::{
         OnceLock,
         atomic::{AtomicUsize, Ordering},
     },
+    time::Duration,
 };
 
 use tinytsx_runtime_sqlite::{Connection, SqlValue};
 use tinytsx_runtime_worker::{ApplicationPool, CallError, LogicalWorker, PostError, ReplyError};
 
 use crate::abi::{
-    APPLICATION_OVERLOAD, INTERNAL_ERROR, OpenAiTransport, RENDER_ERROR, actor_initial_json,
-    actor_initial_state, actor_mailbox_capacity, actor_operation, actor_persistence_database,
-    actor_persistence_key, configured_actors, configured_provider_transport,
-    configured_sqlite_database_path, configured_sqlite_databases, configured_worker_modules,
-    worker_operation,
+    APPLICATION_OVERLOAD, CLIENT_DISCONNECTED, INTERNAL_ERROR, OpenAiTransport, RENDER_ERROR,
+    actor_initial_json, actor_initial_state, actor_mailbox_capacity, actor_operation,
+    actor_persistence_database, actor_persistence_key, configured_actors,
+    configured_provider_transport, configured_sqlite_database_path, configured_sqlite_databases,
+    configured_worker_modules, worker_operation,
 };
 
 const APPLICATION_QUEUE_PER_EXECUTOR: usize = 64;
 const WORKER_MAILBOX_CAPACITY: usize = 64;
 const MAX_WORKER_MESSAGE_BYTES: usize = 4096;
+const ACTOR_REPLY_POLL_INTERVAL: Duration = Duration::from_millis(10);
 
 type WorkerReply = Result<Vec<u8>, u32>;
 type Pool = ApplicationPool<WorkerState, ApplicationMessage, WorkerReply>;
@@ -364,10 +366,20 @@ pub fn read_file(path: &[u8], max_bytes: usize) -> Result<Vec<u8>, u32> {
         .map_err(|_| APPLICATION_OVERLOAD)?
 }
 
-pub fn ask_actor(actor: usize, message: i64, timeout_ms: u64) -> Result<Vec<u8>, u32> {
+pub fn ask_actor(
+    actor: usize,
+    message: i64,
+    timeout_ms: u64,
+    cancelled: impl FnMut() -> bool,
+) -> Result<Vec<u8>, u32> {
     let runtime = APPLICATION.get().ok_or(INTERNAL_ERROR)?;
     let actor = runtime.actors.get(actor).ok_or(INTERNAL_ERROR)?;
-    call_actor(actor, ApplicationMessage::ActorCounter(message), timeout_ms)
+    call_actor(
+        actor,
+        ApplicationMessage::ActorCounter(message),
+        timeout_ms,
+        cancelled,
+    )
 }
 
 pub fn tell_actor(actor: usize, message: i64) -> u32 {
@@ -383,10 +395,20 @@ pub fn tell_actor(actor: usize, message: i64) -> u32 {
     }
 }
 
-pub fn ask_actor_json(actor: usize, message: &[u8], timeout_ms: u64) -> Result<Vec<u8>, u32> {
+pub fn ask_actor_json(
+    actor: usize,
+    message: &[u8],
+    timeout_ms: u64,
+    cancelled: impl FnMut() -> bool,
+) -> Result<Vec<u8>, u32> {
     let runtime = APPLICATION.get().ok_or(INTERNAL_ERROR)?;
     let actor = runtime.actors.get(actor).ok_or(INTERNAL_ERROR)?;
-    call_actor(actor, ApplicationMessage::ActorJson(message.to_vec()), timeout_ms)
+    call_actor(
+        actor,
+        ApplicationMessage::ActorJson(message.to_vec()),
+        timeout_ms,
+        cancelled,
+    )
 }
 
 pub fn tell_actor_json(actor: usize, message: &[u8]) -> u32 {
@@ -406,6 +428,7 @@ fn actor_call_status(error: CallError<ApplicationMessage>) -> u32 {
     match error {
         CallError::Post(error) => actor_post_status(error),
         CallError::Reply(ReplyError::TimedOut) => APPLICATION_OVERLOAD,
+        CallError::Reply(ReplyError::Cancelled) => CLIENT_DISCONNECTED,
         CallError::Reply(_) => RENDER_ERROR,
     }
 }
@@ -414,13 +437,15 @@ fn call_actor(
     actor: &Worker,
     message: ApplicationMessage,
     timeout_ms: u64,
+    cancelled: impl FnMut() -> bool,
 ) -> Result<Vec<u8>, u32> {
-    let result = if timeout_ms == 0 {
-        actor.call(message)
-    } else {
-        actor.call_timeout(message, std::time::Duration::from_millis(timeout_ms))
-    };
-    result.map_err(actor_call_status)?
+    let reply = actor
+        .try_post(message)
+        .map_err(|error| actor_call_status(CallError::Post(error)))?;
+    let timeout = (timeout_ms != 0).then(|| Duration::from_millis(timeout_ms));
+    reply
+        .receive_with_cancellation(timeout, ACTOR_REPLY_POLL_INTERVAL, cancelled)
+        .map_err(|error| actor_call_status(CallError::Reply(error)))?
 }
 
 fn actor_post_status(error: PostError<ApplicationMessage>) -> u32 {
@@ -554,10 +579,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn actor_timeout_is_a_recoverable_application_overload() {
+    fn actor_wait_failures_map_to_transport_statuses() {
         assert_eq!(
             actor_call_status(CallError::Reply(ReplyError::TimedOut)),
             APPLICATION_OVERLOAD,
+        );
+        assert_eq!(
+            actor_call_status(CallError::Reply(ReplyError::Cancelled)),
+            CLIENT_DISCONNECTED,
         );
     }
 

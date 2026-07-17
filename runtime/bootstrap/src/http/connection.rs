@@ -5,8 +5,8 @@ use std::{
 };
 
 use crate::abi::{
-    APPLICATION_OVERLOAD, BAD_REQUEST, CONTENT_TYPE_TEXT, INTERNAL_ERROR, NOT_FOUND, OK,
-    RENDER_ERROR, REQUEST_OOM, RequestArena, render, request_with_body,
+    APPLICATION_OVERLOAD, BAD_REQUEST, CLIENT_DISCONNECTED, CONTENT_TYPE_TEXT, INTERNAL_ERROR,
+    NOT_FOUND, OK, RENDER_ERROR, REQUEST_OOM, RequestArena, render_with_client, request_with_body,
 };
 
 use super::{
@@ -105,7 +105,10 @@ impl Connection {
         };
 
         let request = request_with_body(method, target, &parsed.headers, &body);
-        let response = render(&request, arena);
+        let response = render_with_client(&request, arena, stream);
+        if response.application_status == CLIENT_DISCONNECTED {
+            return Ok(Turn::Complete);
+        }
         let can_reuse = version == b"HTTP/1.1"
             && !parsed.connection_close
             && self.requests_completed + 1 < MAX_REQUESTS_PER_CONNECTION;
