@@ -6,12 +6,13 @@ use std::{
     },
 };
 
-use tinytsx_runtime_sqlite::Connection;
+use tinytsx_runtime_sqlite::{Connection, SqlValue};
 use tinytsx_runtime_worker::{ApplicationPool, CallError, LogicalWorker, PostError};
 
 use crate::abi::{
     APPLICATION_OVERLOAD, INTERNAL_ERROR, OpenAiTransport, RENDER_ERROR, actor_initial_state,
-    actor_mailbox_capacity, actor_operation, configured_actors, configured_provider_transport,
+    actor_mailbox_capacity, actor_operation, actor_persistence_database, actor_persistence_key,
+    configured_actors, configured_provider_transport,
     configured_sqlite_database_path, configured_sqlite_databases, configured_worker_modules,
     worker_operation,
 };
@@ -57,8 +58,14 @@ struct WorkerState {
     operation: u32,
     actor_operation: u32,
     actor_counter: i64,
+    actor_persistence: Option<Result<ActorPersistence, u32>>,
     provider: OpenAiTransport,
     sqlite: Option<Result<Connection, u32>>,
+}
+
+struct ActorPersistence {
+    connection: Connection,
+    key: String,
 }
 
 struct ApplicationRuntime {
@@ -73,6 +80,56 @@ struct ApplicationRuntime {
 }
 
 static APPLICATION: OnceLock<ApplicationRuntime> = OnceLock::new();
+
+fn initialize_actor_persistence(
+    actor: Option<usize>,
+    initial_state: i64,
+    database_paths: &[String],
+) -> (i64, Option<Result<ActorPersistence, u32>>) {
+    let Some(actor) = actor else {
+        return (initial_state, None);
+    };
+    let Some(database) = actor_persistence_database(actor) else {
+        return (initial_state, None);
+    };
+    let persistence = (|| {
+        let path = database_paths.get(database).ok_or(INTERNAL_ERROR)?;
+        let key = actor_persistence_key(actor).map_err(|_| INTERNAL_ERROR)?;
+        let key = String::from_utf8(key).map_err(|_| INTERNAL_ERROR)?;
+        let connection = tinytsx_runtime_sqlite::open(path).map_err(|_| RENDER_ERROR)?;
+        tinytsx_runtime_sqlite::execute_batch(
+            &connection,
+            "CREATE TABLE IF NOT EXISTS _tinytsx_actor_state (key TEXT PRIMARY KEY, value INTEGER NOT NULL)",
+        )
+        .map_err(|_| RENDER_ERROR)?;
+        let result = tinytsx_runtime_sqlite::query(
+            &connection,
+            "SELECT value FROM _tinytsx_actor_state WHERE key = ?1",
+            &[SqlValue::Text(key.clone())],
+            1,
+            128,
+        )
+        .map_err(|_| RENDER_ERROR)?;
+        let state = match result.rows.first().and_then(|row| row.first()) {
+            Some(SqlValue::Integer(value)) => *value,
+            Some(_) => return Err(RENDER_ERROR),
+            None => {
+                tinytsx_runtime_sqlite::execute(
+                    &connection,
+                    "INSERT INTO _tinytsx_actor_state (key, value) VALUES (?1, ?2)",
+                    &[SqlValue::Text(key.clone()), SqlValue::Integer(initial_state)],
+                )
+                .map_err(|_| RENDER_ERROR)?;
+                initial_state
+            }
+        };
+        Ok((state, ActorPersistence {connection, key}))
+    })();
+    match persistence {
+        Ok((state, persistence)) => (state, Some(Ok(persistence))),
+        Err(status) => (initial_state, Some(Err(status))),
+    }
+}
 
 pub fn initialize(executor_count: usize) -> io::Result<(usize, bool, bool)> {
     let worker_count = configured_worker_modules();
@@ -103,22 +160,28 @@ pub fn initialize(executor_count: usize) -> io::Result<(usize, bool, bool)> {
         executor_count,
         queue_capacity,
         WORKER_MAILBOX_CAPACITY,
-        move |id| WorkerState {
-            operation: worker_operation(id),
-            actor_operation: id
+        move |id| {
+            let actor = id
                 .checked_sub(worker_count)
-                .filter(|actor| *actor < actor_count)
-                .map_or(0, actor_operation),
-            actor_counter: id
-                .checked_sub(worker_count)
-                .filter(|actor| *actor < actor_count)
-                .map_or(0, actor_initial_state),
-            provider: OpenAiTransport::default(),
-            sqlite: id
-                .checked_sub(worker_count + actor_count)
-                .filter(|database| *database < database_count)
-                .and_then(|database| database_paths.get(database))
-                .map(|path| tinytsx_runtime_sqlite::open(path).map_err(|_| RENDER_ERROR)),
+                .filter(|actor| *actor < actor_count);
+            let initial_state = actor.map_or(0, actor_initial_state);
+            let (actor_counter, actor_persistence) = initialize_actor_persistence(
+                actor,
+                initial_state,
+                &database_paths,
+            );
+            WorkerState {
+                operation: worker_operation(id),
+                actor_operation: actor.map_or(0, actor_operation),
+                actor_counter,
+                actor_persistence,
+                provider: OpenAiTransport::default(),
+                sqlite: id
+                    .checked_sub(worker_count + actor_count)
+                    .filter(|database| *database < database_count)
+                    .and_then(|database| database_paths.get(database))
+                    .map(|path| tinytsx_runtime_sqlite::open(path).map_err(|_| RENDER_ERROR)),
+            }
         },
         |state, message| match message {
             ApplicationMessage::Worker(mut input) => match state.operation {
@@ -142,8 +205,18 @@ pub fn initialize(executor_count: usize) -> io::Result<(usize, bool, bool)> {
                 if state.actor_operation != 1 {
                     return Err(INTERNAL_ERROR);
                 }
-                state.actor_counter = state.actor_counter.checked_add(delta).ok_or(RENDER_ERROR)?;
-                Ok(state.actor_counter.to_string().into_bytes())
+                let next = state.actor_counter.checked_add(delta).ok_or(RENDER_ERROR)?;
+                if let Some(persistence) = &state.actor_persistence {
+                    let persistence = persistence.as_ref().map_err(|status| *status)?;
+                    tinytsx_runtime_sqlite::execute(
+                        &persistence.connection,
+                        "INSERT INTO _tinytsx_actor_state (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                        &[SqlValue::Text(persistence.key.clone()), SqlValue::Integer(next)],
+                    )
+                    .map_err(|_| RENDER_ERROR)?;
+                }
+                state.actor_counter = next;
+                Ok(next.to_string().into_bytes())
             }
             ApplicationMessage::SqliteExecuteBatch(sql) => {
                 let connection = state

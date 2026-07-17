@@ -7,6 +7,7 @@ export type CounterActorBehavior =
 
 export interface ActorOptions {
   mailboxCapacity?: number;
+  persistence?: {database: Database; key: string};
 }
 
 export interface CounterActorRef {
@@ -21,3 +22,4 @@ export declare function spawn(
   initialState: number,
   options?: ActorOptions,
 ): CounterActorRef;
+import type {Database} from "tinytsx:sqlite";

@@ -171,6 +171,46 @@ fn emit_config(assembly: &mut Emitter, options: &Options, program: &Program) {
         }
     }
 
+    assembly.global_function(format_args!("tinytsx_actor_persistence_database"));
+    for (index, _actor) in program.actors.iter().enumerate() {
+        asm_line!(assembly, "    cmp x0, #{index}");
+        asm_line!(assembly, "    b.eq Ltinytsx_actor_persistence_database_{index}");
+    }
+    asm_line!(assembly, "    mov x0, #0");
+    asm_line!(assembly, "    ret");
+    for (index, actor) in program.actors.iter().enumerate() {
+        asm_line!(assembly, "Ltinytsx_actor_persistence_database_{index}:");
+        emit_immediate(
+            assembly,
+            "x0",
+            actor.persistence.as_ref().map_or(0, |value| value.database + 1) as u64,
+        );
+        asm_line!(assembly, "    ret");
+    }
+
+    assembly.global_function(format_args!("tinytsx_actor_persistence_key"));
+    asm_line!(assembly, "    cbz x1, Ltinytsx_actor_persistence_key_invalid");
+    asm_line!(assembly, "    cbz x2, Ltinytsx_actor_persistence_key_invalid");
+    for (index, actor) in program.actors.iter().enumerate() {
+        if actor.persistence.is_some() {
+            asm_line!(assembly, "    cmp x0, #{index}");
+            asm_line!(assembly, "    b.eq Ltinytsx_actor_persistence_key_{index}");
+        }
+    }
+    asm_line!(assembly, "Ltinytsx_actor_persistence_key_invalid:");
+    emit_immediate(assembly, "x0", 4);
+    asm_line!(assembly, "    ret");
+    for (index, actor) in program.actors.iter().enumerate() {
+        let Some(persistence) = &actor.persistence else { continue };
+        asm_line!(assembly, "Ltinytsx_actor_persistence_key_{index}:");
+        assembly.address("x3", format_args!("Ltinytsx_actor_persistence_key_data_{index}"));
+        asm_line!(assembly, "    str x3, [x1]");
+        emit_immediate(assembly, "x3", persistence.key.len() as u64);
+        asm_line!(assembly, "    str x3, [x2]");
+        asm_line!(assembly, "    mov x0, #0");
+        asm_line!(assembly, "    ret");
+    }
+
     assembly.global_function(format_args!("tinytsx_config_sqlite_databases"));
     emit_immediate(assembly, "x0", program.sqlite_databases.len() as u64);
     asm_line!(assembly, "    ret");

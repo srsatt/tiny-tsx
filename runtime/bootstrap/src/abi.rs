@@ -190,6 +190,12 @@ unsafe extern "C" {
     pub fn tinytsx_actor_operation(actor: usize) -> u32;
     pub fn tinytsx_actor_initial_state(actor: usize) -> i64;
     pub fn tinytsx_actor_mailbox_capacity(actor: usize) -> usize;
+    pub fn tinytsx_actor_persistence_database(actor: usize) -> usize;
+    pub fn tinytsx_actor_persistence_key(
+        actor: usize,
+        pointer: *mut *const u8,
+        length: *mut usize,
+    ) -> u32;
     pub fn tinytsx_worker_operation(worker: usize) -> u32;
 }
 
@@ -286,6 +292,20 @@ unsafe extern "C" fn tinytsx_actor_initial_state(_actor: usize) -> i64 {
 #[cfg(not(feature = "generated"))]
 unsafe extern "C" fn tinytsx_actor_mailbox_capacity(_actor: usize) -> usize {
     0
+}
+
+#[cfg(not(feature = "generated"))]
+unsafe extern "C" fn tinytsx_actor_persistence_database(_actor: usize) -> usize {
+    0
+}
+
+#[cfg(not(feature = "generated"))]
+unsafe extern "C" fn tinytsx_actor_persistence_key(
+    _actor: usize,
+    _pointer: *mut *const u8,
+    _length: *mut usize,
+) -> u32 {
+    INTERNAL_ERROR
 }
 
 #[cfg(not(feature = "generated"))]
@@ -2329,6 +2349,26 @@ pub fn actor_initial_state(actor: usize) -> i64 {
 pub fn actor_mailbox_capacity(actor: usize) -> usize {
     // SAFETY: The generated object returns zero for an invalid actor.
     unsafe { tinytsx_actor_mailbox_capacity(actor) }
+}
+
+pub fn actor_persistence_database(actor: usize) -> Option<usize> {
+    // Generated values are one-based so zero remains the absent sentinel.
+    unsafe { tinytsx_actor_persistence_database(actor) }.checked_sub(1)
+}
+
+pub fn actor_persistence_key(actor: usize) -> Result<Vec<u8>, u32> {
+    let mut pointer = ptr::null();
+    let mut length = 0;
+    // SAFETY: The generated object writes one immutable static key view.
+    let status = unsafe { tinytsx_actor_persistence_key(actor, &mut pointer, &mut length) };
+    if status != OK {
+        return Err(status);
+    }
+    if pointer.is_null() || length == 0 || length > 128 {
+        return Err(INTERNAL_ERROR);
+    }
+    // SAFETY: Successful generated configuration points at `length` static bytes.
+    Ok(unsafe { slice::from_raw_parts(pointer, length) }.to_vec())
 }
 
 pub fn worker_operation(worker: usize) -> u32 {

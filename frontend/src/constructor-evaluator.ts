@@ -2205,18 +2205,36 @@ function evaluateCall(
       const behavior = arguments_[0];
       const initialState = arguments_[1];
       const options = arguments_[2];
+      const optionFields = options === undefined
+        ? new Map<string, Value>()
+        : options.kind === "record"
+          ? options.fields
+          : undefined;
       const mailbox = options === undefined
         ? 64
-        : options.kind === "record" && options.fields.size === 0
+        : optionFields?.size === 0
           ? 64
-          : options.kind === "record" && options.fields.size === 1
-            ? options.fields.get("mailboxCapacity")
-            : undefined;
+          : optionFields?.get("mailboxCapacity") ?? 64;
       const mailboxCapacity = typeof mailbox === "number"
         ? mailbox
         : mailbox?.kind === "number"
           ? mailbox.value
           : undefined;
+      const persistenceValue = optionFields?.get("persistence");
+      const persistenceDatabase = persistenceValue?.kind === "record"
+        ? persistenceValue.fields.get("database")
+        : undefined;
+      const persistenceKey = persistenceValue?.kind === "record"
+        ? persistenceValue.fields.get("key")
+        : undefined;
+      const persistence = persistenceValue === undefined
+        ? undefined
+        : persistenceDatabase?.kind === "database"
+          && persistenceKey?.kind === "string"
+          && persistenceKey.value.length > 0
+          && Buffer.byteLength(persistenceKey.value, "utf8") <= 128
+          ? {database: persistenceDatabase.state, key: persistenceKey.value}
+          : null;
       if (
         arguments_.length < 2
         || arguments_.length > 3
@@ -2227,6 +2245,9 @@ function evaluateCall(
         || !Number.isSafeInteger(mailboxCapacity)
         || mailboxCapacity < 1
         || mailboxCapacity > 64
+        || optionFields === undefined
+        || [...optionFields.keys()].some(name => name !== "mailboxCapacity" && name !== "persistence")
+        || persistence === null
         || !isCounterActorBehavior(behavior)
       ) {
         return unknown("actor spawn requires the bounded counter behavior, integer state, and mailbox capacity up to 64");
@@ -2240,6 +2261,7 @@ function evaluateCall(
           operation: "counter",
           initialState: initialState.value,
           mailboxCapacity,
+          ...(persistence === undefined ? {} : {persistence}),
         };
         evaluator.actors.set(key, state);
       }

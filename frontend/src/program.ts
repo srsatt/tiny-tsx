@@ -479,6 +479,9 @@ function lowerApplicationInitialization(
       operation: actor.operation,
       initialState: actor.initialState,
       mailboxCapacity: actor.mailboxCapacity,
+      ...(actor.persistence === undefined
+        ? {}
+        : {persistence: {database: actor.persistence.database.id, key: actor.persistence.key}}),
     })),
     sqliteDatabases: initialization.databases.map(database => ({
       id: database.id,

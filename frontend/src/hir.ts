@@ -64,6 +64,7 @@ export interface ActorModule {
   operation: "counter";
   initialState: number;
   mailboxCapacity: number;
+  persistence?: {database: number; key: string};
 }
 
 export interface SqliteDatabase {

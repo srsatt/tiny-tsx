@@ -112,6 +112,7 @@ export interface ActorState {
   operation: "counter";
   initialState: number;
   mailboxCapacity: number;
+  persistence?: {database: DatabaseState; key: string};
 }
 
 export interface DatabaseState {

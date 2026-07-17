@@ -111,6 +111,14 @@ pub struct ActorModule {
     pub operation: ActorOperation,
     pub initial_state: i64,
     pub mailbox_capacity: usize,
+    #[serde(default)]
+    pub persistence: Option<ActorPersistence>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct ActorPersistence {
+    pub database: usize,
+    pub key: String,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -724,6 +732,14 @@ impl Program {
             }
             if actor.mailbox_capacity == 0 || actor.mailbox_capacity > 64 {
                 return Err(format!("actor {index} mailbox capacity is outside 1..=64"));
+            }
+            if let Some(persistence) = &actor.persistence {
+                if persistence.database >= self.sqlite_databases.len() {
+                    return Err(format!("actor {index} persistence references a missing database"));
+                }
+                if persistence.key.is_empty() || persistence.key.len() > 128 {
+                    return Err(format!("actor {index} persistence key is outside 1..=128 bytes"));
+                }
             }
         }
         for (index, database) in self.sqlite_databases.iter().enumerate() {

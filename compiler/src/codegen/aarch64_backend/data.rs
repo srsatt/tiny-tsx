@@ -151,6 +151,13 @@ pub(super) fn emit_static_data(
         asm_line!(assembly, "Ltinytsx_sqlite_database_path_data_{index}:");
         emit_bytes(assembly, database.path.as_bytes());
     }
+    for (index, actor) in program.actors.iter().enumerate() {
+        if let Some(persistence) = &actor.persistence {
+            asm_line!(assembly, ".p2align 3");
+            asm_line!(assembly, "Ltinytsx_actor_persistence_key_data_{index}:");
+            emit_bytes(assembly, persistence.key.as_bytes());
+        }
+    }
     Ok(())
 }
 

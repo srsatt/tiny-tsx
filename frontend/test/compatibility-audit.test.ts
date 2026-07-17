@@ -344,6 +344,39 @@ test("lowers a bounded counter actor with ask, tell, and stop", () => {
   assert.deepEqual(hir.handlers[2]?.actorActions, [{kind: "stop", actor: 0}]);
 });
 
+test("binds a counter actor to a capability-scoped SQLite owner", () => {
+  const entry = write("persistent-actor-lowering.ts", `
+    import {spawn} from "tinytsx:actors";
+    import {Database} from "tinytsx:sqlite";
+    import {serve} from "tinytsx:serve";
+    import {Hono} from "hono";
+    const database = new Database("actors.db");
+    const counter = spawn((context, delta: number) => {
+      context.state += delta;
+      return String(context.state);
+    }, 7, {persistence: {database, key: "counter"}});
+    const app = new Hono();
+    app.get("/", async context => context.text(await counter.ask(0)));
+    serve({fetch: app.fetch});
+  `);
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+    apiAliases: {hono: path.join(repository, "tests/compat/hono/api.d.ts")},
+    allowedReadRoots: [directory],
+    allowedWriteRoots: [directory],
+  });
+
+  assert.deepEqual(hir.actors, [{
+    id: 0,
+    operation: "counter",
+    initialState: 7,
+    mailboxCapacity: 64,
+    persistence: {database: 0, key: "counter"},
+  }]);
+  assert.deepEqual(hir.sqliteDatabases, [{id: 0, path: path.join(directory, "actors.db")}]);
+});
+
 test("requires explicit environment capabilities before lowering", () => {
   const entry = write("env-capability.ts", `
     import {get} from "tinytsx:env";
