@@ -133,6 +133,8 @@ test("retains an on-disk SQLite row across process restart", async context => {
 
   const first = spawn(binary, [], {stdio: ["ignore", "pipe", "pipe"]});
   await waitForServer(port, first);
+  await assertResponse(port, "/transaction-failure", 500, "internal server error");
+  await assertGet(port, "/values", 200, '{"values":[]}');
   await assertJson(port, "/values", "POST", {value: "retained"}, 201, '{"ok":true}');
   await assertGet(port, "/values", 200, '{"values":[{"value":"retained"}]}');
   first.kill("SIGTERM");
@@ -142,6 +144,13 @@ test("retains an on-disk SQLite row across process restart", async context => {
   context.after(() => second.kill("SIGTERM"));
   await waitForServer(port, second);
   await assertGet(port, "/values", 200, '{"values":[{"value":"retained"}]}');
+  await assertResponse(port, "/transaction-success", 200, '{"ok":true}');
+  await assertGet(
+    port,
+    "/values",
+    200,
+    '{"values":[{"value":"retained"},{"value":"first"},{"value":"second"}]}',
+  );
 });
 
 function build(binary, port) {
