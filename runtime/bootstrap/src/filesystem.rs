@@ -90,6 +90,7 @@ mod tests {
         let root = std::env::temp_dir().join(format!("tinytsx-fs-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(&root).unwrap();
+        let root = root.canonicalize().unwrap();
         fs::write(root.join("asset.txt"), "hello").unwrap();
         let roots = [root.clone()];
 
