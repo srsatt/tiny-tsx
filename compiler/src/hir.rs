@@ -376,6 +376,17 @@ pub enum ValueExpression {
         when_not_equal: Box<ValueExpression>,
         span: SourceSpan,
     },
+    NumericForLoop {
+        #[serde(rename = "accumulatorInitial")]
+        accumulator_initial: i64,
+        #[serde(rename = "indexInitial")]
+        index_initial: i64,
+        #[serde(rename = "endExclusive")]
+        end_exclusive: i64,
+        #[serde(rename = "accumulatorStep")]
+        accumulator_step: i64,
+        span: SourceSpan,
+    },
     ThrowValue {
         value: Box<ValueExpression>,
         span: SourceSpan,
@@ -1025,6 +1036,18 @@ impl Program {
                     caught_exception_available,
                 )?;
             }
+            ValueExpression::NumericForLoop {
+                accumulator_initial,
+                index_initial,
+                end_exclusive,
+                accumulator_step,
+                ..
+            } => validate_numeric_for_loop(
+                *accumulator_initial,
+                *index_initial,
+                *end_exclusive,
+                *accumulator_step,
+            )?,
             ValueExpression::ThrowValue { value, .. } => {
                 self.validate_expression_context(
                     value,
@@ -1079,6 +1102,7 @@ impl Program {
             ValueExpression::StringLiteral { .. } => Ok("string".to_owned()),
             ValueExpression::NumericLiteral { .. } => Ok("number".to_owned()),
             ValueExpression::BooleanLiteral { .. } => Ok("boolean".to_owned()),
+            ValueExpression::NumericForLoop { .. } => Ok("number".to_owned()),
             ValueExpression::Constant { constant, .. } => match self.constants[*constant].value {
                 ConstantValue::String { .. } => Ok("string".to_owned()),
                 ConstantValue::Number { value }
@@ -1747,6 +1771,27 @@ impl Program {
             _ => false,
         }
     }
+}
+
+fn validate_numeric_for_loop(
+    accumulator_initial: i64,
+    index_initial: i64,
+    end_exclusive: i64,
+    accumulator_step: i64,
+) -> Result<(), String> {
+    const MAX_SAFE_INTEGER: i128 = 9_007_199_254_740_991;
+    let Some(iterations) = end_exclusive.checked_sub(index_initial) else {
+        return Err("numeric for-loop bounds overflow".to_owned());
+    };
+    if !(0..=4096).contains(&iterations) {
+        return Err("numeric for-loop iterations must be within 0..=4096".to_owned());
+    }
+    let final_value =
+        i128::from(accumulator_initial) + i128::from(accumulator_step) * i128::from(iterations);
+    if !(-MAX_SAFE_INTEGER..=MAX_SAFE_INTEGER).contains(&final_value) {
+        return Err("numeric for-loop result exceeds the safe-integer range".to_owned());
+    }
+    Ok(())
 }
 
 fn handler_responses(handler: &Handler) -> Vec<&HandlerResponse> {

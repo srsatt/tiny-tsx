@@ -322,6 +322,9 @@ export class FunctionLowerer {
     currentFunction: number,
     owner: ts.Node,
   ): ValueExpression {
+    const numericLoop = this.lowerNumericForLoopBody(statements, owner);
+    if (numericLoop !== undefined) return numericLoop;
+
     const locals: ts.VariableDeclaration[] = [];
     const closures: ts.VariableDeclaration[] = [];
     let index = 0;
@@ -388,6 +391,100 @@ export class FunctionLowerer {
       for (const declaration of locals) this.#locals.delete(declaration);
       for (const declaration of closures) this.#closures.delete(declaration);
     }
+  }
+
+  private lowerNumericForLoopBody(
+    statements: readonly ts.Statement[],
+    owner: ts.Node,
+  ): ValueExpression | undefined {
+    if (statements.length !== 3 || !statements.some(ts.isForStatement)) return undefined;
+    const [accumulatorStatement, loopStatement, returnStatement] = statements;
+    if (
+      accumulatorStatement === undefined
+      || loopStatement === undefined
+      || returnStatement === undefined
+      || !ts.isVariableStatement(accumulatorStatement)
+      || (accumulatorStatement.declarationList.flags & ts.NodeFlags.Let) === 0
+      || accumulatorStatement.declarationList.declarations.length !== 1
+      || !ts.isForStatement(loopStatement)
+      || !ts.isReturnStatement(returnStatement)
+      || returnStatement.expression === undefined
+    ) {
+      throw tinyError("TINY1329", "native loops require one bounded numeric accumulator", owner);
+    }
+    const accumulator = accumulatorStatement.declarationList.declarations[0]!;
+    if (
+      !ts.isIdentifier(accumulator.name)
+      || accumulator.initializer === undefined
+      || !ts.isIdentifier(returnStatement.expression)
+      || returnStatement.expression.text !== accumulator.name.text
+    ) {
+      throw tinyError("TINY1329", "native loop must return its numeric accumulator", owner);
+    }
+    const initializer = loopStatement.initializer;
+    if (
+      initializer === undefined
+      || !ts.isVariableDeclarationList(initializer)
+      || (initializer.flags & ts.NodeFlags.Let) === 0
+      || initializer.declarations.length !== 1
+    ) {
+      throw tinyError("TINY1329", "native loop requires one local numeric index", loopStatement);
+    }
+    const index = initializer.declarations[0]!;
+    if (!ts.isIdentifier(index.name) || index.initializer === undefined) {
+      throw tinyError("TINY1329", "native loop index must be initialized", index);
+    }
+    if (
+      loopStatement.condition === undefined
+      || !ts.isBinaryExpression(loopStatement.condition)
+      || loopStatement.condition.operatorToken.kind !== ts.SyntaxKind.LessThanToken
+      || !ts.isIdentifier(loopStatement.condition.left)
+      || loopStatement.condition.left.text !== index.name.text
+    ) {
+      throw tinyError("TINY1329", "native loop condition must be `index < bound`", loopStatement);
+    }
+    if (
+      loopStatement.incrementor === undefined
+      || !ts.isPostfixUnaryExpression(loopStatement.incrementor)
+      || loopStatement.incrementor.operator !== ts.SyntaxKind.PlusPlusToken
+      || !ts.isIdentifier(loopStatement.incrementor.operand)
+      || loopStatement.incrementor.operand.text !== index.name.text
+    ) {
+      throw tinyError("TINY1329", "native loop index must use postfix increment", loopStatement);
+    }
+    const body = ts.isBlock(loopStatement.statement)
+      && loopStatement.statement.statements.length === 1
+      ? loopStatement.statement.statements[0]
+      : loopStatement.statement;
+    if (
+      body === undefined
+      || !ts.isExpressionStatement(body)
+      || !ts.isBinaryExpression(body.expression)
+      || body.expression.operatorToken.kind !== ts.SyntaxKind.PlusEqualsToken
+      || !ts.isIdentifier(body.expression.left)
+      || body.expression.left.text !== accumulator.name.text
+    ) {
+      throw tinyError(
+        "TINY1329",
+        "native loop body must add a fixed accumulator step",
+        body ?? loopStatement,
+      );
+    }
+    const accumulatorInitial = safeInteger(accumulator.initializer, "accumulator");
+    const indexInitial = safeInteger(index.initializer, "loop index");
+    const endExclusive = safeInteger(loopStatement.condition.right, "loop bound");
+    const accumulatorStep = safeInteger(body.expression.right, "accumulator step");
+    if (endExclusive < indexInitial || endExclusive - indexInitial > 4096) {
+      throw tinyError("TINY1329", "native loop iteration count must be within 0..=4096", loopStatement);
+    }
+    return {
+      kind: "numericForLoop",
+      accumulatorInitial,
+      indexInitial,
+      endExclusive,
+      accumulatorStep,
+      span: spanOf(loopStatement, loopStatement.getSourceFile()),
+    };
   }
 
   private lowerClosureCall(
@@ -762,6 +859,17 @@ function functionCompletion(statement: ts.Statement): FunctionCompletion | undef
 
 function bindingKey(module: string, name: string): string {
   return `${module}\0${name}`;
+}
+
+function safeInteger(expression: ts.Expression, role: string): number {
+  if (!ts.isNumericLiteral(expression)) {
+    throw tinyError("TINY1329", `native loop ${role} must be an integer literal`, expression);
+  }
+  const value = Number(expression.text);
+  if (!Number.isSafeInteger(value)) {
+    throw tinyError("TINY1329", `native loop ${role} must be a safe integer`, expression);
+  }
+  return value;
 }
 
 function isRequiredStringParameter(

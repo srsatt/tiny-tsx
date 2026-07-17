@@ -84,6 +84,15 @@ fn emits_assemblable_boolean_function_for_linux_arm64() {
 }
 
 #[test]
+fn emits_assemblable_bounded_function_loop_for_linux_arm64() {
+    let assembly = compile_linux("examples/function-loop/server.ts", &[]);
+
+    assert!(assembly.contains("numeric_for_"));
+    assert!(assembly.contains("b.lt"));
+    assert_assembles_as_elf(&assembly, "function-loop");
+}
+
+#[test]
 fn emits_assemblable_lambda_lifted_closure_for_linux_arm64() {
     let assembly = compile_linux("examples/function-closures/server.ts", &[]);
 

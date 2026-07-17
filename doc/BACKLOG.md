@@ -394,6 +394,10 @@ adds an explicit application acceptance test.
   - 2026-07-17: the complete pinned class-constructor program now executes all
     constructor, prototype, descriptor, and instance assertions natively; the
     ordinary application slice remains restricted to closed immediate use.
+  - 2026-07-17: ordinary functions now admit one closed numeric `for` shape with
+    a local accumulator, postfix index increment, static exclusive bound, and
+    fixed additive step. The compiler caps it at 4,096 iterations; dynamic
+    bounds, `break`/`continue`, nested loops, and arbitrary bodies remain open.
 - [ ] Implement bounded native `Map`, constant `symbol`, signed zero, `NaN`, and
       infinities with complete semantics evidence.
 - [ ] Replace whole-module forbidden-syntax rejection with request/initialization

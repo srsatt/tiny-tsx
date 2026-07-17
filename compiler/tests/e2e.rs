@@ -464,6 +464,15 @@ fn builds_and_serves_native_boolean_function_branches() {
 }
 
 #[test]
+fn builds_and_serves_bounded_native_function_loop() {
+    build_and_serve(
+        "examples/function-loop/server.ts",
+        "three",
+        "text/plain; charset=UTF-8",
+    );
+}
+
+#[test]
 fn builds_and_serves_lambda_lifted_function_captures() {
     build_and_serve(
         "examples/function-closures/server.ts",

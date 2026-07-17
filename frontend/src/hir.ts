@@ -150,6 +150,14 @@ export type ValueExpression =
       span: SourceSpan;
     }
   | {
+      kind: "numericForLoop";
+      accumulatorInitial: number;
+      indexInitial: number;
+      endExclusive: number;
+      accumulatorStep: number;
+      span: SourceSpan;
+    }
+  | {
       kind: "throwValue";
       value: ValueExpression;
       span: SourceSpan;

@@ -605,6 +605,16 @@ E2E and Linux assembler gate execute numeric parameters, immutable locals,
 addition, subtraction, a numeric-returning helper, and numeric/boolean branches
 that select string results.
 
+An ordinary function may also contain one closed numeric `for` loop: a `let`
+accumulator initialized from a safe integer literal, a `let` index with a static
+start and exclusive bound, postfix index increment, one fixed `+=` accumulator
+step, and a terminal return of that accumulator. The compiler rejects more than
+4,096 iterations and results outside the safe-integer range. Generated AArch64
+executes a real bounded back-edge and returns the numeric result through the
+same scalar ABI. Apple HTTP and Linux assembly cover the result flowing into a
+second function. Dynamic bounds, arbitrary mutation, `break`, `continue`, nested
+loops, and general loop bodies remain unsupported.
+
 Initialized local `const` bindings may hold an arrow or function expression and
 call it within the declaring function. Direct-parent string parameters and
 immutable string locals referenced by that function value are lambda-lifted:

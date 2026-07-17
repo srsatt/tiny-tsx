@@ -411,6 +411,59 @@ test("lowers boolean parameters, locals, and strict branches", () => {
   );
 });
 
+test("lowers a bounded numeric for loop with an accumulator", () => {
+  const hir = compileSource(`
+    function count(): number {
+      let total = 0;
+      for (let index = 0; index < 3; index++) {
+        total += 1;
+      }
+      return total;
+    }
+    function classify(value: number): string {
+      if (value === 3) return "three";
+      return "other";
+    }
+    export function GET(request: Request): Response {
+      return Response.text(classify(count()));
+    }
+  `);
+
+  assert.deepEqual(hir.functions.map(func => [func.name, func.result, func.body.kind]), [
+    ["classify", "string", "numericEqualConditional"],
+    ["count", "number", "numericForLoop"],
+  ]);
+  assert.deepEqual(hir.functions[1]?.body, {
+    kind: "numericForLoop",
+    accumulatorInitial: 0,
+    indexInitial: 0,
+    endExclusive: 3,
+    accumulatorStep: 1,
+    span: hir.functions[1]?.body.span,
+  });
+});
+
+test("rejects a numeric for loop beyond the compiled iteration bound", () => {
+  assert.throws(
+    () => compileSource(`
+      function count(): number {
+        let total = 0;
+        for (let index = 0; index < 4097; index++) total += 1;
+        return total;
+      }
+      function classify(value: number): string {
+        if (value === 4097) return "large";
+        return "other";
+      }
+      export function GET(request: Request): Response {
+        return Response.text(classify(count()));
+      }
+    `),
+    (error: unknown) => error instanceof CompileFailure
+      && error.diagnostics[0]?.code === "TINY1329",
+  );
+});
+
 test("lambda-lifts closed local function values and immutable captures", () => {
   const hir = compileSource(`
     function authorize(result: string): string {

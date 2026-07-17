@@ -321,6 +321,35 @@ pub(super) fn emit_value_expression(
             )?;
             asm_line!(assembly, "{end}:");
         }
+        ValueExpression::NumericForLoop {
+            accumulator_initial,
+            index_initial,
+            end_exclusive,
+            accumulator_step,
+            ..
+        } => {
+            let loop_index = *conditional_index;
+            *conditional_index += 1;
+            let repeat = format!("Ltinytsx_{label_scope}_numeric_for_{loop_index}_repeat");
+            let end = format!("Ltinytsx_{label_scope}_numeric_for_{loop_index}_end");
+            emit_immediate(assembly, "x0", (*accumulator_initial as f64).to_bits());
+            emit_immediate(assembly, "x9", *index_initial as u64);
+            emit_immediate(assembly, "x10", *end_exclusive as u64);
+            asm_line!(assembly, "    cmp x9, x10");
+            asm_line!(assembly, "    b.ge {end}");
+            asm_line!(assembly, "{repeat}:");
+            emit_immediate(assembly, "x11", (*accumulator_step as f64).to_bits());
+            asm_line!(assembly, "    fmov d0, x0");
+            asm_line!(assembly, "    fmov d1, x11");
+            asm_line!(assembly, "    fadd d0, d0, d1");
+            asm_line!(assembly, "    fmov x0, d0");
+            asm_line!(assembly, "    add x9, x9, #1");
+            asm_line!(assembly, "    cmp x9, x10");
+            asm_line!(assembly, "    b.lt {repeat}");
+            asm_line!(assembly, "{end}:");
+            asm_line!(assembly, "    mov x1, #0");
+            asm_line!(assembly, "    mov x2, #0");
+        }
         ValueExpression::ThrowValue { value, .. } => {
             emit_value_expression(
                 assembly,

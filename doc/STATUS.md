@@ -494,6 +494,10 @@ produces and serves a native Mach-O executable from the example TSX source.
 - The boolean function slice adds required boolean parameters/results, staged
   constants, immutable locals, and strict branches. Apple HTTP executes the
   false path, while the Linux assembler gate covers the unboxed comparison.
+- The first ordinary loop slice lowers a static-bound numeric `for` with one
+  local accumulator and fixed additive step into a real native back-edge. The
+  compiler caps execution at 4,096 iterations and a safe-integer result; Apple
+  HTTP and Linux assembly prove the result crossing a nested function call.
 - Closed local arrow/function values now lambda-lift direct-parent immutable
   string captures into explicit HIR/native parameters. The Apple HTTP E2E and
   Linux assembly test cover both a captured outer parameter and local without a
