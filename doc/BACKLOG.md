@@ -256,7 +256,7 @@ pinned blog success envelopes plus missing-record 404/204 behavior.
       outside the checkout using only its installed resources.
 - [ ] Produce and execute the equivalent Linux-arm64 archive on Linux arm64;
       cross-assembly on macOS is not sufficient evidence.
-- [ ] Add native Apple-arm64 and Linux-arm64 CI/release jobs. Cross-assembled ELF
+- [x] Add native Apple-arm64 and Linux-arm64 CI/release jobs. Cross-assembled ELF
       evidence does not replace executing the Linux archive on Linux.
 - [ ] Verify startup, graceful shutdown, malformed input recovery, request OOM,
       worker/actor saturation, filesystem denial, SQLite contention, and clean

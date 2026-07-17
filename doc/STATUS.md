@@ -24,7 +24,12 @@ produces and serves a native Mach-O executable from the example TSX source.
   temporary directory, then writes an archive, SHA-256, and JSON manifest.
 - The verified Apple-arm64 archive is 5.1 MiB; its generated manifest and
   `.sha256` file carry the artifact-specific digest. Linux-arm64 archive
-  execution and native release CI remain open platform gates.
+  execution remains an open platform gate.
+- `.github/workflows/release.yml` assigns the same clean release gate to native
+  `macos-14` and `ubuntu-24.04-arm` runners and uploads each target archive,
+  checksum, and manifest. The workflow definition is present and YAML-validated;
+  a successful remote Linux run is still required before the Linux artifact is
+  marked verified.
 
 ### Persistent counter actor (2026-07-17)
 
