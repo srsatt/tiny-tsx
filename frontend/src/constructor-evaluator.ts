@@ -3068,6 +3068,16 @@ function sqliteParameters(arguments_: Value[]): SqliteParameter[] | undefined {
       output.push({kind: "requestJsonField", name: parameter.name});
     } else if (parameter.kind === "randomUuid") {
       output.push({kind: "randomUuid"});
+    } else if (parameter.kind === "string" && Buffer.byteLength(parameter.value, "utf8") <= 65_536) {
+      output.push({kind: "staticString", value: parameter.value});
+    } else if (parameter.kind === "number" && Number.isSafeInteger(parameter.value)) {
+      output.push({kind: "staticInteger", value: parameter.value});
+    } else if (parameter.kind === "number" && Number.isFinite(parameter.value)) {
+      output.push({kind: "staticReal", value: parameter.value});
+    } else if (parameter.kind === "boolean") {
+      output.push({kind: "staticBoolean", value: parameter.value});
+    } else if (parameter.kind === "null") {
+      output.push({kind: "null"});
     } else {
       return undefined;
     }
@@ -3078,9 +3088,20 @@ function sqliteParameters(arguments_: Value[]): SqliteParameter[] | undefined {
 function sameSqliteParameters(left: SqliteParameter[], right: SqliteParameter[]): boolean {
   return left.length === right.length && left.every((parameter, index) => {
     const candidate = right[index];
-    return candidate?.kind === parameter.kind
-      && (parameter.kind === "randomUuid"
-        || candidate.kind !== "randomUuid" && candidate.name === parameter.name);
+    if (candidate?.kind !== parameter.kind) return false;
+    switch (parameter.kind) {
+      case "randomUuid":
+      case "null":
+        return true;
+      case "routeParameter":
+      case "requestJsonField":
+        return candidate.kind === parameter.kind && candidate.name === parameter.name;
+      case "staticString":
+      case "staticInteger":
+      case "staticReal":
+      case "staticBoolean":
+        return candidate.kind === parameter.kind && candidate.value === parameter.value;
+    }
   });
 }
 

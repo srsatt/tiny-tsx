@@ -219,6 +219,41 @@ test("lowers a bounded in-memory SQLite owner and effects", () => {
     : parameter.kind), ["body", "routeParameter"]);
 });
 
+test("lowers closed primitive SQLite parameters without a dynamic object model", () => {
+  const entry = write("sqlite-primitives.ts", `
+    import {Database} from "tinytsx:sqlite";
+    import {serve} from "tinytsx:serve";
+    import {Hono} from "hono";
+    const database = new Database(":memory:");
+    const insert = database.prepare(
+      "INSERT INTO values_table (text, integer, real, enabled, missing) VALUES (?1, ?2, ?3, ?4, ?5)",
+    );
+    const app = new Hono();
+    app.post("/values", async context => {
+      await insert.run(["admin", -42, 1.5, true, null]);
+      return context.text("created", 201);
+    });
+    serve({fetch: app.fetch});
+  `);
+
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+    apiAliases: {hono: path.join(repository, "tests/compat/hono/api.d.ts")},
+  });
+  const parameters = hir.handlers[0]?.sqliteActions?.[0]?.kind === "exec"
+    ? hir.handlers[0].sqliteActions[0].parameters
+    : undefined;
+  assert.deepEqual(parameters, [
+    {kind: "staticString", string: 2},
+    {kind: "staticInteger", value: -42},
+    {kind: "staticReal", value: 1.5},
+    {kind: "staticBoolean", value: true},
+    {kind: "null"},
+  ]);
+  assert.equal(hir.staticStrings[2]?.value, "admin");
+});
+
 test("requires matching read/write capabilities for an on-disk SQLite owner", () => {
   const entry = write("sqlite-disk.ts", `
     import {Database} from "tinytsx:sqlite";

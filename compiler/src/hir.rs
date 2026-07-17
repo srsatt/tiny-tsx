@@ -164,6 +164,11 @@ pub enum SqliteParameter {
     RouteParameter { segment: usize },
     RequestJsonField { field: usize },
     RandomUuid,
+    StaticString { string: usize },
+    StaticInteger { value: i64 },
+    StaticReal { value: f64 },
+    StaticBoolean { value: bool },
+    Null,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -1290,6 +1295,30 @@ impl Program {
                     return Err("SQLite JSON parameter has an invalid field name".to_owned());
                 }
                 SqliteParameter::RandomUuid => {}
+                SqliteParameter::StaticString { string }
+                    if self
+                        .static_strings
+                        .get(*string)
+                        .is_none_or(|value| value.value.len() > 65_536) =>
+                {
+                    return Err("SQLite static string parameter is invalid".to_owned());
+                }
+                SqliteParameter::StaticInteger { value }
+                    if value.unsigned_abs() > 9_007_199_254_740_991 =>
+                {
+                    return Err(
+                        "SQLite static integer parameter is outside the JavaScript safe range"
+                            .to_owned(),
+                    );
+                }
+                SqliteParameter::StaticReal { value } if !value.is_finite() => {
+                    return Err("SQLite static real parameter must be finite".to_owned());
+                }
+                SqliteParameter::StaticBoolean { .. }
+                | SqliteParameter::Null
+                | SqliteParameter::StaticString { .. }
+                | SqliteParameter::StaticInteger { .. }
+                | SqliteParameter::StaticReal { .. } => {}
                 _ => {}
             }
         }

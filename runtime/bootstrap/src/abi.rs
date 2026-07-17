@@ -671,6 +671,39 @@ unsafe fn decode_sqlite_parameters(
                     String::from_utf8(uuid.to_vec()).map_err(|_| INTERNAL_ERROR)?,
                 ));
             }
+            4 => {
+                if parameter.value > 65_536 || (parameter.pointer.is_null() && parameter.value != 0)
+                {
+                    return Err(INTERNAL_ERROR);
+                }
+                let value = if parameter.value == 0 {
+                    &[]
+                } else {
+                    // SAFETY: Generated static-string parameters remain valid during dispatch.
+                    unsafe { slice::from_raw_parts(parameter.pointer, parameter.value) }
+                };
+                output.push(tinytsx_runtime_sqlite::SqlValue::Text(
+                    std::str::from_utf8(value)
+                        .map_err(|_| INTERNAL_ERROR)?
+                        .to_owned(),
+                ));
+            }
+            5 => output.push(tinytsx_runtime_sqlite::SqlValue::Integer(
+                parameter.value as i64,
+            )),
+            6 => {
+                let value = f64::from_bits(parameter.value as u64);
+                if !value.is_finite() {
+                    return Err(INTERNAL_ERROR);
+                }
+                output.push(tinytsx_runtime_sqlite::SqlValue::Real(value));
+            }
+            7 if parameter.value <= 1 => output.push(tinytsx_runtime_sqlite::SqlValue::Integer(
+                parameter.value as i64,
+            )),
+            8 if parameter.value == 0 && parameter.pointer.is_null() => {
+                output.push(tinytsx_runtime_sqlite::SqlValue::Null);
+            }
             _ => return Err(INTERNAL_ERROR),
         }
     }

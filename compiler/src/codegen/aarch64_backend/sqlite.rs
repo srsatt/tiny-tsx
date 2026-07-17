@@ -61,6 +61,45 @@ pub(super) fn emit_parameters(
                 asm_line!(assembly, "    str xzr, [sp, #{}]", offset + 8);
                 asm_line!(assembly, "    str xzr, [sp, #{}]", offset + 16);
             }
+            SqliteParameter::StaticString { string } => {
+                emit_immediate(assembly, "x9", 4);
+                asm_line!(assembly, "    str x9, [sp, #{offset}]");
+                emit_immediate(
+                    assembly,
+                    "x9",
+                    program.static_strings[*string].value.len() as u64,
+                );
+                asm_line!(assembly, "    str x9, [sp, #{}]", offset + 8);
+                assembly.address("x9", format_args!("Ltinytsx_string_{string}"));
+                asm_line!(assembly, "    str x9, [sp, #{}]", offset + 16);
+            }
+            SqliteParameter::StaticInteger { value } => {
+                emit_immediate(assembly, "x9", 5);
+                asm_line!(assembly, "    str x9, [sp, #{offset}]");
+                emit_immediate(assembly, "x9", *value as u64);
+                asm_line!(assembly, "    str x9, [sp, #{}]", offset + 8);
+                asm_line!(assembly, "    str xzr, [sp, #{}]", offset + 16);
+            }
+            SqliteParameter::StaticReal { value } => {
+                emit_immediate(assembly, "x9", 6);
+                asm_line!(assembly, "    str x9, [sp, #{offset}]");
+                emit_immediate(assembly, "x9", value.to_bits());
+                asm_line!(assembly, "    str x9, [sp, #{}]", offset + 8);
+                asm_line!(assembly, "    str xzr, [sp, #{}]", offset + 16);
+            }
+            SqliteParameter::StaticBoolean { value } => {
+                emit_immediate(assembly, "x9", 7);
+                asm_line!(assembly, "    str x9, [sp, #{offset}]");
+                emit_immediate(assembly, "x9", u64::from(*value));
+                asm_line!(assembly, "    str x9, [sp, #{}]", offset + 8);
+                asm_line!(assembly, "    str xzr, [sp, #{}]", offset + 16);
+            }
+            SqliteParameter::Null => {
+                emit_immediate(assembly, "x9", 8);
+                asm_line!(assembly, "    str x9, [sp, #{offset}]");
+                asm_line!(assembly, "    str xzr, [sp, #{}]", offset + 8);
+                asm_line!(assembly, "    str xzr, [sp, #{}]", offset + 16);
+            }
         }
     }
 }

@@ -577,11 +577,26 @@ function lowerSqliteParameters(
   routePath: string,
   strings: StringTable,
 ) {
-  return parameters.map(parameter => parameter.kind === "routeParameter"
-    ? {kind: "routeParameter" as const, segment: routeParameterSegment(routePath, parameter.name)}
-    : parameter.kind === "requestJsonField"
-      ? {kind: "requestJsonField" as const, field: strings.intern(parameter.name)}
-      : {kind: "randomUuid" as const});
+  return parameters.map(parameter => {
+    switch (parameter.kind) {
+      case "routeParameter":
+        return {kind: "routeParameter" as const, segment: routeParameterSegment(routePath, parameter.name)};
+      case "requestJsonField":
+        return {kind: "requestJsonField" as const, field: strings.intern(parameter.name)};
+      case "randomUuid":
+        return {kind: "randomUuid" as const};
+      case "staticString":
+        return {kind: "staticString" as const, string: strings.intern(parameter.value)};
+      case "staticInteger":
+        return {kind: "staticInteger" as const, value: parameter.value};
+      case "staticReal":
+        return {kind: "staticReal" as const, value: parameter.value};
+      case "staticBoolean":
+        return {kind: "staticBoolean" as const, value: parameter.value};
+      case "null":
+        return {kind: "null" as const};
+    }
+  });
 }
 
 function lowerGuardedResponse(

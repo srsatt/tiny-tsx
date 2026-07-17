@@ -170,6 +170,52 @@ fn sqlite_parameters_generate_distinct_version_four_uuids() {
 }
 
 #[test]
+fn sqlite_parameters_decode_closed_primitive_values() {
+    use tinytsx_runtime_sqlite::SqlValue;
+
+    let request = request(b"POST", b"/values");
+    let text = b"admin";
+    let parameters = [
+        TinySqlParameter {
+            kind: 4,
+            value: text.len(),
+            pointer: text.as_ptr(),
+        },
+        TinySqlParameter {
+            kind: 5,
+            value: (-42_i64) as usize,
+            pointer: std::ptr::null(),
+        },
+        TinySqlParameter {
+            kind: 6,
+            value: 1.5_f64.to_bits() as usize,
+            pointer: std::ptr::null(),
+        },
+        TinySqlParameter {
+            kind: 7,
+            value: 1,
+            pointer: std::ptr::null(),
+        },
+        TinySqlParameter {
+            kind: 8,
+            value: 0,
+            pointer: std::ptr::null(),
+        },
+    ];
+
+    assert_eq!(
+        unsafe { decode_sqlite_parameters(&request, parameters.as_ptr(), parameters.len()) },
+        Ok(vec![
+            SqlValue::Text("admin".into()),
+            SqlValue::Integer(-42),
+            SqlValue::Real(1.5),
+            SqlValue::Integer(1),
+            SqlValue::Null,
+        ]),
+    );
+}
+
+#[test]
 fn request_path_matching_uses_the_path_without_the_query() {
     let request = request(b"GET", b"/users?expand=true");
 

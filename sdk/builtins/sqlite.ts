@@ -1,4 +1,4 @@
-export type SqlValue = null | number | string | Uint8Array;
+export type SqlValue = null | boolean | number | string | Uint8Array;
 export type SqlParameters = readonly SqlValue[];
 export type SqlRow = Readonly<Record<string, SqlValue>>;
 
