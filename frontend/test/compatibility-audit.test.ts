@@ -357,6 +357,46 @@ test("lowers permitted environment access with a closed fallback", () => {
   assert.deepEqual(hir.staticStrings.map(value => value.value), ["APP_NAME", "missing"]);
 });
 
+test("maps typed Hono bindings to required environment capabilities", () => {
+  const entry = write("hono-env-binding.ts", `
+    import {serve} from "tinytsx:serve";
+    import {Hono} from "hono";
+    type Bindings = { APP_NAME: string };
+    const app = new Hono<{Bindings: Bindings}>();
+    app.get("/", context => context.text(context.env.APP_NAME));
+    serve({fetch: app.fetch});
+  `);
+  const options = {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+    apiAliases: {hono: path.join(repository, "tests/compat/hono/api.d.ts")},
+  };
+
+  assert.throws(
+    () => compileEntry(entry, options),
+    (error: unknown) => error instanceof CompileFailure
+      && error.diagnostics.some(diagnostic => diagnostic.code === "TINY1501"
+        && diagnostic.message.includes("APP_NAME")),
+  );
+  const hir = compileEntry(entry, {
+    ...options,
+    allowedEnvironment: new Set(["APP_NAME"]),
+  });
+  assert.deepEqual(hir.handlers[0]?.response.kind === "text"
+    ? hir.handlers[0].response.value
+    : undefined, {
+    kind: "concat",
+    values: [{
+      kind: "environmentVariable",
+      name: 0,
+      required: true,
+      span: hir.handlers[0]?.span,
+    }],
+    span: hir.handlers[0]?.span,
+  });
+  assert.equal(hir.staticStrings[0]?.value, "APP_NAME");
+});
+
 test("loads a compile-time-known Worker module without treating it as an import binding", () => {
   const entry = path.join(repository, "tests/compat/workers/hono-worker-smoke.ts");
   const graph = loadModuleGraph(entry, {

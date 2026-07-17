@@ -41,6 +41,7 @@ export type Value =
   | {kind: "requestHeader"; name: string}
   | {kind: "randomUuid"}
   | {kind: "environmentVariable"; name: string; required: boolean; fallback?: string}
+  | {kind: "environmentBindings"}
   | {kind: "fileText"; path: string; maxBytes: number}
   | {kind: "actor"; state: ActorState}
   | {kind: "actorCall"; actor: ActorState; message: number}
@@ -182,6 +183,9 @@ export function readProperty(value: Value, name: string): Value {
   if (value.kind === "requestJson") {
     return {kind: "requestJsonField", name};
   }
+  if (value.kind === "environmentBindings") {
+    return {kind: "environmentVariable", name, required: true};
+  }
   if (value.kind === "request" && name === "path") {
     return value.routePattern.includes(":") || value.routePattern.includes("*")
       ? unknown("request path is not closed for a patterned route")
@@ -294,6 +298,7 @@ export function truthiness(value: Value): boolean | undefined {
     case "headers":
     case "request":
     case "requestJson":
+    case "environmentBindings":
     case "clockNow":
     case "closure":
     case "reference":
@@ -349,6 +354,7 @@ export function typeOf(value: Value): string {
     case "randomUuid": return "string";
     case "requestJsonField": return "string";
     case "environmentVariable": return "string";
+    case "environmentBindings": return "object";
     case "fileText": return "string";
     case "fetchStatus": return "number";
     case "queryParameter": return "string";

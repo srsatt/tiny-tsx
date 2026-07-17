@@ -3,6 +3,10 @@ import {Hono} from "hono";
 import {cors} from "hono/cors";
 import {Database} from "tinytsx:sqlite";
 
+type Bindings = {
+  TINYTSX_BLOG_NAME: string;
+};
+
 const database = new Database(":memory:");
 const posts = database.prepare("SELECT id, title, body FROM posts ORDER BY title");
 const post = database.prepare("SELECT id, title, body FROM posts WHERE id = ?1");
@@ -10,9 +14,10 @@ const deletePost = database.prepare("DELETE FROM posts WHERE id = ?1");
 const createPost = database.prepare("INSERT INTO posts (id, title, body) VALUES (?1, ?2, ?3)");
 const updatePost = database.prepare("UPDATE posts SET title = ?1, body = ?2 WHERE id = ?3");
 const latestPost = database.prepare("SELECT id, title, body FROM posts ORDER BY rowid DESC LIMIT 1");
-const app = new Hono();
+const app = new Hono<{Bindings: Bindings}>();
 
 app.use("/posts/*", cors({allowHeaders: ["Content-Type"]}));
+app.get("/config", context => context.text(context.env.TINYTSX_BLOG_NAME));
 
 app.post("/schema", async context => {
   await database.exec("CREATE TABLE IF NOT EXISTS posts (id TEXT PRIMARY KEY, title TEXT, body TEXT)");

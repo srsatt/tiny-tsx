@@ -3,6 +3,10 @@ import {describe, expect, test} from "bun:test";
 import {Hono} from "../../../vendor/hono/src/index.ts";
 import {cors} from "../../../vendor/hono/src/middleware/cors/index.ts";
 
+type Bindings = {
+  TINYTSX_BLOG_NAME: string;
+};
+
 const database = new Database(":memory:");
 database.exec("CREATE TABLE posts (id TEXT PRIMARY KEY, title TEXT, body TEXT)");
 
@@ -12,9 +16,10 @@ const createPost = database.query("INSERT INTO posts (id, title, body) VALUES (?
 const updatePost = database.query("UPDATE posts SET title = ?1, body = ?2 WHERE id = ?3");
 const deletePost = database.query("DELETE FROM posts WHERE id = ?1");
 const latestPost = database.query("SELECT id, title, body FROM posts ORDER BY rowid DESC LIMIT 1");
-const app = new Hono();
+const app = new Hono<{Bindings: Bindings}>();
 
 app.use("/posts/*", cors({allowHeaders: ["Content-Type"]}));
+app.get("/config", context => context.text(context.env.TINYTSX_BLOG_NAME));
 
 app.get("/posts", context => context.json({posts: posts.all()}));
 app.get("/posts/:id", context => context.json({
@@ -36,6 +41,12 @@ app.delete("/posts/:id", context => {
 });
 
 describe("bounded SQLite Hono adapter reference", () => {
+  test("reads the typed Hono environment binding", async () => {
+    const response = await app.request("/config", {}, {TINYTSX_BLOG_NAME: "Tiny Blog"});
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe("Tiny Blog");
+  });
+
   test("matches the native create, list, get, update, delete, and missing contract", async () => {
     expect(await json("GET", "/posts")).toEqual({status: 200, body: {posts: []}});
     const created = await json("POST", "/posts", {title: "Night", body: "Good Night"});

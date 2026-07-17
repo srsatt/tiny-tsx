@@ -20,12 +20,17 @@ test("serializes an in-memory SQLite owner and recovers from SQL errors", async 
   const report = JSON.parse(readFileSync(`${binary}.build.json`, "utf8"));
   assert.equal(report.sqliteDatabases, 1);
   assert.ok(report.runtimeFeatures.includes("bounded-sqlite"));
+  assert.deepEqual(report.permissions.environment, ["TINYTSX_BLOG_NAME"]);
 
-  const server = spawn(binary, [], {stdio: ["ignore", "pipe", "pipe"]});
+  const server = spawn(binary, [], {
+    env: {...process.env, TINYTSX_BLOG_NAME: "Tiny Blog"},
+    stdio: ["ignore", "pipe", "pipe"],
+  });
   context.after(() => server.kill("SIGTERM"));
   await waitForServer(port, server);
 
   await assertResponse(port, "/schema", 200, "ready");
+  await assertGet(port, "/config", 200, "Tiny Blog");
   await assertCors(port);
   await assertGet(port, "/posts", 200, '{"posts":[]}');
   await assertGet(port, "/first", 200, '{"post":null}');
@@ -77,6 +82,7 @@ test("assembles the SQLite owner tracer for Linux arm64", () => {
     "--alias", "hono/cors=vendor/hono/src/middleware/cors/index.ts",
     "--api", "hono=tests/compat/hono/api.d.ts",
     "--api", "hono/cors=tests/compat/hono/cors-api.d.ts",
+    "--allow-env", "TINYTSX_BLOG_NAME",
   ], {cwd: repository, encoding: "utf8"});
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /tinytsx_sqlite_execute_batch/);
@@ -95,6 +101,7 @@ function build(binary, port) {
     "--alias", "hono/cors=vendor/hono/src/middleware/cors/index.ts",
     "--api", "hono=tests/compat/hono/api.d.ts",
     "--api", "hono/cors=tests/compat/hono/cors-api.d.ts",
+    "--allow-env", "TINYTSX_BLOG_NAME",
   ], {cwd: repository, encoding: "utf8"});
 }
 

@@ -564,6 +564,7 @@ function evaluateRouteHandler(
     [unknown("runtime Request"), contextOptions(notFoundHandler)],
     context,
   );
+  context.fields.set("env", {kind: "environmentBindings"});
   context.fields.set("req", {kind: "request", routePattern, method: requestMethod});
   let response = invokeClosure(evaluator, handler, [context], context);
   let middlewareFailed = false;
@@ -613,6 +614,7 @@ function evaluateRouteHandler(
         [unknown("runtime Request"), contextOptions(notFoundHandler)],
         middlewareContext,
       );
+      middlewareContext.fields.set("env", {kind: "environmentBindings"});
       middlewareContext.fields.set("req", {
         kind: "request",
         routePattern,

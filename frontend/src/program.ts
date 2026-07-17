@@ -142,6 +142,11 @@ export function compileEntry(entryPath: string, options: CompileOptions): HirPro
           application.server,
         );
         if (lowered !== undefined) {
+          validateLoweredEnvironmentCapabilities(
+            lowered,
+            options.allowedEnvironment ?? new Set(),
+            sourceFile,
+          );
           return lowered;
         }
         throw tinyError(
@@ -789,6 +794,50 @@ function dynamicResponseExpressions(body: ResponseBody): number {
   return 1
     + dynamicResponseExpressions(body.whenPresent)
     + dynamicResponseExpressions(body.whenAbsent);
+}
+
+function validateLoweredEnvironmentCapabilities(
+  program: HirProgram,
+  allowed: ReadonlySet<string>,
+  sourceFile: ts.SourceFile,
+): void {
+  const ids = new Set<number>();
+  for (const handler of program.handlers) {
+    if (handler.response.kind === "text") {
+      collectEnvironmentIds(handler.response.value, ids);
+    } else if (handler.response.kind === "stream") {
+      for (const chunk of handler.response.chunks) collectEnvironmentIds(chunk, ids);
+    }
+  }
+  const denied = [...ids]
+    .map(id => program.staticStrings[id]?.value)
+    .filter((name): name is string => name !== undefined && !allowed.has(name));
+  if (denied.length === 0) return;
+  throw new CompileFailure([...new Set(denied)].sort().map(name => ({
+    code: "TINY1501",
+    message: `environment variable \`${name}\` requires an explicit capability`,
+    span: spanOf(sourceFile, sourceFile),
+    help: `re-run with \`--allow-env ${name}\``,
+  })));
+}
+
+function collectEnvironmentIds(expression: ValueExpression, output: Set<number>): void {
+  if (expression.kind === "environmentVariable") {
+    output.add(expression.name);
+    return;
+  }
+  if (expression.kind === "concat") {
+    for (const value of expression.values) collectEnvironmentIds(value, output);
+    return;
+  }
+  if (expression.kind === "directCall") {
+    for (const argument of expression.arguments) collectEnvironmentIds(argument, output);
+    return;
+  }
+  if (expression.kind === "queryConditional") {
+    collectEnvironmentIds(expression.whenPresent, output);
+    collectEnvironmentIds(expression.whenAbsent, output);
+  }
 }
 
 function lowerWorkerMessage(

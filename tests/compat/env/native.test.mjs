@@ -43,6 +43,7 @@ test("serves snapshotted environment values, fallbacks, and missing-required err
   await assertResponse(port, "/present", 200, "native");
   await assertResponse(port, "/fallback", 200, "fallback");
   await assertResponse(port, "/required", 500, "internal server error");
+  await assertResponse(port, "/required-explicit", 500, "internal server error");
 
   server.kill("SIGTERM");
   await once(server, "exit");
