@@ -21,11 +21,14 @@ runtime errors, and a failed operation does not poison the connection. The core
 unit suite covers prepared insertion, all value families, bounded queries,
 malformed SQL recovery, and row/byte/parameter limits.
 
-The `native-partial` public slice lowers a compile-time `:memory:` `Database`,
-closed `exec(sql)` effects, prepared `run()`/`all()`/`get()` calls, bounded JSON
-row encoding, and idempotent `close`/`dispose`. A prepared call accepts at most
-16 selected values from named route parameters and a closed request JSON
-object. Parameters use SQLite binding rather than SQL interpolation.
+The native alpha public slice lowers a compile-time `:memory:` or
+capability-scoped on-disk `Database`, closed `exec(sql)` effects, prepared
+`run()`/`all()`/`get()` calls, static-SQL transactions, bounded JSON row
+encoding, and idempotent `close`/`dispose`. Effect calls return `Promise<void>`;
+typed changes/row-id objects are post-alpha. A prepared call accepts at most 16
+selected values from named route parameters, UUID generation, and a closed
+request JSON object. Parameters use SQLite binding rather than SQL
+interpolation.
 
 On-disk owners accept one static normalized relative path. Compilation requires
 exactly one canonical root present in both `--allow-read` and `--allow-write`,
@@ -36,14 +39,14 @@ The persistent Hono tracer writes a row, terminates the native process, starts
 the same binary again, and requires the row to remain; its Linux-arm64 output
 also passes Clang assembly.
 
-This is the first disk-capability slice, not the final filesystem security
-contract. Static path normalization prevents absolute, empty, dot, and parent
-segments, but runtime protection against symlink replacement and SQLite
-sidecar-file path races remains open. Prepared/dynamic transaction callbacks,
-HTTP-level contention load and symlink hardening remain the next persistence
-gate. The native SQLite core holds a competing writer through the one-second
-busy timeout, observes a recoverable error, releases the lock, and proves the
-second connection can write successfully afterward.
+This is the bounded alpha disk-capability contract, not a final filesystem
+security claim. Static path normalization prevents absolute, empty, dot, and
+parent segments, but runtime protection against symlink replacement and SQLite
+sidecar-file path races is explicitly post-alpha. Prepared/dynamic transaction
+callbacks and HTTP-level contention load are also post-alpha. The native SQLite
+core holds a competing writer through the one-second busy timeout, observes a
+recoverable error, releases the lock, and proves the second connection can
+write successfully afterward.
 
 `Database.transaction(sql)` is the first explicit transaction surface. It
 accepts one compile-time SQL batch up to 65,536 bytes and sends the complete
@@ -67,13 +70,13 @@ constraint and malformed-SQL recovery, repeated close, post-close failure,
 Apple execution, and Linux-arm64 assembly. A Bun/Hono plus `bun:sqlite`
 reference test pins the same portable CRUD response contract.
 
-Before promotion to `native`, the compiler must expose typed execute results and
-the remaining value families needed by public callers; prepared transaction
-forms and HTTP contention evidence remain open. Bounded
-wildcard-origin CORS, Content-Type preflight, and OS-random version-4 IDs bound
-as prepared values are native. The adapter also maps its typed Hono blog-name
-binding to a permitted immutable startup value. The pinned upstream 404/204
-envelopes now match through the in-memory adapter.
+The manifest classifies this bounded surface as `native`. Typed execute results,
+additional caller-provided dynamic values, prepared/callback transaction forms,
+and HTTP contention load remain post-alpha. Bounded wildcard-origin CORS,
+Content-Type preflight, and OS-random version-4 IDs bound as prepared values are
+native. The adapter also maps its typed Hono blog-name binding to a permitted
+immutable startup value. The pinned upstream 404/204 envelopes match through
+the in-memory adapter.
 
 The bounded counter actor can reference a compile-time database owner and key.
 Its private state table loads or creates the initial `i64` during actor startup,

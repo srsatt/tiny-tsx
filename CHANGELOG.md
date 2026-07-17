@@ -9,6 +9,9 @@ First developer preview of TinyTSX's zero-JavaScript native server compiler.
 - Official-style `@hono/zod-openapi` route and OpenAPI document compilation.
 - Bounded Web/API, middleware, JSX, worker, environment, filesystem, SQLite,
   and local/persistent counter-actor slices described in `doc/ALPHA.md`.
+- Stable `TINY15xx` diagnostics for built-in capabilities, static limits, and
+  unsupported SQLite/actor operations. SQLite effects deliberately return
+  `Promise<void>` in the alpha API; typed changes/row-id results are post-alpha.
 - Apple-arm64 native builds and Linux-arm64 code generation. Linux execution
   requires the Linux release archive built and verified by Linux CI.
 

@@ -16,6 +16,10 @@ alpha module is a release feature. `native-partial` names an executable tracer
 whose remaining operations are still release gates. `declared` operations must
 fail compilation with a stable diagnostic until promoted.
 
+All five modules reported by the `0.1.0-alpha.1` release manifest are `native`
+for their bounded contracts below. That status does not promote operations that
+are absent from those contracts.
+
 Apple arm64 and Linux arm64 are the only native alpha targets. Cross-host Linux
 assembly inspection is evidence for code generation, not runtime availability.
 
@@ -33,9 +37,21 @@ File-read capability checks canonicalize again before I/O, so symlink and `..`
 traversal cannot escape an allowed read root. SQLite paths reject lexical
 traversal, but runtime symlink/sidecar-race hardening remains open. Missing
 resources, invalid UTF-8, permission denial, capacity overflow, busy databases,
-full mailboxes, stopped actors, and closed handles are recoverable typed errors. The compiler reserves
-`TINY1500`–`TINY1599` for built-in availability/capability diagnostics and the
-runtime reserves stable error categories rather than host errno text.
+full mailboxes, stopped actors, and closed handles are recoverable typed errors.
+The compiler reserves `TINY1500`–`TINY1599` for built-in diagnostics:
+
+- `TINY1500`: built-in unavailable on the selected native target;
+- `TINY1501`: missing environment capability;
+- `TINY1502`: missing or invalid filesystem read capability;
+- `TINY1504`: invalid static environment/filesystem input or exceeded limit;
+- `TINY1510`: invalid static SQLite path;
+- `TINY1511`: missing or invalid SQLite write capability;
+- `TINY1512`: unsupported SQLite operation, argument shape, or exceeded limit;
+- `TINY1520`: unsupported actor spawn behavior, persistence, or capacity;
+- `TINY1521`: unsupported actor-reference operation or message.
+
+Focused frontend/native tests pin these codes. Runtime failures use stable error
+categories rather than exposing host errno text.
 
 ## Resource and blocking contract
 
@@ -104,14 +120,19 @@ observe an atomic file replacement.
 
 ### `tinytsx:sqlite`
 
-The current `native-partial` slice is a single-owner `:memory:` database with
-closed `exec(sql)` effects, prepared `run()`/`all()`/`get()` calls, and
+The native alpha module is a single-owner `:memory:` or capability-scoped
+on-disk database. It provides closed `exec(sql)` effects, prepared
+`run()`/`all()`/`get()` calls, static-SQL `transaction(sql)` batches, and
 idempotent `close`/`dispose`, serialized through one logical application
-worker. Calls bind at most 16 compile-time-selected route or bounded JSON-body
-values. SQL is capped at 65,536 bytes; results at 1,024 rows and 1 MiB; and the
-vendored runtime is described in `doc/PERSISTENCE.md`. General dynamic values,
-typed execute results, transactions, and on-disk read/write capabilities remain
-required before promotion to `native`.
+worker. Effect calls resolve to `Promise<void>`; changes/row-id result objects
+are deliberately not declared in this alpha.
+
+Prepared calls bind at most 16 compile-time-selected route, bounded JSON-body,
+or UUID values. SQL is capped at 65,536 bytes; results at 1,024 rows and 1 MiB;
+and the vendored runtime is described in `doc/PERSISTENCE.md`. On-disk paths
+require one matching canonical read/write root and carry the documented
+symlink/sidecar-race warning. General dynamic values, prepared/callback
+transactions, and typed execute results are post-alpha.
 
 ### `tinytsx:actors`
 
@@ -121,7 +142,8 @@ documented in `doc/ACTORS.md`. It provides typed `ask`, bounded fire-and-forget
 actor owns one native `i64`, returns decimal text, and has a compile-time mailbox
 capacity from 1 through 64. Actors are local logical workers, not one native
 thread each. Structured messages, arbitrary behaviors, supervision, and
-persistence are not yet native.
+general persistence are not native. The optional documented SQLite-backed
+counter persistence specialization is native and has process-restart evidence.
 
 Post-alpha candidates are path utilities, signals, subprocesses, raw sockets,
 binary filesystem APIs, remote actors, and actor supervision trees.

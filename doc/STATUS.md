@@ -75,10 +75,11 @@ produces and serves a native Mach-O executable from the example TSX source.
   arm64. Its static transaction endpoints prove a failed two-statement batch
   rolls back completely and a successful batch commits atomically. The
   disk-backed program also assembles for Linux arm64.
-- Runtime symlink-replacement/sidecar races, prepared/callback transactions,
-  HTTP-level contention load, and the persistent actor remain open. Core native
-  evidence holds a competing writer through the bounded busy timeout and proves
-  the second connection recovers after the lock is released.
+- Runtime symlink-replacement/sidecar races, prepared/callback transactions, and
+  HTTP-level contention load are post-alpha. Core native evidence holds a
+  competing writer through the bounded busy timeout and proves the second
+  connection recovers after the lock is released; the persistent counter actor
+  is covered separately above.
 - Verification: `npm run test:frontend` (85/85),
   `npm run test:sqlite-native` (4/4), `cargo test --workspace`, and
   `cargo clippy --workspace --all-targets -- -D warnings`.
@@ -175,9 +176,10 @@ produces and serves a native Mach-O executable from the example TSX source.
   `tinytsx:env`, `tinytsx:fs`, `tinytsx:sqlite`, and `tinytsx:actors`, alongside
   the native `tinytsx:serve`. Packages and aliases cannot shadow them. The
   frontend resolution test compiles one module importing all four declarations.
-- `tinytsx --list-builtins` emits versioned JSON with each built-in's native,
-  native-partial, or declared status, Apple/Linux targets, permission flags, and compiled default
-  limits. `doc/STANDARD_LIBRARY.md` defines versioning, default-deny capability
+- `tinytsx --list-builtins` emits versioned JSON with each built-in's status,
+  Apple/Linux targets, permission flags, and compiled default limits. All five
+  bounded alpha modules are now `native`; absent operations remain unsupported.
+  `doc/STANDARD_LIBRARY.md` defines versioning, default-deny capability
   separation, recoverable errors, blocking/executor rules, bounded ownership,
   close/dispose semantics, and post-alpha OS modules. `declared` intentionally
   does not yet mean a native implementation.
@@ -188,21 +190,24 @@ produces and serves a native Mach-O executable from the example TSX source.
   covers increment/decrement, tell-before-ask ordering, repeated stop, a
   recoverable post-stop request, Apple-arm64 execution, and Linux-arm64
   assembly. `doc/ACTORS.md` records the local-only boundary and missing
-  structured-message, timeout, supervision, scale, and persistence work.
+  structured-message, timeout, supervision, and scale work; a separate
+  SQLite-backed specialization proves counter persistence across restart.
 - The SQLite foundation is pinned and reproducible: the focused
   `tinytsx-runtime-sqlite` crate uses `rusqlite` 0.40.1, bundled
   `libsqlite3-sys` 0.38.1, and the SQLite 3.53.2 amalgamation. Its bounded core
   covers prepared values, result row/byte limits, malformed SQL recovery, and
-  null/integer/finite-real/text/blob mapping. The first `native-partial`
-  integration lowers `:memory:` database owners, closed `exec` effects,
+  null/integer/finite-real/text/blob mapping. The native alpha integration
+  lowers memory or capability-scoped disk owners, closed `exec` effects,
   prepared `run`/`all`/`get` with up to 16 selected route or bounded JSON-body
   values, bounded JSON results, and idempotent close through that worker. The
   transport retains at most 64 KiB and returns 400/413 for malformed,
   unsupported, missing, or oversized body input. Its Hono test proves
   create/list/get/update/delete over GET/POST/PUT/DELETE, SQL-error recovery,
   post-close failure, Apple execution, and Linux-arm64 assembly; a Bun/Hono
-  `bun:sqlite` test pins the same local adapter contract. Typed execute results,
-  transactions, disk capabilities, and the persistent actor remain open.
+  `bun:sqlite` test pins the same local adapter contract. Static-SQL
+  transactions, disk capabilities/restart, and the persistent counter are now
+  native; typed execute results and prepared/callback transactions are
+  post-alpha.
 - Typed Hono `Bindings` string fields now lower through the immutable
   `tinytsx:env` snapshot and exact `--allow-env` capability. The blog adapter's
   `context.env.TINYTSX_BLOG_NAME` matches Bun/Hono; denied, missing, invalid,

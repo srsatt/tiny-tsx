@@ -97,7 +97,7 @@ prominent.
 - [x] Define built-in module resolution for `tinytsx:env`, `tinytsx:fs`,
       `tinytsx:sqlite`, and `tinytsx:actors`; built-ins must not be resolved from
       `node_modules` or shadowed by application packages.
-- [ ] Add stable diagnostic codes for unavailable built-ins, missing native
+- [x] Add stable diagnostic codes for unavailable built-ins, missing native
       capabilities, denied paths, exceeded limits, and unsupported actor or
       SQLite operations.
 - [x] Decide and document the alpha compatibility policy: additive APIs are
