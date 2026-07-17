@@ -826,8 +826,10 @@ produces and serves a native Mach-O executable from the example TSX source.
   behavior allowlist now cite this evidence. A named request-cookie expression
   additionally covers missing fallback, spaces around pairs, and percent-decoded
   UTF-8 from the borrowed header on Apple, while the same source assembles for
-  Linux arm64. All-cookie objects, signing, dynamic options, deletion, prefixes,
-  and multiple response cookies remain unsupported.
+  Linux arm64. Repeated closed response cookies are retained, and the unchanged
+  `deleteCookie` helper returns the deleted request value while emitting the
+  exact upstream `Max-Age=0` header. All-cookie objects, signing, dynamic options,
+  and prefixes remain unsupported.
 
 Verification:
 

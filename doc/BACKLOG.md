@@ -439,9 +439,10 @@ adds an explicit application acceptance test.
     closed name/value and default or explicit path. Closed `encodeURIComponent`,
     string `+=`, and `Headers.append` are reusable evaluator operations. A
     statically named `getCookie` now parses the borrowed request header with
-    whitespace, percent decoding, and a closed missing fallback. All-cookie
-    objects, dynamic attributes, multiple cookies, prefixes, and signing remain
-    open.
+    whitespace, percent decoding, and a closed missing fallback. The unchanged
+    `deleteCookie` path returns the deleted value and emits `Max-Age=0`, while
+    repeated `setCookie` calls preserve both response values. All-cookie objects,
+    dynamic attributes, prefixes, and signing remain open.
 - [ ] Add optional/multi-segment route parameters, general constraints,
       non-terminal catch-alls, and broader request-dependent handlers.
   - 2026-07-17: one or more contiguous trailing `:name?` parameters now expand

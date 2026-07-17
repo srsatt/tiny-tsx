@@ -283,8 +283,10 @@ serializer exercises bounded closed `encodeURIComponent`, string addition
 assignment, and `Headers.append`; native HTTP returns the exact upstream
 `Set-Cookie` values. A statically named `getCookie` reads the bounded borrowed
 request header, normalizes spaces/tabs, decodes valid percent-encoded UTF-8, and
-uses a closed missing fallback without constructing a cookie record. All-cookie
-objects, dynamic attributes, deletion, multiple response cookies, prefixes,
+uses a closed missing fallback without constructing a cookie record. Repeated
+closed `setCookie` calls preserve both response values, and the unchanged
+`deleteCookie` helper returns the named request value while emitting an empty
+cookie with `Max-Age=0`. All-cookie objects, dynamic attributes, prefixes,
 signing, and session policy are not yet native.
 
 The exact `/etag/cached` middleware now specializes the closed response bytes

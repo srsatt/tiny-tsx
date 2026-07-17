@@ -1036,7 +1036,7 @@ test("lowers closed Response init headers from a Hono route", () => {
   assert.deepEqual(hir.staticStrings, [{id: 0, value: "Headers"}]);
 });
 
-test("executes the pinned Hono setCookie helper for closed values", () => {
+test("executes the pinned Hono cookie lifecycle helpers for closed values", () => {
   const entry = path.join(repository, "tests/compat/hono/cookie-smoke.ts");
   const hir = compileEntry(entry, {
     sdkPath: path.join(repository, "sdk/index.d.ts"),
@@ -1063,6 +1063,17 @@ test("executes the pinned Hono setCookie helper for closed values", () => {
       headers: [{name: "Set-Cookie", value: "delicious_cookie=macha; Path=/a"}],
     },
     {path: "/get-cookie", headers: undefined},
+    {
+      path: "/set-multiple-cookies",
+      headers: [{
+        name: "Set-Cookie",
+        value: "first_cookie=one; Path=/, second_cookie=two; Path=/; HttpOnly",
+      }],
+    },
+    {
+      path: "/delete-cookie",
+      headers: [{name: "Set-Cookie", value: "delicious_cookie=; Max-Age=0; Path=/"}],
+    },
   ]);
   const getCookie = hir.handlers[2]?.response;
   assert.deepEqual(getCookie?.kind === "text" ? getCookie.value : undefined, {
@@ -1074,6 +1085,17 @@ test("executes the pinned Hono setCookie helper for closed values", () => {
       span: hir.handlers[2]!.span,
     }],
     span: hir.handlers[2]!.span,
+  });
+  const deleteCookie = hir.handlers[4]?.response;
+  assert.deepEqual(deleteCookie?.kind === "text" ? deleteCookie.value : undefined, {
+    kind: "concat",
+    values: [{
+      kind: "requestCookie",
+      cookie: 1,
+      fallback: 2,
+      span: hir.handlers[4]!.span,
+    }],
+    span: hir.handlers[4]!.span,
   });
 });
 

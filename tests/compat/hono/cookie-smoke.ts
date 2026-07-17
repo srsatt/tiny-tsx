@@ -1,6 +1,6 @@
 // Closed setCookie cases from the pinned Hono cookie helper behavior tests.
 import {Hono} from "hono";
-import {getCookie, setCookie} from "hono/cookie";
+import {deleteCookie, getCookie, setCookie} from "hono/cookie";
 
 const app = new Hono();
 
@@ -17,5 +17,16 @@ app.get("/a/set-cookie-path", context => {
 app.get("/get-cookie", context => context.text(
   getCookie(context, "delicious_cookie") ?? "missing",
 ));
+
+app.get("/set-multiple-cookies", context => {
+  setCookie(context, "first_cookie", "one");
+  setCookie(context, "second_cookie", "two", {httpOnly: true});
+  return context.text("Give cookies");
+});
+
+app.get("/delete-cookie", context => {
+  const deleted = deleteCookie(context, "delicious_cookie");
+  return context.text(deleted ?? "missing");
+});
 
 export default app;

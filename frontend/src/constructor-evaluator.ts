@@ -2166,13 +2166,23 @@ function evaluateCall(
     if (callable.kind === "reference" && isPinnedGetCookie(callable)) {
       const context = arguments_[0];
       const name = arguments_[1];
-      return arguments_.length === 2
+      const prefix = arguments_[2];
+      const finalName = name?.kind !== "string"
+        ? undefined
+        : prefix?.kind === "string" && prefix.value === "secure"
+          ? `__Secure-${name.value}`
+          : prefix?.kind === "string" && prefix.value === "host"
+            ? `__Host-${name.value}`
+            : prefix === undefined || prefix.kind === "undefined"
+              ? name.value
+              : undefined;
+      return (arguments_.length === 2 || arguments_.length === 3)
         && context?.kind === "instance"
-        && name?.kind === "string"
-        && Buffer.byteLength(name.value, "utf8") <= 128
-        && /^[\w!#$%&'*.^`|~+-]+$/.test(name.value)
-        ? {kind: "requestCookie", name: name.value}
-        : unknown("getCookie requires a context and one closed valid cookie name");
+        && finalName !== undefined
+        && Buffer.byteLength(finalName, "utf8") <= 128
+        && /^[\w!#$%&'*.^`|~+-]+$/.test(finalName)
+        ? {kind: "requestCookie", name: finalName}
+        : unknown("getCookie requires a context, one closed valid cookie name, and an optional closed prefix");
     }
     if (callable.kind === "openAiProvider") {
       const model = arguments_[0];

@@ -159,6 +159,19 @@ test("executes the pinned Hono setCookie helper natively", async context => {
       });
       assert.equal(decoded.status, 200);
       assert.equal(await decoded.text(), "green tea");
+      const multiple = await request(port, "/set-multiple-cookies");
+      assert.equal(multiple.status, 200);
+      assert.equal(
+        multiple.headers.get("set-cookie"),
+        "first_cookie=one; Path=/, second_cookie=two; Path=/; HttpOnly",
+      );
+      assert.equal(await multiple.text(), "Give cookies");
+      const deleted = await request(port, "/delete-cookie", {
+        headers: {cookie: "delicious_cookie=macha"},
+      });
+      assert.equal(deleted.status, 200);
+      assert.equal(deleted.headers.get("set-cookie"), "delicious_cookie=; Max-Age=0; Path=/");
+      assert.equal(await deleted.text(), "macha");
     },
   );
 });
