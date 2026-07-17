@@ -852,8 +852,11 @@ produces and serves a native Mach-O executable from the example TSX source.
   remains unchanged.
 - A native worker-runtime test creates and disposes 10,000 actors, verifies
   sequential identities, two fixed executors, and zero idle message slots.
-  Bytes-per-actor RSS and hot-mailbox fairness still require controlled
-  performance runs before broader scale claims.
+- A five-run M5 Max release probe records 1.75/1.91/3.03 MiB median RSS for
+  0/1,000/10,000 actors, or 163.84 and 134.35 incremental bytes per actor. OS
+  thread count stays at four for all three process configurations. Raw samples
+  and a benchmark-harness test pin the report; hot-mailbox fairness remains
+  open before broader scale claims.
 
 Verification:
 

@@ -56,6 +56,13 @@ remains bounded. A native structural regression creates 10,000 idle actors,
 pins two executors and sequential identities, and verifies zero allocated
 mailbox slots before disposal.
 
+The five-run release-mode M5 Max probe measures 1.75 MiB RSS with no actors,
+1.91 MiB with 1,000 actors, and 3.03 MiB with 10,000 actors. After subtracting
+the zero-actor median, that is 163.84 and 134.35 bytes per actor respectively.
+All three configurations report four OS threads for the process while retaining
+two configured executors. These are idle local-actor numbers, not a mailbox
+throughput or fairness result.
+
 `ask(message)` enqueues in FIFO order, waits for that message's reply, and
 renders the reply into request-owned response memory. `tell(message)` enqueues
 through the same bounded mailbox and returns without waiting for the reply.
@@ -91,6 +98,6 @@ assembles for Linux arm64.
 
 Before actors can carry general application state, TinyTSX still needs bounded
 copying for primitives, closed records, and bounded arrays; per-actor scale and
-fairness measurements (the 10,000-actor structural test is not an RSS result);
-timeout/cancellation policy; panic and isolation tests; and persistence for
-arbitrary actor behaviors outside the counter specialization.
+hot-mailbox fairness measurements; timeout/cancellation policy; panic and
+isolation tests; and persistence for arbitrary actor behaviors outside the
+counter specialization.

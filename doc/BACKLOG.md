@@ -472,8 +472,10 @@ adds an explicit application acceptance test.
       mailbox before raising the documented actor-count limit.
   - 2026-07-17: idle mailboxes no longer preallocate all 64 message slots. A
     native structural test creates and disposes 10,000 actors with zero idle
-    deque capacity and two fixed executors. Controlled RSS/bytes-per-actor and
-    hot-mailbox fairness measurements remain open.
+    deque capacity and two fixed executors. A five-run M5 Max release probe now
+    records 163.84 bytes/actor at 1,000 and 134.35 bytes/actor at 10,000 after
+    subtracting the 1.75 MiB zero-actor RSS; OS thread count stays at four for
+    all three process configurations. Hot-mailbox fairness remains open.
 - [ ] Harden on-disk SQLite opens against symlink replacement and path races
       across compilation, startup, and sidecar-file creation.
   - 2026-07-17: all runtime connections add SQLite's native

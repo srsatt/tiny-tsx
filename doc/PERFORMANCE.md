@@ -62,8 +62,18 @@ non-empty SQLite result copying.
 Idle logical actors now allocate their mailbox deque lazily instead of reserving
 the full 64-message bound at spawn. A native regression proves 10,000 idle
 actors retain zero message-slot capacity and use the configured two executors.
-This is structural allocation evidence, not a published bytes-per-actor or peak
-RSS measurement; those controlled 1,000/10,000-actor runs remain required.
+The adjacent five-run release-mode M5 Max probe records:
+
+| Idle actors | Median RSS | Incremental bytes/actor | OS threads | Median spawn |
+| ---: | ---: | ---: | ---: | ---: |
+| 0 | 1.75 MiB | baseline | 4 | 0.03 ms |
+| 1,000 | 1.91 MiB | 163.84 | 4 | 0.07 ms |
+| 10,000 | 3.03 MiB | 134.35 | 4 | 0.31 ms |
+
+The incremental values subtract the zero-actor median and therefore include
+allocator/RSS granularity. The raw samples are in
+`benchmarks/results/2026-07-17-m5-max-actor-scale.json`. No messages are posted;
+hot-mailbox throughput and fairness remain unmeasured.
 
 ## Earlier connection-close and compatibility evidence
 

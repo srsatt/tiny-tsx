@@ -67,7 +67,25 @@ npm run benchmark:hono-worker
 npm run benchmark:hono-actor
 npm run benchmark:hono-sqlite
 npm run benchmark:hono-ai-provider
+npm run benchmark:actor-scale
 ```
+
+The actor-scale probe is separate from the HTTP/Bun matrix. It builds the
+release worker runtime, holds 0, 1,000, and 10,000 idle logical actors with two
+executors, and records process RSS, incremental bytes per actor, OS threads,
+and spawn time. Override its defaults directly when collecting release evidence:
+
+```bash
+python3 benchmarks/scripts/run_actor_scale.py \
+  --runs 5 \
+  --counts 0,1000,10000 \
+  --executors 2 \
+  --output-prefix benchmarks/results/local-actor-scale
+```
+
+This probe does not involve Hono, Bun, messages, persistence, or hot-mailbox
+fairness. The committed M5 Max result is
+`results/2026-07-17-m5-max-actor-scale.{json,md}`.
 
 Run the worker-scaling baseline as four independent, equivalence-checked
 TinyTSX/Bun comparisons:
