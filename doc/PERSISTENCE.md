@@ -27,6 +27,21 @@ row encoding, and idempotent `close`/`dispose`. A prepared call accepts at most
 16 selected values from named route parameters and a closed request JSON
 object. Parameters use SQLite binding rather than SQL interpolation.
 
+On-disk owners accept one static normalized relative path. Compilation requires
+exactly one canonical root present in both `--allow-read` and `--allow-write`,
+resolves the database path below that root, and embeds only the resolved path in
+the generated configuration. The bootstrap opens that path on the owning
+application worker. Build reports record the canonical read and write roots.
+The persistent Hono tracer writes a row, terminates the native process, starts
+the same binary again, and requires the row to remain; its Linux-arm64 output
+also passes Clang assembly.
+
+This is the first disk-capability slice, not the final filesystem security
+contract. Static path normalization prevents absolute, empty, dot, and parent
+segments, but runtime protection against symlink replacement and SQLite
+sidecar-file path races remains open. Transactions, rollback, contention, and
+busy recovery also remain the next persistence gate.
+
 The HTTP transport retains at most 64 KiB of request body. `HonoRequest.json()`
 is not exposed as a general dynamic JavaScript object: the compiler records
 only statically selected fields and the bootstrap parses those fields at the
@@ -42,10 +57,9 @@ Apple execution, and Linux-arm64 assembly. A Bun/Hono plus `bun:sqlite`
 reference test pins the same portable CRUD response contract.
 
 Before promotion to `native`, the compiler must expose typed execute results and
-the remaining value families needed by public callers; on-disk paths must use
-separate read/write capabilities; transactions need native tests; and the exact
-Hono blog adapter plus persistent actor tracers must pass end to end. Bounded
+the remaining value families needed by public callers; transactions need native
+tests; and the persistent actor tracer must pass end to end. Bounded
 wildcard-origin CORS, Content-Type preflight, and OS-random version-4 IDs bound
 as prepared values are native. The adapter also maps its typed Hono blog-name
-binding to a permitted immutable startup value. Upstream 404/204 envelopes
-remain blog parity work rather than claims of this local CRUD tracer.
+binding to a permitted immutable startup value. The pinned upstream 404/204
+envelopes now match through the in-memory adapter.

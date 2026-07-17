@@ -9,6 +9,24 @@ produces and serves a native Mach-O executable from the example TSX source.
 
 ## Alpha implementation evidence
 
+### On-disk SQLite capability and restart (2026-07-17)
+
+- `new Database("state.db")` now requires one matching canonical
+  `--allow-read`/`--allow-write` root. Non-static, absolute, empty, dot, parent,
+  undeclared, or ambiguous-root paths fail compilation with `TINY1510` or
+  `TINY1511`; `:memory:` remains capability-free.
+- Generated configuration exposes each resolved database path to its single
+  application-worker owner. Build reports record read and write roots, while
+  the application receives no ambient filesystem API.
+- `examples/hono-sqlite/persistent.ts` proves schema creation, prepared JSON
+  insertion, query, process termination, restart, and retained data on Apple
+  arm64. The disk-backed program also assembles for Linux arm64.
+- Runtime symlink-replacement/sidecar races, explicit transactions, rollback,
+  contention recovery, and the persistent actor remain open.
+- Verification: `npm run test:frontend` (85/85),
+  `npm run test:sqlite-native` (4/4), `cargo test --workspace`, and
+  `cargo clippy --workspace --all-targets -- -D warnings`.
+
 ### Pinned Hono blog response contract (2026-07-17)
 
 - The `tinytsx:sqlite` adapter now matches the pinned upstream blog's list,

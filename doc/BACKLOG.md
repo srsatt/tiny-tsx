@@ -55,8 +55,12 @@ restart evidence, and one persistent counter actor.
 
 Acceptance criteria are:
 
-- [ ] Define one explicit database-path capability; reject ambient, dynamic,
-  escaping, and undeclared paths before opening a native handle;
+- [x] Require matching canonical `--allow-read` and `--allow-write` roots for a
+  static normalized database path; embed only the resolved path in the native
+  server and record both permissions in the build report;
+- [ ] Harden disk opens against symlink replacement and path races so a granted
+  root cannot be escaped between compilation, startup, and SQLite sidecar-file
+  creation;
 - [ ] Add a bounded explicit transaction surface with deterministic commit,
   rollback, nested-transaction rejection, and handler-failure behavior;
 - [ ] Prove schema creation, CRUD, rollback, busy/contention recovery, close,
@@ -217,7 +221,7 @@ pinned blog success envelopes plus missing-record 404/204 behavior.
       and blob; reject unsupported dynamic values at compile time.
 - [ ] Make each connection single-owner and serialize its operations through the
       A4 actor mailbox instead of sharing a native handle across HTTP executors.
-- [ ] Require an explicit filesystem capability for on-disk databases and offer
+- [x] Require explicit read/write filesystem capabilities for on-disk databases and offer
       `:memory:` for deterministic tests.
 - [ ] Bound SQL length, parameter count, row count, row bytes, open statements,
       busy timeout, and queued operations; surface typed recoverable failures.

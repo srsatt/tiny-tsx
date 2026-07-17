@@ -26,13 +26,14 @@ separate allowlists so granting one capability never implies another:
 
 - `--allow-env <name>` permits one immutable startup environment value;
 - `--allow-read <root>` permits reads below one canonical filesystem root;
-- `--allow-write <root>` separately permits an on-disk SQLite database to
-  mutate files below one canonical root.
+- `--allow-write <root>` separately permits the bounded on-disk SQLite owner to
+  mutate files below one canonical root and must currently match its read root.
 
-Capability checks use canonical paths and occur before I/O. Symlink and `..`
-traversal cannot escape an allowed root. Missing resources, invalid UTF-8,
-permission denial, capacity overflow, busy databases, full mailboxes, stopped
-actors, and closed handles are recoverable typed errors. The compiler reserves
+File-read capability checks canonicalize again before I/O, so symlink and `..`
+traversal cannot escape an allowed read root. SQLite paths reject lexical
+traversal, but runtime symlink/sidecar-race hardening remains open. Missing
+resources, invalid UTF-8, permission denial, capacity overflow, busy databases,
+full mailboxes, stopped actors, and closed handles are recoverable typed errors. The compiler reserves
 `TINY1500`–`TINY1599` for built-in availability/capability diagnostics and the
 runtime reserves stable error categories rather than host errno text.
 

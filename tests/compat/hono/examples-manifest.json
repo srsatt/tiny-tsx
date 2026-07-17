@@ -101,7 +101,7 @@
       "nativeCompile": {"appleArm64": "pass", "linuxArm64Assembly": "pass", "evidence": "tests/compat/sqlite/native.test.mjs"},
       "httpBehavior": {"status": "pass", "evidence": "tests/compat/sqlite/native.test.mjs"},
       "referenceBehavior": {"runtime": "Bun/Hono with bun:sqlite", "status": "pass", "evidence": "tests/compat/sqlite/reference.behavior.test.ts"},
-      "firstUnsupportedBoundary": "Prepared calls accept at most 16 selected route/JSON/UUID values and bounded wildcard-origin CORS on a capability-free in-memory database; general dynamic values, typed execute results, transactions, and disk paths remain pending."
+      "firstUnsupportedBoundary": "Prepared calls accept at most 16 selected route/JSON/UUID values and bounded wildcard-origin CORS; a separate adapter proves a capability-scoped disk path and restart persistence, while general dynamic values, typed execute results, transactions, contention, and symlink-race hardening remain pending."
     },
     {
       "id": "upstream-blog",
