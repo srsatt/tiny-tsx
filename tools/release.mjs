@@ -17,6 +17,11 @@ if (target === undefined) fail(`release archives require native AArch64, got ${p
 if (!allowDirty) {
   const status = run("git", ["status", "--porcelain"], {encoding: "utf8"}).stdout.trim();
   if (status !== "") fail(`release verification requires a clean tree:\n${status}`);
+  run("npm", ["test"]);
+  run("npm", ["run", "test:zod-openapi-reference"]);
+  run("npm", ["run", "test:zod-openapi"]);
+  const generated = run("git", ["status", "--porcelain"], {encoding: "utf8"}).stdout.trim();
+  if (generated !== "") fail(`release suites changed tracked files:\n${generated}`);
 }
 
 run("npm", ["run", "build:frontend"]);

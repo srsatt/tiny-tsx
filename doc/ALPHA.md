@@ -24,3 +24,29 @@ a substitute. No x86 native target is claimed in this alpha.
 Known security boundary: on-disk SQLite paths are lexically scoped to matching
 read/write roots, but runtime symlink replacement and SQLite sidecar-file races
 remain unresolved. Do not grant a database root writable by untrusted users.
+
+## Getting started
+
+```sh
+tar -xzf tinytsx-0.1.0-alpha.1-aarch64-apple-darwin.tar.gz
+export PATH="$PWD/tinytsx-0.1.0-alpha.1-aarch64-apple-darwin/bin:$PATH"
+mkdir hello && cd hello
+npm init -y
+npm install hono @hono/node-server
+cat > server.ts <<'TS'
+import {serve} from '@hono/node-server'
+import {Hono} from 'hono'
+
+const app = new Hono()
+app.get('/', context => context.text('Hello from TinyTSX'))
+serve({fetch: app.fetch, port: 3000})
+TS
+tinytsx build server.ts --output server --release
+./server
+curl http://127.0.0.1:3000/
+```
+
+Use `tinytsx:serve` instead of `@hono/node-server` when the application wants
+the same native server entrypoint without the Hono package namespace. See the
+capability documents before adding files, environment values, SQLite, or
+persistent actors.
