@@ -18,6 +18,20 @@ const counter = spawn((context, delta: number) => {
 }, 0, {mailboxCapacity: 64});
 ```
 
+An actor may opt into the bounded SQLite owner with a compile-time database and
+key:
+
+```ts
+const counter = spawn(behavior, 0, {
+  persistence: {database, key: "primary-counter"},
+});
+```
+
+The database path still requires matching read/write capabilities. Startup
+loads the stored signed integer or inserts the declared initial state. Each
+successful actor message writes the next value before publishing it as
+in-memory state, so a failed write cannot move memory ahead of disk.
+
 The initial state and messages are signed integers. State addition is checked,
 and replies are decimal strings. The behavior, initial state, and mailbox
 capacity must be known during compilation. Other behaviors and structured
@@ -47,8 +61,10 @@ Consequently, a successful `tell` followed by `ask` observes the tell first.
 
 `stop()` and `dispose()` are idempotent. Stopping rejects new messages and
 fails queued replies; it does not destroy an executor thread. There is no
-automatic restart, supervision tree, durable snapshot, timeout, cancellation,
-or mailbox drain-on-stop in this alpha slice.
+automatic restart, supervision tree, general durable snapshot, timeout,
+cancellation, or mailbox drain-on-stop in this alpha slice. Optional counter
+persistence restores state after a process restart; it does not restart a
+failed actor in-process.
 
 Mailbox or application-queue saturation is a recoverable overload response.
 Use after stop, a disconnected reply, a handler panic, and checked-integer
@@ -64,7 +80,13 @@ Apple-arm64 native server, and Linux-arm64 assembly. It is a TinyTSX adapter to
 the pinned durable-objects example's counter behavior, not unchanged Cloudflare
 source compatibility.
 
+`examples/hono-actors/persistent.ts` binds the same counter behavior to a
+capability-scoped SQLite database. Native HTTP drives it to 2, terminates the
+process, restarts the same binary at 2, and advances to 3. The program also
+assembles for Linux arm64.
+
 Before actors can carry general application state, TinyTSX still needs bounded
 copying for primitives, closed records, and bounded arrays; per-actor scale and
 fairness measurements; timeout/cancellation policy; panic and isolation tests;
-and the persistent SQLite-backed counter variant.
+and persistence for arbitrary actor behaviors outside the counter
+specialization.

@@ -9,6 +9,19 @@ produces and serves a native Mach-O executable from the example TSX source.
 
 ## Alpha implementation evidence
 
+### Persistent counter actor (2026-07-17)
+
+- `spawn(..., {persistence: {database, key}})` connects the bounded `i64`
+  counter to a capability-scoped SQLite owner. Startup loads the saved value or
+  creates it from the compile-time initial state; messages persist before the
+  in-memory value advances.
+- The native Hono tracer reaches 2, terminates, restarts the same binary at 2,
+  and advances to 3. Its Linux-arm64 output passes Clang assembly. The original
+  capability-free in-memory actor behavior remains unchanged.
+- Verification: `npm run test:frontend` (86/86),
+  `npm run test:actors-native` (4/4), `cargo test --workspace`, and
+  `cargo clippy --workspace --all-targets -- -D warnings`.
+
 ### On-disk SQLite capability and restart (2026-07-17)
 
 - `new Database("state.db")` now requires one matching canonical

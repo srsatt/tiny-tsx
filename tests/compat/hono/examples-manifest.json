@@ -127,7 +127,7 @@
       "nativeCompile": {"appleArm64": "pass", "linuxArm64Assembly": "pass", "evidence": "tests/compat/actors/native.test.mjs"},
       "httpBehavior": {"status": "pass", "evidence": "tests/compat/actors/native.test.mjs"},
       "referenceBehavior": {"runtime": "Cloudflare reference", "status": "pending", "evidence": null},
-      "firstUnsupportedBoundary": "The adapter proves a local signed-integer counter only; Cloudflare bindings, persistence, alarms, remote identity, arbitrary actor behaviors, and structured messages are out of scope."
+      "firstUnsupportedBoundary": "The adapters prove an in-memory and optional SQLite-persistent local signed-integer counter only; Cloudflare bindings, alarms, remote identity, arbitrary persistent actor behaviors, and structured messages are out of scope."
     }
   ],
   "behaviorAllowlist": [

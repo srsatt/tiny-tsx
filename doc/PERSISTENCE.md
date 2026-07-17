@@ -69,8 +69,14 @@ reference test pins the same portable CRUD response contract.
 
 Before promotion to `native`, the compiler must expose typed execute results and
 the remaining value families needed by public callers; prepared transaction
-forms, contention evidence, and the persistent actor tracer must pass end to end. Bounded
+forms and HTTP contention evidence remain open. Bounded
 wildcard-origin CORS, Content-Type preflight, and OS-random version-4 IDs bound
 as prepared values are native. The adapter also maps its typed Hono blog-name
 binding to a permitted immutable startup value. The pinned upstream 404/204
 envelopes now match through the in-memory adapter.
+
+The bounded counter actor can reference a compile-time database owner and key.
+Its private state table loads or creates the initial `i64` during actor startup,
+and each message persists the checked next value before updating actor memory.
+Native restart evidence proves 0 -> 2 in the first process and 2 -> 3 after
+restart; this is counter-specific persistence, not a general actor object store.

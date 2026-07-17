@@ -68,7 +68,7 @@ Acceptance criteria are:
 - [x] Prove schema creation, CRUD, rollback, busy/contention recovery, close,
   process restart, and retained rows on Apple arm64; assemble the same program
   for Linux arm64;
-- [ ] Persist one bounded counter actor through the public SQLite and actor APIs,
+- [x] Persist one bounded counter actor through the public SQLite and actor APIs,
   with restart and mailbox-order evidence;
 - [ ] Publish limits, permissions, failure mapping, operational prerequisites,
   and benchmark deltas in the persistence, compatibility, status, and release
@@ -205,7 +205,8 @@ pinned blog success envelopes plus missing-record 404/204 behavior.
       thread growth proportional to actor count.
 - [x] Run the Hono counter tracer through the public actor API as an explicit
       local adapter to the pinned durable-objects behavior.
-- [ ] Persist one actor variant through `tinytsx:sqlite` after A5 is complete.
+- [x] Persist one actor variant through `tinytsx:sqlite` after the bounded disk
+      owner and transaction core are green.
 
 ### A5 — Add bounded SQLite persistence
 
@@ -231,7 +232,7 @@ pinned blog success envelopes plus missing-record 404/204 behavior.
       malformed SQL, limit recovery, shutdown, and restart persistence.
 - [x] Run the in-memory Hono blog tracer end to end against the public SQLite
       built-in with the pinned success envelopes and missing-record semantics.
-- [ ] Add the persistent variant of the A4 counter tracer after disk databases
+- [x] Add the persistent variant of the A4 counter tracer after disk databases
       and transactions are green.
 
 ### A6 — Make the alpha release installable
