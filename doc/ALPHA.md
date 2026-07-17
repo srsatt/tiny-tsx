@@ -25,6 +25,51 @@ Known security boundary: on-disk SQLite paths are lexically scoped to matching
 read/write roots, but runtime symlink replacement and SQLite sidecar-file races
 remain unresolved. Do not grant a database root writable by untrusted users.
 
+## Supported alpha contract
+
+The source language is an explicit AOT allowlist, not JavaScript with fallback.
+It includes the pinned closed Hono initialization graphs, relative/bare ESM
+resolution, typed server JSX, closed records/arrays used by those graphs,
+request-selected strings, bounded JSON fields, selected async middleware, and
+the exact Test262 cases listed in `doc/COMPATIBILITY.md`. Unsupported reachable
+syntax fails compilation; the produced server never interprets JavaScript.
+
+The executable Hono matrix consists of the pinned complete `basic` and
+`jsx-ssr` examples plus the published-package `@hono/zod-openapi`, static-file,
+blog/SQLite, environment, and local/persistent-counter tracers recorded in
+`tests/compat/hono/examples-manifest.json`. `@hono/node-server` and
+`tinytsx:serve` share one AOT entry contract. This does not claim the rest of
+Node server lifecycle, TLS, event, or platform-adapter behavior.
+
+The Web API allowlist covers the Request/Response/Headers behavior exercised by
+that matrix, selected route/query/header reads, bounded JSON input,
+`crypto.randomUUID()`, one closed fetch-status path on Apple, finite text
+streaming, and the WPT-derived behavior in `doc/WEB_API.md`. TypeScript DOM type
+availability is not evidence that an unlisted runtime API exists.
+
+The protected backend modules are:
+
+- `tinytsx:env`: at most 64 static names, 4 KiB UTF-8 per immutable value;
+- `tinytsx:fs`: static UTF-8 text reads, 4 KiB paths and 1 MiB files;
+- `tinytsx:sqlite`: one serialized owner, 64 KiB static SQL, 16 admitted public
+  parameters, 1,024 result rows, 1 MiB results, and one-second busy timeout;
+- `tinytsx:actors`: compile-time counter actors with 1–64 mailbox entries and
+  optional SQLite-backed counter persistence;
+- `tinytsx:serve`: one compile-time fetch application and closed port.
+
+Environment and filesystem/database access are default-deny. Use
+`--allow-env`, `--allow-read`, and `--allow-write`; compiler rejections use the
+stable diagnostic catalog in `doc/STANDARD_LIBRARY.md`. Requests use bounded
+arenas, HTTP/application executors have fixed queues, saturation is recoverable,
+and no feature relies on a garbage collector or finalizer.
+
+Known non-goals include general TypeScript/ECMAScript, arbitrary npm execution,
+Node/Deno/Bun compatibility, blanket Hono/Web API support, x86 targets, dynamic
+SQLite values/results, general actors, WebSockets, compression, JWT/JWK,
+subprocesses, sockets, and a managed heap. The exact first unsupported boundary
+for each admitted Hono documentation row lives in
+`tests/compat/hono/docs-matrix.json`.
+
 ## Getting started
 
 ```sh
