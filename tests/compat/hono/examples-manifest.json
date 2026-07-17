@@ -122,7 +122,7 @@
       "httpBehavior": {"status": "pass", "evidence": "tests/compat/sqlite/native.test.mjs"},
       "referenceBehavior": {"runtime": "Bun/Hono with bun:sqlite", "status": "pass", "evidence": "tests/compat/sqlite/reference.behavior.test.ts"},
       "releaseGates": {"native": ["test:sqlite-native"], "reference": ["test:sqlite-reference"]},
-      "firstUnsupportedBoundary": "Prepared calls accept at most 16 selected route/JSON/UUID values and bounded wildcard-origin CORS; the disk adapter proves capability-scoped restart persistence and static-SQL commit/rollback, while general dynamic values, typed execute results, prepared/callback transactions, HTTP contention load, and symlink-race hardening are post-alpha."
+      "firstUnsupportedBoundary": "Prepared calls accept at most 16 selected route/JSON/UUID values and bounded wildcard-origin CORS; the disk adapter proves capability-scoped restart persistence, static-SQL commit/rollback, and the documented cross-UID Unix path/sidecar policy, while general dynamic values, typed execute results, prepared/callback transactions, HTTP contention load, and same-UID or unusual-filesystem mutation are unsupported."
     },
     {
       "id": "upstream-blog",

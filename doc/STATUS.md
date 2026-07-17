@@ -159,9 +159,9 @@ produces and serves a native Mach-O executable from the example TSX source.
   rolls back completely and a successful batch commits atomically. The
   disk-backed program also assembles for Linux arm64.
 - Runtime database opens now use `SQLITE_OPEN_NOFOLLOW`, and a Unix regression
-  test rejects a database-file symlink. Directory-replacement/sidecar races,
-  prepared/callback transactions, and HTTP-level contention load are post-alpha.
-  Core native evidence holds a
+  test rejects a database-file symlink. Later post-alpha evidence below adds the
+  service-owned directory and sidecar policy; prepared/callback transactions
+  and HTTP-level contention load remain open. Core native evidence holds a
   competing writer through the bounded busy timeout and proves the second
   connection recovers after the lock is released; the persistent counter actor
   is covered separately above.
@@ -888,6 +888,26 @@ produces and serves a native Mach-O executable from the example TSX source.
   `test:actors-native`.
 - Request-derived values, arbitrary behaviors, identity/transfer semantics,
   cycles, and value persistence remain outside this slice.
+
+### Protected SQLite disk ownership (2026-07-17)
+
+- Disk opens now validate ordinary Unix ownership and mode semantics across the
+  complete directory chain. The final database directory must be owned by the
+  effective service user and not group/other writable; writable ancestors must
+  be sticky and lead to a service-owned component.
+- A missing main database is atomically precreated with `O_NOFOLLOW`, `O_EXCL`,
+  and mode `0600`. Existing main, journal, WAL, and SHM names must be owned,
+  single-link regular files without group/other write permission, checked
+  before and after connection open.
+- The pinned SQLite Unix VFS itself uses `O_NOFOLLOW` for all four file classes.
+  Runtime tests reject database, intermediate-directory, and sidecar symlinks,
+  reject a hard-linked sidecar and an unsafe shared directory, retain the
+  protected target, and verify the private creation mode.
+- This closes replacement by another Unix identity under ordinary permission
+  semantics. Same-effective-UID mutation, unusual ACLs, mount replacement,
+  privileged attackers, and filesystems with weaker semantics require a
+  dedicated service account or OS sandbox and are not claimed as in-process
+  protection.
 
 Verification:
 

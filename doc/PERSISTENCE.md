@@ -39,18 +39,34 @@ The persistent Hono tracer writes a row, terminates the native process, starts
 the same binary again, and requires the row to remain; its Linux-arm64 output
 also passes Clang assembly.
 
-This is the bounded alpha disk-capability contract, not a final filesystem
-security claim. Static path normalization prevents absolute, empty, dot, and
-parent segments. Runtime opens now add SQLite's `SQLITE_OPEN_NOFOLLOW`, so a
-database path containing a symlink at open time is rejected; a Unix regression
-test replaces the final database file with a symlink and observes the bounded
-open error. Races involving renamed/replaced directories and SQLite journal/WAL
-sidecar creation remain unresolved, so the granted root must still not be
-writable by untrusted users. Prepared/dynamic transaction callbacks and
-HTTP-level contention load are also post-alpha. The native SQLite core holds a
-competing writer through the one-second busy timeout, observes a recoverable
-error, releases the lock, and proves the second connection can write
-successfully afterward.
+Static path normalization prevents absolute, empty, dot, and parent segments.
+Runtime disk opens enforce a service-owned Unix path contract before and after
+SQLite opens the connection: every component must be a real directory; the
+final database directory must be owned by the effective service user and must
+not be group/other writable; a writable ancestor is accepted only when it is
+sticky and its next component is service-owned. A missing main database is
+precreated atomically with `O_NOFOLLOW`, `O_EXCL`, and mode `0600`. Existing
+main, rollback-journal, WAL, and SHM names must be service-owned, single-link
+regular files without group/other write permission.
+
+The pinned SQLite Unix VFS independently uses `O_NOFOLLOW` for main, journal,
+WAL, and SHM opens, while the public connection retains
+`SQLITE_OPEN_NOFOLLOW` path-component checking. Native regressions reject a
+symlinked database, intermediate directory, and every sidecar name, reject a
+hard-linked sidecar and an unsafe shared directory, preserve the sidecar target,
+and verify private file creation. Together with the directory ownership rule,
+another Unix identity cannot replace an authorized path or pre-place a sidecar
+during the process lifetime.
+
+This is still an application capability boundary, not an OS sandbox against
+code running as the same effective user. Roots writable through unusual ACLs,
+mount changes, privileged attackers, network filesystems with weaker Unix
+semantics, and out-of-process same-UID mutation are unsupported; deploy those
+cases behind an OS sandbox or dedicated service account. Prepared/dynamic
+transaction callbacks and HTTP-level contention load are also post-alpha. The
+native SQLite core holds a competing writer through the one-second busy timeout,
+observes a recoverable error, releases the lock, and proves the second
+connection can write successfully afterward.
 
 `Database.transaction(sql)` is the first explicit transaction surface. It
 accepts one compile-time SQL batch up to 65,536 bytes and sends the complete

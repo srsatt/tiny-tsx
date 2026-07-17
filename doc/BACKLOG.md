@@ -95,9 +95,10 @@ Acceptance criteria are, in order:
 
 Runtime SQLite directory/sidecar-race hardening, prepared/callback transactions,
 general actor messages, actor-scale/fairness work, and the combined user-auth
-example are explicitly post-alpha. Database opens now reject paths containing
-symlinks, but the remaining directory and sidecar boundary stays prominent in
-the alpha documents.
+example were explicitly post-alpha. Later sections record the disk ownership,
+bounded value-message, scale/fairness, and auth work that has since landed;
+callback transactions and the explicitly documented OS-sandbox boundaries
+remain open.
 
 ### Release handoff
 
@@ -518,12 +519,18 @@ Hono” task.
     parallelism, and an eight-message scheduling quantum now has deterministic
     one-executor evidence that a cold actor runs before a 64-message hot backlog
     completes. Hot-mailbox throughput remains a separate P4 measurement.
-- [ ] Harden on-disk SQLite opens against symlink replacement and path races
+- [x] Harden on-disk SQLite opens against symlink replacement and path races
       across compilation, startup, and sidecar-file creation.
   - 2026-07-17: all runtime connections add SQLite's native
     `SQLITE_OPEN_NOFOLLOW`; a Unix regression test proves a symlink replacing
-    the database file is rejected. Directory replacement and journal/WAL
-    sidecar races remain open.
+    the database file is rejected. The runtime now also requires a service-owned
+    protected directory, securely precreates a missing database at mode `0600`,
+    validates sticky/writable ancestors, and rejects unsafe, symlinked, or
+    hard-linked main, journal, WAL, and SHM names before and after open. The
+    pinned VFS applies `O_NOFOLLOW` to every file class. This closes cross-UID
+    path/sidecar replacement under ordinary Unix permissions; same-UID mutation, unusual
+    ACLs, mount changes, and non-Unix filesystem semantics remain explicit OS
+    sandbox boundaries rather than in-process guarantees.
 - [ ] Add bounded prepared-parameter/callback transactions, typed execute
       results, and broader dynamic SQLite values without allowing operations to
       interleave on one connection.

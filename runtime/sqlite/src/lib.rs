@@ -1,4 +1,4 @@
-use std::{fmt, time::Duration};
+use std::{fmt, path::Path, time::Duration};
 
 use rusqlite::{OpenFlags, params_from_iter, types::ValueRef};
 
@@ -53,6 +53,7 @@ pub enum QueryMode {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ErrorKind {
     Open,
+    UnsafePath,
     Sql,
     SqlTooLong,
     TooManyParameters,
@@ -93,13 +94,143 @@ impl fmt::Display for Error {
 impl std::error::Error for Error {}
 
 pub fn open(path: &str) -> Result<Connection, Error> {
+    prepare_database_path(path)?;
     let flags = OpenFlags::default() | OpenFlags::SQLITE_OPEN_NOFOLLOW;
     let connection = Connection::open_with_flags(path, flags)
         .map_err(|error| Error::sqlite(ErrorKind::Open, error))?;
+    validate_opened_database_path(path)?;
     connection
         .busy_timeout(BUSY_TIMEOUT)
         .map_err(|error| Error::sqlite(ErrorKind::Open, error))?;
     Ok(connection)
+}
+
+fn prepare_database_path(path: &str) -> Result<(), Error> {
+    if path == ":memory:" {
+        return Ok(());
+    }
+    #[cfg(unix)]
+    return unix_path::prepare(Path::new(path));
+    #[cfg(not(unix))]
+    Err(Error::bounded(ErrorKind::UnsafePath))
+}
+
+fn validate_opened_database_path(path: &str) -> Result<(), Error> {
+    if path == ":memory:" {
+        return Ok(());
+    }
+    #[cfg(unix)]
+    return unix_path::validate_opened(Path::new(path));
+    #[cfg(not(unix))]
+    Err(Error::bounded(ErrorKind::UnsafePath))
+}
+
+#[cfg(unix)]
+mod unix_path {
+    use std::{
+        fs::{self, OpenOptions},
+        os::unix::fs::{MetadataExt, OpenOptionsExt},
+        path::{Path, PathBuf},
+    };
+
+    use super::{Error, ErrorKind};
+
+    const GROUP_OR_OTHER_WRITE: u32 = 0o022;
+    const STICKY: u32 = 0o1000;
+
+    pub(super) fn prepare(path: &Path) -> Result<(), Error> {
+        validate_directories(path)?;
+        match fs::symlink_metadata(path) {
+            Ok(metadata) => validate_owned_file(&metadata),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .mode(0o600)
+                    .custom_flags(libc::O_NOFOLLOW)
+                    .open(path)
+                    .map_err(|_| unsafe_path())?;
+                Ok(())
+            }
+            Err(_) => Err(unsafe_path()),
+        }?;
+        validate_named_files(path)
+    }
+
+    pub(super) fn validate_opened(path: &Path) -> Result<(), Error> {
+        validate_directories(path)?;
+        validate_named_files(path)
+    }
+
+    fn validate_directories(path: &Path) -> Result<(), Error> {
+        if !path.is_absolute() || path.file_name().is_none() {
+            return Err(unsafe_path());
+        }
+        let parent = path.parent().ok_or_else(unsafe_path)?;
+        let directories = parent.ancestors().collect::<Vec<_>>();
+        let directories = directories.into_iter().rev().collect::<Vec<_>>();
+        let mut metadata = Vec::with_capacity(directories.len());
+        for directory in &directories {
+            let value = fs::symlink_metadata(directory).map_err(|_| unsafe_path())?;
+            if value.file_type().is_symlink() || !value.file_type().is_dir() {
+                return Err(unsafe_path());
+            }
+            metadata.push(value);
+        }
+
+        let effective_user = unsafe { libc::geteuid() };
+        let final_directory = metadata.last().ok_or_else(unsafe_path)?;
+        if final_directory.uid() != effective_user
+            || final_directory.mode() & GROUP_OR_OTHER_WRITE != 0
+        {
+            return Err(unsafe_path());
+        }
+        for (index, directory) in metadata.iter().enumerate().take(metadata.len() - 1) {
+            if directory.mode() & GROUP_OR_OTHER_WRITE == 0 {
+                continue;
+            }
+            let child = &metadata[index + 1];
+            if directory.mode() & STICKY == 0 || child.uid() != effective_user {
+                return Err(unsafe_path());
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_named_files(path: &Path) -> Result<(), Error> {
+        validate_existing_file(path)?;
+        for suffix in ["-journal", "-wal", "-shm"] {
+            let mut sidecar = path.as_os_str().to_os_string();
+            sidecar.push(suffix);
+            let sidecar = PathBuf::from(sidecar);
+            validate_existing_file(&sidecar)?;
+        }
+        Ok(())
+    }
+
+    fn validate_existing_file(path: &Path) -> Result<(), Error> {
+        match fs::symlink_metadata(path) {
+            Ok(metadata) => validate_owned_file(&metadata),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(_) => Err(unsafe_path()),
+        }
+    }
+
+    fn validate_owned_file(metadata: &fs::Metadata) -> Result<(), Error> {
+        let effective_user = unsafe { libc::geteuid() };
+        if !metadata.file_type().is_file()
+            || metadata.uid() != effective_user
+            || metadata.nlink() != 1
+            || metadata.mode() & GROUP_OR_OTHER_WRITE != 0
+        {
+            return Err(unsafe_path());
+        }
+        Ok(())
+    }
+
+    fn unsafe_path() -> Error {
+        Error::bounded(ErrorKind::UnsafePath)
+    }
 }
 
 pub fn execute(
@@ -320,6 +451,16 @@ mod tests {
 
     static DATABASE_ID: AtomicU64 = AtomicU64::new(0);
 
+    fn test_directory(name: &str) -> std::path::PathBuf {
+        let directory = std::env::temp_dir().join(format!(
+            "tinytsx-sqlite-{name}-{}-{}",
+            std::process::id(),
+            DATABASE_ID.fetch_add(1, Ordering::Relaxed),
+        ));
+        std::fs::create_dir(&directory).expect("create SQLite test directory");
+        std::fs::canonicalize(directory).expect("canonicalize SQLite test directory")
+    }
+
     fn database() -> Connection {
         let connection = open(":memory:").expect("open memory database");
         execute_batch(
@@ -386,19 +527,18 @@ mod tests {
                 .kind,
             ErrorKind::Sql
         );
-        execute(&connection, "INSERT INTO posts (title) VALUES ('reused')", &[])
-            .expect("connection remains reusable after nested rejection");
+        execute(
+            &connection,
+            "INSERT INTO posts (title) VALUES ('reused')",
+            &[],
+        )
+        .expect("connection remains reusable after nested rejection");
     }
 
     #[test]
     fn busy_connection_recovers_after_the_competing_writer_rolls_back() {
-        let temporary = std::fs::canonicalize(std::env::temp_dir())
-            .expect("canonicalize temporary directory");
-        let path = temporary.join(format!(
-            "tinytsx-sqlite-contention-{}-{}.db",
-            std::process::id(),
-            DATABASE_ID.fetch_add(1, Ordering::Relaxed),
-        ));
+        let directory = test_directory("contention");
+        let path = directory.join("contention.db");
         let path = path.to_string_lossy().into_owned();
         let first = open(&path).expect("open first connection");
         execute_batch(&first, "CREATE TABLE values_table (value TEXT NOT NULL)")
@@ -413,11 +553,15 @@ mod tests {
             ErrorKind::Sql,
         );
         execute_batch(&first, "ROLLBACK").expect("release writer lock");
-        execute(&second, "INSERT INTO values_table VALUES ('recovered')", &[])
-            .expect("second connection recovers after contention");
+        execute(
+            &second,
+            "INSERT INTO values_table VALUES ('recovered')",
+            &[],
+        )
+        .expect("second connection recovers after contention");
         drop(first);
         drop(second);
-        std::fs::remove_file(path).expect("remove contention database");
+        std::fs::remove_dir_all(directory).expect("remove contention directory");
     }
 
     #[cfg(unix)]
@@ -425,13 +569,7 @@ mod tests {
     fn rejects_a_symlink_as_the_database_file() {
         use std::os::unix::fs::symlink;
 
-        let directory = std::env::temp_dir().join(format!(
-            "tinytsx-sqlite-no-follow-{}-{}",
-            std::process::id(),
-            DATABASE_ID.fetch_add(1, Ordering::Relaxed),
-        ));
-        std::fs::create_dir(&directory).expect("create no-follow test directory");
-        let directory = std::fs::canonicalize(&directory).expect("canonicalize test directory");
+        let directory = test_directory("no-follow");
         let target = directory.join("target.db");
         let redirected = directory.join("redirected.db");
         drop(open(target.to_str().expect("UTF-8 target path")).expect("create target database"));
@@ -441,10 +579,99 @@ mod tests {
             open(redirected.to_str().expect("UTF-8 symlink path"))
                 .expect_err("database symlink must be rejected")
                 .kind,
-            ErrorKind::Open,
+            ErrorKind::UnsafePath,
         );
 
         std::fs::remove_dir_all(directory).expect("remove no-follow test directory");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn creates_a_private_database_and_rejects_an_unsafe_directory() {
+        use std::os::unix::fs::{MetadataExt, PermissionsExt};
+
+        let private = test_directory("private-mode");
+        let database = private.join("state.db");
+        drop(open(database.to_str().expect("UTF-8 database path")).expect("open database"));
+        assert_eq!(
+            std::fs::metadata(&database)
+                .expect("database metadata")
+                .mode()
+                & 0o777,
+            0o600,
+        );
+        std::fs::remove_dir_all(private).expect("remove private database directory");
+
+        let shared = test_directory("shared-mode");
+        std::fs::set_permissions(&shared, std::fs::Permissions::from_mode(0o777))
+            .expect("make directory unsafe");
+        assert_eq!(
+            open(
+                shared
+                    .join("state.db")
+                    .to_str()
+                    .expect("UTF-8 database path")
+            )
+            .expect_err("group/other-writable database directory must be rejected")
+            .kind,
+            ErrorKind::UnsafePath,
+        );
+        std::fs::set_permissions(&shared, std::fs::Permissions::from_mode(0o700))
+            .expect("restore directory permissions");
+        std::fs::remove_dir_all(shared).expect("remove unsafe database directory");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn rejects_symlinked_directory_and_sidecar_paths() {
+        use std::os::unix::fs::symlink;
+
+        let directory = test_directory("sidecars");
+        let real = directory.join("real");
+        std::fs::create_dir(&real).expect("create real database directory");
+        let linked = directory.join("linked");
+        symlink(&real, &linked).expect("create directory symlink");
+        assert_eq!(
+            open(
+                linked
+                    .join("state.db")
+                    .to_str()
+                    .expect("UTF-8 database path")
+            )
+            .expect_err("symlinked database directory must be rejected")
+            .kind,
+            ErrorKind::UnsafePath,
+        );
+
+        let database = real.join("state.db");
+        drop(open(database.to_str().expect("UTF-8 database path")).expect("create database"));
+        let target = real.join("target");
+        std::fs::write(&target, b"protected").expect("create sidecar target");
+        for suffix in ["-journal", "-wal", "-shm"] {
+            let sidecar = real.join(format!("state.db{suffix}"));
+            symlink(&target, &sidecar).expect("create sidecar symlink");
+            assert_eq!(
+                open(database.to_str().expect("UTF-8 database path"))
+                    .expect_err("symlinked SQLite sidecar must be rejected")
+                    .kind,
+                ErrorKind::UnsafePath,
+            );
+            std::fs::remove_file(sidecar).expect("remove sidecar symlink");
+        }
+        let hard_sidecar = real.join("state.db-journal");
+        std::fs::hard_link(&target, &hard_sidecar).expect("create sidecar hard link");
+        assert_eq!(
+            open(database.to_str().expect("UTF-8 database path"))
+                .expect_err("hard-linked SQLite sidecar must be rejected")
+                .kind,
+            ErrorKind::UnsafePath,
+        );
+        std::fs::remove_file(hard_sidecar).expect("remove sidecar hard link");
+        assert_eq!(
+            std::fs::read(target).expect("read protected target"),
+            b"protected"
+        );
+        std::fs::remove_dir_all(directory).expect("remove sidecar test directory");
     }
 
     #[test]

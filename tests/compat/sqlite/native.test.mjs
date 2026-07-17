@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import {mkdtempSync, readFileSync, realpathSync, rmSync} from "node:fs";
+import {chmodSync, mkdtempSync, readFileSync, realpathSync, rmSync} from "node:fs";
 import {tmpdir} from "node:os";
 import path from "node:path";
 import {spawn, spawnSync} from "node:child_process";
@@ -151,6 +151,25 @@ test("retains an on-disk SQLite row across process restart", async context => {
     200,
     '{"values":[{"value":"retained"},{"value":"first"},{"value":"second"}]}',
   );
+});
+
+test("rejects an unsafe on-disk database directory at native startup", async context => {
+  const directory = mkdtempSync(path.join(tmpdir(), "tinytsx-sqlite-unsafe-"));
+  const binary = path.join(directory, "server");
+  const port = 39_492;
+  context.after(() => {
+    chmodSync(directory, 0o700);
+    rmSync(directory, {recursive: true, force: true});
+  });
+
+  const result = buildPersistent(binary, port, directory);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  chmodSync(directory, 0o777);
+
+  const server = spawn(binary, [], {stdio: ["ignore", "pipe", "pipe"]});
+  context.after(() => server.kill("SIGTERM"));
+  await waitForServer(port, server);
+  await assertResponse(port, "/schema", 500, "internal server error");
 });
 
 function build(binary, port) {
