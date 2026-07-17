@@ -14,10 +14,10 @@ The current boundary is:
 | --- | --- | --- |
 | `Request` | standard DOM declaration | borrowed method, path, and raw query ABI views; allocation-free form-decoded query-name presence predicate |
 | `Response` | standard DOM declaration | bounded body writer, explicit status, optional HTML/text/JSON content-type IDs; closed `new Response(string or null, { status, headers })` AOT fast path |
-| `Headers` | standard DOM declaration | closed construction/cloning; bounded request-header borrowing and response-header storage with case-insensitive lookup/replacement |
+| `Headers` | standard DOM declaration | closed construction/cloning; bounded request-header borrowing and response-header storage with case-insensitive lookup/replacement; one request-local Request ID header |
 | `fetch` | standard DOM declaration | one closed URL string; request-time GET; `.status` only; Apple system libcurl transport |
 | `URL` / `URLSearchParams` | standard DOM declaration | native WPT-only bounded ordered pairs, form decoding/serialization, mutation, lookup, and live query linkage for selected URL cases; application API pending |
-| `crypto.randomUUID()` | standard DOM declaration | request-time version-4 UUID when bound directly to a prepared SQLite parameter |
+| `crypto.randomUUID()` | standard DOM declaration | request-time version-4 UUID for a prepared SQLite parameter or the default Hono Request ID policy |
 | body and stream types | standard DOM declaration | borrowed request bytes with a 64 KiB transport ceiling; closed Hono `bodyLimit()` guard over `Content-Length`; general body/stream objects pending |
 | encoding types | standard DOM declaration | pending |
 
@@ -63,6 +63,24 @@ Fetch's WPT-derived `text/plain;charset=UTF-8` for its string body. Bun 1.3.13
 omits that inferred header on the same `new Response(string)` path, so the
 reference test records the runtime difference rather than redefining the Web
 contract.
+
+The pinned Hono `requestId()` middleware specializes one matched policy per
+compiled route. Its default `X-Request-Id`/255-byte configuration and closed
+non-empty token header names up to 128 bytes with closed limits from 1 through
+1,024 bytes are admitted. Incoming IDs must be non-empty ASCII alphanumeric,
+underscore, hyphen, or equals bytes within the configured limit; missing,
+invalid, and oversized input is replaced by a lowercase UUIDv4. The selected
+value is installed before the response is rendered and is reused by both
+`c.get('requestId')` and the response header.
+
+An accepted value remains a borrowed view into the request header table for the
+synchronous dispatch lifetime. A generated UUID is copied into fixed,
+writer-owned dynamic-header storage and remains valid through response
+serialization. Writing the body copies either view into the bounded response
+arena before the request ends. No value enters a general Context map or managed
+heap. Custom generators, empty/dynamic header names, dynamic/out-of-range
+limits, and multiple matching policies fail compilation; other Context keys
+remain unsupported.
 
 Closed ETag middleware uses a second dedicated request predicate. SHA-1 is
 computed by the AOT frontend for immutable response bytes; the native runtime

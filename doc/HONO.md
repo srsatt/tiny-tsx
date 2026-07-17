@@ -9,10 +9,10 @@ every recorded guide, helper, middleware, and core API row.
 
 `native-pass` always means the bounded behavior stated in that row, never the
 whole named Hono API. The current native rows are Basic Auth, Body Limit,
-bounded CORS, ETag, Powered By, Pretty JSON, the `html` helper, finite text
-streaming, and the admitted JSX slice. Core Hono, Context, HonoRequest, routing,
-middleware composition, validation, presets, and Node.js startup remain
-`partial` because only their listed tracers compile.
+Request ID, bounded CORS, ETag, Powered By, Pretty JSON, the `html` helper,
+finite text streaming, and the admitted JSX slice. Core Hono, Context,
+HonoRequest, routing, middleware composition, validation, presets, and Node.js
+startup remain `partial` because only their listed tracers compile.
 
 The official-doc review pulls only two new middleware capabilities into the
 alpha critical path:
@@ -30,6 +30,16 @@ larger limits, bodies without a supported length, and chunked transfer encoding
 remain rejected boundaries. Hono `put()` and `delete()` join the existing
 closed `get()` and `post()` route slice.
 
+The pinned upstream `requestId()` factory also runs unchanged with its default
+UUID generator. One matched policy per compiled route may use the defaults or
+closed `headerName` and `limitLength` options: the header must be a non-empty
+HTTP token of at most 128 UTF-8 bytes, and the accepted incoming ID limit must
+be from 1 through 1,024 bytes. A valid non-empty ASCII word/hyphen/equals value
+is reused; missing, invalid, or oversized input is replaced by UUIDv4. The same
+request-local value is exposed through `c.get('requestId')` and the response
+header. Custom generators, empty or dynamic options, multiple matching
+policies, and general Context variable storage remain rejected boundaries.
+
 The upstream CORS factory now supplies a bounded native slice for closed
 `origin: "*"` options. Normal responses receive the declared allow-origin,
 credentials, and expose headers; generated OPTIONS routes return 204 with
@@ -39,11 +49,11 @@ method functions, reflected request headers, and non-wildcard Vary behavior are
 outside this row.
 
 The review was refreshed after compiling the packaged examples against the
-published `hono@4.12.30` JavaScript distribution. The closed CORS and Body Limit
-specializations accept both the pinned source forms and the exact published
-package forms; this does not admit arbitrary compiled middleware. No other
-documented guide, helper, middleware, or core API was added to the contract by
-the refresh.
+published `hono@4.12.30` JavaScript distribution. The closed CORS, Body Limit,
+and Request ID specializations accept both the pinned source forms and the
+exact published package forms; this does not admit arbitrary compiled
+middleware. No other documented guide, helper, middleware, or core API was
+added to the contract by the refresh.
 
 All other missing helpers and middleware are explicitly post-alpha or out of
 scope. In particular, alpha does not need compression, cache storage,

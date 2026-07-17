@@ -100,7 +100,8 @@ from the bounded request arena. The pinned upstream `streamText()` path also
 emits finite native HTTP/1.1 chunks without collecting its body in that arena.
 The executable matrix additionally covers published-package middleware and
 backend tracers, including a closed 0–64 KiB Hono `bodyLimit()` guard with its
-default 413 response. Each admitted row and its first unsupported boundary is
+default 413 response and a bounded Hono `requestId()` policy with request-local
+UUID fallback/reuse. Each admitted row and its first unsupported boundary is
 listed in `tests/compat/hono/examples-manifest.json` and `doc/HONO.md`.
 
 Install the pinned build-time frontend and compile the Rust driver:

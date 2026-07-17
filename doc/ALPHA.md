@@ -40,8 +40,9 @@ syntax fails compilation; the produced server never interprets JavaScript.
 
 The executable Hono matrix consists of the pinned complete `basic` and
 `jsx-ssr` examples plus the published-package `@hono/zod-openapi`, static-file,
-blog/SQLite, environment, bounded Body Limit, and local/persistent-counter
-tracers recorded in `tests/compat/hono/examples-manifest.json`.
+blog/SQLite, environment, bounded Body Limit, bounded Request ID, and
+local/persistent-counter tracers recorded in
+`tests/compat/hono/examples-manifest.json`.
 `@hono/node-server` and `tinytsx:serve` share one AOT entry contract. This does
 not claim the rest of Node server lifecycle, TLS, event, or platform-adapter
 behavior.
@@ -49,9 +50,10 @@ behavior.
 The Web API allowlist covers the Request/Response/Headers behavior exercised by
 that matrix, selected route/query/header reads, bounded JSON input and a closed
 `Content-Length` body guard,
-`crypto.randomUUID()`, one closed fetch-status path on Apple, finite text
-streaming, and the WPT-derived behavior in `doc/WEB_API.md`. TypeScript DOM type
-availability is not evidence that an unlisted runtime API exists.
+`crypto.randomUUID()`, one bounded request-local ID policy, one closed
+fetch-status path on Apple, finite text streaming, and the WPT-derived behavior
+in `doc/WEB_API.md`. TypeScript DOM type availability is not evidence that an
+unlisted runtime API exists.
 
 The protected backend modules are:
 
@@ -101,8 +103,9 @@ curl http://127.0.0.1:3000/
 Use `tinytsx:serve` instead of `@hono/node-server` when the application wants
 the same native server entrypoint without the Hono package namespace.
 
-Focused examples for both entrypoints, Body Limit, `@hono/zod-openapi`, file
-reads, SQLite, and local/persistent actors ship in `$TINYTSX_HOME/examples`.
+Focused examples for both entrypoints, Body Limit, Request ID,
+`@hono/zod-openapi`, file reads, SQLite, and local/persistent actors ship in
+`$TINYTSX_HOME/examples`.
 Copy that directory to a writable project and follow its `README.md`; the
 archive release gate runs those sources against their pinned npm packages
 before publication. See the capability documents before granting files,

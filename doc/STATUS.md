@@ -189,6 +189,32 @@ produces and serves a native Mach-O executable from the example TSX source.
   native/assembly suite (12/12), Hono intake (8/8), workspace Clippy, and
   installed release tests (4/4).
 
+### Bounded Hono Request ID middleware (2026-07-17)
+
+- The unchanged pinned `hono/request-id` factory lowers from upstream
+  TypeScript and the published `hono@4.12.30` JavaScript distribution. One
+  matched policy per route admits the default UUID generator, a closed
+  non-empty token header name of at most 128 bytes, and a closed incoming-value
+  limit from 1 through 1,024 bytes.
+- Apple native and Bun/Hono tests prove generated, accepted, invalid, and
+  oversized paths. A valid ASCII word/hyphen/equals value is reused; otherwise
+  UUIDv4 is generated. The exact selected bytes reach both the response header
+  and `c.get('requestId')`, including a route-scoped custom header/limit case.
+  Linux-arm64 output for the default and closed-options tracers assembles.
+- Accepted IDs remain request-borrowed during synchronous dispatch; generated
+  IDs use fixed writer-owned header storage, and body output copies the same
+  view into the bounded response arena. HIR validation rejects missing or
+  mismatched middleware ownership, while stable `TINY1403` diagnostics reject
+  custom generators, missing middleware, and conflicting policies. This adds
+  neither a general Context variable map nor a managed heap.
+- The release archive ships `examples/hono-request-id`; its installed build
+  generates and accepts IDs. A provenance-based Hono Context check also keeps
+  published minified class names working without intercepting unrelated `.get`
+  methods; the complete Zod OpenAPI `/doc` regression gate remains green.
+- Verification: 122 frontend tests, 174 workspace Rust tests, 58 bootstrap
+  tests, Hono native/assembly (15/15), Hono intake (8/8), Bun/Hono reference,
+  Zod OpenAPI native (3/3), workspace Clippy, and installed release tests (4/4).
+
 ### Installable alpha archive (2026-07-17)
 
 - Workspace, frontend, and SDK versions are `0.1.0-alpha.1`. `tinytsx

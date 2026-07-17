@@ -187,6 +187,25 @@ dynamic/out-of-range limits, streaming/no-length requests, and chunked transfer
 encoding remain unsupported. TinyTSX applies the pinned Fetch/WPT string-body
 content type; Bun 1.3.13 returns the same status/body without that header.
 
+The pinned upstream Hono `requestId()` factory now compiles unchanged from both
+its TypeScript source and published `hono@4.12.30` JavaScript. One matched
+policy per route supports the default generator and either default options or a
+closed non-empty HTTP-token header name up to 128 bytes with a closed incoming
+limit from 1 through 1,024 bytes. Apple native and Bun/Hono behavior accept a
+valid ASCII word/hyphen/equals value, replace missing, empty, invalid, or
+oversized input with UUIDv4, and expose the exact selected bytes through both
+the response header and `c.get('requestId')`. Linux-arm64 output assembles and
+the installed archive builds and executes the packaged default example.
+
+Accepted input stays borrowed from the request through synchronous dispatch;
+generated UUID bytes live in fixed writer-owned storage through serialization.
+The response body copies the selected view into its bounded writer, so this
+does not add a dynamic Context map, general string identity, or a managed heap.
+Stable `TINY1403` diagnostics reject custom generators, missing middleware,
+empty/dynamic options, out-of-range limits, and multiple matching policies.
+Other Context keys and arbitrary middleware state remain outside the native
+contract.
+
 The pinned upstream CORS factory now lowers for closed wildcard-origin options.
 Normal responses carry the configured static headers, while compiler-generated
 OPTIONS handlers return Hono's 204 preflight with closed allow-method,
