@@ -40,7 +40,7 @@ pub(super) fn emit_handlers(assembly: &mut Emitter, program: &Program) -> Result
                 .iter()
                 .map(|action| match action {
                     SqliteAction::Exec { parameters, .. } => parameters.len(),
-                    SqliteAction::Close { .. } => 0,
+                    SqliteAction::Transaction { .. } | SqliteAction::Close { .. } => 0,
                 })
                 .max()
                 .unwrap_or(0);
@@ -316,6 +316,16 @@ pub(super) fn emit_handlers(assembly: &mut Emitter, program: &Program) -> Result
                 SqliteAction::Close { database } => {
                     emit_immediate(assembly, "x0", *database as u64);
                     assembly.call(format_args!("tinytsx_sqlite_close"));
+                }
+                SqliteAction::Transaction { database, sql } => {
+                    emit_immediate(assembly, "x0", *database as u64);
+                    assembly.address("x1", format_args!("Ltinytsx_string_{sql}"));
+                    emit_immediate(
+                        assembly,
+                        "x2",
+                        program.static_strings[*sql].value.len() as u64,
+                    );
+                    assembly.call(format_args!("tinytsx_sqlite_transaction"));
                 }
             }
             asm_line!(assembly, "    cbnz w0, {return_label}");

@@ -455,7 +455,9 @@ function lowerApplicationInitialization(
               ? {}
               : {parameters: lowerSqliteParameters(action.parameters, route.path, strings)}),
           }
-          : {kind: "close" as const, database: action.database.id})}),
+          : action.kind === "transaction"
+            ? {kind: "transaction" as const, database: action.database.id, sql: strings.intern(action.sql!)}
+            : {kind: "close" as const, database: action.database.id})}),
       ...(response.stderr === undefined
         ? {}
         : {stderr: response.stderr.map(line => strings.intern(line))}),

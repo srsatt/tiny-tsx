@@ -124,6 +124,19 @@ pub fn execute_batch(connection: &Connection, sql: &str) -> Result<(), Error> {
         .map_err(|error| Error::sqlite(ErrorKind::Sql, error))
 }
 
+pub fn execute_transaction(connection: &Connection, sql: &str) -> Result<(), Error> {
+    validate_input(sql, &[])?;
+    let transaction = connection
+        .unchecked_transaction()
+        .map_err(|error| Error::sqlite(ErrorKind::Sql, error))?;
+    transaction
+        .execute_batch(sql)
+        .map_err(|error| Error::sqlite(ErrorKind::Sql, error))?;
+    transaction
+        .commit()
+        .map_err(|error| Error::sqlite(ErrorKind::Sql, error))
+}
+
 pub fn query(
     connection: &Connection,
     sql: &str,
@@ -344,6 +357,24 @@ mod tests {
                 SqlValue::Text("Morning".to_owned()),
                 SqlValue::Blob(vec![1, 2, 3]),
             ]]
+        );
+    }
+
+    #[test]
+    fn transaction_rolls_back_the_complete_static_batch_on_error() {
+        let connection = database();
+        let error = execute_transaction(
+            &connection,
+            "INSERT INTO posts (id, title) VALUES (1, 'first');\n\
+             INSERT INTO posts (id, title) VALUES (1, 'duplicate');",
+        )
+        .expect_err("duplicate key must roll back the transaction");
+        assert_eq!(error.kind, ErrorKind::Sql);
+        assert!(
+            query(&connection, "SELECT id FROM posts", &[], 1, 128)
+                .expect("query after rollback")
+                .rows
+                .is_empty()
         );
     }
 

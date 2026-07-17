@@ -415,6 +415,20 @@ pub unsafe extern "C" fn tinytsx_sqlite_execute_batch(
 }
 
 #[unsafe(no_mangle)]
+pub unsafe extern "C" fn tinytsx_sqlite_transaction(
+    database: usize,
+    sql: *const u8,
+    sql_len: usize,
+) -> u32 {
+    if sql.is_null() && sql_len != 0 {
+        return INTERNAL_ERROR;
+    }
+    // SAFETY: Generated code supplies a static SQL view for the duration of the call.
+    let sql = unsafe { slice::from_raw_parts(sql, sql_len) };
+    crate::application::sqlite_transaction(database, sql)
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn tinytsx_sqlite_close(database: usize) -> u32 {
     crate::application::sqlite_close(database)
 }

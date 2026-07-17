@@ -141,6 +141,10 @@ pub enum SqliteAction {
         #[serde(default)]
         parameters: Vec<SqliteParameter>,
     },
+    Transaction {
+        database: usize,
+        sql: usize,
+    },
     Close {
         database: usize,
     },
@@ -579,6 +583,12 @@ impl Program {
                             return Err("SQLite action references a missing SQL string".to_owned());
                         }
                         self.validate_sqlite_parameters(parameters, &handler.path)?;
+                        database
+                    }
+                    SqliteAction::Transaction { database, sql } => {
+                        if *sql >= self.static_strings.len() {
+                            return Err("SQLite transaction references a missing SQL string".to_owned());
+                        }
                         database
                     }
                     SqliteAction::Close { database } => database,

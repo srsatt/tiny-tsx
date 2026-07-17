@@ -77,6 +77,7 @@ export type ActorAction =
 
 export type SqliteAction =
   | {kind: "exec"; database: number; sql: number; parameters?: SqliteParameter[]}
+  | {kind: "transaction"; database: number; sql: number}
   | {kind: "close"; database: number};
 
 export type SqliteParameter =

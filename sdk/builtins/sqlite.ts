@@ -19,6 +19,7 @@ export declare class Database {
   constructor(path: string);
   prepare(sql: string): Statement;
   exec(sql: string): Promise<ExecuteResult>;
+  transaction(sql: string): Promise<void>;
   close(): void;
   dispose(): void;
 }

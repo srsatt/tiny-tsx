@@ -124,7 +124,7 @@ export interface EvaluatedActorAction {
 }
 
 export interface EvaluatedDatabaseAction {
-  kind: "exec" | "close";
+  kind: "exec" | "transaction" | "close";
   database: DatabaseState;
   sql?: string;
   parameters?: SqliteParameter[];
@@ -2266,6 +2266,18 @@ function evaluateCall(
       }
       appendDatabaseAction(evaluator, instance, {
         kind: "exec",
+        database: receiver.state,
+        sql: sql.value,
+      });
+      return UNDEFINED;
+    }
+    if (receiver.kind === "database" && name === "transaction") {
+      const sql = arguments_[0];
+      if (arguments_.length !== 1 || sql?.kind !== "string" || Buffer.byteLength(sql.value, "utf8") > 65_536) {
+        return unknown("Database.transaction requires one closed SQL string up to 65536 bytes");
+      }
+      appendDatabaseAction(evaluator, instance, {
+        kind: "transaction",
         database: receiver.state,
         sql: sql.value,
       });
