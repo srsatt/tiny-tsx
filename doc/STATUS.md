@@ -9,6 +9,19 @@ produces and serves a native Mach-O executable from the example TSX source.
 
 ## Alpha implementation evidence
 
+### Tag-ready two-target candidate (2026-07-17)
+
+- The final clean source commit completed `npm run release:verify` on native
+  Apple arm64 and native Linux arm64. Both schema-v2 manifests record the same
+  source commit with `source.dirty == false`; their generated `.sha256` files
+  remain the authoritative artifact digests.
+- Both archives build and execute outside the checkout and package the focused
+  Hono, `@hono/node-server`, `tinytsx:serve`, Zod/OpenAPI, file, SQLite, and
+  actor sources. The release candidate is ready for a separate tag-and-publish
+  action; no tag was created here.
+- Verification: workspace Clippy with warnings denied, the repeated benchmark
+  artifacts, and `npm run release:verify` on both native targets.
+
 ### Native Linux release and portable allowlists (2026-07-17)
 
 - A clean `aarch64` Linux VM running kernel 6.8 under Apple Virtualization

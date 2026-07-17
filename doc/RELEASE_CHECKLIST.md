@@ -2,9 +2,9 @@
 
 Release: `0.1.0-alpha.1`
 
-Current decision: **NO-GO until one exact clean commit is attested by both
-native targets.** Apple and Linux arm64 have each completed the full contract;
-the final pass must make their schema-v2 manifests name the same candidate.
+Current decision: **GO for a separate tag-and-publish action.** Both native
+targets have completed the full contract from one exact clean commit, and their
+schema-v2 manifests name that candidate.
 
 This checklist prepares a release candidate; it does not create or push a tag.
 Run it from the exact commit intended for `v0.1.0-alpha.1`.
@@ -41,7 +41,7 @@ npm run release:verify
 - [x] Apple arm64 has completed the clean `release:verify` contract.
 - [x] Linux arm64 has completed the clean `release:verify` contract on a native
       `ubuntu-24.04-arm` or equivalent host.
-- [ ] The exact release-candidate commit has completed both native jobs without
+- [x] The exact release-candidate commit has completed both native jobs without
       generated tracked changes.
 
 ## Artifact inspection
@@ -77,7 +77,7 @@ tar -tzf "$base.tar.gz" | grep '/lib/tinytsx/examples/README.md$'
       outside-checkout HTTP smoke have been verified.
 - [x] Linux archive checksum, manifest, version output, installed layout, and
       outside-checkout HTTP smoke have been verified.
-- [ ] Both artifact manifests identify the same source contract, HIR 2, runtime
+- [x] Both artifact manifests identify the same source contract, HIR 2, runtime
       ABI 1, built-in schema 1, and pinned compatibility revisions.
 
 The generated archive checksums belong in the uploaded `.sha256` files and
@@ -88,14 +88,14 @@ document would change the archive being attested.
 
 Before tagging, confirm all of the following:
 
-- [ ] Every alpha exit gate in `doc/BACKLOG.md` is checked.
-- [ ] Both native archives are downloadable together with their `.sha256` and
+- [x] Every alpha exit gate in `doc/BACKLOG.md` is checked.
+- [x] Both native archives are collected together with their `.sha256` and
       manifest files.
-- [ ] The limitations in `doc/ALPHA.md` match the shipped compiler diagnostics
+- [x] The limitations in `doc/ALPHA.md` match the shipped compiler diagnostics
       and executable tests.
-- [ ] No release note claims general TypeScript, ECMAScript, Node, Bun, Deno,
+- [x] No release note claims general TypeScript, ECMAScript, Node, Bun, Deno,
       Web API, Hono, actor, SQLite, AI SDK, or GC compatibility.
-- [ ] The release commit is clean and is the commit verified by both native
+- [x] The release commit is clean and is the commit verified by both native
       jobs.
 
 Only after this section is green may a separate release action create

@@ -48,14 +48,13 @@ The alpha profiles are:
 
 ## Current implementation slice
 
-The alpha implementation, executable example/failure gates, focused packaged
-examples, repeated TinyTSX/Bun comparison, and installable Apple/Linux-arm64
-archives are complete. Clean native runs on 2026-07-17 exposed and closed the
-last Apple-only Test262/WPT wrapper. The remaining work is **exact candidate
-attestation**: run both native release gates against one final clean commit and
-confirm each schema-v2 manifest records that commit. Do not widen the language,
-Hono, actor, SQLite, or Web API surface unless an existing alpha gate exposes a
-regression in the published contract.
+The `0.1.0-alpha.1` implementation and release candidate are complete. The
+executable example/failure gates, repeated TinyTSX/Bun comparison, installable
+Apple/Linux-arm64 archives, portable Test262/WPT allowlists, and schema-v2
+source attestation have all passed their clean release contracts. The tag is a
+separate release action. New language, Hono, actor, SQLite, Web API, or GC work
+belongs to the ordered post-alpha backlog unless it fixes a regression in this
+published contract.
 
 Acceptance criteria are, in order:
 
@@ -90,7 +89,7 @@ Acceptance criteria are, in order:
 - [x] Repeat the controlled TinyTSX/Bun release benchmark and publish startup,
   idle/warm RSS, throughput, median/p99 latency, binary size, and the measured
   actor/SQLite overhead;
-- [ ] After the Linux and benchmark artifacts land, rerun the complete
+- [x] After the Linux and benchmark artifacts land, rerun the complete
   clean-tree exit suite and produce a tag-ready `0.1.0-alpha.1` checklist
   without creating the tag.
 
@@ -101,13 +100,11 @@ prominent.
 
 ### Next-goal handoff
 
-Use the goal title **Attest the exact alpha release candidate**. Its scope is the
-single unchecked acceptance criterion above. Both native release commands must
-run from the same final clean commit, and each schema-v2 artifact manifest must
-record that commit with `source.dirty == false`. The goal may repair a failing
-existing alpha path, but a broader language, Web, Hono, standard-library,
-actor, SQLite, or GC requirement becomes a post-alpha item instead of silently
-expanding `0.1.0-alpha.1`.
+The next action is **Publish `0.1.0-alpha.1`**. It is deliberately outside the
+implementation goal: attach both already-verified archives, checksums, and
+schema-v2 manifests to a release, then create `v0.1.0-alpha.1` from the attested
+commit. Do not add implementation changes during that action; any change
+creates a new candidate that must repeat both native gates.
 
 The goal is complete only when:
 
