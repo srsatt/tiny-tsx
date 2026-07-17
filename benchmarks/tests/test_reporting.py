@@ -19,6 +19,7 @@ class ReportingTest(unittest.TestCase):
         markdown = render_markdown(result)
         self.assertIn("| TinyTSX | 12.00 ms | 10.00 ms |", markdown)
         self.assertIn("| Global allocator | disabled |", markdown)
+        self.assertIn("| TinyTSX | 0.30 s | 30.0% | 30 | 20 | 5 | 3 | 4/7/4 |", markdown)
 
     def test_renders_instrumented_allocator_metrics_without_a_bun_ratio(self) -> None:
         raw = self._raw()
@@ -64,6 +65,9 @@ class ReportingTest(unittest.TestCase):
             "unixSyscalls": 30,
             "contextSwitches": 5,
             "peakThreads": 4,
+            "openFileDescriptorsStart": 4,
+            "openFileDescriptorsPeak": 7,
+            "openFileDescriptorsEnd": 4,
             "diskBytesRead": 0,
             "diskBytesWritten": 0,
             "instructions": 100,

@@ -94,12 +94,13 @@ def render_markdown(result: dict[str, Any]) -> str:
         "",
         "## Process and optional allocation pressure",
         "",
-        "| Target | Server CPU | CPU utilization | Unix syscalls | Mach syscalls | Context switches | Page faults |",
-        "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| Target | Server CPU | CPU utilization | Unix syscalls | Mach syscalls | Context switches | Page faults | Open FDs start/peak/end |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
         _process_row("TinyTSX", tiny),
         _process_row("Bun", bun),
         "",
         "Counters are per measured server process from warm-up through the final load point; medians are across runs.",
+        "Open file descriptors are sampled every 20 ms; start and end are taken around the measured warm-up and load interval.",
         "",
         "| TinyTSX allocator | Calls | Reallocations | Requested bytes | Peak live bytes | Live bytes at shutdown |",
         "| --- | ---: | ---: | ---: | ---: | ---: |",
@@ -170,6 +171,9 @@ def _process_row(label: str, target: dict[str, Any]) -> str:
         f"{value['cpuUtilizationPercent']:.1f}% | "
         f"{value['unixSyscalls']:,.0f} | {value['machSyscalls']:,.0f} | "
         f"{value['contextSwitches']:,.0f} | {value['pageFaults']:,.0f} |"
+        f" {value['openFileDescriptorsStart']:,.0f}/"
+        f"{value['openFileDescriptorsPeak']:,.0f}/"
+        f"{value['openFileDescriptorsEnd']:,.0f} |"
     )
 
 

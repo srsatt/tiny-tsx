@@ -19,12 +19,26 @@ class ProcessMetricsTest(unittest.TestCase):
 
         self.assertGreater(value.resident_size, 0)
         self.assertGreaterEqual(value.thread_count, 1)
+        self.assertGreater(value.open_file_descriptors, 0)
 
     def test_computes_bounded_process_deltas(self) -> None:
-        started = Snapshot(100, 1_000_000_000, 2_000_000_000, 4, 1, 2, 10, 20, 30, 2)
-        ended = Snapshot(150, 3_000_000_000, 3_000_000_000, 9, 1, 5, 15, 28, 42, 4)
+        started = Snapshot(
+            100, 1_000_000_000, 2_000_000_000, 4, 1, 2, 10, 20, 30, 2,
+            open_file_descriptors=4,
+        )
+        ended = Snapshot(
+            150, 3_000_000_000, 3_000_000_000, 9, 1, 5, 15, 28, 42, 4,
+            open_file_descriptors=6,
+        )
 
-        result = measurement(started, ended, 2.0, 175, nanoseconds_per_tick=1.0)
+        result = measurement(
+            started,
+            ended,
+            2.0,
+            175,
+            nanoseconds_per_tick=1.0,
+            peak_open_file_descriptors=7,
+        )
 
         self.assertEqual(result["peakRssBytes"], 175)
         self.assertEqual(result["cpuSeconds"], 3.0)
@@ -34,6 +48,9 @@ class ProcessMetricsTest(unittest.TestCase):
         self.assertEqual(result["unixSyscalls"], 8)
         self.assertEqual(result["contextSwitches"], 12)
         self.assertEqual(result["peakThreads"], 4)
+        self.assertEqual(result["openFileDescriptorsStart"], 4)
+        self.assertEqual(result["openFileDescriptorsPeak"], 7)
+        self.assertEqual(result["openFileDescriptorsEnd"], 6)
 
 
 if __name__ == "__main__":

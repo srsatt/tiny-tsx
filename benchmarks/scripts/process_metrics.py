@@ -8,6 +8,7 @@ from functools import cache
 
 
 PROC_PIDTASKINFO = 4
+PROC_PIDLISTFDS = 1
 RUSAGE_INFO_V4 = 4
 NANOSECONDS_PER_SECOND = 1_000_000_000
 
@@ -80,6 +81,10 @@ class MachTimebaseInfo(ctypes.Structure):
     _fields_ = [("numerator", ctypes.c_uint32), ("denominator", ctypes.c_uint32)]
 
 
+class ProcFdInfo(ctypes.Structure):
+    _fields_ = [("file_descriptor", ctypes.c_int32), ("fd_type", ctypes.c_uint32)]
+
+
 @dataclass(frozen=True)
 class Snapshot:
     resident_size: int
@@ -96,6 +101,7 @@ class Snapshot:
     disk_bytes_written: int = 0
     instructions: int = 0
     cycles: int = 0
+    open_file_descriptors: int = 0
 
 
 class ProcessSampler:
@@ -106,6 +112,7 @@ class ProcessSampler:
         self.started_at = time.monotonic()
         self.peak_rss = self.started.resident_size
         self.peak_threads = self.started.thread_count
+        self.peak_open_file_descriptors = self.started.open_file_descriptors
         self._stopped = threading.Event()
         self._thread = threading.Thread(target=self._sample, daemon=True)
         self._thread.start()
@@ -117,12 +124,16 @@ class ProcessSampler:
         elapsed = time.monotonic() - self.started_at
         self.peak_rss = max(self.peak_rss, ended.resident_size)
         self.peak_threads = max(self.peak_threads, ended.thread_count)
+        self.peak_open_file_descriptors = max(
+            self.peak_open_file_descriptors, ended.open_file_descriptors
+        )
         return measurement(
             self.started,
             ended,
             elapsed,
             self.peak_rss,
             peak_threads=self.peak_threads,
+            peak_open_file_descriptors=self.peak_open_file_descriptors,
         )
 
     def _sample(self) -> None:
@@ -131,6 +142,9 @@ class ProcessSampler:
                 value = snapshot(self.pid)
                 self.peak_rss = max(self.peak_rss, value.resident_size)
                 self.peak_threads = max(self.peak_threads, value.thread_count)
+                self.peak_open_file_descriptors = max(
+                    self.peak_open_file_descriptors, value.open_file_descriptors
+                )
             except ProcessLookupError:
                 return
 
@@ -164,6 +178,7 @@ def snapshot(pid: int) -> Snapshot:
         disk_bytes_written=usage.disk_bytes_written,
         instructions=usage.instructions,
         cycles=usage.cycles,
+        open_file_descriptors=_open_file_descriptor_count(pid),
     )
 
 
@@ -174,6 +189,7 @@ def measurement(
     peak_rss_bytes: int,
     nanoseconds_per_tick: float | None = None,
     peak_threads: int | None = None,
+    peak_open_file_descriptors: int | None = None,
 ) -> dict[str, float | int]:
     scale = _nanoseconds_per_tick() if nanoseconds_per_tick is None else nanoseconds_per_tick
     user_seconds = (
@@ -201,6 +217,13 @@ def measurement(
             if peak_threads is None
             else peak_threads
         ),
+        "openFileDescriptorsStart": started.open_file_descriptors,
+        "openFileDescriptorsPeak": (
+            max(started.open_file_descriptors, ended.open_file_descriptors)
+            if peak_open_file_descriptors is None
+            else peak_open_file_descriptors
+        ),
+        "openFileDescriptorsEnd": ended.open_file_descriptors,
         "diskBytesRead": _delta(started.disk_bytes_read, ended.disk_bytes_read),
         "diskBytesWritten": _delta(started.disk_bytes_written, ended.disk_bytes_written),
         "instructions": _delta(started.instructions, ended.instructions),
@@ -210,6 +233,23 @@ def measurement(
 
 def _delta(started: int, ended: int) -> int:
     return max(0, ended - started)
+
+
+def _open_file_descriptor_count(pid: int) -> int:
+    required = _libproc().proc_pidinfo(pid, PROC_PIDLISTFDS, 0, None, 0)
+    if required <= 0:
+        raise ProcessLookupError(pid)
+    buffer = (ctypes.c_ubyte * required)()
+    used = _libproc().proc_pidinfo(
+        pid,
+        PROC_PIDLISTFDS,
+        0,
+        ctypes.byref(buffer),
+        required,
+    )
+    if used < 0:
+        raise ProcessLookupError(pid)
+    return used // ctypes.sizeof(ProcFdInfo)
 
 
 @cache
