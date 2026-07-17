@@ -172,6 +172,14 @@ pub struct TinySqlParameter {
 }
 
 #[repr(C)]
+pub struct TinySqlTransactionStep {
+    pub sql: *const u8,
+    pub sql_len: usize,
+    pub parameters: *const TinySqlParameter,
+    pub parameter_count: usize,
+}
+
+#[repr(C)]
 #[derive(Clone, Copy)]
 pub struct TinySqliteExecuteResult {
     pub changes: u64,
@@ -562,6 +570,66 @@ pub unsafe extern "C" fn tinytsx_sqlite_transaction(
     // SAFETY: Generated code supplies a static SQL view for the duration of the call.
     let sql = unsafe { slice::from_raw_parts(sql, sql_len) };
     crate::application::sqlite_transaction(database, sql)
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tinytsx_sqlite_transaction_params(
+    database: usize,
+    request: *const TinyRequest,
+    steps: *const TinySqlTransactionStep,
+    step_count: usize,
+) -> u32 {
+    if request.is_null()
+        || steps.is_null()
+        || step_count == 0
+        || step_count > tinytsx_runtime_sqlite::MAX_TRANSACTION_STEPS
+    {
+        return INTERNAL_ERROR;
+    }
+    // SAFETY: Generated code supplies `step_count` initialized stack entries.
+    let steps = unsafe { slice::from_raw_parts(steps, step_count) };
+    let aggregate = steps
+        .iter()
+        .try_fold((0usize, 0usize), |(sql, parameters), step| {
+            Some((
+                sql.checked_add(step.sql_len)?,
+                parameters.checked_add(step.parameter_count)?,
+            ))
+        });
+    if !matches!(
+        aggregate,
+        Some((sql, parameters))
+            if sql <= tinytsx_runtime_sqlite::MAX_SQL_BYTES
+                && parameters <= tinytsx_runtime_sqlite::MAX_PARAMETERS
+    ) {
+        return INTERNAL_ERROR;
+    }
+    let mut decoded = Vec::with_capacity(step_count);
+    for step in steps {
+        if step.sql_len > tinytsx_runtime_sqlite::MAX_SQL_BYTES
+            || (step.sql.is_null() && step.sql_len != 0)
+        {
+            return INTERNAL_ERROR;
+        }
+        let parameters = match unsafe {
+            decode_sqlite_parameters(request, step.parameters, step.parameter_count)
+        } {
+            Ok(parameters) => parameters,
+            Err(status) => return status,
+        };
+        let sql = if step.sql_len == 0 {
+            &[]
+        } else {
+            // SAFETY: Generated SQL views remain valid for the synchronous copy.
+            unsafe { slice::from_raw_parts(step.sql, step.sql_len) }
+        };
+        let sql = match std::str::from_utf8(sql) {
+            Ok(sql) => sql.to_owned(),
+            Err(_) => return INTERNAL_ERROR,
+        };
+        decoded.push(tinytsx_runtime_sqlite::TransactionStep { sql, parameters });
+    }
+    crate::application::sqlite_prepared_transaction(database, decoded)
 }
 
 #[unsafe(no_mangle)]

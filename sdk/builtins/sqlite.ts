@@ -20,6 +20,7 @@ export declare class Database {
   prepare(sql: string): Statement;
   exec(sql: string): Promise<void>;
   transaction(sql: string): Promise<void>;
+  transaction(callback: () => Promise<void>): Promise<void>;
   close(): void;
   dispose(): void;
 }

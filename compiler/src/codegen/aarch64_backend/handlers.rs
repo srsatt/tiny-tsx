@@ -11,7 +11,8 @@ use super::super::{
 };
 use super::response::emit_handler_response;
 use super::sqlite::{
-    address_parameters, emit_parameters, expression_parameter_count, parameter_frame_size,
+    address_parameters, address_transaction_steps, emit_parameters, emit_transaction_steps,
+    expression_parameter_count, parameter_frame_size, transaction_frame_size,
 };
 
 pub(super) fn emit_handlers(assembly: &mut Emitter, program: &Program) -> Result<(), String> {
@@ -48,7 +49,9 @@ pub(super) fn emit_handlers(assembly: &mut Emitter, program: &Program) -> Result
                 .iter()
                 .map(|action| match action {
                     SqliteAction::Exec { parameters, .. } => parameters.len(),
-                    SqliteAction::Transaction { .. } | SqliteAction::Close { .. } => 0,
+                    SqliteAction::Transaction { .. }
+                    | SqliteAction::TransactionSteps { .. }
+                    | SqliteAction::Close { .. } => 0,
                 })
                 .max()
                 .unwrap_or(0);
@@ -81,6 +84,17 @@ pub(super) fn emit_handlers(assembly: &mut Emitter, program: &Program) -> Result
         .max()
         .unwrap_or(0);
     let frame_size = value_frame_size.max(parameter_frame_size(sqlite_parameter_count));
+    let transaction_frame_size = program
+        .handlers
+        .iter()
+        .flat_map(|handler| handler.sqlite_actions.iter())
+        .filter_map(|action| match action {
+            SqliteAction::TransactionSteps { steps, .. } => Some(transaction_frame_size(steps)),
+            _ => None,
+        })
+        .max()
+        .unwrap_or(0);
+    let frame_size = frame_size.max(transaction_frame_size);
     emit_prologue(assembly, frame_size);
     preserve_request_context(assembly);
     let return_label = "Ltinytsx_handle_get_return";
@@ -413,6 +427,14 @@ pub(super) fn emit_handlers(assembly: &mut Emitter, program: &Program) -> Result
                         program.static_strings[*sql].value.len() as u64,
                     );
                     assembly.call(format_args!("tinytsx_sqlite_transaction"));
+                }
+                SqliteAction::TransactionSteps { database, steps } => {
+                    emit_transaction_steps(assembly, program, steps);
+                    emit_immediate(assembly, "x0", *database as u64);
+                    asm_line!(assembly, "    ldr x1, [sp, #24]");
+                    address_transaction_steps(assembly, "x2", steps);
+                    emit_immediate(assembly, "x3", steps.len() as u64);
+                    assembly.call(format_args!("tinytsx_sqlite_transaction_params"));
                 }
             }
             asm_line!(assembly, "    cbnz w0, {return_label}");

@@ -6,6 +6,7 @@ pub use rusqlite::Connection;
 
 pub const MAX_SQL_BYTES: usize = 65_536;
 pub const MAX_PARAMETERS: usize = 64;
+pub const MAX_TRANSACTION_STEPS: usize = 16;
 pub const MAX_ROWS: usize = 1_024;
 pub const MAX_RESULT_BYTES: usize = 1_048_576;
 const BUSY_TIMEOUT: Duration = Duration::from_millis(1_000);
@@ -36,6 +37,12 @@ impl rusqlite::types::ToSql for SqlValue {
 pub struct ExecuteResult {
     pub changes: usize,
     pub last_insert_row_id: Option<i64>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct TransactionStep {
+    pub sql: String,
+    pub parameters: Vec<SqlValue>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -264,6 +271,45 @@ pub fn execute_transaction(connection: &Connection, sql: &str) -> Result<(), Err
     transaction
         .execute_batch(sql)
         .map_err(|error| Error::sqlite(ErrorKind::Sql, error))?;
+    transaction
+        .commit()
+        .map_err(|error| Error::sqlite(ErrorKind::Sql, error))
+}
+
+pub fn execute_prepared_transaction(
+    connection: &Connection,
+    steps: &[TransactionStep],
+) -> Result<(), Error> {
+    if steps.is_empty() || steps.len() > MAX_TRANSACTION_STEPS {
+        return Err(Error::bounded(ErrorKind::Sql));
+    }
+    let sql_bytes = steps.iter().try_fold(0usize, |total, step| {
+        total
+            .checked_add(step.sql.len())
+            .filter(|total| *total <= MAX_SQL_BYTES)
+    });
+    if sql_bytes.is_none() {
+        return Err(Error::bounded(ErrorKind::SqlTooLong));
+    }
+    let parameter_count = steps.iter().try_fold(0usize, |total, step| {
+        total
+            .checked_add(step.parameters.len())
+            .filter(|total| *total <= MAX_PARAMETERS)
+    });
+    if parameter_count.is_none() {
+        return Err(Error::bounded(ErrorKind::TooManyParameters));
+    }
+    for step in steps {
+        validate_input(&step.sql, &step.parameters)?;
+    }
+    let transaction = connection
+        .unchecked_transaction()
+        .map_err(|error| Error::sqlite(ErrorKind::Sql, error))?;
+    for step in steps {
+        transaction
+            .execute(&step.sql, params_from_iter(&step.parameters))
+            .map_err(|error| Error::sqlite(ErrorKind::Sql, error))?;
+    }
     transaction
         .commit()
         .map_err(|error| Error::sqlite(ErrorKind::Sql, error))
@@ -533,6 +579,59 @@ mod tests {
             &[],
         )
         .expect("connection remains reusable after nested rejection");
+    }
+
+    #[test]
+    fn prepared_transaction_commits_or_rolls_back_all_steps() {
+        let connection = database();
+        execute_prepared_transaction(
+            &connection,
+            &[
+                TransactionStep {
+                    sql: "INSERT INTO posts (id, title) VALUES (?1, ?2)".to_owned(),
+                    parameters: vec![SqlValue::Integer(1), SqlValue::Text("first".to_owned())],
+                },
+                TransactionStep {
+                    sql: "INSERT INTO posts (id, title) VALUES (?1, ?2)".to_owned(),
+                    parameters: vec![SqlValue::Integer(2), SqlValue::Text("second".to_owned())],
+                },
+            ],
+        )
+        .expect("commit prepared transaction");
+        assert_eq!(
+            query(&connection, "SELECT id FROM posts ORDER BY id", &[], 4, 128)
+                .expect("query committed rows")
+                .rows,
+            [vec![SqlValue::Integer(1)], vec![SqlValue::Integer(2)]]
+        );
+
+        let error = execute_prepared_transaction(
+            &connection,
+            &[
+                TransactionStep {
+                    sql: "INSERT INTO posts (id, title) VALUES (?1, ?2)".to_owned(),
+                    parameters: vec![SqlValue::Integer(3), SqlValue::Text("third".to_owned())],
+                },
+                TransactionStep {
+                    sql: "INSERT INTO posts (id, title) VALUES (?1, ?2)".to_owned(),
+                    parameters: vec![SqlValue::Integer(2), SqlValue::Text("duplicate".to_owned())],
+                },
+            ],
+        )
+        .expect_err("duplicate key must roll back every prepared step");
+        assert_eq!(error.kind, ErrorKind::Sql);
+        assert!(
+            query(
+                &connection,
+                "SELECT id FROM posts WHERE id = 3",
+                &[],
+                1,
+                128,
+            )
+            .expect("query rolled-back row")
+            .rows
+            .is_empty()
+        );
     }
 
     #[test]

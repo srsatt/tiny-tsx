@@ -178,9 +178,20 @@ pub enum SqliteAction {
         database: usize,
         sql: usize,
     },
+    TransactionSteps {
+        database: usize,
+        steps: Vec<SqliteTransactionStep>,
+    },
     Close {
         database: usize,
     },
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct SqliteTransactionStep {
+    pub sql: usize,
+    #[serde(default)]
+    pub parameters: Vec<SqliteParameter>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -774,6 +785,13 @@ impl Program {
                         }
                         database
                     }
+                    SqliteAction::TransactionSteps { database, steps } => {
+                        validate_sqlite_transaction_limits(steps, &self.static_strings)?;
+                        for step in steps {
+                            self.validate_sqlite_parameters(&step.parameters, &handler.path)?;
+                        }
+                        database
+                    }
                     SqliteAction::Close { database } => database,
                 };
                 if *database >= self.sqlite_databases.len() {
@@ -960,11 +978,15 @@ impl Program {
                         || actor.failure_message.is_some()
                         || actor.restart.is_some() =>
                 {
-                    return Err(format!("counter actor {index} has fallible/JSON configuration"));
+                    return Err(format!(
+                        "counter actor {index} has fallible/JSON configuration"
+                    ));
                 }
                 ActorOperation::FallibleCounter => {
                     let Some(restart) = &actor.restart else {
-                        return Err(format!("fallible counter actor {index} has no restart policy"));
+                        return Err(format!(
+                            "fallible counter actor {index} has no restart policy"
+                        ));
                     };
                     if actor.initial_json.is_some()
                         || actor.failure_message.is_none()
@@ -1457,7 +1479,10 @@ impl Program {
         };
         match actor.operation {
             ActorOperation::Counter | ActorOperation::FallibleCounter
-                if message.is_some() && json_message.is_none() => Ok(()),
+                if message.is_some() && json_message.is_none() =>
+            {
+                Ok(())
+            }
             ActorOperation::JsonMailbox if message.is_none() => {
                 let Some(message) =
                     json_message.and_then(|message| self.static_strings.get(message))
@@ -2219,6 +2244,35 @@ fn validate_sqlite_result_response(
     }
 }
 
+fn validate_sqlite_transaction_limits(
+    steps: &[SqliteTransactionStep],
+    strings: &[StaticString],
+) -> Result<(), String> {
+    if steps.is_empty() || steps.len() > 16 {
+        return Err("SQLite prepared transaction requires one to sixteen steps".to_owned());
+    }
+    let mut sql_bytes = 0usize;
+    let mut parameter_count = 0usize;
+    for step in steps {
+        let Some(sql) = strings.get(step.sql) else {
+            return Err("SQLite prepared transaction references a missing SQL string".to_owned());
+        };
+        sql_bytes = sql_bytes
+            .checked_add(sql.value.len())
+            .filter(|bytes| *bytes <= 65_536)
+            .ok_or_else(|| {
+                "SQLite prepared transaction exceeds the aggregate SQL limit".to_owned()
+            })?;
+        parameter_count = parameter_count
+            .checked_add(step.parameters.len())
+            .filter(|count| *count <= 64)
+            .ok_or_else(|| {
+                "SQLite prepared transaction exceeds the aggregate parameter limit".to_owned()
+            })?;
+    }
+    Ok(())
+}
+
 fn validate_sqlite_result_expression(
     expression: &ValueExpression,
     actions: &[SqliteAction],
@@ -2917,6 +2971,55 @@ mod sqlite_result_tests {
         assert_eq!(
             validate_sqlite_result_expression(&expression, &[]),
             Err("SQLite result value references a missing run action".to_owned()),
+        );
+    }
+}
+
+#[cfg(test)]
+mod sqlite_transaction_tests {
+    use super::*;
+
+    fn strings(value: &str) -> Vec<StaticString> {
+        vec![StaticString {
+            id: 0,
+            value: value.to_owned(),
+        }]
+    }
+
+    fn step(parameters: usize) -> SqliteTransactionStep {
+        SqliteTransactionStep {
+            sql: 0,
+            parameters: (0..parameters).map(|_| SqliteParameter::Null).collect(),
+        }
+    }
+
+    #[test]
+    fn bounds_prepared_transaction_steps_sql_and_parameters() {
+        assert_eq!(
+            validate_sqlite_transaction_limits(&[step(16), step(16)], &strings("SELECT ?1")),
+            Ok(())
+        );
+        assert_eq!(
+            validate_sqlite_transaction_limits(&[], &strings("SELECT 1")),
+            Err("SQLite prepared transaction requires one to sixteen steps".to_owned())
+        );
+        assert_eq!(
+            validate_sqlite_transaction_limits(
+                &(0..17).map(|_| step(0)).collect::<Vec<_>>(),
+                &strings("SELECT 1"),
+            ),
+            Err("SQLite prepared transaction requires one to sixteen steps".to_owned())
+        );
+        assert_eq!(
+            validate_sqlite_transaction_limits(
+                &[step(16), step(16), step(16), step(16), step(1)],
+                &strings("SELECT ?1")
+            ),
+            Err("SQLite prepared transaction exceeds the aggregate parameter limit".to_owned())
+        );
+        assert_eq!(
+            validate_sqlite_transaction_limits(&[step(0)], &strings(&"x".repeat(65_537))),
+            Err("SQLite prepared transaction exceeds the aggregate SQL limit".to_owned())
         );
     }
 }

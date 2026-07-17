@@ -133,7 +133,7 @@ export function validateBuiltinOperations(
       ) {
         const resource = resources.get(node.expression.expression.text);
         if (resource !== undefined) {
-          validateResourceCall(diagnostics, resource, node, module.sourceFile);
+          validateResourceCall(diagnostics, resource, node, module.sourceFile, resources);
         }
       }
       ts.forEachChild(node, visit);
@@ -217,12 +217,13 @@ function validateResourceCall(
   resource: BuiltinResource,
   invocation: ts.CallExpression,
   sourceFile: ts.SourceFile,
+  resources: ReadonlyMap<string, BuiltinResource>,
 ): void {
   const member = invocation.expression;
   if (!ts.isPropertyAccessExpression(member)) return;
   const operation = member.name.text;
   if (resource === "database") {
-    if (["exec", "prepare", "transaction"].includes(operation)) {
+    if (["exec", "prepare"].includes(operation)) {
       const sql = invocation.arguments[0];
       const value = sql === undefined ? undefined : staticString(sql);
       if (
@@ -234,6 +235,31 @@ function validateResourceCall(
           diagnostics,
           "TINY1512",
           `Database.${operation} requires one static SQL string up to 65536 bytes`,
+          invocation,
+          sourceFile,
+        );
+      }
+      return;
+    }
+    if (operation === "transaction") {
+      const argument = invocation.arguments[0];
+      const sql = argument === undefined ? undefined : staticString(argument);
+      if (
+        invocation.arguments.length !== 1
+        || (
+          (sql === undefined || Buffer.byteLength(sql, "utf8") > 65_536)
+          && !validSqliteTransactionCallback(
+            argument,
+            resources,
+            ts.isIdentifier(member.expression) ? member.expression.text : undefined,
+            sourceFile,
+          )
+        )
+      ) {
+        addDiagnostic(
+          diagnostics,
+          "TINY1512",
+          "Database.transaction requires one static SQL string or a bounded async Statement.run callback",
           invocation,
           sourceFile,
         );
@@ -592,6 +618,71 @@ function isStateAccess(expression: ts.Expression, context: string): boolean {
     && ts.isIdentifier(expression.expression)
     && expression.expression.text === context
     && expression.name.text === "state";
+}
+
+function validSqliteTransactionCallback(
+  expression: ts.Expression | undefined,
+  resources: ReadonlyMap<string, BuiltinResource>,
+  database: string | undefined,
+  sourceFile: ts.SourceFile,
+): boolean {
+  if (
+    expression === undefined
+    || (!ts.isArrowFunction(expression) && !ts.isFunctionExpression(expression))
+    || expression.parameters.length !== 0
+    || !expression.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword)
+    || !ts.isBlock(expression.body)
+    || expression.body.statements.length === 0
+    || expression.body.statements.length > 16
+  ) {
+    return false;
+  }
+  let parameterCount = 0;
+  for (const statement of expression.body.statements) {
+    if (!ts.isExpressionStatement(statement) || !ts.isAwaitExpression(statement.expression)) {
+      return false;
+    }
+    const invocation = statement.expression.expression;
+    if (
+      !ts.isCallExpression(invocation)
+      || !ts.isPropertyAccessExpression(invocation.expression)
+      || invocation.expression.name.text !== "run"
+      || !ts.isIdentifier(invocation.expression.expression)
+      || resources.get(invocation.expression.expression.text) !== "statement"
+      || statementDatabase(invocation.expression.expression.text, sourceFile) !== database
+      || !validSqliteParameters(invocation.arguments)
+    ) {
+      return false;
+    }
+    const parameters = invocation.arguments[0];
+    parameterCount += parameters !== undefined && ts.isArrayLiteralExpression(parameters)
+      ? parameters.elements.length
+      : 0;
+  }
+  return parameterCount <= 64;
+}
+
+function statementDatabase(statement: string, sourceFile: ts.SourceFile): string | undefined {
+  let database: string | undefined;
+  const visit = (node: ts.Node): void => {
+    if (
+      database === undefined
+      && ts.isVariableDeclaration(node)
+      && ts.isIdentifier(node.name)
+      && node.name.text === statement
+      && node.initializer !== undefined
+      && ts.isCallExpression(node.initializer)
+      && ts.isPropertyAccessExpression(node.initializer.expression)
+      && node.initializer.expression.name.text === "prepare"
+      && ts.isIdentifier(node.initializer.expression.expression)
+    ) {
+      database = node.initializer.expression.expression.text;
+      return;
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return database;
 }
 
 function validSqliteParameters(arguments_: ts.NodeArray<ts.Expression>): boolean {

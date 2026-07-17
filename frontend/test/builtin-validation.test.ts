@@ -44,6 +44,16 @@ test("uses stable diagnostics for unsupported SQLite operations and limits", () 
     statement.run([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]);
     export function GET(): Response { return Response.text("ok"); }
   `, "TINY1512");
+
+  expectCode(`
+    import {Database} from "tinytsx:sqlite";
+    const database = new Database(":memory:");
+    const statement = database.prepare("INSERT INTO values_table (value) VALUES (?1)");
+    database.transaction(() => {
+      statement.run(["not awaited"]);
+    });
+    export function GET(): Response { return Response.text("ok"); }
+  `, "TINY1512");
 });
 
 test("uses stable diagnostics for unsupported actor configuration and calls", () => {

@@ -38,6 +38,7 @@ enum ApplicationMessage {
     ActorJson(Vec<u8>),
     SqliteExecuteBatch(Vec<u8>),
     SqliteTransaction(Vec<u8>),
+    SqlitePreparedTransaction(Vec<tinytsx_runtime_sqlite::TransactionStep>),
     SqliteExecute {
         sql: Vec<u8>,
         parameters: Vec<tinytsx_runtime_sqlite::SqlValue>,
@@ -267,6 +268,17 @@ pub fn initialize(executor_count: usize) -> io::Result<(usize, bool, bool)> {
                     .map_err(|status| *status)?;
                 let sql = std::str::from_utf8(&sql).map_err(|_| RENDER_ERROR)?;
                 tinytsx_runtime_sqlite::execute_transaction(connection, sql)
+                    .map_err(|_| RENDER_ERROR)?;
+                Ok(Vec::new())
+            }
+            ApplicationMessage::SqlitePreparedTransaction(steps) => {
+                let connection = state
+                    .sqlite
+                    .as_ref()
+                    .ok_or(INTERNAL_ERROR)?
+                    .as_ref()
+                    .map_err(|status| *status)?;
+                tinytsx_runtime_sqlite::execute_prepared_transaction(connection, &steps)
                     .map_err(|_| RENDER_ERROR)?;
                 Ok(Vec::new())
             }
@@ -502,6 +514,23 @@ pub fn sqlite_transaction(database: usize, sql: &[u8]) -> u32 {
         return INTERNAL_ERROR;
     };
     match database.call(ApplicationMessage::SqliteTransaction(sql.to_vec())) {
+        Ok(Ok(_)) => 0,
+        Ok(Err(status)) => status,
+        Err(error) => actor_call_status(error),
+    }
+}
+
+pub fn sqlite_prepared_transaction(
+    database: usize,
+    steps: Vec<tinytsx_runtime_sqlite::TransactionStep>,
+) -> u32 {
+    let Some(runtime) = APPLICATION.get() else {
+        return INTERNAL_ERROR;
+    };
+    let Some(database) = runtime.databases.get(database) else {
+        return INTERNAL_ERROR;
+    };
+    match database.call(ApplicationMessage::SqlitePreparedTransaction(steps)) {
         Ok(Ok(_)) => 0,
         Ok(Err(status)) => status,
         Err(error) => actor_call_status(error),

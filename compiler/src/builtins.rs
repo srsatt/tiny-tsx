@@ -27,6 +27,9 @@ struct Limits {
     query_rows: Option<usize>,
     restart_attempts: Option<usize>,
     restart_window_ms: Option<u64>,
+    transaction_steps: Option<usize>,
+    transaction_parameters: Option<usize>,
+    transaction_sql_bytes: Option<usize>,
 }
 
 pub fn json() -> Result<String, String> {
@@ -77,6 +80,9 @@ fn manifest() -> Manifest {
                     path_bytes: Some(4_096),
                     value_bytes: Some(1_048_576),
                     query_rows: Some(1_024),
+                    transaction_steps: Some(16),
+                    transaction_parameters: Some(64),
+                    transaction_sql_bytes: Some(65_536),
                     ..empty_limits()
                 },
             },
@@ -105,6 +111,9 @@ const fn empty_limits() -> Limits {
         query_rows: None,
         restart_attempts: None,
         restart_window_ms: None,
+        transaction_steps: None,
+        transaction_parameters: None,
+        transaction_sql_bytes: None,
     }
 }
 
@@ -131,8 +140,20 @@ mod tests {
         assert_eq!(manifest().builtins[1].status, "native");
         assert_eq!(manifest().builtins[2].status, "native");
         assert_eq!(manifest().builtins[3].status, "native");
+        assert_eq!(manifest().builtins[3].limits.transaction_steps, Some(16));
+        assert_eq!(
+            manifest().builtins[3].limits.transaction_parameters,
+            Some(64)
+        );
+        assert_eq!(
+            manifest().builtins[3].limits.transaction_sql_bytes,
+            Some(65_536)
+        );
         assert_eq!(manifest().builtins[4].status, "native");
         assert_eq!(manifest().builtins[4].limits.restart_attempts, Some(16));
-        assert_eq!(manifest().builtins[4].limits.restart_window_ms, Some(60_000));
+        assert_eq!(
+            manifest().builtins[4].limits.restart_window_ms,
+            Some(60_000)
+        );
     }
 }

@@ -305,6 +305,48 @@ test("lowers typed SQLite run results into one serialized owner action", () => {
   );
 });
 
+test("lowers a bounded prepared transaction callback into one owner action", () => {
+  const entry = write("sqlite-transaction-callback.ts", `
+    import {Database} from "tinytsx:sqlite";
+    import {serve} from "tinytsx:serve";
+    import {Hono} from "hono";
+    const database = new Database(":memory:");
+    const insertItem = database.prepare("INSERT INTO items (id, value) VALUES (?1, ?2)");
+    const insertAudit = database.prepare("INSERT INTO audit (id) VALUES (?1)");
+    const app = new Hono();
+    app.post("/transaction/:id", async context => {
+      const input = await context.req.json() as {value: string};
+      await database.transaction(async () => {
+        await insertItem.run([context.req.param("id"), input.value]);
+        await insertAudit.run([context.req.param("id")]);
+      });
+      return context.json({ok: true});
+    });
+    serve({fetch: app.fetch});
+  `);
+
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+    apiAliases: {hono: path.join(repository, "tests/compat/hono/api.d.ts")},
+  });
+  const action = hir.handlers[0]?.sqliteActions?.[0];
+  assert.equal(action?.kind, "transactionSteps");
+  if (action?.kind !== "transactionSteps") return;
+  assert.equal(action.database, 0);
+  assert.equal(action.steps.length, 2);
+  assert.equal(
+    hir.staticStrings[action.steps[0]!.sql]?.value,
+    "INSERT INTO items (id, value) VALUES (?1, ?2)",
+  );
+  assert.deepEqual(action.steps[0]!.parameters.map(parameter => parameter.kind), [
+    "routeParameter",
+    "requestJsonField",
+  ]);
+  assert.equal(hir.staticStrings[action.steps[1]!.sql]?.value, "INSERT INTO audit (id) VALUES (?1)");
+  assert.deepEqual(action.steps[1]!.parameters, [{kind: "routeParameter", segment: 1}]);
+});
+
 test("requires matching read/write capabilities for an on-disk SQLite owner", () => {
   const entry = write("sqlite-disk.ts", `
     import {Database} from "tinytsx:sqlite";

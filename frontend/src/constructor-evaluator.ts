@@ -131,11 +131,12 @@ export interface EvaluatedActorAction {
 }
 
 export interface EvaluatedDatabaseAction {
-  kind: "exec" | "transaction" | "close";
+  kind: "exec" | "transaction" | "transactionSteps" | "close";
   database: DatabaseState;
   sql?: string;
   parameters?: SqliteParameter[];
   result?: number;
+  steps?: Array<{sql: string; parameters: SqliteParameter[]}>;
 }
 
 interface EvaluatedRouteChoice {
@@ -2623,14 +2624,53 @@ function evaluateCall(
       return UNDEFINED;
     }
     if (receiver.kind === "database" && name === "transaction") {
-      const sql = arguments_[0];
-      if (arguments_.length !== 1 || sql?.kind !== "string" || Buffer.byteLength(sql.value, "utf8") > 65_536) {
-        return unknown("Database.transaction requires one closed SQL string up to 65536 bytes");
+      const transaction = arguments_[0];
+      if (arguments_.length !== 1 || transaction === undefined) {
+        return unknown("Database.transaction requires one closed SQL string or bounded async callback");
+      }
+      if (transaction.kind === "closure") {
+        const actions = evaluator.databaseActions.get(instance) ?? [];
+        evaluator.databaseActions.set(instance, actions);
+        const start = actions.length;
+        const result = invokeClosure(evaluator, transaction, [], instance);
+        const callbackActions = actions.splice(start);
+        evaluator.databaseActions.set(instance, actions);
+        const steps = callbackActions.flatMap(action =>
+          action.kind === "exec"
+          && action.database === receiver.state
+          && action.sql !== undefined
+          && action.result !== undefined
+            ? [{sql: action.sql, parameters: action.parameters ?? []}]
+            : []
+        );
+        const sqlBytes = steps.reduce((total, step) => total + Buffer.byteLength(step.sql, "utf8"), 0);
+        const parameterCount = steps.reduce((total, step) => total + step.parameters.length, 0);
+        if (
+          result.kind !== "undefined"
+          || callbackActions.length === 0
+          || callbackActions.length > 16
+          || steps.length !== callbackActions.length
+          || sqlBytes > 65_536
+          || parameterCount > 64
+        ) {
+          return unknown(
+            "Database.transaction callback requires 1-16 same-database Statement.run calls within 65536 SQL bytes and 64 parameters",
+          );
+        }
+        appendDatabaseAction(evaluator, instance, {
+          kind: "transactionSteps",
+          database: receiver.state,
+          steps,
+        });
+        return UNDEFINED;
+      }
+      if (transaction.kind !== "string" || Buffer.byteLength(transaction.value, "utf8") > 65_536) {
+        return unknown("Database.transaction requires one closed SQL string or bounded async callback");
       }
       appendDatabaseAction(evaluator, instance, {
         kind: "transaction",
         database: receiver.state,
-        sql: sql.value,
+        sql: transaction.value,
       });
       return UNDEFINED;
     }

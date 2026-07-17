@@ -483,7 +483,16 @@ function lowerApplicationInitialization(
           }
           : action.kind === "transaction"
             ? {kind: "transaction" as const, database: action.database.id, sql: strings.intern(action.sql!)}
-            : {kind: "close" as const, database: action.database.id})}),
+            : action.kind === "transactionSteps"
+              ? {
+                kind: "transactionSteps" as const,
+                database: action.database.id,
+                steps: action.steps!.map(step => ({
+                  sql: strings.intern(step.sql),
+                  parameters: lowerSqliteParameters(step.parameters, route.path, strings),
+                })),
+              }
+              : {kind: "close" as const, database: action.database.id})}),
       ...(response.stderr === undefined
         ? {}
         : {stderr: response.stderr.map(line => strings.intern(line))}),
