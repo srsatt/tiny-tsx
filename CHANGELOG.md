@@ -12,8 +12,8 @@ First developer preview of TinyTSX's zero-JavaScript native server compiler.
 - Stable `TINY15xx` diagnostics for built-in capabilities, static limits, and
   unsupported SQLite/actor operations. SQLite effects deliberately return
   `Promise<void>` in the alpha API; typed changes/row-id results are post-alpha.
-- Apple-arm64 native builds and Linux-arm64 code generation. Linux execution
-  requires the Linux release archive built and verified by Linux CI.
+- Native Apple-arm64 and Linux-arm64 builds, allowlist execution, installed
+  archive examples, checksums, and source-commit manifests.
 
 This alpha is deliberately not general TypeScript, ECMAScript, Web API, Node,
 Bun, Deno, Hono, or AI SDK compatibility.

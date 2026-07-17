@@ -49,12 +49,13 @@ The alpha profiles are:
 ## Current implementation slice
 
 The alpha implementation, executable example/failure gates, focused packaged
-examples, and installable Apple-arm64 archive are complete. A clean
-Apple-arm64 `npm run release:verify` passed on 2026-07-17. The remaining work is
-**alpha release-candidate closure**: obtain native Linux-arm64 evidence, publish
-the final repeated TinyTSX/Bun comparison, and assemble the tag-ready checklist.
-Do not widen the language, Hono, actor, SQLite, or Web API surface unless one of
-those existing alpha gates exposes a regression in the published contract.
+examples, repeated TinyTSX/Bun comparison, and installable Apple/Linux-arm64
+archives are complete. Clean native runs on 2026-07-17 exposed and closed the
+last Apple-only Test262/WPT wrapper. The remaining work is **exact candidate
+attestation**: run both native release gates against one final clean commit and
+confirm each schema-v2 manifest records that commit. Do not widen the language,
+Hono, actor, SQLite, or Web API surface unless an existing alpha gate exposes a
+regression in the published contract.
 
 Acceptance criteria are, in order:
 
@@ -82,7 +83,8 @@ Acceptance criteria are, in order:
 - [x] Package the focused Hono, file, SQLite, and actor examples and publish one
   archive-based getting-started path that links each runnable example without
   claiming the hello path exercises those features;
-- [ ] Complete one successful Linux-arm64 CI release run, install the resulting
+- [x] Complete one successful isolated native Linux-arm64 release run on the
+  configured CI runner or an equivalent arm64 Linux host, install the resulting
   archive outside the checkout, and retain its checksum, artifact manifest,
   version report, and HTTP-contract evidence;
 - [x] Repeat the controlled TinyTSX/Bun release benchmark and publish startup,
@@ -99,19 +101,18 @@ prominent.
 
 ### Next-goal handoff
 
-Use the goal title **Finish the alpha release candidate**. Its scope is the
-three unchecked acceptance criteria above, in order. Native Linux-arm64
-execution is required; cross-assembly does not close that gate. The benchmark
-must include the Hono control plus actor and SQLite workloads, verify equivalent
-responses, and commit the raw JSON and rendered Markdown results before making
-comparative claims. The goal may repair a failing existing alpha path, but a
-broader language, Web, Hono, standard-library, actor, SQLite, or GC requirement
-becomes a post-alpha item instead of silently expanding `0.1.0-alpha.1`.
+Use the goal title **Attest the exact alpha release candidate**. Its scope is the
+single unchecked acceptance criterion above. Both native release commands must
+run from the same final clean commit, and each schema-v2 artifact manifest must
+record that commit with `source.dirty == false`. The goal may repair a failing
+existing alpha path, but a broader language, Web, Hono, standard-library,
+actor, SQLite, or GC requirement becomes a post-alpha item instead of silently
+expanding `0.1.0-alpha.1`.
 
 The goal is complete only when:
 
-- `npm run release:verify` passes from a clean Apple-arm64 checkout and the
-  Linux-arm64 workflow passes the same release contract natively;
+- `npm run release:verify` passes from clean Apple- and Linux-arm64 checkouts at
+  the same source commit;
 - both archives install outside the checkout and build/run their smoke
   applications from installed resources;
 - repeated control, actor, and SQLite benchmark artifacts plus the final
@@ -285,7 +286,7 @@ The goal is complete only when:
 - [x] Produce an installable Apple-arm64 archive with checksum and explicit
       artifact manifest; build and execute an application from a clean directory
       outside the checkout using only its installed resources.
-- [ ] Produce and execute the equivalent Linux-arm64 archive on Linux arm64;
+- [x] Produce and execute the equivalent Linux-arm64 archive on Linux arm64;
       cross-assembly on macOS is not sufficient evidence.
 - [x] Add native Apple-arm64 and Linux-arm64 CI/release jobs. Cross-assembled ELF
       evidence does not replace executing the Linux archive on Linux.
@@ -300,11 +301,11 @@ The goal is complete only when:
 
 Do not tag `0.1.0-alpha.1` until all of these are true:
 
-- [ ] Every A0–A6 item is complete or explicitly moved to post-alpha with the
+- [x] Every A0–A6 item is complete or explicitly moved to post-alpha with the
       alpha contract adjusted so no documented feature depends on it.
 - [x] The complete Rust, frontend, Hono, Test262 allowlist, WPT allowlist, native
       API, benchmark-harness, and alpha example suites pass from a clean tree.
-- [ ] Apple and Linux archives install and execute outside the checkout, and
+- [x] Apple and Linux archives install and execute outside the checkout, and
       their checksums, version output, build reports, and HTTP contracts match
       the release manifest.
 - [x] The published compatibility matrix contains no unqualified “supports

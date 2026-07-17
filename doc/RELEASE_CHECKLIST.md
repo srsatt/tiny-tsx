@@ -2,9 +2,9 @@
 
 Release: `0.1.0-alpha.1`
 
-Current decision: **NO-GO until native Linux-arm64 verification is complete.**
-Cross-assembled Linux output is useful compiler evidence but cannot replace
-building, installing, and executing the archive on Linux arm64.
+Current decision: **NO-GO until one exact clean commit is attested by both
+native targets.** Apple and Linux arm64 have each completed the full contract;
+the final pass must make their schema-v2 manifests name the same candidate.
 
 This checklist prepares a release candidate; it does not create or push a tag.
 Run it from the exact commit intended for `v0.1.0-alpha.1`.
@@ -39,7 +39,7 @@ npm run release:verify
 ```
 
 - [x] Apple arm64 has completed the clean `release:verify` contract.
-- [ ] Linux arm64 has completed the clean `release:verify` contract on a native
+- [x] Linux arm64 has completed the clean `release:verify` contract on a native
       `ubuntu-24.04-arm` or equivalent host.
 - [ ] The exact release-candidate commit has completed both native jobs without
       generated tracked changes.
@@ -54,14 +54,17 @@ Perform these checks independently for both target names:
 ```sh
 target=aarch64-apple-darwin # repeat with aarch64-unknown-linux-gnu
 base="dist/release/tinytsx-0.1.0-alpha.1-$target"
+commit=$(git rev-parse HEAD)
 test -f "$base.tar.gz"
 test -f "$base.tar.gz.sha256"
 test -f "$base.manifest.json"
 (cd dist/release && shasum -a 256 -c "$(basename "$base.tar.gz.sha256")")
-jq -e --arg target "$target" '
-  .schemaVersion == 1 and
+jq -e --arg target "$target" --arg commit "$commit" '
+  .schemaVersion == 2 and
   .version == "0.1.0-alpha.1" and
   .target == $target and
+  .source.commit == $commit and
+  .source.dirty == false and
   (.versionOutput | startswith("tinytsx 0.1.0-alpha.1;")) and
   .layout.binary == "bin/tinytsx" and
   .layout.resources == "lib/tinytsx"
@@ -72,7 +75,7 @@ tar -tzf "$base.tar.gz" | grep '/lib/tinytsx/examples/README.md$'
 
 - [x] Apple archive checksum, manifest, version output, installed layout, and
       outside-checkout HTTP smoke have been verified.
-- [ ] Linux archive checksum, manifest, version output, installed layout, and
+- [x] Linux archive checksum, manifest, version output, installed layout, and
       outside-checkout HTTP smoke have been verified.
 - [ ] Both artifact manifests identify the same source contract, HIR 2, runtime
       ABI 1, built-in schema 1, and pinned compatibility revisions.
@@ -97,4 +100,3 @@ Before tagging, confirm all of the following:
 
 Only after this section is green may a separate release action create
 `v0.1.0-alpha.1`.
-

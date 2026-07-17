@@ -9,6 +9,29 @@ produces and serves a native Mach-O executable from the example TSX source.
 
 ## Alpha implementation evidence
 
+### Native Linux release and portable allowlists (2026-07-17)
+
+- A clean `aarch64` Linux VM running kernel 6.8 under Apple Virtualization
+  Framework executed the same `npm run release:verify` contract with Rust
+  1.96.0, Node 22, Bun 1.3.13, Clang, and libcurl. The VM used native arm64
+  containers, not QEMU architecture emulation.
+- The first native run found a real release blocker: the dedicated Test262 and
+  WPT wrappers still rejected non-macOS hosts after the main compiler gained
+  Linux support. Test262 now emits target-selected Mach-O or ELF AArch64
+  assembly; both HIR validators retarget to the native host; the executable
+  tests assert Mach-O or ELF magic as appropriate.
+- Focused native Linux evidence executes all four Test262 programs and all three
+  WPT programs. The subsequent full run passed Hono basic/JSX,
+  `@hono/node-server`, `tinytsx:serve`, Zod/OpenAPI success/rejection/document
+  behavior, release-profile failures, and all four installed-resource tests.
+- The verified Linux archive checksum from commit `9d67c26` is
+  `0a28b080de2f8adb4f5225123d9aa63d26b865b08a35bfadb0a05a34f663e969`;
+  its target is `aarch64-unknown-linux-gnu` and its installed smoke binary is an
+  ELF AArch64 executable. A final two-target pass will replace this interim
+  artifact after schema-v2 manifests bind both archives to one exact commit.
+- Release manifests now include the clean source commit, and the GitHub Actions
+  job rejects a manifest whose commit differs from `GITHUB_SHA`.
+
 ### Repeated alpha release benchmark (2026-07-17)
 
 - The final controlled comparison uses the Hono basic control, one persistent
