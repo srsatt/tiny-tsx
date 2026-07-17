@@ -68,18 +68,18 @@ Acceptance criteria are, in order:
   manifests, `--list-builtins`, and the getting-started path so none describes
   already-shipped disk, transaction, or persistent-counter work as missing or
   implies an example exercises more than it does;
-- [ ] Give every row in `tests/compat/hono/examples-manifest.json` an explicit
+- [x] Give every row in `tests/compat/hono/examples-manifest.json` an explicit
   release gate and make intake fail when the referenced script is missing or is
   not reached by `release:verify`;
-- [ ] Close the matrix's remaining evidence: Linux-arm64 assembly for
+- [x] Close the matrix's remaining evidence: Linux-arm64 assembly for
   `@hono/zod-openapi`, `@hono/node-server`, and `tinytsx:serve`; native success
   and failure HTTP paths for `tinytsx:serve`; the pinned Node/Hono reference for
   `@hono/node-server`; and an explicit tested-reference or not-applicable
   decision for the local durable-object counter adapter;
-- [ ] Exercise release-build startup and graceful shutdown, malformed input,
+- [x] Exercise release-build startup and graceful shutdown, malformed input,
   request-memory exhaustion, worker/actor saturation, filesystem denial,
   SQLite contention, and post-disposal recovery through named release gates;
-- [ ] Package the focused Hono, file, SQLite, and actor examples and publish one
+- [x] Package the focused Hono, file, SQLite, and actor examples and publish one
   archive-based getting-started path that links each runnable example without
   claiming the hello path exercises those features;
 - [ ] Complete one successful Linux-arm64 CI release run, install the resulting
@@ -158,7 +158,7 @@ The goal is complete only when:
 - [x] Use the pinned upstream `durable-objects` counter behavior as the contract
       for a Hono + `tinytsx:actors` counter example. Do not claim Cloudflare API
       compatibility unless the upstream source itself runs unchanged.
-- [ ] For every alpha example, build a native server, exercise success and error
+- [x] For every alpha example, build a native server, exercise success and error
       HTTP paths, compare portable behavior with Bun or another declared
       reference, and assemble the Linux-arm64 output in cross-host tests.
 - [x] Resolve the known Hono response-clone Content-Type difference with direct
@@ -286,10 +286,10 @@ The goal is complete only when:
       cross-assembly on macOS is not sufficient evidence.
 - [x] Add native Apple-arm64 and Linux-arm64 CI/release jobs. Cross-assembled ELF
       evidence does not replace executing the Linux archive on Linux.
-- [ ] Verify startup, graceful shutdown, malformed input recovery, request OOM,
+- [x] Verify startup, graceful shutdown, malformed input recovery, request OOM,
       worker/actor saturation, filesystem denial, SQLite contention, and clean
       resource disposal in release builds.
-- [ ] Publish one short getting-started path that installs the archive and builds
+- [x] Publish one short getting-started path that installs the archive and builds
       a Hono application; link focused, runnable file, SQLite, and actor examples
       instead of implying the current hello-only snippet exercises them.
 

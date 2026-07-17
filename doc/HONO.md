@@ -3,7 +3,7 @@
 The authoritative coverage inventory is
 `tests/compat/hono/docs-matrix.json`. It was reviewed against the official
 [Hono documentation](https://hono.dev/docs/) and
-[`llms-full.txt`](https://hono.dev/llms-full.txt) on 2026-07-16. The intake test
+[`llms-full.txt`](https://hono.dev/llms-full.txt) on 2026-07-17. The intake test
 requires an explicit status, first unsupported boundary, and evidence path for
 every recorded guide, helper, middleware, and core API row.
 
@@ -34,6 +34,12 @@ preflight under both TinyTSX and Bun/Hono. Origin arrays/functions, dynamic
 method functions, reflected request headers, and non-wildcard Vary behavior are
 outside this row.
 
+The review was refreshed after compiling the packaged examples against the
+published `hono@4.12.30` JavaScript distribution. The closed CORS specialization
+accepts both the pinned source form and that exact published-package form; this
+does not admit arbitrary compiled middleware. No newly documented guide,
+helper, middleware, or core API was added to the alpha contract by the refresh.
+
 All other missing helpers and middleware are explicitly post-alpha or out of
 scope. In particular, alpha does not need compression, cache storage,
 WebSockets, JWT/JWK, proxying, SSG, platform adapter detection, or Bun/Node
@@ -42,7 +48,10 @@ runtime compatibility merely because Hono documents them.
 The separate example matrix in `tests/compat/hono/examples-manifest.json`
 records ten completed or planned alpha tracers with provenance, imports/APIs,
 intake, native/assembly state, HTTP/reference evidence, and the first unsupported
-boundary. The local environment tracer combines Hono, `@hono/node-server`, and
+boundary. Every row now names native and reference scripts reached by
+`release:verify`, with intentionally local adapters explicitly marked
+not-applicable instead of pending. The local environment tracer combines Hono,
+`@hono/node-server`, and
 the bounded `tinytsx:env` startup snapshot. The static tracer executes the
 pinned upstream landing unchanged, then uses the public `tinytsx:fs` built-in
 to serve the pinned text assets through application workers. Its

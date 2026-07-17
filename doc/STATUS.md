@@ -9,6 +9,32 @@ produces and serves a native Mach-O executable from the example TSX source.
 
 ## Alpha implementation evidence
 
+### Installed alpha example and failure gates (2026-07-17)
+
+- Every Hono example-manifest row names native and reference scripts reachable
+  from `release:verify`; intake rejects missing scripts, unexplained pending
+  states, and local adapters that pretend to be Cloudflare/Node references.
+- The archive ships a pinned npm project containing runnable Hono,
+  `@hono/node-server`, Hono-neutral `tinytsx:serve`, `@hono/zod-openapi`, file,
+  SQLite, and actor sources. The installed-resource gate copies that project
+  outside the checkout, installs its compile-time packages, then builds and
+  executes release servers with the archived compiler and resources.
+- The installed release servers cover success/default-404 behavior, Zod path
+  rejection and OpenAPI output, filesystem denial and recovery, malformed JSON,
+  SQLite and actor post-disposal recovery, request-arena exhaustion, and HTTP
+  worker overload/recovery. Release-profile native suites separately prove
+  deterministic application/mailbox saturation and SQLite writer contention.
+- SIGINT and SIGTERM now stop the nonblocking accept loop, reject no new work,
+  drain accepted HTTP jobs, and exit with status zero. Accepted sockets are
+  explicitly returned to blocking mode so the bounded I/O timeout and overload
+  behavior remain portable on Apple and Linux.
+- The exact published `hono@4.12.30` CORS JavaScript shape is admitted alongside
+  the pinned TypeScript source shape. This closed specialization fixed an
+  installed-package failure without broadening arbitrary middleware execution.
+- Verification: `npm run test:frontend` (91/91),
+  `npm run test:release-runtime` (68/68), the focused compiler saturation E2E,
+  and `npm run release:package` including installed release tests (4/4).
+
 ### Installable alpha archive (2026-07-17)
 
 - Workspace, frontend, and SDK versions are `0.1.0-alpha.1`. `tinytsx

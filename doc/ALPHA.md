@@ -4,8 +4,9 @@ This developer preview compiles the allowlisted server-side TypeScript/Hono
 matrix into an AArch64 native HTTP server without a JavaScript engine in the
 produced application.
 
-The archive contains `bin/tinytsx` and read-only resources under
-`lib/tinytsx`. The compiler finds that directory relative to its executable;
+The archive contains `bin/tinytsx`, read-only compiler resources, documentation,
+and runnable source examples under `lib/tinytsx`. The compiler finds that
+directory relative to its executable;
 `TINYTSX_HOME` may explicitly override it. Building applications requires Node
 with the bundled TypeScript package, Cargo/Rust, Clang, a target linker, and the
 target system's libcurl development/runtime support. SQLite is statically
@@ -74,6 +75,7 @@ for each admitted Hono documentation row lives in
 
 ```sh
 tar -xzf tinytsx-0.1.0-alpha.1-aarch64-apple-darwin.tar.gz
+export TINYTSX_HOME="$PWD/tinytsx-0.1.0-alpha.1-aarch64-apple-darwin/lib/tinytsx"
 export PATH="$PWD/tinytsx-0.1.0-alpha.1-aarch64-apple-darwin/bin:$PATH"
 mkdir hello && cd hello
 npm init -y
@@ -92,6 +94,11 @@ curl http://127.0.0.1:3000/
 ```
 
 Use `tinytsx:serve` instead of `@hono/node-server` when the application wants
-the same native server entrypoint without the Hono package namespace. See the
-capability documents before adding files, environment values, SQLite, or
+the same native server entrypoint without the Hono package namespace.
+
+Focused examples for both entrypoints, `@hono/zod-openapi`, file reads, SQLite,
+and local/persistent actors ship in `$TINYTSX_HOME/examples`. Copy that directory
+to a writable project and follow its `README.md`; the archive release gate runs
+those sources against their pinned npm packages before publication. See the
+capability documents before granting files, environment values, SQLite, or
 persistent actors.
