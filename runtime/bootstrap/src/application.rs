@@ -269,7 +269,7 @@ pub fn initialize(executor_count: usize) -> io::Result<(usize, bool, bool)> {
                     .map_err(|status| *status)?;
                 let sql = std::str::from_utf8(&sql).map_err(|_| RENDER_ERROR)?;
                 tinytsx_runtime_sqlite::execute(connection, sql, &parameters)
-                    .map(|_| Vec::new())
+                    .map(encode_execute_result)
                     .map_err(|_| RENDER_ERROR)
             }
             ApplicationMessage::SqliteQuery {
@@ -474,20 +474,51 @@ pub fn sqlite_execute(
     sql: &[u8],
     parameters: Vec<tinytsx_runtime_sqlite::SqlValue>,
 ) -> u32 {
+    match sqlite_execute_result(database, sql, parameters) {
+        Ok(_) => 0,
+        Err(status) => status,
+    }
+}
+
+pub fn sqlite_execute_result(
+    database: usize,
+    sql: &[u8],
+    parameters: Vec<tinytsx_runtime_sqlite::SqlValue>,
+) -> Result<tinytsx_runtime_sqlite::ExecuteResult, u32> {
     let Some(runtime) = APPLICATION.get() else {
-        return INTERNAL_ERROR;
+        return Err(INTERNAL_ERROR);
     };
     let Some(database) = runtime.databases.get(database) else {
-        return INTERNAL_ERROR;
+        return Err(INTERNAL_ERROR);
     };
-    match database.call(ApplicationMessage::SqliteExecute {
-        sql: sql.to_vec(),
-        parameters,
-    }) {
-        Ok(Ok(_)) => 0,
-        Ok(Err(status)) => status,
-        Err(error) => actor_call_status(error),
+    let encoded = database
+        .call(ApplicationMessage::SqliteExecute {
+            sql: sql.to_vec(),
+            parameters,
+        })
+        .map_err(actor_call_status)??;
+    decode_execute_result(&encoded).ok_or(INTERNAL_ERROR)
+}
+
+fn encode_execute_result(result: tinytsx_runtime_sqlite::ExecuteResult) -> Vec<u8> {
+    let mut encoded = Vec::with_capacity(17);
+    encoded.extend_from_slice(&(result.changes as u64).to_le_bytes());
+    encoded.extend_from_slice(&result.last_insert_row_id.unwrap_or_default().to_le_bytes());
+    encoded.push(u8::from(result.last_insert_row_id.is_some()));
+    encoded
+}
+
+fn decode_execute_result(encoded: &[u8]) -> Option<tinytsx_runtime_sqlite::ExecuteResult> {
+    let changes = u64::from_le_bytes(encoded.get(..8)?.try_into().ok()?);
+    let row_id = i64::from_le_bytes(encoded.get(8..16)?.try_into().ok()?);
+    let has_row_id = *encoded.get(16)?;
+    if encoded.len() != 17 || has_row_id > 1 || changes > usize::MAX as u64 {
+        return None;
     }
+    Some(tinytsx_runtime_sqlite::ExecuteResult {
+        changes: changes as usize,
+        last_insert_row_id: (has_row_id == 1).then_some(row_id),
+    })
 }
 
 pub fn sqlite_close(database: usize) -> u32 {
@@ -528,5 +559,26 @@ mod tests {
             actor_call_status(CallError::Reply(ReplyError::TimedOut)),
             APPLICATION_OVERLOAD,
         );
+    }
+
+    #[test]
+    fn sqlite_execute_results_round_trip_through_the_owner_reply() {
+        for result in [
+            tinytsx_runtime_sqlite::ExecuteResult {
+                changes: 0,
+                last_insert_row_id: None,
+            },
+            tinytsx_runtime_sqlite::ExecuteResult {
+                changes: 7,
+                last_insert_row_id: Some(-42),
+            },
+        ] {
+            let encoded = encode_execute_result(tinytsx_runtime_sqlite::ExecuteResult {
+                changes: result.changes,
+                last_insert_row_id: result.last_insert_row_id,
+            });
+            assert_eq!(decode_execute_result(&encoded), Some(result));
+        }
+        assert_eq!(decode_execute_result(&[0; 16]), None);
     }
 }

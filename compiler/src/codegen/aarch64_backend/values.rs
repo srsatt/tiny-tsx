@@ -404,6 +404,8 @@ pub(super) fn emit_value_expression(
         | ValueExpression::RouteParameter { .. }
         | ValueExpression::RequestHeader { .. }
         | ValueExpression::RequestId { .. }
+        | ValueExpression::SqliteRunChanges { .. }
+        | ValueExpression::SqliteRunLastInsertRowId { .. }
         | ValueExpression::RequestCookie { .. }
         | ValueExpression::EnvironmentVariable { .. }
         | ValueExpression::FileText { .. }

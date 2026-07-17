@@ -33,6 +33,12 @@ test("serializes an in-memory SQLite owner and recovers from SQL errors", async 
   await assertResponse(port, "/schema", 200, "ready");
   await assertGet(port, "/config", 200, "Tiny Blog");
   await assertCors(port);
+  await assertResponse(
+    port,
+    "/run-result",
+    201,
+    '{"changes":1,"lastInsertRowId":"1"}',
+  );
   await assertGet(port, "/posts", 200, '{"posts":[],"ok":true}');
   await assertGet(port, "/first", 200, '{"post":null}');
   await assertResponse(port, "/seed", 201, "created");

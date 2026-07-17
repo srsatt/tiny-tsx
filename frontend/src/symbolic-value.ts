@@ -50,6 +50,8 @@ export type Value =
   | {kind: "database"; state: DatabaseState}
   | {kind: "statement"; state: StatementState}
   | {kind: "sqliteQuery"; statement: StatementState; mode: "all" | "first"; parameters: SqliteParameter[]}
+  | {kind: "sqliteRunChanges"; result: number}
+  | {kind: "sqliteRunLastInsertRowId"; result: number}
   | {kind: "sqlitePredicate"; query: Value & {kind: "sqliteQuery"}; test: "missing" | "present"}
   | {kind: "queryParameter"; name: string; fallback?: string}
   | {kind: "queryPredicate"; name: string; test: "truthy" | "empty" | "present"}
@@ -95,6 +97,8 @@ export type RuntimeStringPart =
   | {kind: "fileText"; path: string; maxBytes: number}
   | {kind: "actorCall"; actor: ActorState; message: number | string; timeoutMs?: number}
   | {kind: "sqliteQuery"; statement: StatementState; mode: "all" | "first"; parameters: SqliteParameter[]}
+  | {kind: "sqliteRunChanges"; result: number}
+  | {kind: "sqliteRunLastInsertRowId"; result: number; json: boolean}
   | {kind: "queryParameter"; name: string; fallback: string | undefined; escapeHtml: boolean}
   | {kind: "fetchStatus"; url: string}
   | {kind: "elapsedMilliseconds"}
@@ -329,6 +333,8 @@ export function truthiness(value: Value): boolean | undefined {
     case "workerCall": return undefined;
     case "actorCall": return undefined;
     case "sqliteQuery": return undefined;
+    case "sqliteRunChanges": return undefined;
+    case "sqliteRunLastInsertRowId": return undefined;
     case "sqlitePredicate": return undefined;
     case "randomUuid": return true;
     case "requestJsonField": return undefined;
@@ -387,6 +393,8 @@ export function typeOf(value: Value): string {
     case "workerCall": return "string";
     case "actorCall": return "string";
     case "sqliteQuery": return "object";
+    case "sqliteRunChanges": return "number";
+    case "sqliteRunLastInsertRowId": return "string";
     case "sqlitePredicate": return "boolean";
     case "openAiProvider": return "function";
     case "openAiModel": return "object";
@@ -440,6 +448,12 @@ export function runtimeStringParts(value: Value): RuntimeStringPart[] | undefine
       statement: value.statement,
       mode: value.mode,
       parameters: value.parameters,
+    }];
+    case "sqliteRunChanges": return [{kind: "sqliteRunChanges", result: value.result}];
+    case "sqliteRunLastInsertRowId": return [{
+      kind: "sqliteRunLastInsertRowId",
+      result: value.result,
+      json: false,
     }];
     case "queryParameter": return [{
       kind: "queryParameter",

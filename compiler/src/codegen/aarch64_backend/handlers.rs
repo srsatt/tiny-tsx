@@ -359,8 +359,24 @@ pub(super) fn emit_handlers(assembly: &mut Emitter, program: &Program) -> Result
                     database,
                     sql,
                     parameters,
+                    result,
                 } => {
-                    if parameters.is_empty() {
+                    if let Some(result) = result {
+                        emit_parameters(assembly, program, parameters);
+                        asm_line!(assembly, "    ldr x0, [sp, #16]");
+                        emit_immediate(assembly, "x1", *result as u64);
+                        emit_immediate(assembly, "x2", *database as u64);
+                        asm_line!(assembly, "    ldr x3, [sp, #24]");
+                        assembly.address("x4", format_args!("Ltinytsx_string_{sql}"));
+                        emit_immediate(
+                            assembly,
+                            "x5",
+                            program.static_strings[*sql].value.len() as u64,
+                        );
+                        address_parameters(assembly, "x6");
+                        emit_immediate(assembly, "x7", parameters.len() as u64);
+                        assembly.call(format_args!("tinytsx_sqlite_execute_result"));
+                    } else if parameters.is_empty() {
                         emit_immediate(assembly, "x0", *database as u64);
                         assembly.address("x1", format_args!("Ltinytsx_string_{sql}"));
                         emit_immediate(

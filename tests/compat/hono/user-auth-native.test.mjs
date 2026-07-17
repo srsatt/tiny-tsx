@@ -30,10 +30,23 @@ test("serves the multi-module auth/config/persistence tracer", async context => 
   await assertText(port, "/session", 200, "signed-out");
   await assertText(port, "/account/events", 500, "handled error");
   await assertText(port, "/schema", 200, "ready", {method: "POST"});
-  await assertText(port, "/account/events", 201, '{"ok":true}', {
+  await assertText(
+    port,
+    "/account/events/missing",
+    200,
+    '{"changes":0,"lastInsertRowId":null}',
+    {method: "POST", headers: {authorization}},
+  );
+  await assertText(
+    port,
+    "/account/events",
+    201,
+    '{"changes":1,"lastInsertRowId":"1","ok":true}',
+    {
     method: "POST",
     headers: {authorization},
-  });
+    },
+  );
   await assertText(port, "/account/events", 200, '{"events":[{"username":"admin"}]}', {
     headers: {authorization},
   });
@@ -72,6 +85,8 @@ test("assembles the auth/config/persistence tracer for Linux arm64", () => {
     ], {cwd: repository, encoding: "utf8"});
     assert.equal(checked.status, 0, checked.stderr || checked.stdout);
     assert.match(checked.stdout, /tinytsx_sqlite_execute_batch/);
+    assert.match(checked.stdout, /tinytsx_sqlite_execute_result/);
+    assert.match(checked.stdout, /tinytsx_html_write_sqlite_changes/);
     assert.match(checked.stdout, /tinytsx_html_write_environment_variable/);
     const assembled = spawnSync("clang", [
       "--target=aarch64-unknown-linux-gnu", "-x", "assembler", "-c", "-o", "/dev/null", "-",

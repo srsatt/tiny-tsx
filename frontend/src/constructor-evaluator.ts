@@ -135,6 +135,7 @@ export interface EvaluatedDatabaseAction {
   database: DatabaseState;
   sql?: string;
   parameters?: SqliteParameter[];
+  result?: number;
 }
 
 interface EvaluatedRouteChoice {
@@ -1860,6 +1861,14 @@ function sameResponseHeaderValue(left: ResponseHeaderValue, right: ResponseHeade
     if (part.kind === "requestId") {
       return candidate?.kind === "requestId" && candidate.headerName === part.headerName;
     }
+    if (part.kind === "sqliteRunChanges") {
+      return candidate?.kind === "sqliteRunChanges" && candidate.result === part.result;
+    }
+    if (part.kind === "sqliteRunLastInsertRowId") {
+      return candidate?.kind === "sqliteRunLastInsertRowId"
+        && candidate.result === part.result
+        && candidate.json === part.json;
+    }
     return candidate?.kind === part.kind && candidate.name === part.name;
   });
 }
@@ -2617,13 +2626,21 @@ function evaluateCall(
     if (receiver.kind === "statement" && name === "run") {
       const parameters = sqliteParameters(arguments_);
       if (parameters === undefined) return unknown("Statement.run accepts up to 16 route or JSON-field values");
-      appendDatabaseAction(evaluator, instance, {
+      const action: EvaluatedDatabaseAction = {
         kind: "exec",
         database: receiver.state.database,
         sql: receiver.state.sql,
         ...(parameters.length === 0 ? {} : {parameters}),
-      });
-      return UNDEFINED;
+      };
+      const result = appendDatabaseAction(evaluator, instance, action);
+      action.result = result;
+      return {
+        kind: "record",
+        fields: new Map([
+          ["changes", {kind: "sqliteRunChanges", result}],
+          ["lastInsertRowId", {kind: "sqliteRunLastInsertRowId", result}],
+        ]),
+      };
     }
     if (receiver.kind === "statement" && (name === "close" || name === "dispose")) {
       return arguments_.length === 0
@@ -3452,10 +3469,12 @@ function appendDatabaseAction(
   evaluator: Evaluator,
   instance: Value & {kind: "instance"},
   action: EvaluatedDatabaseAction,
-): void {
+): number {
   const actions = evaluator.databaseActions.get(instance) ?? [];
+  const result = actions.length;
   actions.push(action);
   evaluator.databaseActions.set(instance, actions);
+  return result;
 }
 
 function sqliteParameters(arguments_: Value[]): SqliteParameter[] | undefined {
@@ -5024,6 +5043,14 @@ function appendRuntimeJsonValue(
       mode: value.mode,
       parameters: value.parameters,
     });
+    return true;
+  }
+  if (value.kind === "sqliteRunChanges") {
+    appendRuntimePart(parts, {kind: value.kind, result: value.result});
+    return true;
+  }
+  if (value.kind === "sqliteRunLastInsertRowId") {
+    appendRuntimePart(parts, {kind: value.kind, result: value.result, json: true});
     return true;
   }
   if (value.kind === "routeParameter") {

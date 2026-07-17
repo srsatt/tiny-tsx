@@ -122,6 +122,13 @@ test("runs capability, malformed-input, and disposal failures in release servers
   ), "sqlite");
   await withServer(sqliteBinary, 39_494, async () => {
     await assertText(39_494, "/schema", 200, "ready", {method: "POST"});
+    await assertText(
+      39_494,
+      "/run-result",
+      201,
+      '{"changes":1,"lastInsertRowId":"1"}',
+      {method: "POST"},
+    );
     await assertText(39_494, "/posts", 400, "bad request", {
       method: "POST",
       headers: {"content-type": "application/json"},

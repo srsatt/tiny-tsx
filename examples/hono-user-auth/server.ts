@@ -3,7 +3,7 @@ import {Hono} from "hono";
 import {getCookie, setCookie} from "hono/cookie";
 import {accountGuard} from "./auth.js";
 import type {Bindings} from "./config.js";
-import {database, events, recordEvent} from "./storage.js";
+import {database, events, recordEvent, renameMissingEvent} from "./storage.js";
 
 const app = new Hono<{Bindings: Bindings}>();
 
@@ -25,8 +25,16 @@ app.post("/schema", async context => {
   return context.text("ready");
 });
 app.post("/account/events", async context => {
-  await recordEvent.run(["admin"]);
-  return context.json({ok: true}, 201);
+  const result = await recordEvent.run(["admin"]);
+  return context.json({
+    changes: result.changes,
+    lastInsertRowId: result.lastInsertRowId,
+    ok: true,
+  }, 201);
+});
+app.post("/account/events/missing", async context => {
+  const result = await renameMissingEvent.run();
+  return context.json(result);
 });
 app.get("/account/events", async context => context.json({events: await events.all()}));
 app.post("/account/session", context => {

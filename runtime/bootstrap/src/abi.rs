@@ -26,6 +26,7 @@ pub const CONTENT_TYPE_STREAM_TEXT: u16 = 5;
 pub const MAX_RESPONSE_HEADERS: usize = 8;
 pub const MAX_DYNAMIC_HEADER_BYTES: usize = 256;
 pub const MAX_STREAM_CHUNKS: usize = 16;
+pub const MAX_SQLITE_RESULTS: usize = 16;
 
 const MAX_FETCH_URL_BYTES: usize = 2048;
 const MAX_PROVIDER_AUTHORIZATION_BYTES: usize = 1024;
@@ -143,6 +144,22 @@ pub struct TinySqlParameter {
 }
 
 #[repr(C)]
+#[derive(Clone, Copy)]
+pub struct TinySqliteExecuteResult {
+    pub changes: u64,
+    pub last_insert_row_id: i64,
+    pub present: u32,
+    pub has_last_insert_row_id: u32,
+}
+
+const EMPTY_SQLITE_EXECUTE_RESULT: TinySqliteExecuteResult = TinySqliteExecuteResult {
+    changes: 0,
+    last_insert_row_id: 0,
+    present: 0,
+    has_last_insert_row_id: 0,
+};
+
+#[repr(C)]
 pub struct TinyResponseWriter {
     pub start: *mut u8,
     pub cursor: *mut u8,
@@ -154,6 +171,7 @@ pub struct TinyResponseWriter {
     pub headers: [TinyHeader; MAX_RESPONSE_HEADERS],
     pub dynamic_header_cursor: usize,
     pub dynamic_header_bytes: [u8; MAX_DYNAMIC_HEADER_BYTES],
+    pub sqlite_results: [TinySqliteExecuteResult; MAX_SQLITE_RESULTS],
     pub streaming: u32,
     pub stream_chunk_count: usize,
     pub stream_chunks: [TinyStringView; MAX_STREAM_CHUNKS],
@@ -549,6 +567,90 @@ pub unsafe extern "C" fn tinytsx_sqlite_execute_params(
     // SAFETY: Generated code supplies a static SQL view for the duration of the call.
     let sql = unsafe { slice::from_raw_parts(sql, sql_len) };
     crate::application::sqlite_execute(database, sql, parameters)
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tinytsx_sqlite_execute_result(
+    writer: *mut TinyResponseWriter,
+    result: usize,
+    database: usize,
+    request: *const TinyRequest,
+    sql: *const u8,
+    sql_len: usize,
+    parameters: *const TinySqlParameter,
+    parameter_count: usize,
+) -> u32 {
+    if writer.is_null() || result >= MAX_SQLITE_RESULTS || (sql.is_null() && sql_len != 0) {
+        return INTERNAL_ERROR;
+    }
+    let parameters = match unsafe { decode_sqlite_parameters(request, parameters, parameter_count) }
+    {
+        Ok(parameters) => parameters,
+        Err(status) => return status,
+    };
+    // SAFETY: Generated code supplies a static SQL view for the duration of the call.
+    let sql = unsafe { slice::from_raw_parts(sql, sql_len) };
+    match crate::application::sqlite_execute_result(database, sql, parameters) {
+        Ok(executed) => {
+            // SAFETY: The writer and bounded result slot were validated above.
+            unsafe {
+                (*writer).sqlite_results[result] = TinySqliteExecuteResult {
+                    changes: executed.changes as u64,
+                    last_insert_row_id: executed.last_insert_row_id.unwrap_or_default(),
+                    present: 1,
+                    has_last_insert_row_id: u32::from(executed.last_insert_row_id.is_some()),
+                };
+            }
+            OK
+        }
+        Err(status) => status,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tinytsx_html_write_sqlite_changes(
+    writer: *mut TinyResponseWriter,
+    result: usize,
+) -> u32 {
+    let Some(executed) = (unsafe { writer.as_ref() })
+        .and_then(|writer| writer.sqlite_results.get(result))
+        .filter(|result| result.present != 0)
+    else {
+        return INTERNAL_ERROR;
+    };
+    let mut storage = [0_u8; 20];
+    let digits = decimal_bytes(executed.changes, &mut storage);
+    unsafe { tinytsx_html_write_static(writer, digits.as_ptr(), digits.len()) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tinytsx_html_write_sqlite_last_insert_row_id(
+    writer: *mut TinyResponseWriter,
+    result: usize,
+    json: u32,
+) -> u32 {
+    let Some(executed) = (unsafe { writer.as_ref() })
+        .and_then(|writer| writer.sqlite_results.get(result))
+        .filter(|result| result.present != 0)
+    else {
+        return INTERNAL_ERROR;
+    };
+    if executed.has_last_insert_row_id == 0 {
+        return unsafe { tinytsx_html_write_static(writer, b"null".as_ptr(), 4) };
+    }
+    let mut storage = [0_u8; 20];
+    let digits = signed_decimal_bytes(executed.last_insert_row_id, &mut storage);
+    if json != 0 {
+        let status = unsafe { tinytsx_html_write_static(writer, b"\"".as_ptr(), 1) };
+        if status != OK {
+            return status;
+        }
+    }
+    let status = unsafe { tinytsx_html_write_static(writer, digits.as_ptr(), digits.len()) };
+    if status != OK || json == 0 {
+        return status;
+    }
+    unsafe { tinytsx_html_write_static(writer, b"\"".as_ptr(), 1) }
 }
 
 #[unsafe(no_mangle)]
@@ -2483,6 +2585,16 @@ fn decimal_bytes(mut value: u64, storage: &mut [u8; 20]) -> &[u8] {
     }
 }
 
+fn signed_decimal_bytes(value: i64, storage: &mut [u8; 20]) -> &[u8] {
+    let digit_count = decimal_bytes(value.unsigned_abs(), storage).len();
+    let mut cursor = storage.len() - digit_count;
+    if value < 0 {
+        cursor -= 1;
+        storage[cursor] = b'-';
+    }
+    &storage[cursor..]
+}
+
 fn set_response_header(
     writer: &mut TinyResponseWriter,
     name: TinyStringView,
@@ -2593,6 +2705,7 @@ pub fn render<'a>(request: &TinyRequest, arena: &'a mut RequestArena) -> Rendere
         headers: [EMPTY_HEADER; MAX_RESPONSE_HEADERS],
         dynamic_header_cursor: 0,
         dynamic_header_bytes: [0; MAX_DYNAMIC_HEADER_BYTES],
+        sqlite_results: [EMPTY_SQLITE_EXECUTE_RESULT; MAX_SQLITE_RESULTS],
         streaming: 0,
         stream_chunk_count: 0,
         stream_chunks: [EMPTY_VIEW; MAX_STREAM_CHUNKS],

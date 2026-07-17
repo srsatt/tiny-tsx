@@ -14,6 +14,10 @@ const deletePost = database.prepare("DELETE FROM posts WHERE id = ?1");
 const createPost = database.prepare("INSERT INTO posts (id, title, body) VALUES (?1, ?2, ?3)");
 const updatePost = database.prepare("UPDATE posts SET title = ?1, body = ?2 WHERE id = ?3");
 const latestPost = database.prepare("SELECT id, title, body FROM posts ORDER BY rowid DESC LIMIT 1");
+const insertResultProbe = database.prepare(
+  "INSERT INTO posts (id, title, body) VALUES ('result-probe', 'Result Probe', NULL)",
+);
+const deleteResultProbe = database.prepare("DELETE FROM posts WHERE id = 'result-probe'");
 const app = new Hono<{Bindings: Bindings}>();
 
 app.use("/posts/*", cors({allowHeaders: ["Content-Type"]}));
@@ -26,6 +30,11 @@ app.post("/schema", async context => {
 app.post("/seed", async context => {
   await database.exec("INSERT INTO posts (id, title) VALUES ('morning', 'Morning')");
   return context.text("created", 201);
+});
+app.post("/run-result", async context => {
+  const result = await insertResultProbe.run();
+  await deleteResultProbe.run();
+  return context.json(result, 201);
 });
 app.post("/bad-sql", async context => {
   await database.exec("THIS IS NOT SQL");

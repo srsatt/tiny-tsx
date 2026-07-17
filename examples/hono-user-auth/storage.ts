@@ -7,4 +7,6 @@ export const events = database.prepare(
 export const recordEvent = database.prepare(
   "INSERT INTO auth_events (username) VALUES (?1)",
 );
-
+export const renameMissingEvent = database.prepare(
+  "UPDATE auth_events SET username = 'renamed' WHERE username = 'missing'",
+);

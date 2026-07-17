@@ -78,7 +78,7 @@ export type ActorAction =
   | {kind: "stop"; actor: number};
 
 export type SqliteAction =
-  | {kind: "exec"; database: number; sql: number; parameters?: SqliteParameter[]}
+  | {kind: "exec"; database: number; sql: number; parameters?: SqliteParameter[]; result?: number}
   | {kind: "transaction"; database: number; sql: number}
   | {kind: "close"; database: number};
 
@@ -200,6 +200,8 @@ export type ValueExpression =
       header: number;
       span: SourceSpan;
     }
+  | {kind: "sqliteRunChanges"; result: number; span: SourceSpan}
+  | {kind: "sqliteRunLastInsertRowId"; result: number; json: boolean; span: SourceSpan}
   | {
       kind: "requestCookie";
       cookie: number;

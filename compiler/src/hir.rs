@@ -159,6 +159,8 @@ pub enum SqliteAction {
         sql: usize,
         #[serde(default)]
         parameters: Vec<SqliteParameter>,
+        #[serde(default)]
+        result: Option<usize>,
     },
     Transaction {
         database: usize,
@@ -454,6 +456,16 @@ pub enum ValueExpression {
         header: usize,
         span: SourceSpan,
     },
+    SqliteRunChanges {
+        result: usize,
+        span: SourceSpan,
+    },
+    SqliteRunLastInsertRowId {
+        result: usize,
+        #[serde(default)]
+        json: bool,
+        span: SourceSpan,
+    },
     RequestCookie {
         cookie: usize,
         fallback: Option<usize>,
@@ -722,17 +734,24 @@ impl Program {
                     self.validate_actor_message(*actor, *message, *json_message)?;
                 }
             }
-            for action in &handler.sqlite_actions {
+            if handler.sqlite_actions.len() > 16 {
+                return Err("handler contains more than sixteen SQLite actions".to_owned());
+            }
+            for (action_index, action) in handler.sqlite_actions.iter().enumerate() {
                 let database = match action {
                     SqliteAction::Exec {
                         database,
                         sql,
                         parameters,
+                        result,
                     } => {
                         if *sql >= self.static_strings.len() {
                             return Err("SQLite action references a missing SQL string".to_owned());
                         }
                         self.validate_sqlite_parameters(parameters, &handler.path)?;
+                        if result.is_some_and(|result| result != action_index) {
+                            return Err("SQLite result slot does not match its action".to_owned());
+                        }
                         database
                     }
                     SqliteAction::Transaction { database, sql } => {
@@ -748,6 +767,9 @@ impl Program {
                 if *database >= self.sqlite_databases.len() {
                     return Err("handler SQLite action references a missing database".to_owned());
                 }
+            }
+            for response in handler_responses(handler) {
+                validate_sqlite_result_response(response, &handler.sqlite_actions)?;
             }
             if let Some(authorization) = &handler.basic_authorization {
                 if authorization.credentials.is_empty() {
@@ -1190,6 +1212,8 @@ impl Program {
             | ValueExpression::RouteParameter { .. }
             | ValueExpression::RequestHeader { .. }
             | ValueExpression::RequestId { .. }
+            | ValueExpression::SqliteRunChanges { .. }
+            | ValueExpression::SqliteRunLastInsertRowId { .. }
             | ValueExpression::RequestCookie { .. }
             | ValueExpression::EnvironmentVariable { .. }
             | ValueExpression::FileText { .. }
@@ -1330,6 +1354,8 @@ impl Program {
             ValueExpression::RouteParameter { .. }
             | ValueExpression::RequestHeader { .. }
             | ValueExpression::RequestId { .. }
+            | ValueExpression::SqliteRunChanges { .. }
+            | ValueExpression::SqliteRunLastInsertRowId { .. }
             | ValueExpression::RequestCookie { .. }
             | ValueExpression::EnvironmentVariable { .. }
             | ValueExpression::FileText { .. }
@@ -1586,6 +1612,8 @@ impl Program {
                 }
                 Ok(())
             }
+            ValueExpression::SqliteRunChanges { .. }
+            | ValueExpression::SqliteRunLastInsertRowId { .. } => Ok(()),
             ValueExpression::RequestCookie {
                 cookie, fallback, ..
             } => {
@@ -2134,6 +2162,93 @@ fn validate_request_id_expression(
         }
         ValueExpression::WorkerCall { input, .. } => {
             validate_request_id_expression(input, configured_header)
+        }
+        _ => Ok(()),
+    }
+}
+
+fn validate_sqlite_result_response(
+    response: &HandlerResponse,
+    actions: &[SqliteAction],
+) -> Result<(), String> {
+    match response {
+        HandlerResponse::Html { .. } => Ok(()),
+        HandlerResponse::Text { value, .. } => validate_sqlite_result_expression(value, actions),
+        HandlerResponse::Stream { chunks, .. } => chunks
+            .iter()
+            .try_for_each(|chunk| validate_sqlite_result_expression(chunk, actions)),
+    }
+}
+
+fn validate_sqlite_result_expression(
+    expression: &ValueExpression,
+    actions: &[SqliteAction],
+) -> Result<(), String> {
+    match expression {
+        ValueExpression::SqliteRunChanges { result, .. }
+        | ValueExpression::SqliteRunLastInsertRowId { result, .. } => match actions.get(*result) {
+            Some(SqliteAction::Exec {
+                result: Some(slot), ..
+            }) if slot == result => Ok(()),
+            _ => Err("SQLite result value references a missing run action".to_owned()),
+        },
+        ValueExpression::DirectCall { arguments, .. }
+        | ValueExpression::Concat {
+            values: arguments, ..
+        } => arguments
+            .iter()
+            .try_for_each(|value| validate_sqlite_result_expression(value, actions)),
+        ValueExpression::StringEqualConditional {
+            left,
+            right,
+            when_equal,
+            when_not_equal,
+            ..
+        }
+        | ValueExpression::NumericEqualConditional {
+            left,
+            right,
+            when_equal,
+            when_not_equal,
+            ..
+        }
+        | ValueExpression::BooleanEqualConditional {
+            left,
+            right,
+            when_equal,
+            when_not_equal,
+            ..
+        } => {
+            validate_sqlite_result_expression(left, actions)?;
+            validate_sqlite_result_expression(right, actions)?;
+            validate_sqlite_result_expression(when_equal, actions)?;
+            validate_sqlite_result_expression(when_not_equal, actions)
+        }
+        ValueExpression::NumericBinary { left, right, .. } => {
+            validate_sqlite_result_expression(left, actions)?;
+            validate_sqlite_result_expression(right, actions)
+        }
+        ValueExpression::ThrowValue { value, .. } => {
+            validate_sqlite_result_expression(value, actions)
+        }
+        ValueExpression::TryCatch {
+            try_value,
+            catch_value,
+            ..
+        } => {
+            validate_sqlite_result_expression(try_value, actions)?;
+            validate_sqlite_result_expression(catch_value, actions)
+        }
+        ValueExpression::QueryConditional {
+            when_present,
+            when_absent,
+            ..
+        } => {
+            validate_sqlite_result_expression(when_present, actions)?;
+            validate_sqlite_result_expression(when_absent, actions)
+        }
+        ValueExpression::WorkerCall { input, .. } => {
+            validate_sqlite_result_expression(input, actions)
         }
         _ => Ok(()),
     }
@@ -2725,6 +2840,44 @@ mod request_id_tests {
         assert_eq!(
             validate_request_id_expression(&expression, Some(4)),
             Err("request ID value does not match its middleware header".to_owned()),
+        );
+    }
+}
+
+#[cfg(test)]
+mod sqlite_result_tests {
+    use super::*;
+
+    fn span() -> SourceSpan {
+        SourceSpan {
+            file: "app.ts".to_owned(),
+            line: 1,
+            column: 1,
+            end_line: 1,
+            end_column: 2,
+        }
+    }
+
+    #[test]
+    fn requires_sqlite_result_values_to_reference_their_run_action() {
+        let expression = ValueExpression::SqliteRunChanges {
+            result: 0,
+            span: span(),
+        };
+        let actions = [SqliteAction::Exec {
+            database: 0,
+            sql: 0,
+            parameters: Vec::new(),
+            result: Some(0),
+        }];
+
+        assert_eq!(
+            validate_sqlite_result_expression(&expression, &actions),
+            Ok(())
+        );
+        assert_eq!(
+            validate_sqlite_result_expression(&expression, &[]),
+            Err("SQLite result value references a missing run action".to_owned()),
         );
     }
 }

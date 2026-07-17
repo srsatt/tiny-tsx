@@ -2,10 +2,15 @@ export type SqlValue = null | boolean | number | string | Uint8Array;
 export type SqlParameters = readonly SqlValue[];
 export type SqlRow = Readonly<Record<string, SqlValue>>;
 
+export interface RunResult {
+  readonly changes: number;
+  readonly lastInsertRowId: string | null;
+}
+
 export interface Statement {
   all(parameters?: SqlParameters): Promise<readonly SqlRow[]>;
   get(parameters?: SqlParameters): Promise<SqlRow | undefined>;
-  run(parameters?: SqlParameters): Promise<void>;
+  run(parameters?: SqlParameters): Promise<RunResult>;
   close(): void;
   dispose(): void;
 }

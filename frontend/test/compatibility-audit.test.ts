@@ -254,6 +254,57 @@ test("lowers closed primitive SQLite parameters without a dynamic object model",
   assert.equal(hir.staticStrings[2]?.value, "admin");
 });
 
+test("lowers typed SQLite run results into one serialized owner action", () => {
+  const entry = write("sqlite-run-result.ts", `
+    import {Database} from "tinytsx:sqlite";
+    import {serve} from "tinytsx:serve";
+    import {Hono} from "hono";
+    const database = new Database(":memory:");
+    const insert = database.prepare("INSERT INTO events (name) VALUES (?1)");
+    const app = new Hono();
+    app.post("/events", async context => {
+      const result = await insert.run(["admin"]);
+      return context.json(result, 201);
+    });
+    serve({fetch: app.fetch});
+  `);
+
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+    apiAliases: {hono: path.join(repository, "tests/compat/hono/api.d.ts")},
+  });
+  const handler = hir.handlers[0];
+  const action = handler?.sqliteActions?.[0];
+  assert.equal(action?.kind, "exec");
+  if (action?.kind !== "exec") return;
+  assert.equal(action.database, 0);
+  assert.equal(action.result, 0);
+  assert.equal(hir.staticStrings[action.sql]?.value, "INSERT INTO events (name) VALUES (?1)");
+  assert.equal(
+    action.parameters?.[0]?.kind === "staticString"
+      ? hir.staticStrings[action.parameters[0].string]?.value
+      : undefined,
+    "admin",
+  );
+  assert.equal(handler?.response.kind, "text");
+  const value = handler?.response.kind === "text" ? handler.response.value : undefined;
+  assert.equal(value?.kind, "concat");
+  if (value?.kind !== "concat") return;
+  assert.deepEqual(value.values.map(part => part.kind), [
+    "stringLiteral",
+    "sqliteRunChanges",
+    "stringLiteral",
+    "sqliteRunLastInsertRowId",
+    "stringLiteral",
+  ]);
+  assert.equal(value.values[1]?.kind === "sqliteRunChanges" ? value.values[1].result : -1, 0);
+  assert.equal(
+    value.values[3]?.kind === "sqliteRunLastInsertRowId" ? value.values[3].result : -1,
+    0,
+  );
+});
+
 test("requires matching read/write capabilities for an on-disk SQLite owner", () => {
   const entry = write("sqlite-disk.ts", `
     import {Database} from "tinytsx:sqlite";

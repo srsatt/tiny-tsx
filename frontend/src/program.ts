@@ -479,6 +479,7 @@ function lowerApplicationInitialization(
             ...(action.parameters === undefined
               ? {}
               : {parameters: lowerSqliteParameters(action.parameters, route.path, strings)}),
+            ...(action.result === undefined ? {} : {result: action.result}),
           }
           : action.kind === "transaction"
             ? {kind: "transaction" as const, database: action.database.id, sql: strings.intern(action.sql!)}
@@ -782,6 +783,17 @@ function lowerRuntimeString(
       }
       if (part.kind === "requestId") {
         return {kind: "requestId" as const, header: strings.intern(part.headerName), span};
+      }
+      if (part.kind === "sqliteRunChanges") {
+        return {kind: "sqliteRunChanges" as const, result: part.result, span};
+      }
+      if (part.kind === "sqliteRunLastInsertRowId") {
+        return {
+          kind: "sqliteRunLastInsertRowId" as const,
+          result: part.result,
+          json: part.json,
+          span,
+        };
       }
       if (part.kind === "requestCookie") {
         return {

@@ -1,11 +1,13 @@
 use super::{
-    BAD_REQUEST, CONTENT_TYPE_HTML, CONTENT_TYPE_NONE, CONTENT_TYPE_TEXT, INTERNAL_ERROR,
-    MAX_DYNAMIC_HEADER_BYTES, MAX_RESPONSE_HEADERS, MAX_STREAM_CHUNKS, OK, OpenAiTransport,
-    REQUEST_OOM, RequestArena, TinyHeader, TinyResponseWriter, TinySqlParameter, TinyStringView,
+    BAD_REQUEST, CONTENT_TYPE_HTML, CONTENT_TYPE_NONE, CONTENT_TYPE_TEXT,
+    EMPTY_SQLITE_EXECUTE_RESULT, INTERNAL_ERROR, MAX_DYNAMIC_HEADER_BYTES, MAX_RESPONSE_HEADERS,
+    MAX_SQLITE_RESULTS, MAX_STREAM_CHUNKS, OK, OpenAiTransport, REQUEST_OOM, RequestArena,
+    TinyHeader, TinyResponseWriter, TinySqlParameter, TinySqliteExecuteResult, TinyStringView,
     decode_sqlite_parameters, render, request, request_with_body, request_with_headers,
     tinytsx_html_write_fetch_status, tinytsx_html_write_path_segment, tinytsx_html_write_path_tail,
     tinytsx_html_write_query_parameter, tinytsx_html_write_request_header,
-    tinytsx_html_write_response_header, tinytsx_html_write_static,
+    tinytsx_html_write_response_header, tinytsx_html_write_sqlite_changes,
+    tinytsx_html_write_sqlite_last_insert_row_id, tinytsx_html_write_static,
     tinytsx_request_basic_auth_equals, tinytsx_request_body_length, tinytsx_request_if_none_match,
     tinytsx_request_method_equals, tinytsx_request_path_equals, tinytsx_request_path_matches,
     tinytsx_request_path_segment_min_length, tinytsx_request_query_has, tinytsx_response_begin,
@@ -836,6 +838,42 @@ fn response_headers_format_elapsed_milliseconds_in_writer_storage() {
 }
 
 #[test]
+fn sqlite_execute_results_write_changes_row_ids_and_null() {
+    let mut output = [0_u8; 64];
+    let mut writer = writer(&mut output);
+    writer.sqlite_results[2] = TinySqliteExecuteResult {
+        changes: 7,
+        last_insert_row_id: -42,
+        present: 1,
+        has_last_insert_row_id: 1,
+    };
+    writer.sqlite_results[3] = TinySqliteExecuteResult {
+        changes: 0,
+        last_insert_row_id: 0,
+        present: 1,
+        has_last_insert_row_id: 0,
+    };
+
+    assert_eq!(
+        unsafe { tinytsx_html_write_sqlite_changes(&mut writer, 2) },
+        OK
+    );
+    assert_eq!(
+        unsafe { tinytsx_html_write_sqlite_last_insert_row_id(&mut writer, 2, 0) },
+        OK,
+    );
+    assert_eq!(
+        unsafe { tinytsx_html_write_sqlite_last_insert_row_id(&mut writer, 3, 1) },
+        OK,
+    );
+    assert_eq!(&output[..8], b"7-42null");
+    assert_eq!(
+        unsafe { tinytsx_html_write_sqlite_changes(&mut writer, 1) },
+        INTERNAL_ERROR,
+    );
+}
+
+#[test]
 fn fetch_status_writes_the_local_http_response_code() {
     let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind local fetch peer");
     let address = listener.local_addr().expect("local fetch peer address");
@@ -1001,6 +1039,7 @@ fn writer(output: &mut [u8]) -> TinyResponseWriter {
         headers: [empty_header(); MAX_RESPONSE_HEADERS],
         dynamic_header_cursor: 0,
         dynamic_header_bytes: [0; MAX_DYNAMIC_HEADER_BYTES],
+        sqlite_results: [EMPTY_SQLITE_EXECUTE_RESULT; MAX_SQLITE_RESULTS],
         streaming: 0,
         stream_chunk_count: 0,
         stream_chunks: [TinyStringView {

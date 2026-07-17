@@ -150,6 +150,17 @@ fn emit_handler_text_expression(
             );
             assembly.call(format_args!("tinytsx_html_write_response_header"));
         }
+        ValueExpression::SqliteRunChanges { result, .. } => {
+            asm_line!(assembly, "    ldr x0, [sp, #16]");
+            emit_immediate(assembly, "x1", *result as u64);
+            assembly.call(format_args!("tinytsx_html_write_sqlite_changes"));
+        }
+        ValueExpression::SqliteRunLastInsertRowId { result, json, .. } => {
+            asm_line!(assembly, "    ldr x0, [sp, #16]");
+            emit_immediate(assembly, "x1", *result as u64);
+            emit_immediate(assembly, "x2", u64::from(*json));
+            assembly.call(format_args!("tinytsx_html_write_sqlite_last_insert_row_id"));
+        }
         ValueExpression::RequestCookie {
             cookie, fallback, ..
         } => {
