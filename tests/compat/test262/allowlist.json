@@ -28,7 +28,7 @@
     {
       "path": "test/language/expressions/array/spread-sngl-literal.js",
       "feature": "constant-array-spread",
-      "mode": "syntax"
+      "mode": "native"
     },
     {
       "path": "test/language/expressions/typeof/undefined.js",

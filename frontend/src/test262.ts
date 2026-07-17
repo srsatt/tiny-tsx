@@ -3,6 +3,11 @@ import path from "node:path";
 import ts from "typescript";
 import {CompileFailure, fromTypeScript, spanOf, tinyError} from "./diagnostics.js";
 import type {SourceSpan} from "./hir.js";
+import {
+  isArraySpreadApplyProgram,
+  lowerArraySpreadApplyProgram,
+  type ArraySpreadApplyProgramAssertion,
+} from "./test262-array-spread.js";
 
 export interface Test262Program {
   version: 3;
@@ -14,7 +19,8 @@ export interface Test262Program {
 export type Test262Assertion =
   | SameValueStringAssertion
   | ForThrowCounterAssertion
-  | ArrayUnshiftProgramAssertion;
+  | ArrayUnshiftProgramAssertion
+  | ArraySpreadApplyProgramAssertion;
 
 export interface SameValueStringAssertion {
   kind: "sameValueString";
@@ -77,6 +83,8 @@ export function compileTest262Entry(entryPath: string): Test262Program {
 
   const assertions = sourceFile.statements.every(isSameValueStatement)
     ? sourceFile.statements.map(statement => lowerSameValueAssertion(statement, sourceFile))
+    : isArraySpreadApplyProgram(sourceFile)
+      ? [lowerArraySpreadApplyProgram(sourceFile)]
     : isEmptyArrayDeclaration(sourceFile.statements[0])
       ? [lowerArrayUnshiftProgram(sourceFile)]
       : [lowerForThrowCounter(sourceFile)];

@@ -36,6 +36,14 @@ pub enum Test262Assertion {
         operations: Vec<ArrayUnshiftOperation>,
         span: SourceSpan,
     },
+    ArraySpreadApplyProgram {
+        values: Vec<i64>,
+        #[serde(rename = "expectedArguments")]
+        expected_arguments: Vec<i64>,
+        #[serde(rename = "expectedCalls")]
+        expected_calls: usize,
+        span: SourceSpan,
+    },
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -92,6 +100,20 @@ impl Test262Program {
                     operations,
                     ..
                 } => validate_array_unshift(*capacity, operations)?,
+                Test262Assertion::ArraySpreadApplyProgram {
+                    values,
+                    expected_arguments,
+                    expected_calls,
+                    ..
+                } if values.len() > 8
+                    || expected_arguments.len() != values.len()
+                    || *expected_calls != 1 =>
+                {
+                    return Err(
+                        "Test262 spread/apply requires up to eight arguments and one callback"
+                            .to_owned(),
+                    );
+                }
                 _ => {}
             }
         }

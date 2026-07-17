@@ -421,7 +421,10 @@ produces and serves a native Mach-O executable from the example TSX source.
   and checks final state. The complete `Array.prototype.unshift` case executes
   three source-ordered calls against a bounded dense numeric array and verifies
   returned lengths, signed element movement, out-of-range `undefined`, and final
-  length. The other ten cases remain syntax-only and are not conformance results.
+  length. The complete array-spread/apply case copies three values into a
+  distinct native argument buffer and checks callback argument length/order and
+  call count. The other nine cases remain syntax-only and are not conformance
+  results.
 - The dedicated native API suite currently covers Request method/path/query
   views, allocation-free form-decoded query-name presence, elapsed-header
   formatting, and exact-fit, OOM, and invalid response-writer behavior. Query
@@ -449,8 +452,9 @@ produces and serves a native Mach-O executable from the example TSX source.
   one closed computed access with seven exact method keys. The other 98 computed
   accesses in the `hono/tiny` graph remain runtime work. Dynamic computed access
   continues to receive `TINY1004`.
-- The Test262 array-spread case has its closed literal consumed by the staging
-  test, without claiming execution of the full case.
+- The Test262 array-spread case now executes its complete callback/apply
+  assertion program natively; the claim remains restricted to one bounded dense
+  numeric spread rather than general iterator or application-code support.
 - Closed staged values now lower into a canonical HIR constant pool with tagged
   undefined, null, boolean, number, bigint, string, array, and record values.
   HIR validation checks their IDs, modules, shapes, depth, and statistics.

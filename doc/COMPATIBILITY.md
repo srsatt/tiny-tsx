@@ -452,10 +452,14 @@ pending. The trace and
 evaluator contract are recorded in
 `doc/APPLICATION_INITIALIZATION.md`.
 
-The allowlisted Test262 array-spread source is parsed by the intake suite and
-its closed literal `[...[3, 4, 5]]` is folded by a frontend test. The complete
-Test262 program is still not executed natively, so this is staging evidence, not
-an ECMAScript conformance claim.
+The allowlisted Test262 array-spread source now runs as a complete native
+assertion program. The frontend validates the exact callback/apply shape and
+lowers `[...[3, 4, 5]]` into a bounded dense-array spread operation. The native
+program copies source elements into a distinct argument buffer, verifies
+`arguments.length`, all three argument values in order, and the final callback
+count. This is evidence for that exact closed numeric spread/apply program; it
+does not claim general iterators, arrays, function apply, or runtime spread in
+ordinary application code.
 
 The allowlisted `language/expressions/typeof/undefined.js` case is the first
 `mode: native` Test262 entry. `tinytsx test262 <case> --output <binary>` parses

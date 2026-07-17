@@ -6,6 +6,16 @@ use crate::{
 
 use super::emit;
 
+fn span() -> SourceSpan {
+    SourceSpan {
+        file: "case.js".to_owned(),
+        line: 1,
+        column: 1,
+        end_line: 1,
+        end_column: 2,
+    }
+}
+
 fn program(target: Target) -> Test262Program {
     Test262Program {
         version: 3,
@@ -15,13 +25,7 @@ fn program(target: Target) -> Test262Program {
             actual: "ok".to_owned(),
             expected: "ok".to_owned(),
             message: None,
-            span: SourceSpan {
-                file: "case.js".to_owned(),
-                line: 1,
-                column: 1,
-                end_line: 1,
-                end_column: 2,
-            },
+            span: span(),
         }],
     }
 }
@@ -56,4 +60,21 @@ fn rejects_a_hir_target_that_does_not_match_codegen() {
     let error = emit(&program(Target::MacosArm64), Target::LinuxArm64).unwrap_err();
 
     assert!(error.contains("does not match codegen target"));
+}
+
+#[test]
+fn emits_native_array_spread_copy_and_assertions() {
+    let mut program = program(Target::LinuxArm64);
+    program.assertions = vec![Test262Assertion::ArraySpreadApplyProgram {
+        values: vec![3, 4, 5],
+        expected_arguments: vec![3, 4, 5],
+        expected_calls: 1,
+        span: span(),
+    }];
+
+    let assembly = emit(&program, Target::LinuxArm64).unwrap();
+
+    assert!(assembly.contains("ldr x10, [sp, #16]"));
+    assert!(assembly.contains("str x10, [sp, #80]"));
+    assert!(assembly.contains("Ltinytsx_test262_spread_0_fail:"));
 }

@@ -5,6 +5,8 @@ use crate::test262_hir::{ArrayUnshiftOperation, Test262Assertion, Test262Program
 
 const ARRAY_STACK_BYTES: usize = 144;
 const ARRAY_DATA_OFFSET: usize = 16;
+const SPREAD_SOURCE_OFFSET: usize = 16;
+const SPREAD_ARGUMENTS_OFFSET: usize = 80;
 
 pub fn emit(program: &Test262Program, target: Target) -> Result<String, String> {
     program.validate()?;
@@ -41,6 +43,18 @@ pub fn emit(program: &Test262Program, target: Target) -> Result<String, String> 
             Test262Assertion::ArrayUnshiftProgram { operations, .. } => {
                 emit_array_unshift_program(&mut assembly, index, operations)
             }
+            Test262Assertion::ArraySpreadApplyProgram {
+                values,
+                expected_arguments,
+                expected_calls,
+                ..
+            } => emit_array_spread_apply_program(
+                &mut assembly,
+                index,
+                values,
+                expected_arguments,
+                *expected_calls,
+            ),
         }
     }
     writeln!(assembly, "    mov w0, #0").unwrap();
@@ -65,6 +79,93 @@ pub fn emit(program: &Test262Program, target: Target) -> Result<String, String> 
         emit_bytes(&mut assembly, expected.as_bytes());
     }
     Ok(assembly)
+}
+
+fn emit_array_spread_apply_program(
+    assembly: &mut String,
+    assertion_index: usize,
+    values: &[i64],
+    expected_arguments: &[i64],
+    expected_calls: usize,
+) {
+    writeln!(assembly, "    sub sp, sp, #{ARRAY_STACK_BYTES}").unwrap();
+    emit_immediate(assembly, "x9", values.len() as u64);
+    writeln!(assembly, "    str x9, [sp]").unwrap();
+    for (index, value) in values.iter().enumerate() {
+        emit_immediate(assembly, "x10", *value as u64);
+        writeln!(
+            assembly,
+            "    str x10, [sp, #{}]",
+            SPREAD_SOURCE_OFFSET + index * 8
+        )
+        .unwrap();
+    }
+
+    for index in 0..values.len() {
+        writeln!(
+            assembly,
+            "    ldr x10, [sp, #{}]",
+            SPREAD_SOURCE_OFFSET + index * 8
+        )
+        .unwrap();
+        writeln!(
+            assembly,
+            "    str x10, [sp, #{}]",
+            SPREAD_ARGUMENTS_OFFSET + index * 8
+        )
+        .unwrap();
+    }
+    writeln!(assembly, "    str x9, [sp, #8]").unwrap();
+
+    emit_immediate(assembly, "x10", expected_arguments.len() as u64);
+    writeln!(assembly, "    ldr x9, [sp, #8]").unwrap();
+    writeln!(assembly, "    cmp x9, x10").unwrap();
+    writeln!(
+        assembly,
+        "    b.ne Ltinytsx_test262_spread_{assertion_index}_fail"
+    )
+    .unwrap();
+    for (index, expected) in expected_arguments.iter().enumerate() {
+        writeln!(
+            assembly,
+            "    ldr x9, [sp, #{}]",
+            SPREAD_ARGUMENTS_OFFSET + index * 8
+        )
+        .unwrap();
+        emit_immediate(assembly, "x10", *expected as u64);
+        writeln!(assembly, "    cmp x9, x10").unwrap();
+        writeln!(
+            assembly,
+            "    b.ne Ltinytsx_test262_spread_{assertion_index}_fail"
+        )
+        .unwrap();
+    }
+    emit_immediate(assembly, "x9", 1);
+    emit_immediate(assembly, "x10", expected_calls as u64);
+    writeln!(assembly, "    cmp x9, x10").unwrap();
+    writeln!(
+        assembly,
+        "    b.ne Ltinytsx_test262_spread_{assertion_index}_fail"
+    )
+    .unwrap();
+    writeln!(assembly, "    add sp, sp, #{ARRAY_STACK_BYTES}").unwrap();
+    writeln!(
+        assembly,
+        "    b Ltinytsx_test262_spread_{assertion_index}_pass"
+    )
+    .unwrap();
+    writeln!(
+        assembly,
+        "Ltinytsx_test262_spread_{assertion_index}_fail:"
+    )
+    .unwrap();
+    writeln!(assembly, "    add sp, sp, #{ARRAY_STACK_BYTES}").unwrap();
+    writeln!(assembly, "    b Ltinytsx_test262_fail").unwrap();
+    writeln!(
+        assembly,
+        "Ltinytsx_test262_spread_{assertion_index}_pass:"
+    )
+    .unwrap();
 }
 
 fn emit_header(assembly: &mut String, target: Target) {

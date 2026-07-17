@@ -49,3 +49,18 @@ test("lowers the complete pinned Array.prototype.unshift Test262 case", () => {
     {kind: "assertLength", expected: 2},
   ]);
 });
+
+test("lowers the complete pinned array spread/apply Test262 case", () => {
+  const program = compileTest262Entry(path.join(
+    repository,
+    "vendor/test262/test/language/expressions/array/spread-sngl-literal.js",
+  ));
+
+  assert.deepEqual(program.assertions, [{
+    kind: "arraySpreadApplyProgram",
+    values: [3, 4, 5],
+    expectedArguments: [3, 4, 5],
+    expectedCalls: 1,
+    span: program.assertions[0]?.span,
+  }]);
+});

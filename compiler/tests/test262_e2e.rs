@@ -25,6 +25,10 @@ fn compiles_and_runs_native_test262_programs() {
             "array-unshift",
             "vendor/test262/test/built-ins/Array/prototype/unshift/S15.4.4.13_A1_T1.js",
         ),
+        (
+            "array-spread-apply",
+            "vendor/test262/test/language/expressions/array/spread-sngl-literal.js",
+        ),
     ] {
         compile_and_run(&root, &directory.join(name), case);
     }
