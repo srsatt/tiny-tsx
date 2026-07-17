@@ -48,42 +48,48 @@ The alpha profiles are:
 
 ## Current implementation slice
 
-Finish the first durable persistence slice before widening the language or
-standard-library surface. The bounded in-memory Hono blog contract is green;
-the active work is capability-gated disk databases, explicit transactions,
-restart evidence, and one persistent counter actor.
+The bounded persistence tracer and installable Apple archive are complete. The
+next goal is **alpha release-candidate closure**: reconcile the published
+contract with executable evidence, run the native Linux artifact, harden the
+release build, and publish a repeatable benchmark. Do not widen the language,
+Hono, actor, or SQLite surface during this goal unless an existing alpha tracer
+cannot pass without it.
 
-Acceptance criteria are:
+Acceptance criteria are, in order:
 
-- [x] Require matching canonical `--allow-read` and `--allow-write` roots for a
-  static normalized database path; embed only the resolved path in the native
-  server and record both permissions in the build report;
-- [ ] Harden disk opens against symlink replacement and path races so a granted
-  root cannot be escaped between compilation, startup, and SQLite sidecar-file
-  creation;
-- [x] Add a bounded static-SQL transaction batch with deterministic commit,
-  rollback, nested-transaction rejection, and handler-failure behavior;
-- [ ] Extend transactions to prepared parameters or a bounded callback form
-  without allowing other database messages to interleave;
-- [x] Prove schema creation, CRUD, rollback, busy/contention recovery, close,
-  process restart, and retained rows on Apple arm64; assemble the same program
-  for Linux arm64;
-- [x] Persist one bounded counter actor through the public SQLite and actor APIs,
-  with restart and mailbox-order evidence;
-- [ ] Publish limits, permissions, failure mapping, operational prerequisites,
-  and benchmark deltas in the persistence, compatibility, status, and release
-  artifacts.
+- [ ] Resolve the Hono response-clone `Content-Type` difference from Fetch/WPT
+  evidence and update the affected native/reference contract;
+- [ ] Finish and test stable `TINY15xx` diagnostics for unavailable built-ins,
+  denied capabilities, exceeded alpha limits, and unsupported actor/SQLite
+  operations;
+- [ ] Audit `doc/ALPHA.md`, `doc/COMPATIBILITY.md`,
+  `doc/STANDARD_LIBRARY.md`, `doc/PERSISTENCE.md`, `doc/ACTORS.md`, the Hono
+  manifests, `--list-builtins`, and the getting-started path so none describes
+  already-shipped disk, transaction, or persistent-counter work as missing or
+  implies an example exercises more than it does;
+- [ ] Make every documented alpha example an explicit `release:verify` gate,
+  including native success/failure HTTP behavior and its declared reference;
+- [ ] Complete one successful Linux-arm64 CI release run, install the resulting
+  archive outside the checkout, and retain its checksum/manifest evidence;
+- [ ] Exercise release-build startup/shutdown, malformed input, request-memory
+  exhaustion, worker/actor saturation, filesystem denial, SQLite contention,
+  and disposal recovery;
+- [ ] Repeat the controlled TinyTSX/Bun release benchmark and publish startup,
+  idle/warm RSS, throughput, median/p99 latency, binary size, and the measured
+  actor/SQLite overhead;
+- [ ] Run the complete clean-tree exit suite and produce a tag-ready
+  `0.1.0-alpha.1` checklist without creating the tag.
 
-The completed in-memory slice accepts a closed JSON object no larger than 64
-KiB, binds at most 16 selected route/body/UUID parameters, exercises CRUD and
-failure recovery, matches Bun/Hono, assembles for Linux arm64, and preserves the
-pinned blog success envelopes plus missing-record 404/204 behavior.
+Runtime SQLite symlink/sidecar-race hardening, prepared/callback transactions,
+general actor messages, actor-scale/fairness work, and the combined user-auth
+example are explicitly post-alpha. The alpha documents must keep those limits
+prominent.
 
 ## Alpha critical path
 
 ### A0 — Freeze the developer-preview contract
 
-- [ ] Add `doc/ALPHA.md` with the supported syntax, Hono/Web API matrix, native
+- [x] Add `doc/ALPHA.md` with the supported syntax, Hono/Web API matrix, native
       targets, standard-library modules, limits, security model, prerequisites,
       non-goals, and known incompatibilities.
 - [x] Resolve bare package imports and package declarations so documented Hono
@@ -103,7 +109,7 @@ pinned blog success envelopes plus missing-record 404/204 behavior.
 - [x] Add a machine-readable example matrix recording source provenance,
       required imports/APIs, intake status, native compile status, HTTP behavior
       coverage, Bun/reference coverage, and the first unsupported boundary.
-- [ ] Keep the complete pinned `basic` and `jsx-ssr` applications as mandatory
+- [x] Keep the complete pinned `basic` and `jsx-ssr` applications as mandatory
       release gates on every supported native target.
 - [x] Compile and execute the pinned upstream `serve-static` landing application,
       then extend it with `tinytsx:fs` using the pinned assets as the file API
@@ -119,12 +125,9 @@ pinned blog success envelopes plus missing-record 404/204 behavior.
       native format/uniqueness tests.
 - [x] Connect permitted environment values to typed Hono bindings for the blog
       configuration path; keep denied and missing bindings explicit.
-- [ ] Use the pinned upstream `durable-objects` counter behavior as the contract
+- [x] Use the pinned upstream `durable-objects` counter behavior as the contract
       for a Hono + `tinytsx:actors` counter example. Do not claim Cloudflare API
       compatibility unless the upstream source itself runs unchanged.
-- [ ] Add at least one multi-module user-auth/configuration example covering
-      environment input, middleware, error handling, and persistent state without
-      network credentials in the automated suite.
 - [ ] For every alpha example, build a native server, exercise success and error
       HTTP paths, compare portable behavior with Bun or another declared
       reference, and assemble the Linux-arm64 output in cross-host tests.
@@ -138,7 +141,7 @@ pinned blog success envelopes plus missing-record 404/204 behavior.
 - [x] Add `doc/STANDARD_LIBRARY.md` defining built-in-module versioning,
       capability permissions, error types, blocking rules, resource ownership,
       bounds, target support, and the distinction from Web-standard APIs.
-- [ ] Keep built-in declarations in the shipped SDK and implementations in
+- [x] Keep built-in declarations in the shipped SDK and implementations in
       focused zero-JavaScript native runtime modules. Applications must not need
       npm packages to use them.
 - [x] Add `tinytsx --list-builtins` or equivalent machine-readable capability
@@ -173,7 +176,7 @@ pinned blog success envelopes plus missing-record 404/204 behavior.
       replacement.
 - [x] Enforce configurable maximum path and file sizes, copy results into a
       documented ownership domain, and return recoverable errors on overflow.
-- [ ] Add native unit tests, permission/security tests, request-time Hono tests,
+- [x] Add native unit tests, permission/security tests, request-time Hono tests,
       and Apple/Linux target coverage.
 - [x] Run the Hono static-file tracer through the public built-in rather than a
       test-only runtime intrinsic.
@@ -190,19 +193,12 @@ pinned blog success envelopes plus missing-record 404/204 behavior.
       General typed behaviors remain gated by structured message copying below.
 - [x] Reuse the existing fixed application executor and logical-worker mailbox;
       spawning or stopping an actor must not create or destroy a native thread.
-- [ ] Extend message copying from strings to an explicit structured subset of
-      primitives, closed records, and bounded arrays. Preserve isolation and
-      reject unsupported identity/transfer semantics.
 - [x] Define actor-local counter state without a managed heap and reject
       behavior/state that escapes the supported native `i64` lifetime contract.
-- [ ] Add deterministic mailbox-full, stopped, handler-failure, timeout, and
-      caller-cancellation behavior. Automatic restart/supervision is optional for
-      the first alpha but its absence must be explicit.
-- [ ] Measure 1,000 and 10,000 idle/local actors, publish bytes per actor and
-      thread count, then set a documented practical limit from evidence.
-- [ ] Prove per-actor FIFO ordering, parallelism across actors, fairness under a
-      hot mailbox, isolation, stop/drain behavior, panic recovery, and no native
-      thread growth proportional to actor count.
+- [x] Define bounded stopped, mailbox/application saturation, handler-panic, and
+      overflow behavior for the counter specialization; document that timeout,
+      caller cancellation, automatic restart, supervision, and drain-on-stop are
+      not part of this alpha.
 - [x] Run the Hono counter tracer through the public actor API as an explicit
       local adapter to the pinned durable-objects behavior.
 - [x] Persist one actor variant through `tinytsx:sqlite` after the bounded disk
@@ -213,21 +209,23 @@ pinned blog success envelopes plus missing-record 404/204 behavior.
 - [x] Pin a SQLite revision and choose a reproducible linking policy. Prefer a
       vendored/static alpha artifact with license and provenance records so
       applications do not depend on an undeclared host SQLite installation.
-- [ ] Specify and declare `tinytsx:sqlite` with database open/close, prepared
-      statements, positional binding, bounded query rows, execute results, and
-      explicit transactions.
+- [x] Specify and declare the bounded alpha `tinytsx:sqlite` subset: static
+      database open/close, prepared positional binding, bounded query rows,
+      closed effects, and static-SQL transaction batches. Typed general execute
+      results and callback transactions remain post-alpha.
 - [x] Finish the in-memory prepared-parameter slice described above before
       adding transactions or on-disk databases; keep request JSON decoding in
       the bounded bootstrap/runtime boundary rather than a general JS object
       heap.
-- [ ] Define the alpha value mapping for `null`, integer, finite number, text,
+- [x] Define the alpha value mapping for `null`, integer, finite number, text,
       and blob; reject unsupported dynamic values at compile time.
-- [ ] Make each connection single-owner and serialize its operations through the
+- [x] Make each connection single-owner and serialize its operations through the
       A4 actor mailbox instead of sharing a native handle across HTTP executors.
 - [x] Require explicit read/write filesystem capabilities for on-disk databases and offer
       `:memory:` for deterministic tests.
-- [ ] Bound SQL length, parameter count, row count, row bytes, open statements,
-      busy timeout, and queued operations; surface typed recoverable failures.
+- [x] Bound the admitted static SQL, selected parameters, rows, row bytes,
+      result bytes, busy wait, and owner mailbox; surface recoverable failures
+      without exposing an unbounded statement or operation queue.
 - [x] Prove schema creation, insert/select/update/delete, rollback, contention,
       malformed SQL, limit recovery, shutdown, and restart persistence.
 - [x] Run the in-memory Hono blog tracer end to end against the public SQLite
@@ -261,8 +259,9 @@ pinned blog success envelopes plus missing-record 404/204 behavior.
 - [ ] Verify startup, graceful shutdown, malformed input recovery, request OOM,
       worker/actor saturation, filesystem denial, SQLite contention, and clean
       resource disposal in release builds.
-- [x] Publish one short getting-started path that installs the archive, builds a
-      Hono application using files/SQLite/actors, and exercises it with `curl`.
+- [ ] Publish one short getting-started path that installs the archive and builds
+      a Hono application; link focused, runnable file, SQLite, and actor examples
+      instead of implying the current hello-only snippet exercises them.
 
 ## Alpha exit gate
 
@@ -304,6 +303,9 @@ Do not tag `0.1.0-alpha.1` until all of these are true:
 
 ### P2 — Web and Hono breadth
 
+- [ ] Add a multi-module user-auth/configuration example covering environment
+      input, middleware, error handling, and persistent state without network
+      credentials in the automated suite.
 - [ ] Generalize Request, Response, Headers, Fetch, URL, encoding, request bodies
       beyond the alpha JSON subset, abort/timeout, and portable non-macOS
       transports.
@@ -317,6 +319,20 @@ Do not tag `0.1.0-alpha.1` until all of these are true:
 
 ### P3 — Actors, AI, persistence, and managed memory
 
+- [ ] Extend actor message copying to an explicit structured subset of
+      primitives, closed records, and bounded arrays; preserve isolation and
+      reject unsupported identity/transfer semantics.
+- [ ] Define actor timeout, caller cancellation, drain-on-stop, automatic
+      restart, and supervision behavior, then prove handler isolation and panic
+      recovery beyond the counter specialization.
+- [ ] Measure 1,000 and 10,000 idle/local actors, publish bytes per actor and
+      thread count, and prove cross-actor parallelism and fairness under a hot
+      mailbox before raising the documented actor-count limit.
+- [ ] Harden on-disk SQLite opens against symlink replacement and path races
+      across compilation, startup, and sidecar-file creation.
+- [ ] Add bounded prepared-parameter/callback transactions, typed execute
+      results, and broader dynamic SQLite values without allowing operations to
+      interleave on one connection.
 - [ ] Add actor supervision trees, restart intensity, monitors/links, registries,
       persistence snapshots, and remote/distributed actors only from separate
       evidence-driven proposals.
