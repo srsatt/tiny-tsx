@@ -498,6 +498,14 @@ execution, and the final instance prototype. This complements the ordinary
 closed-class method slice but does not claim inheritance, dynamic class values,
 arbitrary instances, or a general property-descriptor object model.
 
+The complete pinned `Error/message_property.js` program constructs a bounded
+native Error record with an owned copy of its message bytes. Generated code
+reads that property back and compares it byte-for-byte, then verifies the
+standard writable, non-enumerable, configurable descriptor flags. This proves
+the exact constructor/helper observations in the upstream program; ordinary
+application Error objects, stacks, subclasses, causes, and general descriptor
+reflection remain unsupported.
+
 The allowlisted `language/expressions/typeof/undefined.js` case is the first
 `mode: native` Test262 entry. `tinytsx test262 <case> --output <binary>` parses
 the untouched upstream source and lowers its two top-level

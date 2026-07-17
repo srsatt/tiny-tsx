@@ -175,3 +175,19 @@ test("lowers the complete pinned Date.now type Test262 case", () => {
     span: program.assertions[0]?.span,
   }]);
 });
+
+test("lowers the complete pinned Error message-property Test262 case", () => {
+  const program = compileTest262Entry(path.join(
+    repository,
+    "vendor/test262/test/built-ins/Error/message_property.js",
+  ));
+
+  assert.deepEqual(program.assertions, [{
+    kind: "errorMessageProgram",
+    message: "my-message",
+    writable: true,
+    enumerable: false,
+    configurable: true,
+    span: program.assertions[0]?.span,
+  }]);
+});

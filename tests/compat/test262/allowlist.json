@@ -53,7 +53,7 @@
     {
       "path": "test/built-ins/Error/message_property.js",
       "feature": "error-message",
-      "mode": "syntax"
+      "mode": "native"
     },
     {
       "path": "test/built-ins/Date/now/15.9.4.4-0-4.js",

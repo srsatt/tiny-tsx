@@ -33,6 +33,11 @@ import {
   lowerClassConstructorProgram,
   type ClassConstructorProgramAssertion,
 } from "./test262-class.js";
+import {
+  isErrorMessageProgram,
+  lowerErrorMessageProgram,
+  type ErrorMessageProgramAssertion,
+} from "./test262-error.js";
 
 export interface Test262Program {
   version: 3;
@@ -50,7 +55,8 @@ export type Test262Assertion =
   | RecordMembershipProgramAssertion
   | ThrowCatchProgramAssertion
   | DateNowTypeProgramAssertion
-  | ClassConstructorProgramAssertion;
+  | ClassConstructorProgramAssertion
+  | ErrorMessageProgramAssertion;
 
 export interface SameValueStringAssertion {
   kind: "sameValueString";
@@ -111,8 +117,10 @@ export function compileTest262Entry(entryPath: string): Test262Program {
     throw tinyError("TINY2601", "Test262 metadata block is required", sourceFile, undefined, sourceFile);
   }
 
-  const assertions = isClassConstructorProgram(sourceFile)
-    ? [lowerClassConstructorProgram(sourceFile)]
+  const assertions = isErrorMessageProgram(sourceFile)
+    ? [lowerErrorMessageProgram(sourceFile)]
+    : isClassConstructorProgram(sourceFile)
+      ? [lowerClassConstructorProgram(sourceFile)]
     : isDateNowTypeProgram(sourceFile)
       ? [lowerDateNowTypeProgram(sourceFile)]
     : sourceFile.statements.every(isSameValueStatement)

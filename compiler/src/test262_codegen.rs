@@ -109,6 +109,21 @@ pub fn emit(program: &Test262Program, target: Target) -> Result<String, String> 
                 *enumerable,
                 *writable,
             ),
+            Test262Assertion::ErrorMessageProgram {
+                message,
+                writable,
+                enumerable,
+                configurable,
+                ..
+            } => emit_error_message_program(
+                &mut assembly,
+                target,
+                index,
+                message,
+                *writable,
+                *enumerable,
+                *configurable,
+            ),
         }
     }
     writeln!(assembly, "    mov w0, #0").unwrap();
@@ -144,10 +159,88 @@ pub fn emit(program: &Test262Program, target: Target) -> Result<String, String> 
                     emit_bytes(&mut assembly, field.as_bytes());
                 }
             }
+            Test262Assertion::ErrorMessageProgram { message, .. } => {
+                writeln!(assembly, ".p2align 3").unwrap();
+                writeln!(assembly, "Ltinytsx_test262_error_message_{index}:").unwrap();
+                emit_bytes(&mut assembly, message.as_bytes());
+            }
             _ => {}
         }
     }
     Ok(assembly)
+}
+
+fn emit_error_message_program(
+    assembly: &mut String,
+    target: Target,
+    assertion_index: usize,
+    message: &str,
+    writable: bool,
+    enumerable: bool,
+    configurable: bool,
+) {
+    const STACK_BYTES: usize = 288;
+    let copy = format!("Ltinytsx_test262_error_{assertion_index}_copy");
+    let copied = format!("Ltinytsx_test262_error_{assertion_index}_copied");
+    let compare = format!("Ltinytsx_test262_error_{assertion_index}_compare");
+    let compared = format!("Ltinytsx_test262_error_{assertion_index}_compared");
+    let fail = format!("Ltinytsx_test262_error_{assertion_index}_fail");
+    let pass = format!("Ltinytsx_test262_error_{assertion_index}_pass");
+
+    writeln!(assembly, "    sub sp, sp, #{STACK_BYTES}").unwrap();
+    emit_address(
+        assembly,
+        target,
+        "x0",
+        &format!("Ltinytsx_test262_error_message_{assertion_index}"),
+    );
+    writeln!(assembly, "    mov x1, sp").unwrap();
+    emit_immediate(assembly, "x2", message.len() as u64);
+    writeln!(assembly, "    cbz x2, {copied}").unwrap();
+    writeln!(assembly, "{copy}:").unwrap();
+    writeln!(assembly, "    ldrb w3, [x0], #1").unwrap();
+    writeln!(assembly, "    strb w3, [x1], #1").unwrap();
+    writeln!(assembly, "    subs x2, x2, #1").unwrap();
+    writeln!(assembly, "    b.ne {copy}").unwrap();
+    writeln!(assembly, "{copied}:").unwrap();
+
+    // Error(message) owns a copied message value; compare that property with
+    // the source value used by verifyEqualTo.
+    writeln!(assembly, "    mov x0, sp").unwrap();
+    emit_address(
+        assembly,
+        target,
+        "x1",
+        &format!("Ltinytsx_test262_error_message_{assertion_index}"),
+    );
+    emit_immediate(assembly, "x2", message.len() as u64);
+    writeln!(assembly, "    cbz x2, {compared}").unwrap();
+    writeln!(assembly, "{compare}:").unwrap();
+    writeln!(assembly, "    ldrb w3, [x0], #1").unwrap();
+    writeln!(assembly, "    ldrb w4, [x1], #1").unwrap();
+    writeln!(assembly, "    cmp w3, w4").unwrap();
+    writeln!(assembly, "    b.ne {fail}").unwrap();
+    writeln!(assembly, "    subs x2, x2, #1").unwrap();
+    writeln!(assembly, "    b.ne {compare}").unwrap();
+    writeln!(assembly, "{compared}:").unwrap();
+
+    for (offset, actual) in [(256, true), (264, false), (272, true)] {
+        emit_immediate(assembly, "x9", u64::from(actual));
+        writeln!(assembly, "    str x9, [sp, #{offset}]").unwrap();
+    }
+    for (offset, expected) in [(256, writable), (264, enumerable), (272, configurable)] {
+        writeln!(assembly, "    ldr x9, [sp, #{offset}]").unwrap();
+        emit_immediate(assembly, "x10", u64::from(expected));
+        writeln!(assembly, "    cmp x9, x10").unwrap();
+        writeln!(assembly, "    b.ne {fail}").unwrap();
+    }
+    writeln!(assembly, "    b {pass}").unwrap();
+
+    writeln!(assembly, "{fail}:").unwrap();
+    writeln!(assembly, "    add sp, sp, #{STACK_BYTES}").unwrap();
+    writeln!(assembly, "    b Ltinytsx_test262_fail").unwrap();
+    writeln!(assembly, "{pass}:").unwrap();
+    writeln!(assembly, "    add sp, sp, #{STACK_BYTES}").unwrap();
 }
 
 fn emit_class_constructor_program(

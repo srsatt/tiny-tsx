@@ -362,11 +362,11 @@ adds an explicit application acceptance test.
 - [ ] Promote remaining syntax-only Test262 cases only when their complete
       assertion programs execute natively.
   - 2026-07-17: the complete pinned array-spread/apply, subtraction/GetValue,
-    closed-record membership, direct string throw/catch, `Date.now()` type, and
-    closed class-constructor programs were promoted to native mode. Their
-    assertions execute against copied arguments, numeric slots, runtime
-    field-name bytes, native abrupt completion, the portable host clock, and
-    bounded class/prototype identities. Four syntax-only cases remain.
+    closed-record membership, direct string throw/catch, `Date.now()` type,
+    closed class-constructor, and own `Error.message` programs were promoted to
+    native mode. Their assertions execute against copied arguments, numeric
+    slots, runtime field-name bytes, native abrupt completion, the portable host
+    clock, and bounded class/error identities. Three syntax-only cases remain.
 - [ ] Expand ordinary functions to locals, branches, closures, additional native
       types, and general typed expressions/statements.
   - 2026-07-17: immutable string locals and strict string-equality branches now
@@ -392,7 +392,9 @@ adds an explicit application acceptance test.
       allowlisted Test262 coverage.
   - 2026-07-17: ordinary native functions can throw strings across direct calls
     and consume them in same-function `try/catch`; uncaught completion is a
-    compile error. Error objects, finally, Promise, and async remain open.
+    compile error. The exact Test262 Error constructor now owns a bounded copied
+    message with standard descriptor flags; general Error objects, finally,
+    Promise, and async remain open.
 
 ### P2 — Web and Hono breadth
 

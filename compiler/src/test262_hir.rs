@@ -79,6 +79,13 @@ pub enum Test262Assertion {
         writable: bool,
         span: SourceSpan,
     },
+    ErrorMessageProgram {
+        message: String,
+        writable: bool,
+        enumerable: bool,
+        configurable: bool,
+        span: SourceSpan,
+    },
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -202,6 +209,23 @@ impl Test262Program {
                 {
                     return Err(
                         "Test262 class constructor requires one construction and the standard constructor descriptor"
+                            .to_owned(),
+                    );
+                }
+                Test262Assertion::ErrorMessageProgram {
+                    message,
+                    writable,
+                    enumerable,
+                    configurable,
+                    ..
+                } if message.is_empty()
+                    || message.len() > 256
+                    || !writable
+                    || *enumerable
+                    || !configurable =>
+                {
+                    return Err(
+                        "Test262 Error requires a 1-256 byte message and the standard message descriptor"
                             .to_owned(),
                     );
                 }

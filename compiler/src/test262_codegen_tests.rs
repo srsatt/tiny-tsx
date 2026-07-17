@@ -102,6 +102,26 @@ fn emits_closed_class_constructor_identity_and_descriptor_checks() {
 }
 
 #[test]
+fn emits_owned_error_message_and_descriptor_checks() {
+    let mut program = program(Target::LinuxArm64);
+    program.assertions = vec![Test262Assertion::ErrorMessageProgram {
+        message: "my-message".to_owned(),
+        writable: true,
+        enumerable: false,
+        configurable: true,
+        span: span(),
+    }];
+
+    let assembly = emit(&program, Target::LinuxArm64).unwrap();
+
+    assert!(assembly.contains("Ltinytsx_test262_error_message_0:"));
+    assert!(assembly.contains("strb w3, [x1], #1"));
+    assert!(assembly.contains("ldrb w3, [x0], #1"));
+    assert!(assembly.contains("Ltinytsx_test262_error_0_fail:"));
+    assert!(assembly.contains("add sp, sp, #288"));
+}
+
+#[test]
 fn emits_runtime_numeric_binding_loads_and_subtraction() {
     let mut program = program(Target::LinuxArm64);
     program.assertions = vec![Test262Assertion::NumericSubtractionProgram {

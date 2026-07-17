@@ -431,8 +431,9 @@ produces and serves a native Mach-O executable from the example TSX source.
   successful numeric-category completion from a link-register-safe standalone
   entry. The complete class-constructor case checks constructor/prototype
   identity, standard descriptor flags, construction count, and instance
-  prototype in bounded native storage. The other four cases remain syntax-only
-  and are not conformance results.
+  prototype in bounded native storage. The complete Error case copies its own
+  bounded message bytes and verifies the standard property descriptor. The
+  other three cases remain syntax-only and are not conformance results.
 - The dedicated native API suite currently covers Request method/path/query
   views, allocation-free form-decoded query-name presence, elapsed-header
   formatting, and exact-fit, OOM, and invalid response-writer behavior. Query
