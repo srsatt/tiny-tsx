@@ -587,6 +587,18 @@ explicitly promoted into a later goal.
     `test:actors-native`. Clean TCP half-close, arbitrary `AbortSignal` sources,
     cancellation of SQLite/fetch/file operations, message retraction, restart,
     and supervision remain outside this tracer.
+  - Selected next tracer (2026-07-17): admit one exact non-persistent counter
+    behavior whose first statement throws a closed `Error` for one
+    compile-time integer sentinel, followed by the existing checked counter
+    update/reply. A closed `restart: {maxRestarts, withinMs}` policy allows 1–16
+    initializer resets in a 1–60,000 ms rolling window; each failed caller gets
+    the existing internal-error envelope, queued messages continue against the
+    reset initial state, and the next failure beyond the limit terminates that
+    actor and cancels its queue. Require generic reset/intensity tests, stable
+    `TINY1520` rejections, Apple Hono state/reset/termination behavior, Linux
+    assembly, manifest/SDK/docs updates, and no cross-actor state change.
+    Persistent restart recovery, backoff, manual restart, supervision, links,
+    monitors, registries, snapshots, and distributed identity remain separate.
 - [x] Measure 1,000 and 10,000 idle/local actors, publish bytes per actor and
       thread count, and prove cross-actor parallelism and fairness under a hot
       mailbox before raising the documented actor-count limit.
