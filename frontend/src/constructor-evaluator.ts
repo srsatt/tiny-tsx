@@ -1468,6 +1468,7 @@ function executeStatement(
     && (
       expression.operatorToken.kind === ts.SyntaxKind.EqualsToken
       || expression.operatorToken.kind === ts.SyntaxKind.QuestionQuestionEqualsToken
+      || expression.operatorToken.kind === ts.SyntaxKind.PlusEqualsToken
     )
   ) {
     if (expression.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
@@ -1989,14 +1990,18 @@ function executeEffectCall(
   if (receiver.kind === "reference" && receiver.name === "contextStash" && name === "set") {
     return true;
   }
-  if (receiver.kind === "headers" && name === "set") {
+  if (receiver.kind === "headers" && (name === "set" || name === "append")) {
     const headerName = arguments_[0];
     const headerValue = arguments_[1];
     const loweredValue = headerValue === undefined ? undefined : responseHeaderValue(headerValue);
     if (headerName?.kind === "string" && loweredValue !== undefined) {
-      receiver.entries.set(headerName.value.toLowerCase(), {
+      const key = headerName.value.toLowerCase();
+      const existing = name === "append" ? receiver.entries.get(key) : undefined;
+      receiver.entries.set(key, {
         name: headerName.value,
-        value: loweredValue,
+        value: existing === undefined
+          ? loweredValue
+          : appendResponseHeaderValue(existing.value, loweredValue),
       });
       return true;
     }
@@ -2042,6 +2047,20 @@ function executeEffectCall(
 function responseHeaderValue(value: Value): ResponseHeaderValue | undefined {
   if (value.kind === "string") return value.value;
   return runtimeStringParts(value);
+}
+
+function appendResponseHeaderValue(
+  current: ResponseHeaderValue,
+  appended: ResponseHeaderValue,
+): ResponseHeaderValue {
+  if (typeof current === "string" && typeof appended === "string") {
+    return `${current}, ${appended}`;
+  }
+  return [
+    ...(typeof current === "string" ? [{kind: "literal" as const, value: current}] : current),
+    {kind: "literal", value: ", "},
+    ...(typeof appended === "string" ? [{kind: "literal" as const, value: appended}] : appended),
+  ];
 }
 
 function streamChunk(value: Value): string | RuntimeStringPart[] | undefined {
@@ -2159,6 +2178,20 @@ function evaluateCall(
       return argument.kind === "unknown"
         ? unknown("String argument is not closed")
         : {kind: "string", value: stringValue(argument)};
+    }
+    if (callable.kind === "reference" && callable.name === "encodeURIComponent") {
+      const input = arguments_[0];
+      if (arguments_.length !== 1 || input?.kind !== "string") {
+        return unknown("encodeURIComponent requires one closed string");
+      }
+      try {
+        const value = encodeURIComponent(input.value);
+        return Buffer.byteLength(value, "utf8") <= 65_536
+          ? {kind: "string", value}
+          : unknown("encodeURIComponent result exceeds 65536 bytes");
+      } catch {
+        return {kind: "thrown", value: {kind: "error", name: "URIError", message: "URI malformed"}};
+      }
     }
     if (callable.kind === "reference" && callable.name === "Error") {
       const message = arguments_[0] ?? UNDEFINED;
@@ -3626,6 +3659,18 @@ function evaluateExpression(
       const right = evaluate(evaluator, expression.right, module, environment, instance);
       assign(evaluator, expression.left, right, module, environment, instance);
       return right;
+    }
+    if (operator === ts.SyntaxKind.PlusEqualsToken) {
+      const right = evaluate(evaluator, expression.right, module, environment, instance);
+      const joined = joinRuntimeStrings([left, right]);
+      const value = joined ?? (left.kind === "number" && right.kind === "number"
+        ? {kind: "number" as const, value: left.value + right.value}
+        : undefined);
+      if (value === undefined) {
+        return unknown(`addition assignment operands are not closed (${left.kind}, ${right.kind})`);
+      }
+      assign(evaluator, expression.left, value, module, environment, instance);
+      return value;
     }
     if (operator === ts.SyntaxKind.AmpersandAmpersandToken) {
       const decision = truthiness(left);

@@ -434,6 +434,11 @@ adds an explicit application acceptance test.
 - [ ] Generalize Request, Response, Headers, Fetch, URL, encoding, request bodies
       beyond the alpha JSON subset, abort/timeout, and portable non-macOS
       transports.
+  - 2026-07-17: the real pinned `hono/cookie` `setCookie` helper now executes for
+    closed name/value and default or explicit path. Closed `encodeURIComponent`,
+    string `+=`, and `Headers.append` are reusable evaluator operations; request
+    cookie parsing, dynamic attributes, multiple cookies, and signing remain
+    open.
 - [ ] Add optional/multi-segment route parameters, general constraints,
       non-terminal catch-alls, and broader request-dependent handlers.
   - 2026-07-17: one or more contiguous trailing `:name?` parameters now expand

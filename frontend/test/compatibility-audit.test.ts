@@ -1036,6 +1036,35 @@ test("lowers closed Response init headers from a Hono route", () => {
   assert.deepEqual(hir.staticStrings, [{id: 0, value: "Headers"}]);
 });
 
+test("executes the pinned Hono setCookie helper for closed values", () => {
+  const entry = path.join(repository, "tests/compat/hono/cookie-smoke.ts");
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    aliases: {
+      hono: path.join(repository, "vendor/hono/src/index.ts"),
+      "hono/cookie": path.join(repository, "vendor/hono/src/helper/cookie/index.ts"),
+    },
+    apiAliases: {
+      hono: path.join(repository, "tests/compat/hono/api.d.ts"),
+      "hono/cookie": path.join(repository, "tests/compat/hono/cookie-api.d.ts"),
+    },
+  });
+
+  assert.deepEqual(hir.handlers.map(handler => ({
+    path: handler.path,
+    headers: handler.headers,
+  })), [
+    {
+      path: "/set-cookie",
+      headers: [{name: "Set-Cookie", value: "delicious_cookie=macha; Path=/"}],
+    },
+    {
+      path: "/a/set-cookie-path",
+      headers: [{name: "Set-Cookie", value: "delicious_cookie=macha; Path=/a"}],
+    },
+  ]);
+});
+
 test("applies the upstream poweredBy middleware after the root handler", () => {
   const entry = path.join(repository, "tests/compat/hono/powered-by-smoke.ts");
   const hir = compileEntry(entry, {

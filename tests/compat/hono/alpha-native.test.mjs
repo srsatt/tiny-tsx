@@ -27,6 +27,11 @@ const jsx = [
   "--alias", "hono/html=vendor/hono/src/helper/html/index.ts",
   "--api", "hono/html=tests/compat/hono/html-api.d.ts",
 ];
+const cookie = [
+  ...hono,
+  "--alias", "hono/cookie=vendor/hono/src/helper/cookie/index.ts",
+  "--api", "hono/cookie=tests/compat/hono/cookie-api.d.ts",
+];
 
 test("assembles both supported serve entry contracts for Linux arm64", () => {
   for (const entry of [
@@ -123,6 +128,26 @@ test("executes trailing optional Hono parameters as finite native routes", async
       await assertText(port, "/api/v1/animal/bird", 200, '{"type":"bird"}');
       await assertText(port, "/api/v1/animal", 200, "{}");
       await assertText(port, "/api/v1/animal/bird/extra", 404, "404 Not Found");
+    },
+  );
+});
+
+test("executes the pinned Hono setCookie helper natively", async context => {
+  await withServer(
+    context,
+    "tests/compat/hono/cookie-smoke.ts",
+    39_489,
+    cookie,
+    async port => {
+      for (const [pathname, expected] of [
+        ["/set-cookie", "delicious_cookie=macha; Path=/"],
+        ["/a/set-cookie-path", "delicious_cookie=macha; Path=/a"],
+      ]) {
+        const response = await request(port, pathname);
+        assert.equal(response.status, 200);
+        assert.equal(response.headers.get("set-cookie"), expected);
+        assert.equal(await response.text(), "Give cookie");
+      }
     },
   );
 });

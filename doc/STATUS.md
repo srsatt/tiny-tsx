@@ -814,6 +814,17 @@ produces and serves a native Mach-O executable from the example TSX source.
   and official routing matrix point to the project-owned tracer. General route
   regular expressions and multi-segment captures remain outside this slice.
 
+### Closed Hono response cookies (2026-07-17)
+
+- The unchanged pinned `hono/cookie` `setCookie` path now lowers closed default
+  and explicit-path cookies. Its source uses newly admitted closed
+  `encodeURIComponent`, string `+=`, and `Headers.append` operations rather
+  than a compiler-owned helper replacement.
+- Frontend HIR and native HTTP tests pin `delicious_cookie=macha; Path=/` and
+  `delicious_cookie=macha; Path=/a`. The official helper matrix and upstream
+  behavior allowlist now cite this evidence; request parsing, signing, dynamic
+  options, deletion, and multiple cookies remain unsupported.
+
 Verification:
 
 ```bash
