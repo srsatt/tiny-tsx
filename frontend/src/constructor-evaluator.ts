@@ -781,9 +781,9 @@ interface ClosedCors {
 function closedCors(middleware: Value & {kind: "closure"}): ClosedCors | undefined {
   const module = middleware.module.path.replaceAll("\\", "/");
   if (
-    !module.endsWith("/middleware/cors/index.ts")
+    !/\/middleware\/cors\/index\.(?:ts|js)$/.test(module)
     || !ts.isFunctionExpression(middleware.expression)
-    || middleware.expression.name?.text !== "cors"
+    || !["cors", "cors2"].includes(middleware.expression.name?.text ?? "")
   ) {
     return undefined;
   }

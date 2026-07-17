@@ -995,6 +995,28 @@ test("lowers bounded upstream CORS headers and preflight", () => {
   ]);
 });
 
+test("lowers the pinned published Hono CORS JavaScript shape", () => {
+  const entry = path.join(repository, "tests/compat/hono/cors-smoke.ts");
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    aliases: {
+      hono: path.join(repository, "vendor/hono/src/index.ts"),
+      "hono/cors": path.join(repository, "tests/compat/hono/published/middleware/cors/index.js"),
+    },
+    apiAliases: {
+      hono: path.join(repository, "tests/compat/hono/api.d.ts"),
+      "hono/cors": path.join(repository, "tests/compat/hono/cors-api.d.ts"),
+    },
+  });
+
+  const get = hir.handlers.find(handler => handler.method === "GET" && handler.path === "/posts");
+  assert.deepEqual(get?.headers, [{name: "Access-Control-Allow-Origin", value: "*"}]);
+  const preflight = hir.handlers.find(handler =>
+    handler.method === "OPTIONS" && handler.path === "/posts"
+  );
+  assert.equal(preflight?.response.kind === "text" ? preflight.response.status : undefined, 204);
+});
+
 test("lowers the upstream response-time middleware into a native elapsed header", () => {
   const entry = path.join(repository, "tests/compat/hono/response-time-smoke.ts");
   const options = {
