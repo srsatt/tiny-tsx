@@ -360,29 +360,34 @@ collection are research tracks below. They may provide tracers or design
 evidence, but they do not block this milestone unless a later backlog change
 adds an explicit application acceptance test.
 
-#### Next-goal handoff
+#### Goal handoff
 
-The next bounded implementation goal is **finish the local actor message and
-persistence core, then measure it**. Execute it in this order:
+The previous bounded goal—copied structured actor messages, protected SQLite
+ownership, and actor pressure evidence—is complete. Its implementation and
+evidence are recorded under P3 and P4. No next goal is active in this backlog;
+select one explicitly before implementation begins.
 
-1. admit copied, bounded actor messages containing primitives, closed records,
-   and bounded arrays; reject dynamic identity, transfer, cycles, excessive
-   depth, and oversized payloads at the earliest deterministic boundary;
-2. run those messages through the public `tinytsx:actors` API on Apple arm64
-   and Linux-arm64 assembly, proving FIFO ordering, isolation, saturation,
-   stop/caller-detach behavior, and disposal without one native thread per
-   actor;
-3. finish the remaining on-disk SQLite directory and journal/WAL sidecar race
-   model before expanding actor persistence beyond the counter tracer;
-4. add the structured-message example to the Hono matrix and release gate, then
-   publish actor throughput, latency, CPU, allocation, and peak-RSS evidence at
-   idle scale and under a hot mailbox.
+The groomed candidates, in recommended dependency order, are:
 
-This goal does not include general JavaScript object identity, arbitrary actor
-behaviors, distributed actors, a managed heap, callback transactions, or a new
-release tag. After it is green, choose the next upstream Hono example by its
-first unsupported boundary; do not start from an open-ended “support more
-Hono” task.
+1. **HTTP connection fairness:** preserve live keep-alive connections while
+   resubmitting them after a bounded request turn, then repeat the actor load
+   matrix. This addresses a measured runtime bottleneck and benefits every Hono
+   application without widening the language contract.
+2. **One broader Hono tracer:** choose one exact upstream example or behavior
+   file, compile it unchanged, and promote only the first unsupported language,
+   Web API, or standard-library boundary that it exposes.
+3. **SQLite result depth:** add typed execute results and only the dynamic value
+   forms required by the selected application while retaining single-owner,
+   non-interleaving execution.
+4. **Actor lifecycle depth:** specify disconnect cancellation, restart, and
+   supervision separately; do not bundle distributed actors, snapshots, or a
+   managed heap into the local lifecycle goal.
+
+Each selected goal must name its tracer, supported boundary, native Apple and
+Linux evidence, failure/resource tests, and documentation updates. General
+JavaScript object identity, blanket Hono compatibility, distributed actors,
+production GC, and a new release tag remain out of scope unless explicitly
+promoted into a later goal.
 
 ### P1 — Compatibility and language depth
 
@@ -570,6 +575,25 @@ Hono” task.
     claimed.
 - [ ] Run controlled longer-duration comparisons before publishing performance
       claims and optimize only from profiles.
+  - 2026-07-17: a symbolized five-second macOS sample during a ten-second,
+    concurrency-64 actor run shows the HTTP executors blocked in synchronous
+    actor asks while seven of eight actor executors sleep, as expected for one
+    single-owner actor. Excess keep-alive connections remain pinned behind each
+    HTTP executor's 100-request turn; wall-time samples are not presented as
+    CPU-only attribution.
+  - 2026-07-17: exploratory request-turn caps reject connection closing as the
+    fairness mechanism. Reducing the cap from 100 to 8 improved p99 from the
+    committed 41.94 ms baseline to 12.14 ms but reduced throughput from about
+    71.0k to 41.9k requests/second. A cap of 32 reached 28.10 ms p99 and 63.3k
+    requests/second. Neither experiment was retained because reconnect churn
+    trades too much throughput for latency.
+  - [ ] Design bounded live-connection resubmission that preserves the socket,
+        buffered request bytes, HTTP body framing, pipelining order, overload
+        behavior, and graceful shutdown. Prove bounded queue/FD ownership and
+        no leak under disconnects. Accept it only if three repeated
+        concurrency-64 actor runs improve p99 to at most 25 ms while retaining
+        at least 90% of the committed baseline throughput, then rerun the basic,
+        actor, SQLite, and user-auth Hono native matrices.
 
 ### P5 — Research tracks outside the release critical path
 
