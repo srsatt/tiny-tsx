@@ -203,7 +203,8 @@ fn request_basic_auth_matches_the_configured_credentials() {
         name: TinyStringView::from_bytes(b"authorization"),
         value: TinyStringView::from_bytes(b"basic   aG9ubzphY29vbHByb2plY3Q=  "),
     };
-    let request = request_with_headers(b"GET", b"/auth/test", &[authorization]);
+    let headers = [authorization];
+    let request = request_with_headers(b"GET", b"/auth/test", &headers);
 
     assert_eq!(
         unsafe {
@@ -231,7 +232,8 @@ fn request_if_none_match_accepts_weak_tags_and_lists() {
         name: TinyStringView::from_bytes(b"If-None-Match"),
         value: TinyStringView::from_bytes(b"\"miss\", W/\"tag\""),
     };
-    let request = request_with_headers(b"GET", b"/etag/cached", &[header]);
+    let headers = [header];
+    let request = request_with_headers(b"GET", b"/etag/cached", &headers);
 
     assert_eq!(
         unsafe { tinytsx_request_if_none_match(&request, b"\"tag\"".as_ptr(), 5) },

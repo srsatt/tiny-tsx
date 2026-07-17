@@ -4,8 +4,13 @@ mod environment;
 mod filesystem;
 mod http;
 mod random;
+mod shutdown;
 
 fn main() {
+    if let Err(error) = shutdown::install() {
+        eprintln!("TinyTSX signal-handler error: {error}");
+        std::process::exit(1);
+    }
     match environment::initialize() {
         Ok(count) if count > 0 => println!("Environment snapshot: {count} variable(s)"),
         Ok(_) => {}
