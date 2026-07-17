@@ -467,15 +467,18 @@ adds an explicit application acceptance test.
 - [ ] Define actor timeout, caller cancellation, drain-on-stop, automatic
       restart, and supervision behavior, then prove handler isolation and panic
       recovery beyond the counter specialization.
-- [ ] Measure 1,000 and 10,000 idle/local actors, publish bytes per actor and
+- [x] Measure 1,000 and 10,000 idle/local actors, publish bytes per actor and
       thread count, and prove cross-actor parallelism and fairness under a hot
       mailbox before raising the documented actor-count limit.
   - 2026-07-17: idle mailboxes no longer preallocate all 64 message slots. A
     native structural test creates and disposes 10,000 actors with zero idle
     deque capacity and two fixed executors. A five-run M5 Max release probe now
-    records 163.84 bytes/actor at 1,000 and 134.35 bytes/actor at 10,000 after
+    records 131.07 bytes/actor at 1,000 and 139.26 bytes/actor at 10,000 after
     subtracting the 1.75 MiB zero-actor RSS; OS thread count stays at four for
-    all three process configurations. Hot-mailbox fairness remains open.
+    all three process configurations. The runtime already proves cross-actor
+    parallelism, and an eight-message scheduling quantum now has deterministic
+    one-executor evidence that a cold actor runs before a 64-message hot backlog
+    completes. Hot-mailbox throughput remains a separate P4 measurement.
 - [ ] Harden on-disk SQLite opens against symlink replacement and path races
       across compilation, startup, and sidecar-file creation.
   - 2026-07-17: all runtime connections add SQLite's native

@@ -57,8 +57,8 @@ pins two executors and sequential identities, and verifies zero allocated
 mailbox slots before disposal.
 
 The five-run release-mode M5 Max probe measures 1.75 MiB RSS with no actors,
-1.91 MiB with 1,000 actors, and 3.03 MiB with 10,000 actors. After subtracting
-the zero-actor median, that is 163.84 and 134.35 bytes per actor respectively.
+1.88 MiB with 1,000 actors, and 3.08 MiB with 10,000 actors. After subtracting
+the zero-actor median, that is 131.07 and 139.26 bytes per actor respectively.
 All three configurations report four OS threads for the process while retaining
 two configured executors. These are idle local-actor numbers, not a mailbox
 throughput or fairness result.
@@ -67,6 +67,12 @@ throughput or fairness result.
 renders the reply into request-owned response memory. `tell(message)` enqueues
 through the same bounded mailbox and returns without waiting for the reply.
 Consequently, a successful `tell` followed by `ask` observes the tell first.
+One executor handles at most eight messages from a mailbox before resubmitting
+that actor behind already runnable work. A deterministic one-executor test
+blocks the first hot message, queues the remaining 63 plus a cold actor, and
+proves the cold actor runs by the first quantum boundary while hot work remains.
+Separate barrier evidence proves distinct actors execute in parallel when two
+executors are configured.
 
 ## Stop and failures
 
@@ -98,6 +104,6 @@ assembles for Linux arm64.
 
 Before actors can carry general application state, TinyTSX still needs bounded
 copying for primitives, closed records, and bounded arrays; per-actor scale and
-hot-mailbox fairness measurements; timeout/cancellation policy; panic and
-isolation tests; and persistence for arbitrary actor behaviors outside the
-counter specialization.
+hot-mailbox throughput measurements; timeout/cancellation policy; panic and
+isolation tests beyond the generic runtime; and persistence for arbitrary actor
+behaviors outside the counter specialization.

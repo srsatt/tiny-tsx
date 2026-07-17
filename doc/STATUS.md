@@ -852,11 +852,15 @@ produces and serves a native Mach-O executable from the example TSX source.
   remains unchanged.
 - A native worker-runtime test creates and disposes 10,000 actors, verifies
   sequential identities, two fixed executors, and zero idle message slots.
-- A five-run M5 Max release probe records 1.75/1.91/3.03 MiB median RSS for
-  0/1,000/10,000 actors, or 163.84 and 134.35 incremental bytes per actor. OS
+- A five-run M5 Max release probe records 1.75/1.88/3.08 MiB median RSS for
+  0/1,000/10,000 actors, or 131.07 and 139.26 incremental bytes per actor. OS
   thread count stays at four for all three process configurations. Raw samples
-  and a benchmark-harness test pin the report; hot-mailbox fairness remains
-  open before broader scale claims.
+  and a benchmark-harness test pin the report.
+- An eight-message drain quantum prevents one continuously non-empty mailbox
+  from monopolizing an executor. A deterministic single-executor test proves a
+  cold actor runs before the hot 64-message backlog completes; the existing
+  barrier test proves cross-actor parallelism with two executors. Sustained
+  fairness throughput remains unmeasured.
 
 Verification:
 

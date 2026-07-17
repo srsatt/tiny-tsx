@@ -10,6 +10,8 @@ use std::{
 
 use crate::{SubmitError, WorkerPool};
 
+const MAILBOX_DRAIN_QUANTUM: usize = 8;
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum PostError<M> {
     MailboxFull(M),
@@ -106,8 +108,8 @@ where
                 id,
                 (self.initialize)(id),
                 mailbox_capacity,
+                self.weak_pool.clone(),
             )),
-            pool: self.weak_pool.clone(),
         })
     }
 
@@ -126,7 +128,6 @@ where
 
 pub struct LogicalWorker<S, M, R> {
     control: Arc<WorkerControl<S, M, R>>,
-    pool: Weak<WorkerPool<Arc<WorkerControl<S, M, R>>>>,
 }
 
 impl<S, M, R> LogicalWorker<S, M, R>
@@ -143,7 +144,7 @@ where
         if self.control.terminated.load(Ordering::Acquire) {
             return Err(PostError::Terminated(input));
         }
-        let Some(pool) = self.pool.upgrade() else {
+        let Some(pool) = self.control.pool.upgrade() else {
             return Err(PostError::Closed(input));
         };
         let (sender, receiver) = mpsc::sync_channel(1);
@@ -193,10 +194,16 @@ struct WorkerControl<S, M, R> {
     state: Mutex<S>,
     mailbox: Mutex<Mailbox<M, R>>,
     terminated: AtomicBool,
+    pool: Weak<WorkerPool<Arc<WorkerControl<S, M, R>>>>,
 }
 
 impl<S, M, R> WorkerControl<S, M, R> {
-    fn new(id: usize, state: S, mailbox_capacity: usize) -> Self {
+    fn new(
+        id: usize,
+        state: S,
+        mailbox_capacity: usize,
+        pool: Weak<WorkerPool<Arc<WorkerControl<S, M, R>>>>,
+    ) -> Self {
         Self {
             id,
             state: Mutex::new(state),
@@ -206,6 +213,7 @@ impl<S, M, R> WorkerControl<S, M, R> {
                 scheduled: false,
             }),
             terminated: AtomicBool::new(false),
+            pool,
         }
     }
 
@@ -224,8 +232,23 @@ where
     M: Send + 'static,
     R: Send + 'static,
 {
-    fn drain(&self, handle: &impl Fn(&mut S, M) -> R) {
+    fn drain(self: &Arc<Self>, handle: &impl Fn(&mut S, M) -> R) {
+        let mut processed = 0;
         loop {
+            if processed == MAILBOX_DRAIN_QUANTUM {
+                let mut mailbox = lock(&self.mailbox);
+                if mailbox.messages.is_empty() {
+                    mailbox.scheduled = false;
+                    return;
+                }
+                drop(mailbox);
+                if let Some(pool) = self.pool.upgrade()
+                    && pool.try_submit(Arc::clone(self)).is_ok()
+                {
+                    return;
+                }
+                processed = 0;
+            }
             let message = {
                 let mut mailbox = lock(&self.mailbox);
                 let Some(message) = mailbox.messages.pop_front() else {
@@ -243,6 +266,7 @@ where
                 .map_err(|_| ReplyError::Panicked);
             drop(state);
             let _ = message.sender.send(result);
+            processed += 1;
         }
     }
 }

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-17T11:31:13.940883+00:00",
+  "generatedAt": "2026-07-17T11:35:14.278036+00:00",
   "platform": {
     "system": "Darwin",
     "release": "25.5.0",
@@ -22,28 +22,28 @@
     "runs": 5,
     "executors": 2
   },
-  "logicalHandleBytes": 16,
+  "logicalHandleBytes": 8,
   "summary": [
     {
       "actors": 0,
       "rssKiB": 1792,
       "threads": 4,
-      "spawnMicros": 34,
+      "spawnMicros": 30,
       "incrementalBytesPerActor": null
     },
     {
       "actors": 1000,
-      "rssKiB": 1952,
+      "rssKiB": 1920,
       "threads": 4,
-      "spawnMicros": 75,
-      "incrementalBytesPerActor": 163.84
+      "spawnMicros": 59,
+      "incrementalBytesPerActor": 131.07
     },
     {
       "actors": 10000,
-      "rssKiB": 3104,
+      "rssKiB": 3152,
       "threads": 4,
-      "spawnMicros": 311,
-      "incrementalBytesPerActor": 134.35
+      "spawnMicros": 217,
+      "incrementalBytesPerActor": 139.26
     }
   ],
   "samples": [
@@ -52,120 +52,120 @@
       "actors": 0,
       "rssKiB": 1792,
       "threads": 4,
-      "spawnMicros": 93,
-      "logicalHandleBytes": 16
+      "spawnMicros": 51,
+      "logicalHandleBytes": 8
     },
     {
       "run": 1,
       "actors": 1000,
-      "rssKiB": 1952,
+      "rssKiB": 1936,
       "threads": 4,
-      "spawnMicros": 75,
-      "logicalHandleBytes": 16
+      "spawnMicros": 88,
+      "logicalHandleBytes": 8
     },
     {
       "run": 1,
       "actors": 10000,
-      "rssKiB": 3104,
+      "rssKiB": 3136,
       "threads": 4,
-      "spawnMicros": 356,
-      "logicalHandleBytes": 16
+      "spawnMicros": 204,
+      "logicalHandleBytes": 8
     },
     {
       "run": 2,
       "actors": 0,
       "rssKiB": 1792,
       "threads": 4,
-      "spawnMicros": 39,
-      "logicalHandleBytes": 16
+      "spawnMicros": 38,
+      "logicalHandleBytes": 8
     },
     {
       "run": 2,
       "actors": 1000,
-      "rssKiB": 1952,
+      "rssKiB": 1920,
       "threads": 4,
-      "spawnMicros": 87,
-      "logicalHandleBytes": 16
+      "spawnMicros": 71,
+      "logicalHandleBytes": 8
     },
     {
       "run": 2,
       "actors": 10000,
-      "rssKiB": 3104,
-      "threads": 4,
-      "spawnMicros": 332,
-      "logicalHandleBytes": 16
-    },
-    {
-      "run": 3,
-      "actors": 0,
-      "rssKiB": 1792,
-      "threads": 4,
-      "spawnMicros": 31,
-      "logicalHandleBytes": 16
-    },
-    {
-      "run": 3,
-      "actors": 1000,
-      "rssKiB": 1952,
-      "threads": 4,
-      "spawnMicros": 78,
-      "logicalHandleBytes": 16
-    },
-    {
-      "run": 3,
-      "actors": 10000,
-      "rssKiB": 3104,
-      "threads": 4,
-      "spawnMicros": 305,
-      "logicalHandleBytes": 16
-    },
-    {
-      "run": 4,
-      "actors": 0,
-      "rssKiB": 1792,
-      "threads": 4,
-      "spawnMicros": 29,
-      "logicalHandleBytes": 16
-    },
-    {
-      "run": 4,
-      "actors": 1000,
-      "rssKiB": 1952,
-      "threads": 4,
-      "spawnMicros": 65,
-      "logicalHandleBytes": 16
-    },
-    {
-      "run": 4,
-      "actors": 10000,
-      "rssKiB": 3104,
-      "threads": 4,
-      "spawnMicros": 311,
-      "logicalHandleBytes": 16
-    },
-    {
-      "run": 5,
-      "actors": 0,
-      "rssKiB": 1792,
-      "threads": 4,
-      "spawnMicros": 34,
-      "logicalHandleBytes": 16
-    },
-    {
-      "run": 5,
-      "actors": 1000,
-      "rssKiB": 1952,
-      "threads": 4,
-      "spawnMicros": 65,
-      "logicalHandleBytes": 16
-    },
-    {
-      "run": 5,
-      "actors": 10000,
-      "rssKiB": 3104,
+      "rssKiB": 3152,
       "threads": 4,
       "spawnMicros": 254,
-      "logicalHandleBytes": 16
+      "logicalHandleBytes": 8
+    },
+    {
+      "run": 3,
+      "actors": 0,
+      "rssKiB": 1792,
+      "threads": 4,
+      "spawnMicros": 30,
+      "logicalHandleBytes": 8
+    },
+    {
+      "run": 3,
+      "actors": 1000,
+      "rssKiB": 1936,
+      "threads": 4,
+      "spawnMicros": 59,
+      "logicalHandleBytes": 8
+    },
+    {
+      "run": 3,
+      "actors": 10000,
+      "rssKiB": 3152,
+      "threads": 4,
+      "spawnMicros": 275,
+      "logicalHandleBytes": 8
+    },
+    {
+      "run": 4,
+      "actors": 0,
+      "rssKiB": 1792,
+      "threads": 4,
+      "spawnMicros": 28,
+      "logicalHandleBytes": 8
+    },
+    {
+      "run": 4,
+      "actors": 1000,
+      "rssKiB": 1920,
+      "threads": 4,
+      "spawnMicros": 50,
+      "logicalHandleBytes": 8
+    },
+    {
+      "run": 4,
+      "actors": 10000,
+      "rssKiB": 3152,
+      "threads": 4,
+      "spawnMicros": 217,
+      "logicalHandleBytes": 8
+    },
+    {
+      "run": 5,
+      "actors": 0,
+      "rssKiB": 1792,
+      "threads": 4,
+      "spawnMicros": 20,
+      "logicalHandleBytes": 8
+    },
+    {
+      "run": 5,
+      "actors": 1000,
+      "rssKiB": 1920,
+      "threads": 4,
+      "spawnMicros": 39,
+      "logicalHandleBytes": 8
+    },
+    {
+      "run": 5,
+      "actors": 10000,
+      "rssKiB": 3136,
+      "threads": 4,
+      "spawnMicros": 180,
+      "logicalHandleBytes": 8
     }
   ]
 }

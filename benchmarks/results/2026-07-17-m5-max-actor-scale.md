@@ -5,13 +5,13 @@
 Platform: `Darwin 25.5.0 arm64`  
 Executors: `2`  
 Runs per actor count: `5`  
-Logical handle size: `16 bytes`
+Logical handle size: `8 bytes`
 
 | Actors | Median RSS | Incremental bytes/actor | OS threads | Median spawn |
 | ---: | ---: | ---: | ---: | ---: |
 | 0 | 1.75 MiB | baseline | 4 | 0.03 ms |
-| 1,000 | 1.91 MiB | 163.84 | 4 | 0.07 ms |
-| 10,000 | 3.03 MiB | 134.35 | 4 | 0.31 ms |
+| 1,000 | 1.88 MiB | 131.07 | 4 | 0.06 ms |
+| 10,000 | 3.08 MiB | 139.26 | 4 | 0.22 ms |
 
 Limitations:
 

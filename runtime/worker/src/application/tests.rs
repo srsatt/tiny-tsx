@@ -72,6 +72,58 @@ fn distinct_logical_workers_execute_on_the_native_pool_in_parallel() {
 }
 
 #[test]
+fn a_hot_mailbox_yields_to_another_actor_after_one_quantum() {
+    let (started_tx, started_rx) = mpsc::channel();
+    let (executed_tx, executed_rx) = mpsc::channel();
+    let gate = Arc::new((Mutex::new(false), std::sync::Condvar::new()));
+    let pool = ApplicationPool::new(1, 4, 64, |_| (), {
+        let gate = Arc::clone(&gate);
+        move |_, message: (&'static str, usize)| {
+            if message == ("hot", 0) {
+                started_tx.send(()).expect("report hot actor start");
+                let (open, changed) = &*gate;
+                let mut open = open.lock().expect("lock fairness gate");
+                while !*open {
+                    open = changed.wait(open).expect("wait for fairness gate");
+                }
+            }
+            executed_tx.send(message).expect("record execution order");
+            message
+        }
+    })
+    .expect("create application pool");
+    let hot = pool.spawn();
+    let cold = pool.spawn();
+    drop(hot.try_post(("hot", 0)).expect("post active hot message"));
+    started_rx
+        .recv_timeout(Duration::from_secs(1))
+        .expect("hot actor started");
+    for index in 1..64 {
+        drop(hot.try_post(("hot", index)).expect("fill hot mailbox"));
+    }
+    drop(cold.try_post(("cold", 0)).expect("post cold message"));
+    let (open, changed) = &*gate;
+    *open.lock().expect("open fairness gate") = true;
+    changed.notify_all();
+
+    let order = (0..65)
+        .map(|_| {
+            executed_rx
+                .recv_timeout(Duration::from_secs(1))
+                .expect("receive scheduled message")
+        })
+        .collect::<Vec<_>>();
+    let cold_index = order
+        .iter()
+        .position(|message| *message == ("cold", 0))
+        .expect("cold actor executed");
+    assert!(cold_index <= super::MAILBOX_DRAIN_QUANTUM);
+    assert!(order[cold_index + 1..].iter().any(|message| message.0 == "hot"));
+
+    pool.join();
+}
+
+#[test]
 fn termination_cancels_queued_messages_after_active_work() {
     let (started_tx, started_rx) = mpsc::channel();
     let gate = Arc::new((Mutex::new(false), std::sync::Condvar::new()));

@@ -67,13 +67,20 @@ The adjacent five-run release-mode M5 Max probe records:
 | Idle actors | Median RSS | Incremental bytes/actor | OS threads | Median spawn |
 | ---: | ---: | ---: | ---: | ---: |
 | 0 | 1.75 MiB | baseline | 4 | 0.03 ms |
-| 1,000 | 1.91 MiB | 163.84 | 4 | 0.07 ms |
-| 10,000 | 3.03 MiB | 134.35 | 4 | 0.31 ms |
+| 1,000 | 1.88 MiB | 131.07 | 4 | 0.06 ms |
+| 10,000 | 3.08 MiB | 139.26 | 4 | 0.22 ms |
 
 The incremental values subtract the zero-actor median and therefore include
 allocator/RSS granularity. The raw samples are in
-`benchmarks/results/2026-07-17-m5-max-actor-scale.json`. No messages are posted;
-hot-mailbox throughput and fairness remain unmeasured.
+`benchmarks/results/2026-07-17-m5-max-actor-scale.json`. No messages are posted,
+so that RSS probe does not measure mailbox throughput or scheduling fairness.
+
+Scheduling semantics are tested independently of that RSS probe. A mailbox now
+handles at most eight messages before yielding its executor; a deterministic
+one-thread test proves a cold actor runs at the first quantum boundary while 56
+or more hot messages remain. A two-executor barrier test separately proves
+cross-actor parallel execution. Sustained hot/cold throughput and tail latency
+remain P4 measurements.
 
 ## Earlier connection-close and compatibility evidence
 
