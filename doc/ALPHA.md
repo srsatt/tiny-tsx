@@ -16,7 +16,8 @@ Run `tinytsx --version` for compiler, HIR/runtime ABI, target, and compatibility
 revisions. Run `tinytsx --list-builtins` for the exact standard-library surface
 and bounds. `doc/COMPATIBILITY.md` is the supported Hono/Web/language matrix;
 `doc/STANDARD_LIBRARY.md`, `doc/PERSISTENCE.md`, and `doc/ACTORS.md` define
-capabilities, ownership, limits, and known gaps.
+capabilities, ownership, limits, and known gaps. `doc/RELEASE_CHECKLIST.md`
+defines the two-target verification and no-go conditions for tagging.
 
 Apple-arm64 archives must execute on Apple arm64. Linux-arm64 archives must be
 built and executed on Linux arm64; cross-assembled ELF output from macOS is not
