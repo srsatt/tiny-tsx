@@ -6,6 +6,7 @@ use std::{
         atomic::{AtomicBool, AtomicUsize, Ordering},
         mpsc::{self, Receiver, SyncSender},
     },
+    time::Duration,
 };
 
 use crate::{SubmitError, WorkerPool};
@@ -24,6 +25,7 @@ pub enum PostError<M> {
 pub enum ReplyError {
     Panicked,
     Terminated,
+    TimedOut,
     Disconnected,
 }
 
@@ -36,6 +38,14 @@ impl<R> Reply<R> {
         self.receiver
             .recv()
             .unwrap_or(Err(ReplyError::Disconnected))
+    }
+
+    pub fn receive_timeout(self, timeout: Duration) -> Result<R, ReplyError> {
+        match self.receiver.recv_timeout(timeout) {
+            Ok(result) => result,
+            Err(mpsc::RecvTimeoutError::Timeout) => Err(ReplyError::TimedOut),
+            Err(mpsc::RecvTimeoutError::Disconnected) => Err(ReplyError::Disconnected),
+        }
     }
 }
 
@@ -174,6 +184,13 @@ where
     pub fn call(&self, input: M) -> Result<R, CallError<M>> {
         match self.try_post(input) {
             Ok(reply) => reply.receive().map_err(CallError::Reply),
+            Err(error) => Err(CallError::Post(error)),
+        }
+    }
+
+    pub fn call_timeout(&self, input: M, timeout: Duration) -> Result<R, CallError<M>> {
+        match self.try_post(input) {
+            Ok(reply) => reply.receive_timeout(timeout).map_err(CallError::Reply),
             Err(error) => Err(CallError::Post(error)),
         }
     }

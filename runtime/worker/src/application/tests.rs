@@ -181,6 +181,42 @@ fn dropping_a_reply_does_not_cancel_an_accepted_message() {
 }
 
 #[test]
+fn a_timed_out_call_detaches_without_retracting_the_accepted_message() {
+    let (started_tx, started_rx) = mpsc::sync_channel(1);
+    let release = Arc::new(Barrier::new(2));
+    let handler_release = Arc::clone(&release);
+    let pool = ApplicationPool::new(
+        1,
+        8,
+        8,
+        |_| 0,
+        move |state, message| {
+            if message == 1 {
+                started_tx.send(()).expect("report blocking message");
+                handler_release.wait();
+            }
+            *state += message;
+            *state
+        },
+    )
+    .expect("create pool");
+    let actor = pool.spawn();
+    let active = actor.try_post(1).expect("accept blocking message");
+    started_rx
+        .recv_timeout(Duration::from_secs(1))
+        .expect("blocking message started");
+
+    assert_eq!(
+        actor.call_timeout(2, Duration::from_millis(10)),
+        Err(CallError::Reply(ReplyError::TimedOut)),
+    );
+
+    release.wait();
+    assert_eq!(active.receive(), Ok(1));
+    assert_eq!(actor.call(0), Ok(3));
+}
+
+#[test]
 fn panic_is_reported_and_later_messages_recover() {
     let pool = ApplicationPool::new(
         1,
