@@ -202,7 +202,10 @@ Terminal wildcard matching now covers the exact `/api/*` fallback from the
 basic example. Native tests pin Hono's behavior that the pattern matches `/api`,
 `/api/`, and deeper paths. The generated handler returns Hono's explicit status
 404 and text body; unmatched non-API paths still use the bootstrap 404. Optional
-patterns and constraints other than `[0-9]+` remain pending.
+trailing parameters now expand at compile time into every finite prefix, so
+`/api/:version/animal/:type?` serves both the present value and the staged
+missing value without a dynamic router. Non-trailing optionals, multi-segment
+captures, and constraints other than `[0-9]+` remain pending.
 
 Hono registrations that share a method and path now retain handler-chain order.
 The compiler emits only the terminal route and applies earlier post-`next()`

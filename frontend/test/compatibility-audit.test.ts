@@ -808,6 +808,60 @@ test("lowers a Hono named parameter into a request-time text expression", () => 
   assert.equal(hir.statistics.dynamicHtmlExpressions, 1);
 });
 
+test("expands trailing optional Hono parameters into finite native routes", () => {
+  const entry = path.join(repository, "tests/compat/hono/optional-param-smoke.ts");
+  const options = {
+    aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+    apiAliases: {hono: path.join(repository, "tests/compat/hono/api.d.ts")},
+  };
+  const graph = loadModuleGraph(entry, options);
+  const application = analyzeApplicationEntry(graph.modules[0]!.sourceFile);
+  assert.ok(application);
+
+  const result = evaluateApplicationInitialization(graph, application);
+  assert.deepEqual(result?.issues, []);
+  assert.deepEqual(result?.routes.map(route => ({
+    path: route.path,
+    body: route.response?.body,
+  })), [
+    {path: "/api/:version/animal", body: "{}"},
+    {
+      path: "/api/:version/animal/:type",
+      body: [
+        {kind: "literal", value: '{"type":"'},
+        {kind: "routeParameter", name: "type"},
+        {kind: "literal", value: '"}'},
+      ],
+    },
+  ]);
+
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    ...options,
+  });
+  assert.deepEqual(hir.handlers.map(handler => ({
+    path: handler.path,
+    value: handler.response.kind === "text" ? handler.response.value : undefined,
+  })), [
+    {
+      path: "/api/:version/animal",
+      value: {kind: "stringLiteral", string: 0, span: hir.handlers[0]!.span},
+    },
+    {
+      path: "/api/:version/animal/:type",
+      value: {
+        kind: "concat",
+        values: [
+          {kind: "stringLiteral", string: 1, span: hir.handlers[1]!.span},
+          {kind: "routeParameter", name: "type", segment: 3, span: hir.handlers[1]!.span},
+          {kind: "stringLiteral", string: 2, span: hir.handlers[1]!.span},
+        ],
+        span: hir.handlers[1]!.span,
+      },
+    },
+  ]);
+});
+
 test("mounts a nested Hono application through upstream route semantics", () => {
   const entry = path.join(repository, "tests/compat/hono/nested-route-smoke.ts");
   const graph = loadModuleGraph(entry, {

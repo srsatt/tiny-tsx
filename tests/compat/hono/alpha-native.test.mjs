@@ -113,6 +113,20 @@ test("executes the Hono-neutral tinytsx:serve source entry natively", async cont
   );
 });
 
+test("executes trailing optional Hono parameters as finite native routes", async context => {
+  await withServer(
+    context,
+    "tests/compat/hono/optional-param-smoke.ts",
+    39_488,
+    hono,
+    async port => {
+      await assertText(port, "/api/v1/animal/bird", 200, '{"type":"bird"}');
+      await assertText(port, "/api/v1/animal", 200, "{}");
+      await assertText(port, "/api/v1/animal/bird/extra", 404, "404 Not Found");
+    },
+  );
+});
+
 async function withServer(context, entry, port, options, verify) {
   const directory = mkdtempSync(path.join(tmpdir(), "tinytsx-alpha-native-"));
   const binary = path.join(directory, "server");

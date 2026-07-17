@@ -803,6 +803,17 @@ produces and serves a native Mach-O executable from the example TSX source.
   binary tests, Apple-arm64 native HTTP/restart behavior, and Linux-arm64 Clang
   assembly.
 
+### Finite optional Hono routes (2026-07-17)
+
+- Contiguous trailing `:name?` parameters now specialize into every concrete
+  prefix during Hono initialization analysis. Each path evaluates the handler
+  independently: present parameters lower to borrowed decoded path segments,
+  while absent parameters remain staged `undefined` and serialize accordingly.
+- The pinned Hono present/absent behavior runs natively for
+  `/api/:version/animal/:type?`; an extra segment remains a 404. The allowlist
+  and official routing matrix point to the project-owned tracer. General route
+  regular expressions and multi-segment captures remain outside this slice.
+
 Verification:
 
 ```bash

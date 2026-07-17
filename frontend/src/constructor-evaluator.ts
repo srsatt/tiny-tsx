@@ -409,51 +409,53 @@ function summarizeRoutes(
     if (isSupportedHttpMethod(method.value) && hasLaterHandler) {
       return [];
     }
-    const middleware = routes.items.slice(0, routeIndex).flatMap(candidate =>
-      matchingMiddleware(candidate, method.value, path.value)
-    );
-    const response = isSupportedHttpMethod(method.value) && handler?.kind === "closure"
-      ? evaluateRouteHandler(
-        evaluator,
-        handler,
-        middleware,
-        path.value,
-        method.value,
-        errorHandler,
-        notFoundHandler,
-      )
-      : undefined;
-    const installedValidations = evaluator.pathParameterValidations.get(
-      `${method.value}\0${path.value}`,
-    );
-    const route: Omit<EvaluatedRoute, "response"> = {
-      method: method.value,
-      path: path.value,
-      basePath: basePath.value,
-      handlerKind: handler?.kind === "closure"
-        ? "closure" as const
-        : handler?.kind === "reference"
-          ? "reference" as const
-          : "unknown" as const,
-      ...(installedValidations === undefined
-        ? parameterValidations(middleware)
-        : {parameterValidations: installedValidations}),
-    };
-    const selectedRoutes = response?.kind === "routeChoice"
-      ? [
-        ...[...response.cases].map(([key, selected]) => ({
-          ...route,
-          path: specializeRoutePath(path.value, response.name, key),
-          response: selected,
-        })),
-        {...route, response: response.fallback},
-      ]
-      : [{...route, ...(response === undefined ? {} : {response})}];
-    const cors = middleware.map(closedCors).find(candidate => candidate !== undefined);
-    return cors === undefined || response === undefined || !isSupportedHttpMethod(method.value)
-      || method.value === "OPTIONS"
-      ? selectedRoutes
-      : [...selectedRoutes, corsPreflightRoute(route, cors)];
+    return expandOptionalRoutePaths(path.value).flatMap(resolvedPath => {
+      const middleware = routes.items.slice(0, routeIndex).flatMap(candidate =>
+        matchingMiddleware(candidate, method.value, resolvedPath)
+      );
+      const response = isSupportedHttpMethod(method.value) && handler?.kind === "closure"
+        ? evaluateRouteHandler(
+          evaluator,
+          handler,
+          middleware,
+          resolvedPath,
+          method.value,
+          errorHandler,
+          notFoundHandler,
+        )
+        : undefined;
+      const installedValidations = evaluator.pathParameterValidations.get(
+        `${method.value}\0${resolvedPath}`,
+      ) ?? evaluator.pathParameterValidations.get(`${method.value}\0${path.value}`);
+      const route: Omit<EvaluatedRoute, "response"> = {
+        method: method.value,
+        path: resolvedPath,
+        basePath: basePath.value,
+        handlerKind: handler?.kind === "closure"
+          ? "closure" as const
+          : handler?.kind === "reference"
+            ? "reference" as const
+            : "unknown" as const,
+        ...(installedValidations === undefined
+          ? parameterValidations(middleware)
+          : {parameterValidations: installedValidations}),
+      };
+      const selectedRoutes = response?.kind === "routeChoice"
+        ? [
+          ...[...response.cases].map(([key, selected]) => ({
+            ...route,
+            path: specializeRoutePath(resolvedPath, response.name, key),
+            response: selected,
+          })),
+          {...route, response: response.fallback},
+        ]
+        : [{...route, ...(response === undefined ? {} : {response})}];
+      const cors = middleware.map(closedCors).find(candidate => candidate !== undefined);
+      return cors === undefined || response === undefined || !isSupportedHttpMethod(method.value)
+        || method.value === "OPTIONS"
+        ? selectedRoutes
+        : [...selectedRoutes, corsPreflightRoute(route, cors)];
+    });
   });
   return summarized.filter((route, index, all) =>
     all.findIndex(candidate => candidate.method === route.method && candidate.path === route.path)
@@ -4420,6 +4422,25 @@ function routeParameterNames(pattern: string): string[] {
   return pattern.split("/").flatMap(segment => {
     const match = /^:([A-Za-z0-9_]+)(?:\{.*\})?$/.exec(segment);
     return match?.[1] === undefined ? [] : [match[1]];
+  });
+}
+
+function expandOptionalRoutePaths(pattern: string): string[] {
+  if (!pattern.endsWith("?")) return [pattern];
+  const segments = pattern.split("/").filter(Boolean);
+  const firstOptional = segments.findIndex(segment => segment.endsWith("?"));
+  if (firstOptional < 0) return [pattern];
+  const optional = segments.slice(firstOptional);
+  if (!optional.every(segment => /^:[A-Za-z0-9_]+(?:\{.*\})?\?$/.test(segment))) {
+    return [pattern];
+  }
+  const prefix = segments.slice(0, firstOptional);
+  return Array.from({length: optional.length + 1}, (_, count) => {
+    const selected = [
+      ...prefix,
+      ...optional.slice(0, count).map(segment => segment.slice(0, -1)),
+    ];
+    return selected.length === 0 ? "/" : `/${selected.join("/")}`;
   });
 }
 
