@@ -19,7 +19,7 @@ A subsequent actor-only profile drove bounded live-connection rotation. The
 same eight-worker concurrency-64 actor point now reaches 67,001 requests/second
 (94.4% of its committed pre-change baseline and 0.71x Bun) while p99 falls from
 41.94 to 13.72 ms. Repeated basic and SQLite points also fall to 12.46 and
-16.16 ms p99. Peak RSS remains 6.80–7.91 MiB and open descriptors return from
+16.20 ms p99. Peak RSS remains 6.80–7.89 MiB and open descriptors return from
 68 peak to 4 at every interval end. This validates the scheduling change for
 the three measured routes; longer controlled runs have not yet been repeated,
 so it is not a general tail-latency claim.
@@ -140,7 +140,7 @@ concurrency 64 with eight workers and keep-alive:
 | --- | ---: | ---: | ---: | ---: | ---: |
 | Hono basic | 73,293 | 0.56x | 12.456 ms | 1.149 ms | 6.88 / 118.89 MiB |
 | Counter actor | 67,001 | 0.71x | 13.719 ms | 1.497 ms | 6.80 / 111.48 MiB |
-| SQLite owner | 56,722 | 0.45x | 16.163 ms | 1.089 ms | 7.91 / 66.14 MiB |
+| SQLite owner | 56,107 | 0.45x | 16.198 ms | 1.117 ms | 7.89 / 69.38 MiB |
 
 TinyTSX open descriptors are 4/68/4 start/peak/end for all three workloads.
 The raw samples are retained in the adjacent

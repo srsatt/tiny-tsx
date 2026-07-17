@@ -116,8 +116,8 @@ produces and serves a native Mach-O executable from the example TSX source.
 - The acceptance comparison uses three five-second concurrency-64 runs, eight
   workers, and keep-alive. TinyTSX reaches 67,001 requests/second (94.4% of the
   committed ~71.0k baseline) while p99 falls from 41.94 to 13.72 ms. The paired
-  basic and SQLite reruns record 12.46 and 16.16 ms p99. Peak RSS remains
-  6.80–7.91 MiB; sampled descriptors return from 68 peak to 4 in every run.
+  basic and SQLite reruns record 12.46 and 16.20 ms p99. Peak RSS remains
+  6.80–7.89 MiB; sampled descriptors return from 68 peak to 4 in every run.
 - Verification: 17 worker tests, 56 bootstrap tests, both crates under Clippy
   with warnings denied, Hono alpha 10/10, actor 6/6, SQLite 5/5, and user-auth
   2/2 across Apple execution and Linux-arm64 assembly. Raw evidence is in
