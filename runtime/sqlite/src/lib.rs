@@ -376,6 +376,14 @@ mod tests {
                 .rows
                 .is_empty()
         );
+        assert_eq!(
+            execute_transaction(&connection, "BEGIN; SELECT 1; COMMIT")
+                .expect_err("nested transaction syntax must be rejected")
+                .kind,
+            ErrorKind::Sql
+        );
+        execute(&connection, "INSERT INTO posts (title) VALUES ('reused')", &[])
+            .expect("connection remains reusable after nested rejection");
     }
 
     #[test]
