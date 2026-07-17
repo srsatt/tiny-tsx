@@ -132,9 +132,12 @@ The basic example's `/entry/:id` shape is the first request-dependent route.
 One closed `:name` segment becomes a native matcher and `c.req.param('name')`
 becomes a request-time text value. Literal and parameter chunks write directly
 to the bounded response buffer, including Hono-compatible decoding of valid
-percent-encoded UTF-8 groups. Optional and non-terminal catch-all patterns
-remain outside this named-parameter slice. Constraints are limited to the exact
-`[0-9]+` form used by the pinned JSX SSR example.
+percent-encoded UTF-8 groups. A terminal `:remaining{.*}` now matches an empty
+tail or any number of slash-separated segments; `c.req.param('remaining')`
+writes the complete decoded tail without allocating a request string. Trailing
+optional parameters are specialized into finite routes. Non-trailing optionals,
+non-terminal catch-alls, and constraints beyond exact `[0-9]+` and terminal
+`.*` remain outside the slice.
 
 Nested application initialization now follows the actual upstream `route()`
 implementation. The compiler constructs the second `book` binding, retains its

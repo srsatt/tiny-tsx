@@ -447,8 +447,11 @@ adds an explicit application acceptance test.
       non-terminal catch-alls, and broader request-dependent handlers.
   - 2026-07-17: one or more contiguous trailing `:name?` parameters now expand
     into a finite native route set. Present values use the borrowed path segment;
-    absent values remain staged `undefined`. Non-trailing optionals,
-    multi-segment captures, and general constraints remain open.
+    absent values remain staged `undefined`. The pinned terminal
+    `:remaining{.*}` shape also captures an empty or slash-containing tail and
+    writes it with bounded percent decoding on Apple and Linux arm64.
+    Non-trailing optionals, non-terminal catch-alls, and general constraints
+    remain open.
 - [ ] Add invalid UTF-8 replacement semantics with upstream parser evidence.
 - [ ] Add request-dependent stream chunks, sleep, cancellation, backpressure,
       and disconnect propagation.

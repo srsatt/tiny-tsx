@@ -862,6 +862,33 @@ test("expands trailing optional Hono parameters into finite native routes", () =
   ]);
 });
 
+test("lowers a terminal multi-segment Hono parameter", () => {
+  const entry = path.join(repository, "tests/compat/hono/catch-all-param-smoke.ts");
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+    apiAliases: {hono: path.join(repository, "tests/compat/hono/api.d.ts")},
+  });
+
+  assert.equal(hir.handlers[0]?.path, "/:remaining{.*}");
+  const response = hir.handlers[0]?.response;
+  assert.deepEqual(response?.kind === "text" ? response.value : undefined, {
+    kind: "concat",
+    values: [
+      {kind: "stringLiteral", string: 0, span: hir.handlers[0]!.span},
+      {
+        kind: "routeParameter",
+        name: "remaining",
+        segment: 0,
+        tail: true,
+        span: hir.handlers[0]!.span,
+      },
+      {kind: "stringLiteral", string: 1, span: hir.handlers[0]!.span},
+    ],
+    span: hir.handlers[0]!.span,
+  });
+});
+
 test("mounts a nested Hono application through upstream route semantics", () => {
   const entry = path.join(repository, "tests/compat/hono/nested-route-smoke.ts");
   const graph = loadModuleGraph(entry, {

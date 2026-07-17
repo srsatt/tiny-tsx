@@ -3,7 +3,7 @@ use super::{
     MAX_DYNAMIC_HEADER_BYTES, MAX_RESPONSE_HEADERS, MAX_STREAM_CHUNKS, OK, OpenAiTransport,
     REQUEST_OOM, RequestArena, TinyHeader, TinyResponseWriter, TinySqlParameter, TinyStringView,
     decode_sqlite_parameters, render, request, request_with_body, request_with_headers,
-    tinytsx_html_write_fetch_status, tinytsx_html_write_path_segment,
+    tinytsx_html_write_fetch_status, tinytsx_html_write_path_segment, tinytsx_html_write_path_tail,
     tinytsx_html_write_query_parameter, tinytsx_html_write_request_header,
     tinytsx_html_write_static, tinytsx_request_basic_auth_equals, tinytsx_request_if_none_match,
     tinytsx_request_method_equals, tinytsx_request_path_equals, tinytsx_request_path_matches,
@@ -377,6 +377,35 @@ fn request_path_patterns_match_nonempty_named_segments() {
 }
 
 #[test]
+fn request_path_patterns_match_terminal_multi_segment_parameters() {
+    for path in [b"/".as_slice(), b"/one/two".as_slice()] {
+        let request = request(b"GET", path);
+        assert_eq!(
+            unsafe {
+                tinytsx_request_path_matches(
+                    &request,
+                    b"/:remaining{.*}".as_ptr(),
+                    b"/:remaining{.*}".len(),
+                )
+            },
+            1
+        );
+    }
+
+    let request = request(b"GET", b"/api/one/two");
+    assert_eq!(
+        unsafe {
+            tinytsx_request_path_matches(
+                &request,
+                b"/api/:remaining{.*}".as_ptr(),
+                b"/api/:remaining{.*}".len(),
+            )
+        },
+        1
+    );
+}
+
+#[test]
 fn request_path_segment_minimum_length_counts_percent_decoded_bytes() {
     for (target, minimum, expected) in [
         (b"/users/abc".as_slice(), 3, 1),
@@ -468,6 +497,18 @@ fn response_writer_preserves_malformed_percent_encoded_utf8() {
 
     assert_eq!(status, OK);
     assert_eq!(&output, b"a%FFb%2");
+}
+
+#[test]
+fn response_writer_decodes_a_multi_segment_path_tail() {
+    let request = request(b"GET", b"/files/hello%20world/one%2Ftwo");
+    let mut output = [0_u8; 19];
+    let mut writer = writer(&mut output);
+
+    let status = unsafe { tinytsx_html_write_path_tail(&mut writer, &request, 1) };
+
+    assert_eq!(status, OK);
+    assert_eq!(&output, b"hello world/one/two");
 }
 
 #[test]

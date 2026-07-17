@@ -132,6 +132,35 @@ test("executes trailing optional Hono parameters as finite native routes", async
   );
 });
 
+test("executes a terminal multi-segment Hono parameter natively", async context => {
+  await withServer(
+    context,
+    "tests/compat/hono/catch-all-param-smoke.ts",
+    39_490,
+    hono,
+    async port => {
+      await assertText(port, "/", 200, '{"type":"string","value":""}');
+      await assertText(port, "/one/two", 200, '{"type":"string","value":"one/two"}');
+      await assertText(port, "/hello%20world/two", 200, '{"type":"string","value":"hello world/two"}');
+    },
+  );
+});
+
+test("assembles a terminal multi-segment Hono parameter for Linux arm64", () => {
+  const checked = spawnSync("cargo", [
+    "run", "-q", "-p", "tinytsx", "--", "check",
+    "tests/compat/hono/catch-all-param-smoke.ts",
+    "--emit-asm", "--target", "aarch64-unknown-linux-gnu",
+    ...hono,
+  ], {cwd: repository, encoding: "utf8"});
+  assert.equal(checked.status, 0, checked.stderr || checked.stdout);
+  assert.match(checked.stdout, /tinytsx_html_write_path_tail/);
+  const assembled = spawnSync("clang", [
+    "--target=aarch64-unknown-linux-gnu", "-x", "assembler", "-c", "-o", "/dev/null", "-",
+  ], {cwd: repository, input: checked.stdout, encoding: "utf8"});
+  assert.equal(assembled.status, 0, assembled.stderr);
+});
+
 test("executes the pinned Hono setCookie helper natively", async context => {
   await withServer(
     context,

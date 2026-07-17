@@ -119,11 +119,15 @@ fn emit_handler_text_expression(
                 asm_line!(assembly, "    cbnz w0, {return_label}");
             }
         }
-        ValueExpression::RouteParameter { segment, .. } => {
+        ValueExpression::RouteParameter { segment, tail, .. } => {
             asm_line!(assembly, "    ldr x0, [sp, #16]");
             asm_line!(assembly, "    ldr x1, [sp, #24]");
             emit_immediate(assembly, "x2", *segment as u64);
-            assembly.call(format_args!("tinytsx_html_write_path_segment"));
+            if *tail {
+                assembly.call(format_args!("tinytsx_html_write_path_tail"));
+            } else {
+                assembly.call(format_args!("tinytsx_html_write_path_segment"));
+            }
         }
         ValueExpression::RequestHeader { header, .. } => {
             asm_line!(assembly, "    ldr x0, [sp, #16]");

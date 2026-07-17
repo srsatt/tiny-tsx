@@ -413,6 +413,8 @@ pub enum ValueExpression {
     RouteParameter {
         name: String,
         segment: usize,
+        #[serde(default)]
+        tail: bool,
         span: SourceSpan,
     },
     RequestHeader {
@@ -1412,18 +1414,25 @@ impl Program {
                 }
                 Ok(())
             }
-            ValueExpression::RouteParameter { name, segment, .. } => {
+            ValueExpression::RouteParameter {
+                name,
+                segment,
+                tail,
+                ..
+            } => {
                 let segments: Vec<&str> = route_pattern
                     .split('/')
                     .filter(|part| !part.is_empty())
                     .collect();
-                if segments
-                    .get(*segment)
-                    .and_then(|segment| route_parameter_name(segment))
-                    != Some(name.as_str())
-                {
+                let route_segment = segments.get(*segment).copied();
+                if route_segment.and_then(route_parameter_name) != Some(name.as_str()) {
                     return Err(format!(
                         "route parameter `{name}` does not match segment {segment} of `{route_pattern}`"
+                    ));
+                }
+                if route_segment.is_some_and(|segment| segment.ends_with("{.*}")) != *tail {
+                    return Err(format!(
+                        "route parameter `{name}` has inconsistent multi-segment metadata"
                     ));
                 }
                 Ok(())
@@ -2158,7 +2167,9 @@ fn validate_route_pattern(pattern: &str) -> Result<(), String> {
                 || !name
                     .bytes()
                     .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
-                || constraint.is_some_and(|constraint| constraint != "[0-9]+}")
+                || constraint.is_some_and(|constraint| {
+                    constraint != "[0-9]+}" && !(constraint == ".*}" && index + 1 == segments.len())
+                })
             {
                 return Err(format!("unsupported route parameter segment `{segment}`"));
             }
@@ -2177,15 +2188,21 @@ fn valid_provider_url(url: &str) -> bool {
 
 fn route_parameter_name(segment: &str) -> Option<&str> {
     let parameter = segment.strip_prefix(':')?;
-    Some(parameter.strip_suffix("{[0-9]+}").unwrap_or(parameter))
+    Some(
+        parameter
+            .strip_suffix("{[0-9]+}")
+            .or_else(|| parameter.strip_suffix("{.*}"))
+            .unwrap_or(parameter),
+    )
 }
 
 fn handler_path_has_parameter_segment(path: &str, expected: usize) -> bool {
     path.split('/')
         .filter(|part| !part.is_empty())
         .nth(expected)
-        .and_then(route_parameter_name)
-        .is_some()
+        .is_some_and(|segment| {
+            route_parameter_name(segment).is_some() && !segment.ends_with("{.*}")
+        })
 }
 
 fn root_path() -> String {

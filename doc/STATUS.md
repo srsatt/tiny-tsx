@@ -831,6 +831,18 @@ produces and serves a native Mach-O executable from the example TSX source.
   exact upstream `Max-Age=0` header. All-cookie objects, signing, dynamic options,
   and prefixes remain unsupported.
 
+### Terminal Hono multi-segment parameters (2026-07-17)
+
+- The exact pinned `/:remaining{.*}` source now matches `/` with an empty
+  string and captures slash-containing request tails through
+  `c.req.param("remaining")`.
+- HIR distinguishes a single path segment from a terminal tail, and native
+  response writing percent-decodes the borrowed tail without constructing a
+  dynamic string. Runtime matcher/writer unit tests, Apple native HTTP behavior,
+  and Linux arm64 assembly pin the boundary.
+- Non-terminal catch-alls, non-trailing optional parameters, and general regular
+  expression constraints remain unsupported.
+
 Verification:
 
 ```bash

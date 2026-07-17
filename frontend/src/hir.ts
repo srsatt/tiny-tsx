@@ -186,6 +186,7 @@ export type ValueExpression =
       kind: "routeParameter";
       name: string;
       segment: number;
+      tail?: boolean;
       span: SourceSpan;
     }
   | {

@@ -836,7 +836,7 @@ function lowerRuntimeString(
       return {
         kind: "routeParameter",
         name: part.name,
-        segment: routeParameterSegment(routePath, part.name),
+        ...routeParameterLocation(routePath, part.name),
         span,
       };
     }),
@@ -1023,6 +1023,10 @@ function validateAsciiUppercaseWorker(sourceFile: ts.SourceFile): void {
 }
 
 function routeParameterSegment(pattern: string, name: string): number {
+  return routeParameterLocation(pattern, name).segment;
+}
+
+function routeParameterLocation(pattern: string, name: string): {segment: number; tail?: true} {
   const segments = pattern.split("/").filter(Boolean);
   const index = segments.findIndex(segment =>
     segment === `:${name}` || segment.startsWith(`:${name}{`)
@@ -1030,7 +1034,10 @@ function routeParameterSegment(pattern: string, name: string): number {
   if (index < 0) {
     throw new Error(`route parameter \`${name}\` is absent from pattern \`${pattern}\``);
   }
-  return index;
+  return {
+    segment: index,
+    ...(segments[index]!.endsWith("{.*}") ? {tail: true as const} : {}),
+  };
 }
 
 function isResponseIntrinsicDiagnostic(diagnostic: ts.Diagnostic): boolean {

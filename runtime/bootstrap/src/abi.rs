@@ -1146,6 +1146,9 @@ pub unsafe extern "C" fn tinytsx_request_path_matches(
         match pattern_segments.next() {
             None => return u32::from(actual_segments.next().is_none()),
             Some(b"*") => return 1,
+            Some(pattern) if pattern.strip_suffix(b"{.*}").is_some() => {
+                return u32::from(pattern_segments.next().is_none());
+            }
             Some(pattern) => {
                 let Some(actual) = actual_segments.next() else {
                     return 0;
@@ -1222,6 +1225,34 @@ pub unsafe extern "C" fn tinytsx_html_write_path_segment(
     let Some(value) = route_segments(path).nth(segment) else {
         return BAD_REQUEST;
     };
+    // SAFETY: The value is borrowed from the request for this synchronous write.
+    unsafe { write_decoded_path_value(writer, value) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tinytsx_html_write_path_tail(
+    writer: *mut TinyResponseWriter,
+    request: *const TinyRequest,
+    segment: usize,
+) -> u32 {
+    if writer.is_null() || request.is_null() {
+        return INTERNAL_ERROR;
+    }
+    // SAFETY: Generated code passes the request supplied by this runtime.
+    let path = unsafe { &(*request).path };
+    if path.ptr.is_null() && path.len != 0 {
+        return BAD_REQUEST;
+    }
+    // SAFETY: The request path is valid for the duration of request dispatch.
+    let path = unsafe { slice::from_raw_parts(path.ptr, path.len) };
+    let Some(value) = route_tail(path, segment) else {
+        return BAD_REQUEST;
+    };
+    // SAFETY: The value is borrowed from the request for this synchronous write.
+    unsafe { write_decoded_path_value(writer, value) }
+}
+
+unsafe fn write_decoded_path_value(writer: *mut TinyResponseWriter, value: &[u8]) -> u32 {
     let mut cursor = 0;
     let mut literal_start = 0;
     while cursor < value.len() {
@@ -2109,6 +2140,15 @@ fn base64_value(byte: u8) -> Option<u8> {
 fn route_segments(path: &[u8]) -> impl Iterator<Item = &[u8]> {
     path.split(|byte| *byte == b'/')
         .skip(usize::from(path.first() == Some(&b'/')))
+}
+
+fn route_tail(path: &[u8], segment: usize) -> Option<&[u8]> {
+    let mut start = usize::from(path.first() == Some(&b'/'));
+    for _ in 0..segment {
+        let separator = path.get(start..)?.iter().position(|byte| *byte == b'/');
+        start = separator.map_or(path.len(), |separator| start + separator + 1);
+    }
+    path.get(start..)
 }
 
 fn hex(byte: u8) -> Option<u8> {
