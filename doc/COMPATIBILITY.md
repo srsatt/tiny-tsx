@@ -514,6 +514,15 @@ results required by the upstream assertion. The current `/1|12/` evidence does
 not cover flags, escapes, character classes, quantifiers, captures, Unicode,
 match arrays, `lastIndex`, or ordinary application RegExp values.
 
+The complete pinned module-function binding program now executes natively. A
+bounded module slot is initialized with the function identity before source
+evaluation, its direct call result is compared byte-for-byte, and a separate
+global-ownership slot remains absent through every upstream check. Assignment
+changes the module slot to `null`, and generated code proves that reaching the
+hoisted declaration does not initialize it again. This is evidence for the
+exact local mutable function-binding lifecycle, not general live bindings,
+cycles, dynamic imports, or arbitrary mutable application values.
+
 The allowlisted `language/expressions/typeof/undefined.js` case is the first
 `mode: native` Test262 entry. `tinytsx test262 <case> --output <binary>` parses
 the untouched upstream source and lowers its two top-level

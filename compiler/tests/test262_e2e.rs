@@ -57,6 +57,10 @@ fn compiles_and_runs_native_test262_programs() {
             "regexp-test-exec",
             "vendor/test262/test/built-ins/RegExp/prototype/test/S15.10.6.3_A1_T1.js",
         ),
+        (
+            "module-function-binding",
+            "vendor/test262/test/language/module-code/instn-local-bndng-fun.js",
+        ),
     ] {
         compile_and_run(&root, &directory.join(name), case);
     }

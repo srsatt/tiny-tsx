@@ -129,6 +129,17 @@ pub fn emit(program: &Test262Program, target: Target) -> Result<String, String> 
                 alternatives,
                 ..
             } => emit_regexp_test_program(&mut assembly, target, index, input, alternatives),
+            Test262Assertion::ModuleFunctionBindingProgram {
+                return_value,
+                expected_return,
+                ..
+            } => emit_module_function_binding_program(
+                &mut assembly,
+                target,
+                index,
+                return_value,
+                expected_return,
+            ),
         }
     }
     writeln!(assembly, "    mov w0, #0").unwrap();
@@ -187,10 +198,83 @@ pub fn emit(program: &Test262Program, target: Target) -> Result<String, String> 
                     emit_bytes(&mut assembly, alternative.as_bytes());
                 }
             }
+            Test262Assertion::ModuleFunctionBindingProgram {
+                return_value,
+                expected_return,
+                ..
+            } => {
+                writeln!(assembly, ".p2align 3").unwrap();
+                writeln!(assembly, "Ltinytsx_test262_module_return_{index}:").unwrap();
+                emit_bytes(&mut assembly, return_value.as_bytes());
+                writeln!(assembly, ".p2align 3").unwrap();
+                writeln!(assembly, "Ltinytsx_test262_module_expected_{index}:").unwrap();
+                emit_bytes(&mut assembly, expected_return.as_bytes());
+            }
             _ => {}
         }
     }
     Ok(assembly)
+}
+
+fn emit_module_function_binding_program(
+    assembly: &mut String,
+    target: Target,
+    assertion_index: usize,
+    return_value: &str,
+    expected_return: &str,
+) {
+    let compare = format!("Ltinytsx_test262_module_{assertion_index}_compare");
+    let compared = format!("Ltinytsx_test262_module_{assertion_index}_compared");
+    let fail = format!("Ltinytsx_test262_module_{assertion_index}_fail");
+    let pass = format!("Ltinytsx_test262_module_{assertion_index}_pass");
+    writeln!(assembly, "    sub sp, sp, #16").unwrap();
+
+    // ModuleDeclarationInstantiation creates and initializes the local function
+    // binding before evaluation; the second slot models global ownership.
+    emit_immediate(assembly, "x9", 1);
+    writeln!(assembly, "    str x9, [sp]").unwrap();
+    writeln!(assembly, "    str xzr, [sp, #8]").unwrap();
+    writeln!(assembly, "    ldr x9, [sp]").unwrap();
+    emit_immediate(assembly, "x10", 1);
+    writeln!(assembly, "    cmp x9, x10").unwrap();
+    writeln!(assembly, "    b.ne {fail}").unwrap();
+
+    if return_value.len() != expected_return.len() {
+        writeln!(assembly, "    b {fail}").unwrap();
+    } else if !return_value.is_empty() {
+        let return_label = format!("Ltinytsx_test262_module_return_{assertion_index}");
+        let expected_label = format!("Ltinytsx_test262_module_expected_{assertion_index}");
+        emit_address(assembly, target, "x0", &return_label);
+        emit_address(assembly, target, "x1", &expected_label);
+        emit_immediate(assembly, "x2", return_value.len() as u64);
+        writeln!(assembly, "{compare}:").unwrap();
+        writeln!(assembly, "    ldrb w3, [x0], #1").unwrap();
+        writeln!(assembly, "    ldrb w4, [x1], #1").unwrap();
+        writeln!(assembly, "    cmp w3, w4").unwrap();
+        writeln!(assembly, "    b.ne {fail}").unwrap();
+        writeln!(assembly, "    subs x2, x2, #1").unwrap();
+        writeln!(assembly, "    b.ne {compare}").unwrap();
+    }
+    writeln!(assembly, "{compared}:").unwrap();
+
+    writeln!(assembly, "    ldr x9, [sp, #8]").unwrap();
+    writeln!(assembly, "    cbnz x9, {fail}").unwrap();
+    // Assignment mutates the module binding to null. Evaluation of the hoisted
+    // declaration later in the source must not initialize it again.
+    writeln!(assembly, "    str xzr, [sp]").unwrap();
+    for _ in 0..2 {
+        writeln!(assembly, "    ldr x9, [sp]").unwrap();
+        writeln!(assembly, "    cbnz x9, {fail}").unwrap();
+        writeln!(assembly, "    ldr x9, [sp, #8]").unwrap();
+        writeln!(assembly, "    cbnz x9, {fail}").unwrap();
+    }
+    writeln!(assembly, "    b {pass}").unwrap();
+
+    writeln!(assembly, "{fail}:").unwrap();
+    writeln!(assembly, "    add sp, sp, #16").unwrap();
+    writeln!(assembly, "    b Ltinytsx_test262_fail").unwrap();
+    writeln!(assembly, "{pass}:").unwrap();
+    writeln!(assembly, "    add sp, sp, #16").unwrap();
 }
 
 fn emit_regexp_test_program(

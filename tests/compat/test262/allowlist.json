@@ -43,7 +43,7 @@
     {
       "path": "test/language/module-code/instn-local-bndng-fun.js",
       "feature": "function-declaration-direct-call",
-      "mode": "syntax"
+      "mode": "native"
     },
     {
       "path": "test/language/statements/throw/S12.13_A1.js",

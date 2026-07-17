@@ -92,6 +92,15 @@ pub enum Test262Assertion {
         alternatives: Vec<String>,
         span: SourceSpan,
     },
+    ModuleFunctionBindingProgram {
+        #[serde(rename = "expectedType")]
+        expected_type: String,
+        #[serde(rename = "returnValue")]
+        return_value: String,
+        #[serde(rename = "expectedReturn")]
+        expected_return: String,
+        span: SourceSpan,
+    },
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -249,6 +258,20 @@ impl Test262Program {
                 {
                     return Err(
                         "Test262 RegExp requires an ASCII input up to 256 bytes and 1-8 literal alternatives up to 64 bytes"
+                            .to_owned(),
+                    );
+                }
+                Test262Assertion::ModuleFunctionBindingProgram {
+                    expected_type,
+                    return_value,
+                    expected_return,
+                    ..
+                } if expected_type != "function"
+                    || return_value.len() > 256
+                    || expected_return.len() > 256 =>
+                {
+                    return Err(
+                        "Test262 module function binding requires a bounded function return"
                             .to_owned(),
                     );
                 }

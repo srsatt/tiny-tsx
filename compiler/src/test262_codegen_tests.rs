@@ -141,6 +141,26 @@ fn emits_bounded_regexp_test_and_exec_matchers() {
 }
 
 #[test]
+fn emits_hoisted_mutable_module_function_binding_checks() {
+    let mut program = program(Target::LinuxArm64);
+    program.assertions = vec![Test262Assertion::ModuleFunctionBindingProgram {
+        expected_type: "function".to_owned(),
+        return_value: "test262".to_owned(),
+        expected_return: "test262".to_owned(),
+        span: span(),
+    }];
+
+    let assembly = emit(&program, Target::LinuxArm64).unwrap();
+
+    assert!(assembly.contains("Ltinytsx_test262_module_return_0:"));
+    assert!(assembly.contains("Ltinytsx_test262_module_expected_0:"));
+    assert!(assembly.contains("str x9, [sp]"));
+    assert!(assembly.contains("str xzr, [sp]"));
+    assert!(assembly.contains("Ltinytsx_test262_module_0_compare:"));
+    assert!(assembly.contains("Ltinytsx_test262_module_0_fail:"));
+}
+
+#[test]
 fn emits_runtime_numeric_binding_loads_and_subtraction() {
     let mut program = program(Target::LinuxArm64);
     program.assertions = vec![Test262Assertion::NumericSubtractionProgram {

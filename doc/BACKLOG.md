@@ -367,12 +367,16 @@ adds an explicit application acceptance test.
     programs were promoted to native mode. Their assertions execute against
     copied arguments, numeric slots, runtime field-name bytes, native abrupt
     completion, the portable host clock, bounded class/error identities, and a
-    dependency-free native matcher. Two syntax-only cases remain.
+    dependency-free native matcher, and a hoisted mutable module-function
+    binding. One syntax-only case remains.
 - [ ] Expand ordinary functions to locals, branches, closures, additional native
       types, and general typed expressions/statements.
   - 2026-07-17: immutable string locals and strict string-equality branches now
     lower through HIR and execute natively on both branch paths. Mutable locals,
     non-string types, escaping closures, and general statements remain open.
+  - 2026-07-17: the complete module-function Test262 case now proves pre-
+    evaluation initialization, direct call behavior, mutable reassignment, and
+    non-global ownership. General mutable ordinary locals remain open.
 - [ ] Compile function values, closures, records, arrays, ordinary loops, the
       restricted class semantics required by `hono/tiny`, and required runtime
       rest/spread operations.

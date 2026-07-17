@@ -205,3 +205,18 @@ test("lowers the complete pinned RegExp test/exec Test262 case", () => {
     span: program.assertions[0]?.span,
   }]);
 });
+
+test("lowers the complete pinned module function-binding Test262 case", () => {
+  const program = compileTest262Entry(path.join(
+    repository,
+    "vendor/test262/test/language/module-code/instn-local-bndng-fun.js",
+  ));
+
+  assert.deepEqual(program.assertions, [{
+    kind: "moduleFunctionBindingProgram",
+    expectedType: "function",
+    returnValue: "test262",
+    expectedReturn: "test262",
+    span: program.assertions[0]?.span,
+  }]);
+});

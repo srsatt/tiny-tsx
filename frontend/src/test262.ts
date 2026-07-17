@@ -43,6 +43,11 @@ import {
   lowerRegExpTestProgram,
   type RegExpTestProgramAssertion,
 } from "./test262-regexp.js";
+import {
+  isModuleFunctionBindingProgram,
+  lowerModuleFunctionBindingProgram,
+  type ModuleFunctionBindingProgramAssertion,
+} from "./test262-module-function.js";
 
 export interface Test262Program {
   version: 3;
@@ -62,7 +67,8 @@ export type Test262Assertion =
   | DateNowTypeProgramAssertion
   | ClassConstructorProgramAssertion
   | ErrorMessageProgramAssertion
-  | RegExpTestProgramAssertion;
+  | RegExpTestProgramAssertion
+  | ModuleFunctionBindingProgramAssertion;
 
 export interface SameValueStringAssertion {
   kind: "sameValueString";
@@ -123,8 +129,10 @@ export function compileTest262Entry(entryPath: string): Test262Program {
     throw tinyError("TINY2601", "Test262 metadata block is required", sourceFile, undefined, sourceFile);
   }
 
-  const assertions = isRegExpTestProgram(sourceFile)
-    ? [lowerRegExpTestProgram(sourceFile)]
+  const assertions = isModuleFunctionBindingProgram(sourceFile)
+    ? [lowerModuleFunctionBindingProgram(sourceFile)]
+    : isRegExpTestProgram(sourceFile)
+      ? [lowerRegExpTestProgram(sourceFile)]
     : isErrorMessageProgram(sourceFile)
       ? [lowerErrorMessageProgram(sourceFile)]
     : isClassConstructorProgram(sourceFile)

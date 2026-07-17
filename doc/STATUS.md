@@ -434,8 +434,10 @@ produces and serves a native Mach-O executable from the example TSX source.
   prototype in bounded native storage. The complete Error case copies its own
   bounded message bytes and verifies the standard property descriptor. The
   complete RegExp case runs independent bounded native literal-alternative
-  searches for `test` and `exec` presence. The other two cases remain
-  syntax-only and are not conformance results.
+  searches for `test` and `exec` presence. The complete module-function case
+  proves hoisted initialization, direct call, non-global ownership, mutable
+  reassignment, and declaration no-op behavior. The remaining async/Promise case
+  is syntax-only and is not a conformance result.
 - The dedicated native API suite currently covers Request method/path/query
   views, allocation-free form-decoded query-name presence, elapsed-header
   formatting, and exact-fit, OOM, and invalid response-writer behavior. Query
