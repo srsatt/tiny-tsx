@@ -489,6 +489,15 @@ portable host-call ABI for this exact assertion; it does not claim ECMAScript
 epoch-millisecond precision, monotonicity, clock adjustment, or general `Date`
 objects.
 
+The complete pinned class-constructor Test262 program also executes natively.
+The bounded assertion frame gives the class, prototype, prototype constructor,
+and constructed instance explicit identities; generated code verifies the
+constructor-body prototype observation, `C === C.prototype.constructor`, the
+standard configurable/enumerable/writable descriptor flags, one constructor
+execution, and the final instance prototype. This complements the ordinary
+closed-class method slice but does not claim inheritance, dynamic class values,
+arbitrary instances, or a general property-descriptor object model.
+
 The allowlisted `language/expressions/typeof/undefined.js` case is the first
 `mode: native` Test262 entry. `tinytsx test262 <case> --output <binary>` parses
 the untouched upstream source and lowers its two top-level

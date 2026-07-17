@@ -8,7 +8,7 @@
     {
       "path": "test/language/statements/class/definition/constructor.js",
       "feature": "classes",
-      "mode": "syntax"
+      "mode": "native"
     },
     {
       "path": "test/language/statements/for/S12.6.3_A1.js",

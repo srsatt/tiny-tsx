@@ -429,8 +429,10 @@ produces and serves a native Mach-O executable from the example TSX source.
   direct string throw/catch case compares the caught bytes and final catch flag.
   The complete `Date.now()` type case calls the portable host clock and verifies
   successful numeric-category completion from a link-register-safe standalone
-  entry. The other five cases remain syntax-only and are not conformance
-  results.
+  entry. The complete class-constructor case checks constructor/prototype
+  identity, standard descriptor flags, construction count, and instance
+  prototype in bounded native storage. The other four cases remain syntax-only
+  and are not conformance results.
 - The dedicated native API suite currently covers Request method/path/query
   views, allocation-free form-decoded query-name presence, elapsed-header
   formatting, and exact-fit, OOM, and invalid response-writer behavior. Query

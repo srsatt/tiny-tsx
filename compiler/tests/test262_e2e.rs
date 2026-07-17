@@ -14,6 +14,10 @@ fn compiles_and_runs_native_test262_programs() {
     let directory = temporary_directory();
     for (name, case) in [
         (
+            "class-constructor",
+            "vendor/test262/test/language/statements/class/definition/constructor.js",
+        ),
+        (
             "typeof-undefined",
             "vendor/test262/test/language/expressions/typeof/undefined.js",
         ),

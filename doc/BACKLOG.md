@@ -362,10 +362,11 @@ adds an explicit application acceptance test.
 - [ ] Promote remaining syntax-only Test262 cases only when their complete
       assertion programs execute natively.
   - 2026-07-17: the complete pinned array-spread/apply, subtraction/GetValue,
-    closed-record membership, direct string throw/catch, and `Date.now()` type
-    programs were promoted to native mode. Their assertions execute against
-    copied arguments, numeric slots, runtime field-name bytes, native abrupt
-    completion, and the portable host clock. Five syntax-only cases remain.
+    closed-record membership, direct string throw/catch, `Date.now()` type, and
+    closed class-constructor programs were promoted to native mode. Their
+    assertions execute against copied arguments, numeric slots, runtime
+    field-name bytes, native abrupt completion, the portable host clock, and
+    bounded class/prototype identities. Four syntax-only cases remain.
 - [ ] Expand ordinary functions to locals, branches, closures, additional native
       types, and general typed expressions/statements.
   - 2026-07-17: immutable string locals and strict string-equality branches now
@@ -377,6 +378,9 @@ adds an explicit application acceptance test.
   - 2026-07-17: closed local arrow/function values can capture direct-parent
     immutable strings and are lambda-lifted into native calls. Escaping identity,
     nested/transitive captures, and dynamic function selection remain open.
+  - 2026-07-17: the complete pinned class-constructor program now executes all
+    constructor, prototype, descriptor, and instance assertions natively; the
+    ordinary application slice remains restricted to closed immediate use.
 - [ ] Implement bounded native `Map`, constant `symbol`, signed zero, `NaN`, and
       infinities with complete semantics evidence.
 - [ ] Replace whole-module forbidden-syntax rejection with request/initialization

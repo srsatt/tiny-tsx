@@ -80,6 +80,28 @@ fn emits_native_array_spread_copy_and_assertions() {
 }
 
 #[test]
+fn emits_closed_class_constructor_identity_and_descriptor_checks() {
+    let mut program = program(Target::LinuxArm64);
+    program.assertions = vec![Test262Assertion::ClassConstructorProgram {
+        initial_count: 0,
+        expected_count: 1,
+        configurable: true,
+        enumerable: false,
+        writable: true,
+        span: span(),
+    }];
+
+    let assembly = emit(&program, Target::LinuxArm64).unwrap();
+
+    assert!(assembly.contains("sub sp, sp, #64"));
+    assert!(assembly.contains("str x9, [sp, #24]"));
+    assert!(assembly.contains("str x10, [sp, #56]"));
+    assert!(assembly.contains("add x9, x9, #1"));
+    assert!(assembly.contains("Ltinytsx_test262_class_0_fail:"));
+    assert!(assembly.contains("add sp, sp, #64"));
+}
+
+#[test]
 fn emits_runtime_numeric_binding_loads_and_subtraction() {
     let mut program = program(Target::LinuxArm64);
     program.assertions = vec![Test262Assertion::NumericSubtractionProgram {

@@ -69,6 +69,16 @@ pub enum Test262Assertion {
         expected_type: String,
         span: SourceSpan,
     },
+    ClassConstructorProgram {
+        #[serde(rename = "initialCount")]
+        initial_count: i64,
+        #[serde(rename = "expectedCount")]
+        expected_count: i64,
+        configurable: bool,
+        enumerable: bool,
+        writable: bool,
+        span: SourceSpan,
+    },
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -177,6 +187,23 @@ impl Test262Program {
                     if expected_type != "number" =>
                 {
                     return Err("Test262 Date.now expected type must be number".to_owned());
+                }
+                Test262Assertion::ClassConstructorProgram {
+                    initial_count,
+                    expected_count,
+                    configurable,
+                    enumerable,
+                    writable,
+                    ..
+                } if initial_count.checked_add(1) != Some(*expected_count)
+                    || !configurable
+                    || *enumerable
+                    || !writable =>
+                {
+                    return Err(
+                        "Test262 class constructor requires one construction and the standard constructor descriptor"
+                            .to_owned(),
+                    );
                 }
                 _ => {}
             }

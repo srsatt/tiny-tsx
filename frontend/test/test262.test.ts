@@ -6,6 +6,23 @@ import {compileTest262Entry} from "../src/test262.js";
 
 const repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
+test("lowers the complete pinned class constructor Test262 case", () => {
+  const program = compileTest262Entry(path.join(
+    repository,
+    "vendor/test262/test/language/statements/class/definition/constructor.js",
+  ));
+
+  assert.deepEqual(program.assertions, [{
+    kind: "classConstructorProgram",
+    initialCount: 0,
+    expectedCount: 1,
+    configurable: true,
+    enumerable: false,
+    writable: true,
+    span: program.assertions[0]?.span,
+  }]);
+});
+
 test("lowers the complete pinned infinite for/throw Test262 case", () => {
   const program = compileTest262Entry(path.join(
     repository,

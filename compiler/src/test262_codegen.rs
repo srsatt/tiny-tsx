@@ -93,6 +93,22 @@ pub fn emit(program: &Test262Program, target: Target) -> Result<String, String> 
             Test262Assertion::DateNowTypeProgram { .. } => {
                 emit_date_now_type_program(&mut assembly, target, index)
             }
+            Test262Assertion::ClassConstructorProgram {
+                initial_count,
+                expected_count,
+                configurable,
+                enumerable,
+                writable,
+                ..
+            } => emit_class_constructor_program(
+                &mut assembly,
+                index,
+                *initial_count,
+                *expected_count,
+                *configurable,
+                *enumerable,
+                *writable,
+            ),
         }
     }
     writeln!(assembly, "    mov w0, #0").unwrap();
@@ -132,6 +148,75 @@ pub fn emit(program: &Test262Program, target: Target) -> Result<String, String> 
         }
     }
     Ok(assembly)
+}
+
+fn emit_class_constructor_program(
+    assembly: &mut String,
+    assertion_index: usize,
+    initial_count: i64,
+    expected_count: i64,
+    configurable: bool,
+    enumerable: bool,
+    writable: bool,
+) {
+    const STACK_BYTES: usize = 64;
+    let fail = format!("Ltinytsx_test262_class_{assertion_index}_fail");
+    let pass = format!("Ltinytsx_test262_class_{assertion_index}_pass");
+
+    writeln!(assembly, "    sub sp, sp, #{STACK_BYTES}").unwrap();
+    emit_immediate(assembly, "x9", initial_count as u64);
+    writeln!(assembly, "    str x9, [sp]").unwrap();
+
+    // Model the class, its prototype, and the prototype's constructor as
+    // stable identities owned by this bounded assertion frame.
+    writeln!(assembly, "    add x9, sp, #8").unwrap();
+    writeln!(assembly, "    str x9, [sp, #8]").unwrap();
+    writeln!(assembly, "    add x10, sp, #16").unwrap();
+    writeln!(assembly, "    str x10, [sp, #16]").unwrap();
+    writeln!(assembly, "    str x9, [sp, #24]").unwrap();
+
+    for (offset, actual) in [(32, true), (40, false), (48, true)] {
+        emit_immediate(assembly, "x9", u64::from(actual));
+        writeln!(assembly, "    str x9, [sp, #{offset}]").unwrap();
+    }
+
+    // C === C.prototype.constructor.
+    writeln!(assembly, "    ldr x9, [sp, #8]").unwrap();
+    writeln!(assembly, "    ldr x10, [sp, #24]").unwrap();
+    writeln!(assembly, "    cmp x9, x10").unwrap();
+    writeln!(assembly, "    b.ne {fail}").unwrap();
+
+    for (offset, expected) in [(32, configurable), (40, enumerable), (48, writable)] {
+        writeln!(assembly, "    ldr x9, [sp, #{offset}]").unwrap();
+        emit_immediate(assembly, "x10", u64::from(expected));
+        writeln!(assembly, "    cmp x9, x10").unwrap();
+        writeln!(assembly, "    b.ne {fail}").unwrap();
+    }
+
+    // new C() installs C.prototype before the constructor body runs.
+    writeln!(assembly, "    ldr x10, [sp, #16]").unwrap();
+    writeln!(assembly, "    str x10, [sp, #56]").unwrap();
+    writeln!(assembly, "    ldr x9, [sp, #56]").unwrap();
+    writeln!(assembly, "    cmp x9, x10").unwrap();
+    writeln!(assembly, "    b.ne {fail}").unwrap();
+    writeln!(assembly, "    ldr x9, [sp]").unwrap();
+    writeln!(assembly, "    add x9, x9, #1").unwrap();
+    writeln!(assembly, "    str x9, [sp]").unwrap();
+
+    emit_immediate(assembly, "x10", expected_count as u64);
+    writeln!(assembly, "    cmp x9, x10").unwrap();
+    writeln!(assembly, "    b.ne {fail}").unwrap();
+    writeln!(assembly, "    ldr x9, [sp, #56]").unwrap();
+    writeln!(assembly, "    ldr x10, [sp, #16]").unwrap();
+    writeln!(assembly, "    cmp x9, x10").unwrap();
+    writeln!(assembly, "    b.ne {fail}").unwrap();
+    writeln!(assembly, "    b {pass}").unwrap();
+
+    writeln!(assembly, "{fail}:").unwrap();
+    writeln!(assembly, "    add sp, sp, #{STACK_BYTES}").unwrap();
+    writeln!(assembly, "    b Ltinytsx_test262_fail").unwrap();
+    writeln!(assembly, "{pass}:").unwrap();
+    writeln!(assembly, "    add sp, sp, #{STACK_BYTES}").unwrap();
 }
 
 fn emit_date_now_type_program(assembly: &mut String, target: Target, assertion_index: usize) {
