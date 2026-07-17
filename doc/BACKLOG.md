@@ -48,32 +48,43 @@ The alpha profiles are:
 
 ## Current implementation slice
 
-The bounded persistence tracer and installable Apple archive are complete. The
-next goal is **alpha release-candidate closure**: reconcile the published
-contract with executable evidence, run the native Linux artifact, harden the
-release build, and publish a repeatable benchmark. Do not widen the language,
-Hono, actor, or SQLite surface during this goal unless an existing alpha tracer
-cannot pass without it.
+The bounded persistence tracer, stable built-in diagnostics, reconciled alpha
+contract, and installable Apple archive are complete. The next goal is
+**executable alpha release-gate closure**: make every published example and
+failure contract part of `release:verify`, close the remaining native-target
+evidence, and leave a tag-ready release candidate. Do not widen the language,
+Hono, actor, or SQLite surface during this goal unless an existing alpha gate
+exposes a regression in the already-published contract.
 
 Acceptance criteria are, in order:
 
 - [x] Resolve the Hono response-clone `Content-Type` difference from Fetch/WPT
   evidence and update the affected native/reference contract;
-- [ ] Finish and test stable `TINY15xx` diagnostics for unavailable built-ins,
+- [x] Finish and test stable `TINY15xx` diagnostics for unavailable built-ins,
   denied capabilities, exceeded alpha limits, and unsupported actor/SQLite
   operations;
-- [ ] Audit `doc/ALPHA.md`, `doc/COMPATIBILITY.md`,
+- [x] Audit `doc/ALPHA.md`, `doc/COMPATIBILITY.md`,
   `doc/STANDARD_LIBRARY.md`, `doc/PERSISTENCE.md`, `doc/ACTORS.md`, the Hono
   manifests, `--list-builtins`, and the getting-started path so none describes
   already-shipped disk, transaction, or persistent-counter work as missing or
   implies an example exercises more than it does;
-- [ ] Make every documented alpha example an explicit `release:verify` gate,
-  including native success/failure HTTP behavior and its declared reference;
+- [ ] Give every row in `tests/compat/hono/examples-manifest.json` an explicit
+  release gate and make intake fail when the referenced script is missing or is
+  not reached by `release:verify`;
+- [ ] Close the matrix's remaining evidence: Linux-arm64 assembly for
+  `@hono/zod-openapi`, `@hono/node-server`, and `tinytsx:serve`; native success
+  and failure HTTP paths for `tinytsx:serve`; the pinned Node/Hono reference for
+  `@hono/node-server`; and an explicit tested-reference or not-applicable
+  decision for the local durable-object counter adapter;
+- [ ] Exercise release-build startup and graceful shutdown, malformed input,
+  request-memory exhaustion, worker/actor saturation, filesystem denial,
+  SQLite contention, and post-disposal recovery through named release gates;
+- [ ] Package the focused Hono, file, SQLite, and actor examples and publish one
+  archive-based getting-started path that links each runnable example without
+  claiming the hello path exercises those features;
 - [ ] Complete one successful Linux-arm64 CI release run, install the resulting
-  archive outside the checkout, and retain its checksum/manifest evidence;
-- [ ] Exercise release-build startup/shutdown, malformed input, request-memory
-  exhaustion, worker/actor saturation, filesystem denial, SQLite contention,
-  and disposal recovery;
+  archive outside the checkout, and retain its checksum, artifact manifest,
+  version report, and HTTP-contract evidence;
 - [ ] Repeat the controlled TinyTSX/Bun release benchmark and publish startup,
   idle/warm RSS, throughput, median/p99 latency, binary size, and the measured
   actor/SQLite overhead;
@@ -84,6 +95,25 @@ Runtime SQLite symlink/sidecar-race hardening, prepared/callback transactions,
 general actor messages, actor-scale/fairness work, and the combined user-auth
 example are explicitly post-alpha. The alpha documents must keep those limits
 prominent.
+
+### Next-goal handoff
+
+Use the goal title **Close executable alpha release gates**. Its scope is the
+unchecked acceptance criteria above, in order. The goal may repair a failing
+existing alpha path, but discovering a broader language, Web, Hono, standard
+library, actor, SQLite, or GC feature creates a post-alpha backlog item instead
+of silently expanding `0.1.0-alpha.1`.
+
+The goal is complete only when:
+
+- the example manifest has no unexplained `pending` state and every row names a
+  release-reachable test;
+- `npm run release:verify` passes from a clean Apple-arm64 checkout and the
+  Linux-arm64 workflow passes the same release contract natively;
+- both archives install outside the checkout and build/run their smoke
+  applications from installed resources;
+- the repeated benchmark and final checklist are committed, while the tag is
+  deliberately left for a separate release action.
 
 ## Alpha critical path
 
