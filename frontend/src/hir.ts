@@ -194,6 +194,12 @@ export type ValueExpression =
       span: SourceSpan;
     }
   | {
+      kind: "requestCookie";
+      cookie: number;
+      fallback?: number;
+      span: SourceSpan;
+    }
+  | {
       kind: "environmentVariable";
       name: number;
       required: boolean;

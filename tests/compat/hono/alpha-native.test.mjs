@@ -148,8 +148,34 @@ test("executes the pinned Hono setCookie helper natively", async context => {
         assert.equal(response.headers.get("set-cookie"), expected);
         assert.equal(await response.text(), "Give cookie");
       }
+      await assertText(port, "/get-cookie", 200, "missing");
+      const parsed = await request(port, "/get-cookie", {
+        headers: {cookie: "other=one; delicious_cookie = macha"},
+      });
+      assert.equal(parsed.status, 200);
+      assert.equal(await parsed.text(), "macha");
+      const decoded = await request(port, "/get-cookie", {
+        headers: {cookie: "delicious_cookie=green%20tea"},
+      });
+      assert.equal(decoded.status, 200);
+      assert.equal(await decoded.text(), "green tea");
     },
   );
+});
+
+test("assembles the pinned Hono cookie helper for Linux arm64", () => {
+  const checked = spawnSync("cargo", [
+    "run", "-q", "-p", "tinytsx", "--", "check",
+    "tests/compat/hono/cookie-smoke.ts",
+    "--emit-asm", "--target", "aarch64-unknown-linux-gnu",
+    ...cookie,
+  ], {cwd: repository, encoding: "utf8"});
+  assert.equal(checked.status, 0, checked.stderr || checked.stdout);
+  assert.match(checked.stdout, /tinytsx_html_write_request_cookie/);
+  const assembled = spawnSync("clang", [
+    "--target=aarch64-unknown-linux-gnu", "-x", "assembler", "-c", "-o", "/dev/null", "-",
+  ], {cwd: repository, input: checked.stdout, encoding: "utf8"});
+  assert.equal(assembled.status, 0, assembled.stderr);
 });
 
 async function withServer(context, entry, port, options, verify) {
@@ -172,9 +198,10 @@ async function withServer(context, entry, port, options, verify) {
   await new Promise(resolve => server.once("exit", resolve));
 }
 
-async function request(port, pathname) {
+async function request(port, pathname, init = {}) {
   return fetch(`http://127.0.0.1:${port}${pathname}`, {
-    headers: {connection: "close"},
+    ...init,
+    headers: {connection: "close", ...init.headers},
   });
 }
 

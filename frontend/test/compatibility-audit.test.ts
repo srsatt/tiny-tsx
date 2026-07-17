@@ -1062,7 +1062,19 @@ test("executes the pinned Hono setCookie helper for closed values", () => {
       path: "/a/set-cookie-path",
       headers: [{name: "Set-Cookie", value: "delicious_cookie=macha; Path=/a"}],
     },
+    {path: "/get-cookie", headers: undefined},
   ]);
+  const getCookie = hir.handlers[2]?.response;
+  assert.deepEqual(getCookie?.kind === "text" ? getCookie.value : undefined, {
+    kind: "concat",
+    values: [{
+      kind: "requestCookie",
+      cookie: 1,
+      fallback: 2,
+      span: hir.handlers[2]!.span,
+    }],
+    span: hir.handlers[2]!.span,
+  });
 });
 
 test("applies the upstream poweredBy middleware after the root handler", () => {

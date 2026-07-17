@@ -403,6 +403,7 @@ pub(super) fn emit_value_expression(
         ValueExpression::Concat { .. }
         | ValueExpression::RouteParameter { .. }
         | ValueExpression::RequestHeader { .. }
+        | ValueExpression::RequestCookie { .. }
         | ValueExpression::EnvironmentVariable { .. }
         | ValueExpression::FileText { .. }
         | ValueExpression::ActorCall { .. }

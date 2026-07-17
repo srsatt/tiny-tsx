@@ -2159,6 +2159,17 @@ function evaluateCall(
       const providerResult = evaluatePinnedProviderGenerateText(arguments_);
       if (providerResult !== undefined) return providerResult;
     }
+    if (callable.kind === "reference" && isPinnedGetCookie(callable)) {
+      const context = arguments_[0];
+      const name = arguments_[1];
+      return arguments_.length === 2
+        && context?.kind === "instance"
+        && name?.kind === "string"
+        && Buffer.byteLength(name.value, "utf8") <= 128
+        && /^[\w!#$%&'*.^`|~+-]+$/.test(name.value)
+        ? {kind: "requestCookie", name: name.value}
+        : unknown("getCookie requires a context and one closed valid cookie name");
+    }
     if (callable.kind === "openAiProvider") {
       const model = arguments_[0];
       return arguments_.length === 1 && model?.kind === "string"
@@ -3206,6 +3217,12 @@ function evaluatePinnedProviderGenerateText(arguments_: Value[]): Value | undefi
   return {kind: "record", fields: new Map([["text", text]])};
 }
 
+function isPinnedGetCookie(value: Value & {kind: "reference"}): boolean {
+  return value.name === "getCookie"
+    && value.callable?.module.path.replaceAll("\\", "/")
+      .endsWith("/helper/cookie/index.ts") === true;
+}
+
 function isPinnedStreamText(value: Value & {kind: "reference"}): boolean {
   return value.name === "streamText"
     && value.callable?.module.path.replaceAll("\\", "/")
@@ -3710,6 +3727,12 @@ function evaluateExpression(
           ? {...left, fallback: fallback.value}
           : unknown("environment variable fallback is not a closed string");
       }
+      if (left.kind === "requestCookie") {
+        const fallback = evaluate(evaluator, expression.right, module, environment, instance);
+        return fallback.kind === "string"
+          ? {...left, fallback: fallback.value}
+          : unknown("cookie fallback is not a closed string");
+      }
       return left.kind === "undefined" || left.kind === "null"
         ? evaluate(evaluator, expression.right, module, environment, instance)
         : left;
@@ -3925,6 +3948,7 @@ function evaluateExpression(
         && body.kind !== "actorCall"
         && body.kind !== "sqliteQuery"
         && body.kind !== "routeParameter"
+        && body.kind !== "requestCookie"
         && body.kind !== "responseBody"
         && body.kind !== "undefined"
         && body.kind !== "null"
@@ -3935,7 +3959,7 @@ function evaluateExpression(
       }
       const runtimeBody = body.kind === "routeParameter"
         ? [{kind: "routeParameter" as const, name: body.name}]
-        : body.kind === "workerCall" || body.kind === "openAiChatText" || body.kind === "environmentVariable" || body.kind === "fileText" || body.kind === "actorCall" || body.kind === "sqliteQuery"
+        : body.kind === "workerCall" || body.kind === "openAiChatText" || body.kind === "environmentVariable" || body.kind === "fileText" || body.kind === "actorCall" || body.kind === "sqliteQuery" || body.kind === "requestCookie"
           ? runtimeStringParts(body)
         : body.kind === "runtimeString"
           ? body.parts
@@ -4123,6 +4147,7 @@ function evaluateExpression(
       values.push(
         part.kind === "routeParameter"
           || part.kind === "requestHeader"
+          || part.kind === "requestCookie"
           || part.kind === "fetchStatus"
           || part.kind === "elapsedMilliseconds"
           || part.kind === "runtimeString"
@@ -4984,6 +5009,7 @@ function isTrackedAllocation(expression: ts.Expression, value: Value): boolean {
     || value.kind === "request"
     || value.kind === "routeParameter"
     || value.kind === "requestHeader"
+    || value.kind === "requestCookie"
     || value.kind === "environmentVariable"
     || value.kind === "fileText"
     || value.kind === "actorCall"

@@ -136,6 +136,30 @@ fn emit_handler_text_expression(
             );
             assembly.call(format_args!("tinytsx_html_write_request_header"));
         }
+        ValueExpression::RequestCookie {
+            cookie, fallback, ..
+        } => {
+            asm_line!(assembly, "    ldr x0, [sp, #16]");
+            asm_line!(assembly, "    ldr x1, [sp, #24]");
+            assembly.address("x2", format_args!("Ltinytsx_string_{cookie}"));
+            emit_immediate(
+                assembly,
+                "x3",
+                program.static_strings[*cookie].value.len() as u64,
+            );
+            if let Some(fallback) = fallback {
+                assembly.address("x4", format_args!("Ltinytsx_string_{fallback}"));
+                emit_immediate(
+                    assembly,
+                    "x5",
+                    program.static_strings[*fallback].value.len() as u64,
+                );
+            } else {
+                asm_line!(assembly, "    mov x4, #0");
+                asm_line!(assembly, "    mov x5, #0");
+            }
+            assembly.call(format_args!("tinytsx_html_write_request_cookie"));
+        }
         ValueExpression::EnvironmentVariable {
             name,
             required,

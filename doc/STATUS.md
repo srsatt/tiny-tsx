@@ -822,8 +822,11 @@ produces and serves a native Mach-O executable from the example TSX source.
   than a compiler-owned helper replacement.
 - Frontend HIR and native HTTP tests pin `delicious_cookie=macha; Path=/` and
   `delicious_cookie=macha; Path=/a`. The official helper matrix and upstream
-  behavior allowlist now cite this evidence; request parsing, signing, dynamic
-  options, deletion, and multiple cookies remain unsupported.
+  behavior allowlist now cite this evidence. A named request-cookie expression
+  additionally covers missing fallback, spaces around pairs, and percent-decoded
+  UTF-8 from the borrowed header on Apple, while the same source assembles for
+  Linux arm64. All-cookie objects, signing, dynamic options, deletion, prefixes,
+  and multiple response cookies remain unsupported.
 
 Verification:
 

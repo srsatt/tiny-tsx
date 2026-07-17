@@ -20,3 +20,4 @@ export function setCookie(
   options?: CookieOptionsApi,
 ): void;
 
+export function getCookie(context: HonoContextApi, name: string): string | undefined;

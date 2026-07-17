@@ -436,8 +436,10 @@ adds an explicit application acceptance test.
       transports.
   - 2026-07-17: the real pinned `hono/cookie` `setCookie` helper now executes for
     closed name/value and default or explicit path. Closed `encodeURIComponent`,
-    string `+=`, and `Headers.append` are reusable evaluator operations; request
-    cookie parsing, dynamic attributes, multiple cookies, and signing remain
+    string `+=`, and `Headers.append` are reusable evaluator operations. A
+    statically named `getCookie` now parses the borrowed request header with
+    whitespace, percent decoding, and a closed missing fallback. All-cookie
+    objects, dynamic attributes, multiple cookies, prefixes, and signing remain
     open.
 - [ ] Add optional/multi-segment route parameters, general constraints,
       non-terminal catch-alls, and broader request-dependent handlers.

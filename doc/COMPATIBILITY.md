@@ -273,16 +273,18 @@ handler, and an on-disk SQLite audit row retained across process restart. Closed
 prepared parameters now include bounded strings, safe integers, finite reals,
 booleans, and null without constructing a runtime JavaScript array or record.
 Apple native HTTP and Linux-arm64 assembly are release-gated. This does not add
-dynamic credentials, password hashing, request-cookie parsing, sessions, or a
-general policy engine.
+dynamic credentials, password hashing, signed/session cookies, or a general
+policy engine.
 
 The pinned `hono/cookie` helper now runs unchanged for closed `setCookie`
 name/value pairs with its default path or one explicit static path. Hono's real
 serializer exercises bounded closed `encodeURIComponent`, string addition
 assignment, and `Headers.append`; native HTTP returns the exact upstream
-`Set-Cookie` values. This is response-cookie generation only. Request parsing,
-dynamic attributes, deletion, multiple cookies, signing, and session policy are
-not yet native.
+`Set-Cookie` values. A statically named `getCookie` reads the bounded borrowed
+request header, normalizes spaces/tabs, decodes valid percent-encoded UTF-8, and
+uses a closed missing fallback without constructing a cookie record. All-cookie
+objects, dynamic attributes, deletion, multiple response cookies, prefixes,
+signing, and session policy are not yet native.
 
 The exact `/etag/cached` middleware now specializes the closed response bytes
 to Hono's default SHA-1 entity tag. HIR retains both the normal response and its

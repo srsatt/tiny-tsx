@@ -95,7 +95,7 @@
       "httpBehavior": {"status": "pass", "evidence": "tests/compat/hono/user-auth-native.test.mjs"},
       "referenceBehavior": {"runtime": "not-applicable", "status": "not-applicable", "evidence": "doc/COMPATIBILITY.md"},
       "releaseGates": {"native": ["test:hono-user-auth"], "reference": []},
-      "firstUnsupportedBoundary": "The multi-module tracer proves one static Basic Auth guard, a required string environment binding, a closed error response, and SQLite state across restart; dynamic credentials, sessions, request-cookie parsing, hashing, and general authorization policy remain unsupported."
+      "firstUnsupportedBoundary": "The multi-module tracer proves one static Basic Auth guard, a required string environment binding, a closed error response, and SQLite state across restart; dynamic credentials, sessions, signed cookies, hashing, and general authorization policy remain unsupported."
     },
     {
       "id": "upstream-serve-static",
@@ -160,7 +160,7 @@
     {"source":"vendor/hono/src/middleware/pretty-json/index.test.ts","selectors":["Should return pretty JSON output"],"evidenceMode":"native-derived","nativeEvidence":"tests/compat/hono/pretty-json-smoke.ts"},
     {"source":"vendor/hono/src/middleware/basic-auth/index.test.ts","selectors":["Should not authorize","Should authorize"],"evidenceMode":"native-derived","nativeEvidence":"tests/compat/hono/basic-auth-smoke.ts"},
     {"source":"vendor/hono/src/hono.test.ts","selectors":["Should match with an optional parameter","Should match without an optional parameter"],"evidenceMode":"native-derived","nativeEvidence":"tests/compat/hono/optional-param-smoke.ts"},
-    {"source":"vendor/hono/src/helper/cookie/index.test.ts","selectors":["Set cookie with setCookie()","Set cookie with setCookie() and path option"],"evidenceMode":"native-derived","nativeEvidence":"tests/compat/hono/cookie-smoke.ts"},
+    {"source":"vendor/hono/src/helper/cookie/index.test.ts","selectors":["Parse cookie with getCookie()","Set cookie with setCookie()","Set cookie with setCookie() and path option"],"evidenceMode":"native-derived","nativeEvidence":"tests/compat/hono/cookie-smoke.ts"},
     {"source":"vendor/hono/src/middleware/etag/index.test.ts","selectors":["Should return etag header","Should handle conditional GETs"],"evidenceMode":"native-derived","nativeEvidence":"tests/compat/hono/etag-smoke.ts"},
     {"source":"vendor/hono/src/helper/streaming/text.test.ts","selectors":["Check streamText Response"],"evidenceMode":"native-derived","nativeEvidence":"tests/compat/hono/stream-text-smoke.ts"}
   ],

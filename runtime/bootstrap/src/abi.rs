@@ -1323,6 +1323,140 @@ pub unsafe extern "C" fn tinytsx_html_write_request_header(
 }
 
 #[unsafe(no_mangle)]
+pub unsafe extern "C" fn tinytsx_html_write_request_cookie(
+    writer: *mut TinyResponseWriter,
+    request: *const TinyRequest,
+    expected: *const u8,
+    expected_len: usize,
+    fallback: *const u8,
+    fallback_len: usize,
+) -> u32 {
+    if writer.is_null()
+        || request.is_null()
+        || expected.is_null()
+        || expected_len == 0
+        || (fallback.is_null() && fallback_len != 0)
+    {
+        return INTERNAL_ERROR;
+    }
+    let request = unsafe { &*request };
+    if request.headers.is_null() && request.header_count != 0 {
+        return INTERNAL_ERROR;
+    }
+    let headers = unsafe { slice::from_raw_parts(request.headers, request.header_count) };
+    let expected = unsafe { slice::from_raw_parts(expected, expected_len) };
+    for header in headers {
+        if (header.name.ptr.is_null() && header.name.len != 0)
+            || (header.value.ptr.is_null() && header.value.len != 0)
+        {
+            return INTERNAL_ERROR;
+        }
+        let name = unsafe { slice::from_raw_parts(header.name.ptr, header.name.len) };
+        if !name.eq_ignore_ascii_case(b"cookie") {
+            continue;
+        }
+        let value = unsafe { slice::from_raw_parts(header.value.ptr, header.value.len) };
+        for pair in value.split(|byte| *byte == b';') {
+            let Some(equals) = pair.iter().position(|byte| *byte == b'=') else {
+                continue;
+            };
+            let name = trim_cookie_whitespace(&pair[..equals]);
+            if name != expected {
+                continue;
+            }
+            let mut cookie = trim_cookie_whitespace(&pair[equals + 1..]);
+            if cookie.len() >= 2 && cookie.first() == Some(&b'"') && cookie.last() == Some(&b'"') {
+                cookie = &cookie[1..cookie.len() - 1];
+            }
+            if !cookie
+                .iter()
+                .all(|byte| matches!(*byte, 0x20..=0x7e) && !matches!(*byte, b'"' | b';' | b'\\'))
+            {
+                break;
+            }
+            return unsafe { write_cookie_value(writer, cookie) };
+        }
+        break;
+    }
+    if fallback.is_null() {
+        unsafe { tinytsx_html_write_static(writer, b"undefined".as_ptr(), b"undefined".len()) }
+    } else {
+        unsafe { tinytsx_html_write_static(writer, fallback, fallback_len) }
+    }
+}
+
+fn trim_cookie_whitespace(mut value: &[u8]) -> &[u8] {
+    while value.first().is_some_and(|byte| matches!(byte, b' ' | b'\t')) {
+        value = &value[1..];
+    }
+    while value.last().is_some_and(|byte| matches!(byte, b' ' | b'\t')) {
+        value = &value[..value.len() - 1];
+    }
+    value
+}
+
+unsafe fn write_cookie_value(writer: *mut TinyResponseWriter, value: &[u8]) -> u32 {
+    let mut cursor = 0;
+    let mut literal_start = 0;
+    while cursor < value.len() {
+        if percent_byte(value, cursor).is_none() {
+            cursor += 1;
+            continue;
+        }
+        if literal_start < cursor {
+            let status = unsafe {
+                tinytsx_html_write_static(
+                    writer,
+                    value[literal_start..cursor].as_ptr(),
+                    cursor - literal_start,
+                )
+            };
+            if status != OK {
+                return status;
+            }
+        }
+        let group_start = cursor;
+        while percent_byte(value, cursor).is_some() {
+            cursor += 3;
+        }
+        if valid_percent_utf8(value, group_start, cursor) {
+            let mut encoded = group_start;
+            while encoded < cursor {
+                let decoded = [percent_byte(value, encoded).expect("validated percent byte")];
+                let status = unsafe { tinytsx_html_write_static(writer, decoded.as_ptr(), 1) };
+                if status != OK {
+                    return status;
+                }
+                encoded += 3;
+            }
+        } else {
+            let status = unsafe {
+                tinytsx_html_write_static(
+                    writer,
+                    value[group_start..cursor].as_ptr(),
+                    cursor - group_start,
+                )
+            };
+            if status != OK {
+                return status;
+            }
+        }
+        literal_start = cursor;
+    }
+    if literal_start < value.len() {
+        unsafe {
+            tinytsx_html_write_static(
+                writer,
+                value[literal_start..].as_ptr(),
+                value.len() - literal_start,
+            )
+        }
+    } else {
+        OK
+    }
+}
+
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn tinytsx_html_write_environment_variable(
     writer: *mut TinyResponseWriter,
     name: *const u8,

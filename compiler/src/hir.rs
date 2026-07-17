@@ -419,6 +419,11 @@ pub enum ValueExpression {
         header: usize,
         span: SourceSpan,
     },
+    RequestCookie {
+        cookie: usize,
+        fallback: Option<usize>,
+        span: SourceSpan,
+    },
     EnvironmentVariable {
         name: usize,
         required: bool,
@@ -1080,6 +1085,7 @@ impl Program {
             ValueExpression::Concat { .. }
             | ValueExpression::RouteParameter { .. }
             | ValueExpression::RequestHeader { .. }
+            | ValueExpression::RequestCookie { .. }
             | ValueExpression::EnvironmentVariable { .. }
             | ValueExpression::FileText { .. }
             | ValueExpression::ActorCall { .. }
@@ -1218,6 +1224,7 @@ impl Program {
             }
             ValueExpression::RouteParameter { .. }
             | ValueExpression::RequestHeader { .. }
+            | ValueExpression::RequestCookie { .. }
             | ValueExpression::EnvironmentVariable { .. }
             | ValueExpression::FileText { .. }
             | ValueExpression::ActorCall { .. }
@@ -1427,6 +1434,26 @@ impl Program {
                 };
                 if header.value.is_empty() {
                     return Err("request header name must not be empty".to_owned());
+                }
+                Ok(())
+            }
+            ValueExpression::RequestCookie {
+                cookie, fallback, ..
+            } => {
+                let Some(cookie) = self.static_strings.get(*cookie) else {
+                    return Err("request cookie references a missing static string".to_owned());
+                };
+                if cookie.value.is_empty()
+                    || cookie.value.len() > 128
+                    || !cookie.value.bytes().all(|byte| {
+                        byte.is_ascii_alphanumeric()
+                            || matches!(byte, b'_' | b'!' | b'#' | b'$' | b'%' | b'&' | b'\'' | b'*' | b'.' | b'^' | b'`' | b'|' | b'~' | b'+' | b'-')
+                    })
+                {
+                    return Err("request cookie name is invalid".to_owned());
+                }
+                if fallback.is_some_and(|fallback| fallback >= self.static_strings.len()) {
+                    return Err("request cookie fallback references a missing static string".to_owned());
                 }
                 Ok(())
             }

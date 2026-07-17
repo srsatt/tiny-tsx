@@ -754,6 +754,14 @@ function lowerRuntimeString(
       if (part.kind === "requestHeader") {
         return {kind: "requestHeader" as const, header: strings.intern(part.name), span};
       }
+      if (part.kind === "requestCookie") {
+        return {
+          kind: "requestCookie" as const,
+          cookie: strings.intern(part.name),
+          ...(part.fallback === undefined ? {} : {fallback: strings.intern(part.fallback)}),
+          span,
+        };
+      }
       if (part.kind === "environmentVariable") {
         return {
           kind: "environmentVariable" as const,
@@ -842,6 +850,7 @@ function dynamicResponseExpressions(body: ResponseBody): number {
     return body.filter(part =>
       part.kind === "routeParameter"
       || part.kind === "requestHeader"
+      || part.kind === "requestCookie"
       || part.kind === "environmentVariable"
       || part.kind === "fileText"
       || part.kind === "actorCall"
