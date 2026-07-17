@@ -362,32 +362,49 @@ adds an explicit application acceptance test.
 
 #### Goal handoff
 
-The previous bounded goal—copied structured actor messages, protected SQLite
-ownership, and actor pressure evidence—is complete. Its implementation and
-evidence are recorded under P3 and P4. No next goal is active in this backlog;
-select one explicitly before implementation begins.
+The current stabilization pass has landed the complete native Test262
+allowlist, the multi-module Hono user-auth tracer, copied structured actor
+messages, protected SQLite ownership, actor pressure evidence, and bounded live
+HTTP-connection resubmission. Their implementation and evidence are recorded
+under P1-P4. No next implementation slice is selected in this backlog; select
+one explicitly before implementation begins.
+
+Do not reopen the completed alpha foundations as broad projects. File reading,
+SQLite, and local actors already have public bounded built-ins. Their next work
+is API depth and real-application evidence, not a second standard-library
+design. Likewise, a new Hono row promotes only the behavior exercised by its
+named upstream tracer.
 
 The groomed candidates, in recommended dependency order, are:
 
-1. **HTTP connection fairness:** preserve live keep-alive connections while
-   resubmitting them after a bounded request turn, then repeat the actor load
-   matrix. This addresses a measured runtime bottleneck and benefits every Hono
-   application without widening the language contract.
-2. **One broader Hono tracer:** choose one exact upstream example or behavior
-   file, compile it unchanged, and promote only the first unsupported language,
-   Web API, or standard-library boundary that it exposes.
+1. **Hono body-limit tracer:** compile the pinned upstream middleware unchanged
+   for a literal bounded `maxSize`, its default rejection response, and
+   `Content-Length` request bodies. Add accepted/exceeded native HTTP cases,
+   Bun/Hono reference behavior, Linux-arm64 assembly, stable diagnostics for
+   custom handlers or invalid limits, and an explicit chunked-body boundary.
+2. **One further upstream Hono tracer:** after body limits are green, choose one
+   exact example or behavior file from the pinned tree and promote only its
+   first unsupported language, Web API, or built-in boundary. Prefer a tracer
+   that extends the user-auth application rather than an isolated synthetic
+   feature.
 3. **SQLite result depth:** add typed execute results and only the dynamic value
    forms required by the selected application while retaining single-owner,
    non-interleaving execution.
 4. **Actor lifecycle depth:** specify disconnect cancellation, restart, and
    supervision separately; do not bundle distributed actors, snapshots, or a
    managed heap into the local lifecycle goal.
+5. **Release-stability evidence:** finish the named P4 workload families and a
+   longer controlled TinyTSX/Bun run only after the selected functional slice
+   is green. A new release candidate remains a separate explicitly selected
+   goal.
 
-Each selected goal must name its tracer, supported boundary, native Apple and
-Linux evidence, failure/resource tests, and documentation updates. General
-JavaScript object identity, blanket Hono compatibility, distributed actors,
-production GC, and a new release tag remain out of scope unless explicitly
-promoted into a later goal.
+Before implementation, the selected goal must be copied into the active goal
+with: its exact tracer/source revision; admitted and rejected boundaries; Apple
+execution and Linux-arm64 evidence; failure, saturation, and disposal tests as
+applicable; manifest/declaration/package changes; and documentation updates.
+General JavaScript object identity, blanket Hono compatibility, distributed
+actors, production GC, and a new release tag remain out of scope unless
+explicitly promoted into a later goal.
 
 ### P1 — Compatibility and language depth
 
@@ -475,6 +492,17 @@ promoted into a later goal.
     `deleteCookie` path returns the deleted value and emits `Max-Age=0`, while
     repeated `setCookie` calls preserve both response values. All-cookie objects,
     dynamic attributes, prefixes, and signing remain open.
+- [ ] Compile the pinned upstream Hono `bodyLimit` middleware unchanged for a
+      closed literal `maxSize` and its default error response.
+  - Admit `Content-Length` request bodies within the existing 64 KiB transport
+    ceiling, reject exceeded bodies with the upstream status/body/content type,
+    and preserve keep-alive framing after either result.
+  - Reject custom `onError`, dynamic or out-of-range limits, and chunked request
+    bodies with stable documented boundaries until separate tracers require
+    them.
+  - Require upstream Bun/Hono reference tests, Apple-arm64 native HTTP behavior,
+    Linux-arm64 assembly, manifest/intake coverage, and installed-release
+    reachability.
 - [ ] Add optional/multi-segment route parameters, general constraints,
       non-terminal catch-alls, and broader request-dependent handlers.
   - 2026-07-17: one or more contiguous trailing `:name?` parameters now expand
