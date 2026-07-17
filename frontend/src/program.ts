@@ -8,6 +8,7 @@ import {
   evaluateApplicationInitialization,
   type EvaluatedBasicAuthorization,
   type EvaluatedEntityTag,
+  type EvaluatedSqliteExistence,
   type EvaluatedResponse,
   type ApplicationInitializationEvaluation,
 } from "./constructor-evaluator.js";
@@ -19,6 +20,7 @@ import type {
   BasicAuthorization,
   ElapsedHeader,
   EntityTag,
+  SqliteExistence,
   Handler,
   HirProgram,
   SourceSpan,
@@ -37,6 +39,7 @@ import type {
   ResponseBody,
   ResponseHeaderValue,
   RuntimeStringPart,
+  SqliteParameter,
   WorkerMessage,
 } from "./symbolic-value.js";
 
@@ -409,6 +412,9 @@ function lowerApplicationInitialization(
     const entityTag = response.entityTag === undefined
       ? undefined
       : lowerEntityTag(response.entityTag, route.path, strings, workers, span);
+    const sqliteExistence = response.sqliteExistence === undefined
+      ? undefined
+      : lowerSqliteExistence(response.sqliteExistence, route.path, strings, workers, span);
     const parameterValidations = route.parameterValidations?.map(validation => ({
       name: validation.name,
       segment: routeParameterSegment(route.path, validation.name),
@@ -421,6 +427,7 @@ function lowerApplicationInitialization(
       ...responseHeaders,
       ...(basicAuthorization === undefined ? {} : {basicAuthorization}),
       ...(entityTag === undefined ? {} : {entityTag}),
+      ...(sqliteExistence === undefined ? {} : {sqliteExistence}),
       ...(parameterValidations === undefined || parameterValidations.length === 0
         ? {}
         : {parameterValidations}),
@@ -438,11 +445,7 @@ function lowerApplicationInitialization(
             sql: strings.intern(action.sql!),
             ...(action.parameters === undefined
               ? {}
-              : {parameters: action.parameters.map(parameter => parameter.kind === "routeParameter"
-                ? {kind: "routeParameter" as const, segment: routeParameterSegment(route.path, parameter.name)}
-                : parameter.kind === "requestJsonField"
-                  ? {kind: "requestJsonField" as const, field: strings.intern(parameter.name)}
-                  : {kind: "randomUuid" as const})}),
+              : {parameters: lowerSqliteParameters(action.parameters, route.path, strings)}),
           }
           : {kind: "close" as const, database: action.database.id})}),
       ...(response.stderr === undefined
@@ -541,6 +544,33 @@ function lowerEntityTag(
   };
 }
 
+function lowerSqliteExistence(
+  existence: EvaluatedSqliteExistence,
+  routePath: string,
+  strings: StringTable,
+  workers: WorkerTable,
+  span: SourceSpan,
+): SqliteExistence {
+  return {
+    database: existence.query.statement.database.id,
+    sql: strings.intern(existence.query.statement.sql),
+    parameters: lowerSqliteParameters(existence.query.parameters, routePath, strings),
+    missing: lowerGuardedResponse(existence.missing, routePath, strings, workers, span),
+  };
+}
+
+function lowerSqliteParameters(
+  parameters: SqliteParameter[],
+  routePath: string,
+  strings: StringTable,
+) {
+  return parameters.map(parameter => parameter.kind === "routeParameter"
+    ? {kind: "routeParameter" as const, segment: routeParameterSegment(routePath, parameter.name)}
+    : parameter.kind === "requestJsonField"
+      ? {kind: "requestJsonField" as const, field: strings.intern(parameter.name)}
+      : {kind: "randomUuid" as const});
+}
+
 function lowerGuardedResponse(
   response: EvaluatedResponse,
   routePath: string,
@@ -600,7 +630,14 @@ function isLowerableEvaluatedResponse(response: EvaluatedResponse): boolean {
     || (entityTag.notModified.basicAuthorization === undefined
       && entityTag.notModified.entityTag === undefined
       && isLowerableEvaluatedResponse(entityTag.notModified));
-  return authorizationLowerable && entityTagLowerable;
+  const sqliteExistence = response.sqliteExistence;
+  const sqliteExistenceLowerable = sqliteExistence === undefined
+    || (sqliteExistence.query.mode === "first"
+      && sqliteExistence.missing.sqliteExistence === undefined
+      && sqliteExistence.missing.databaseActions === undefined
+      && sqliteExistence.missing.actorActions === undefined
+      && isLowerableEvaluatedResponse(sqliteExistence.missing));
+  return authorizationLowerable && entityTagLowerable && sqliteExistenceLowerable;
 }
 
 function lowerResponseHeaders(

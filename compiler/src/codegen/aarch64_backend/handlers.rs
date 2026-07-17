@@ -1,4 +1,4 @@
-use crate::hir::{ActorAction, HandlerResponse, Program, SqliteAction};
+use crate::hir::{ActorAction, GuardedResponse, HandlerResponse, Program, SqliteAction};
 
 use super::super::{
     aarch64::{
@@ -17,14 +17,15 @@ pub(super) fn emit_handlers(assembly: &mut Emitter, program: &Program) -> Result
     let value_frame_size = program
         .handlers
         .iter()
-        .map(|handler| match &handler.response {
-            HandlerResponse::Text { value, .. } => value_frame_size(HANDLER_SCRATCH_BASE, value),
-            HandlerResponse::Stream { chunks, .. } => chunks
-                .iter()
-                .map(|chunk| value_frame_size(HANDLER_SCRATCH_BASE, chunk))
-                .collect::<Result<Vec<_>, _>>()
-                .map(|sizes| sizes.into_iter().max().unwrap_or(HANDLER_SCRATCH_BASE)),
-            HandlerResponse::Html { .. } => Ok(HANDLER_SCRATCH_BASE),
+        .map(|handler| {
+            let response = handler_response_frame_size(&handler.response)?;
+            let missing = handler
+                .sqlite_existence
+                .as_ref()
+                .map(|guard| handler_response_frame_size(&guard.missing.response))
+                .transpose()?
+                .unwrap_or(HANDLER_SCRATCH_BASE);
+            Ok::<usize, String>(response.max(missing))
         })
         .collect::<Result<Vec<_>, _>>()?
         .into_iter()
@@ -52,7 +53,22 @@ pub(super) fn emit_handlers(assembly: &mut Emitter, program: &Program) -> Result
                     .unwrap_or(0),
                 HandlerResponse::Html { .. } => 0,
             };
-            actions.max(response)
+            let existence = handler
+                .sqlite_existence
+                .as_ref()
+                .map(|guard| {
+                    guard.parameters.len().max(match &guard.missing.response {
+                        HandlerResponse::Text { value, .. } => expression_parameter_count(value),
+                        HandlerResponse::Stream { chunks, .. } => chunks
+                            .iter()
+                            .map(expression_parameter_count)
+                            .max()
+                            .unwrap_or(0),
+                        HandlerResponse::Html { .. } => 0,
+                    })
+                })
+                .unwrap_or(0);
+            actions.max(response).max(existence)
         })
         .max()
         .unwrap_or(0);
@@ -210,6 +226,35 @@ pub(super) fn emit_handlers(assembly: &mut Emitter, program: &Program) -> Result
             asm_line!(assembly, "    b {return_label}");
             asm_line!(assembly, "{authorized_label}:");
         }
+        if let Some(existence) = &handler.sqlite_existence {
+            let present_label = format!("Ltinytsx_handler_{index}_sqlite_present");
+            emit_parameters(assembly, program, &existence.parameters);
+            emit_immediate(assembly, "x0", existence.database as u64);
+            asm_line!(assembly, "    ldr x1, [sp, #24]");
+            assembly.address("x2", format_args!("Ltinytsx_string_{}", existence.sql));
+            emit_immediate(
+                assembly,
+                "x3",
+                program.static_strings[existence.sql].value.len() as u64,
+            );
+            address_parameters(assembly, "x4");
+            emit_immediate(assembly, "x5", existence.parameters.len() as u64);
+            asm_line!(assembly, "    add x6, sp, #40");
+            assembly.call(format_args!("tinytsx_sqlite_query_exists_params"));
+            asm_line!(assembly, "    cbnz w0, {return_label}");
+            asm_line!(assembly, "    ldr w9, [sp, #40]");
+            asm_line!(assembly, "    cbnz w9, {present_label}");
+            emit_guarded_response(
+                assembly,
+                &existence.missing,
+                program,
+                return_label,
+                index,
+                "sqlite_missing",
+            )?;
+            asm_line!(assembly, "    b {return_label}");
+            asm_line!(assembly, "{present_label}:");
+        }
         if !handler.elapsed_headers.is_empty() {
             assembly.call(format_args!("tinytsx_date_now_millis"));
             asm_line!(assembly, "    str x0, [sp, #32]");
@@ -318,4 +363,53 @@ pub(super) fn emit_handlers(assembly: &mut Emitter, program: &Program) -> Result
     asm_line!(assembly, "{return_label}:");
     emit_epilogue(assembly, frame_size);
     Ok(())
+}
+
+fn handler_response_frame_size(response: &HandlerResponse) -> Result<usize, String> {
+    match response {
+        HandlerResponse::Text { value, .. } => value_frame_size(HANDLER_SCRATCH_BASE, value),
+        HandlerResponse::Stream { chunks, .. } => chunks
+            .iter()
+            .map(|chunk| value_frame_size(HANDLER_SCRATCH_BASE, chunk))
+            .collect::<Result<Vec<_>, _>>()
+            .map(|sizes| sizes.into_iter().max().unwrap_or(HANDLER_SCRATCH_BASE)),
+        HandlerResponse::Html { .. } => Ok(HANDLER_SCRATCH_BASE),
+    }
+}
+
+fn emit_guarded_response(
+    assembly: &mut Emitter,
+    guarded: &GuardedResponse,
+    program: &Program,
+    return_label: &str,
+    handler_index: usize,
+    label: &str,
+) -> Result<(), String> {
+    for string in &guarded.stderr {
+        assembly.address("x0", format_args!("Ltinytsx_string_{string}"));
+        emit_immediate(assembly, "x1", program.static_strings[*string].value.len() as u64);
+        assembly.call(format_args!("tinytsx_console_error_static"));
+    }
+    for (header_index, header) in guarded.headers.iter().enumerate() {
+        asm_line!(assembly, "    ldr x0, [sp, #16]");
+        assembly.address(
+            "x1",
+            format_args!("Ltinytsx_handler_{handler_index}_{label}_header_{header_index}_name"),
+        );
+        emit_immediate(assembly, "x2", header.name.len() as u64);
+        assembly.address(
+            "x3",
+            format_args!("Ltinytsx_handler_{handler_index}_{label}_header_{header_index}_value"),
+        );
+        emit_immediate(assembly, "x4", header.value.len() as u64);
+        assembly.call(format_args!("tinytsx_response_header_static"));
+        asm_line!(assembly, "    cbnz w0, {return_label}");
+    }
+    emit_handler_response(
+        assembly,
+        &guarded.response,
+        program,
+        return_label,
+        handler_index,
+    )
 }

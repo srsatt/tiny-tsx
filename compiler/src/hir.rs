@@ -174,6 +174,8 @@ pub struct Handler {
     pub basic_authorization: Option<BasicAuthorization>,
     #[serde(default, rename = "entityTag")]
     pub entity_tag: Option<EntityTag>,
+    #[serde(default, rename = "sqliteExistence")]
+    pub sqlite_existence: Option<SqliteExistence>,
     #[serde(default, rename = "parameterValidations")]
     pub parameter_validations: Vec<ParameterValidation>,
     #[serde(default, rename = "actorActions")]
@@ -184,6 +186,15 @@ pub struct Handler {
     pub stderr: Vec<usize>,
     pub response: HandlerResponse,
     pub span: SourceSpan,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct SqliteExistence {
+    pub database: usize,
+    pub sql: usize,
+    #[serde(default)]
+    pub parameters: Vec<SqliteParameter>,
+    pub missing: GuardedResponse,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -453,6 +464,10 @@ impl Program {
                     .as_ref()
                     .is_some_and(|guard| response_uses_filesystem(&guard.not_modified.response))
                 || handler
+                    .sqlite_existence
+                    .as_ref()
+                    .is_some_and(|guard| response_uses_filesystem(&guard.missing.response))
+                || handler
                     .parameter_validations
                     .iter()
                     .any(|guard| response_uses_filesystem(&guard.rejected.response))
@@ -468,6 +483,9 @@ impl Program {
             }
             if let Some(entity_tag) = &handler.entity_tag {
                 collect_response_environment_ids(&entity_tag.not_modified.response, &mut ids);
+            }
+            if let Some(existence) = &handler.sqlite_existence {
+                collect_response_environment_ids(&existence.missing.response, &mut ids);
             }
             for validation in &handler.parameter_validations {
                 collect_response_environment_ids(&validation.rejected.response, &mut ids);
@@ -487,6 +505,10 @@ impl Program {
                     .entity_tag
                     .as_ref()
                     .is_some_and(|guard| response_uses_openai(&guard.not_modified.response))
+                || handler
+                    .sqlite_existence
+                    .as_ref()
+                    .is_some_and(|guard| response_uses_openai(&guard.missing.response))
                 || handler
                     .parameter_validations
                     .iter()
@@ -580,6 +602,18 @@ impl Program {
                 validate_response_headers(&entity_tag.not_modified.headers, &[])?;
                 self.validate_stderr(&entity_tag.not_modified.stderr)?;
                 self.validate_handler_response(&entity_tag.not_modified.response, &handler.path)?;
+            }
+            if let Some(existence) = &handler.sqlite_existence {
+                if existence.database >= self.sqlite_databases.len() {
+                    return Err("SQLite existence guard references a missing database".to_owned());
+                }
+                if existence.sql >= self.static_strings.len() {
+                    return Err("SQLite existence guard references a missing SQL string".to_owned());
+                }
+                self.validate_sqlite_parameters(&existence.parameters, &handler.path)?;
+                validate_response_headers(&existence.missing.headers, &[])?;
+                self.validate_stderr(&existence.missing.stderr)?;
+                self.validate_handler_response(&existence.missing.response, &handler.path)?;
             }
             for validation in &handler.parameter_validations {
                 if validation.min_length == 0 {

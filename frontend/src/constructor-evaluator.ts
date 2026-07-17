@@ -107,8 +107,14 @@ export interface EvaluatedResponse {
   stderr?: string[];
   basicAuthorization?: EvaluatedBasicAuthorization;
   entityTag?: EvaluatedEntityTag;
+  sqliteExistence?: EvaluatedSqliteExistence;
   actorActions?: EvaluatedActorAction[];
   databaseActions?: EvaluatedDatabaseAction[];
+}
+
+export interface EvaluatedSqliteExistence {
+  query: Value & {kind: "sqliteQuery"};
+  missing: EvaluatedResponse;
 }
 
 export interface EvaluatedActorAction {
@@ -164,6 +170,10 @@ interface Evaluator {
   actorActions: WeakMap<Value & {kind: "instance"}, EvaluatedActorAction[]>;
   actors: Map<string, ActorState>;
   databaseActions: WeakMap<Value & {kind: "instance"}, EvaluatedDatabaseAction[]>;
+  sqliteExistence: WeakMap<Value & {kind: "instance"}, {
+    query: Value & {kind: "sqliteQuery"};
+    missing: Value & {kind: "response"};
+  }>;
   databases: Map<string, DatabaseState>;
 }
 
@@ -279,6 +289,7 @@ function initializeConstructor(
     actorActions: new WeakMap(),
     actors: new Map(),
     databaseActions: new WeakMap(),
+    sqliteExistence: new WeakMap(),
     databases: new Map(),
   };
   const instance: Value & {kind: "instance"} = {kind: "instance", fields: new Map()};
@@ -712,6 +723,14 @@ function evaluateRouteHandler(
     : [];
   const actorActions = evaluator.actorActions.get(context) ?? [];
   const databaseActions = evaluator.databaseActions.get(context) ?? [];
+  const sqliteExistence = evaluator.sqliteExistence.get(context);
+  if (sqliteExistence !== undefined) {
+    for (const [name, header] of response.headers) {
+      if (!sqliteExistence.missing.headers.has(name)) {
+        sqliteExistence.missing.headers.set(name, header);
+      }
+    }
+  }
   return {
     kind: "text",
     body: response.body,
@@ -721,6 +740,14 @@ function evaluateRouteHandler(
     ...(stderrLines.length === 0 ? {} : {stderr: stderrLines}),
     ...(actorActions.length === 0 ? {} : {actorActions}),
     ...(databaseActions.length === 0 ? {} : {databaseActions}),
+    ...(sqliteExistence === undefined
+      ? {}
+      : {
+        sqliteExistence: {
+          query: sqliteExistence.query,
+          missing: evaluatedResponse(sqliteExistence.missing, []),
+        },
+      }),
     ...(basicAuthorization === undefined
       ? {}
       : {
@@ -1644,12 +1671,68 @@ function executeStatements(
           instance,
         );
       }
+      if (
+        condition.kind === "sqlitePredicate"
+        && condition.test === "missing"
+        && statement.elseStatement === undefined
+      ) {
+        const result = executeSqliteMissingConditional(
+          evaluator,
+          statement,
+          condition.query,
+          module,
+          environment,
+          instance,
+        );
+        if (result.returned || result.control !== undefined) return result;
+        continue;
+      }
     }
     const result = executeStatement(evaluator, statement, module, environment, instance);
     if (result.returned || result.control !== undefined) {
       return result;
     }
   }
+  return continued();
+}
+
+function executeSqliteMissingConditional(
+  evaluator: Evaluator,
+  statement: ts.IfStatement,
+  query: Value & {kind: "sqliteQuery"},
+  module: SourceModule,
+  environment: Map<string, Value>,
+  instance: Value & {kind: "instance"},
+): ExecutionResult {
+  if (evaluator.sqliteExistence.has(instance)) {
+    issue(evaluator, statement, module, "only one SQLite existence guard is supported per route");
+    return continued();
+  }
+  const actorActionCount = evaluator.actorActions.get(instance)?.length ?? 0;
+  const databaseActionCount = evaluator.databaseActions.get(instance)?.length ?? 0;
+  const result = executeStatement(
+    evaluator,
+    statement.thenStatement,
+    module,
+    new Map(environment),
+    instance,
+  );
+  const actorActions = evaluator.actorActions.get(instance) ?? [];
+  const databaseActions = evaluator.databaseActions.get(instance) ?? [];
+  const hasEffects = actorActions.length !== actorActionCount
+    || databaseActions.length !== databaseActionCount;
+  actorActions.length = actorActionCount;
+  databaseActions.length = databaseActionCount;
+  if (!result.returned || result.value.kind !== "response" || hasEffects) {
+    issue(
+      evaluator,
+      statement,
+      module,
+      "SQLite missing branch must directly return a closed response without effects",
+    );
+    return continued();
+  }
+  evaluator.sqliteExistence.set(instance, {query, missing: result.value});
   return continued();
 }
 
@@ -3894,6 +3977,16 @@ function evaluateExpression(
     const operand = evaluate(evaluator, expression.operand, module, environment, instance);
     if (operand.kind === "routeChoice") {
       return mapRouteChoice(operand, negateValue);
+    }
+    if (operand.kind === "sqliteQuery" && operand.mode === "first") {
+      return {kind: "sqlitePredicate", query: operand, test: "missing"};
+    }
+    if (operand.kind === "sqlitePredicate") {
+      return {
+        kind: "sqlitePredicate",
+        query: operand.query,
+        test: operand.test === "missing" ? "present" : "missing",
+      };
     }
     const decision = truthiness(operand);
     return decision === undefined

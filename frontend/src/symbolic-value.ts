@@ -48,6 +48,7 @@ export type Value =
   | {kind: "database"; state: DatabaseState}
   | {kind: "statement"; state: StatementState}
   | {kind: "sqliteQuery"; statement: StatementState; mode: "all" | "first"; parameters: SqliteParameter[]}
+  | {kind: "sqlitePredicate"; query: Value & {kind: "sqliteQuery"}; test: "missing" | "present"}
   | {kind: "queryParameter"; name: string; fallback?: string}
   | {kind: "queryPredicate"; name: string; test: "truthy" | "empty" | "present"}
   | {kind: "runtimeString"; parts: RuntimeStringPart[]}
@@ -317,6 +318,7 @@ export function truthiness(value: Value): boolean | undefined {
     case "workerCall": return undefined;
     case "actorCall": return undefined;
     case "sqliteQuery": return undefined;
+    case "sqlitePredicate": return undefined;
     case "randomUuid": return true;
     case "requestJsonField": return undefined;
     case "openAiProvider":
@@ -370,6 +372,7 @@ export function typeOf(value: Value): string {
     case "workerCall": return "string";
     case "actorCall": return "string";
     case "sqliteQuery": return "object";
+    case "sqlitePredicate": return "boolean";
     case "openAiProvider": return "function";
     case "openAiModel": return "object";
     case "openAiChatText": return "string";

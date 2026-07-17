@@ -233,11 +233,19 @@ export interface Handler {
   stderr?: number[];
   basicAuthorization?: BasicAuthorization;
   entityTag?: EntityTag;
+  sqliteExistence?: SqliteExistence;
   parameterValidations?: ParameterValidation[];
   actorActions?: ActorAction[];
   sqliteActions?: SqliteAction[];
   response: HandlerResponse;
   span: SourceSpan;
+}
+
+export interface SqliteExistence {
+  database: number;
+  sql: number;
+  parameters: SqliteParameter[];
+  missing: GuardedResponse;
 }
 
 export interface ParameterValidation {

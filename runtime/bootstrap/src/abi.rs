@@ -538,6 +538,36 @@ pub unsafe extern "C" fn tinytsx_sqlite_query_json_params(
     }
 }
 
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tinytsx_sqlite_query_exists_params(
+    database: usize,
+    request: *const TinyRequest,
+    sql: *const u8,
+    sql_len: usize,
+    parameters: *const TinySqlParameter,
+    parameter_count: usize,
+    exists: *mut u32,
+) -> u32 {
+    if exists.is_null() || (sql.is_null() && sql_len != 0) {
+        return INTERNAL_ERROR;
+    }
+    let parameters = match unsafe { decode_sqlite_parameters(request, parameters, parameter_count) }
+    {
+        Ok(parameters) => parameters,
+        Err(status) => return status,
+    };
+    // SAFETY: Generated code supplies a static SQL view for the duration of the call.
+    let sql = unsafe { slice::from_raw_parts(sql, sql_len) };
+    match crate::application::sqlite_query_json(database, sql, true, parameters) {
+        Ok(output) => {
+            // A first-row SQLite query has exactly one missing sentinel: JSON null.
+            unsafe { *exists = u32::from(output.as_slice() != b"null") };
+            0
+        }
+        Err(status) => status,
+    }
+}
+
 unsafe fn decode_sqlite_parameters(
     request: *const TinyRequest,
     parameters: *const TinySqlParameter,

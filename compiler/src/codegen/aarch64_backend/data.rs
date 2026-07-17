@@ -96,6 +96,22 @@ pub(super) fn emit_static_data(
                 emit_bytes(assembly, header.value.as_bytes());
             }
         }
+        if let Some(existence) = &handler.sqlite_existence {
+            for (header_index, header) in existence.missing.headers.iter().enumerate() {
+                asm_line!(assembly, ".p2align 3");
+                asm_line!(
+                    assembly,
+                    "Ltinytsx_handler_{index}_sqlite_missing_header_{header_index}_name:"
+                );
+                emit_bytes(assembly, header.name.as_bytes());
+                asm_line!(assembly, ".p2align 3");
+                asm_line!(
+                    assembly,
+                    "Ltinytsx_handler_{index}_sqlite_missing_header_{header_index}_value:"
+                );
+                emit_bytes(assembly, header.value.as_bytes());
+            }
+        }
         for (validation_index, validation) in handler.parameter_validations.iter().enumerate() {
             for (header_index, header) in validation.rejected.headers.iter().enumerate() {
                 asm_line!(assembly, ".p2align 3");

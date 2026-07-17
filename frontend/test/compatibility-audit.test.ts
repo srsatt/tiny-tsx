@@ -145,9 +145,11 @@ test("lowers a bounded in-memory SQLite owner and effects", () => {
       return context.text("closed");
     });
     app.get("/posts", async context => context.json({posts: await posts.all()}));
-    app.get("/posts/:title", async context => context.json({
-      post: await post.get([context.req.param("title")]),
-    }));
+    app.get("/posts/:title", async context => {
+      const selected = await post.get([context.req.param("title")]);
+      if (!selected) return context.json({error: "Not Found", ok: false}, 404);
+      return context.json({post: selected, ok: true});
+    });
     app.delete("/posts/:title", async context => {
       await deletePost.run([context.req.param("title")]);
       return context.text("deleted");
@@ -189,14 +191,15 @@ test("lowers a bounded in-memory SQLite owner and effects", () => {
     },
   );
   assert.deepEqual(
-    hir.handlers[3]?.response.kind === "text"
-      && hir.handlers[3].response.value.kind === "concat"
-      ? hir.handlers[3].response.value.values[1]?.kind === "sqliteQuery"
-        ? hir.handlers[3].response.value.values[1].parameters
-        : undefined
-      : undefined,
+    hir.handlers[3]?.sqliteExistence?.parameters,
     [{kind: "routeParameter", segment: 1}],
   );
+  assert.equal(hir.handlers[3]?.sqliteExistence?.database, 0);
+  assert.equal(hir.staticStrings[hir.handlers[3]?.sqliteExistence?.sql ?? -1]?.value,
+    "SELECT title FROM posts WHERE title = ?1");
+  assert.equal(hir.handlers[3]?.sqliteExistence?.missing.response.kind === "text"
+    ? hir.handlers[3].sqliteExistence.missing.response.status
+    : undefined, 404);
   assert.deepEqual(hir.handlers[4]?.sqliteActions?.[0]?.kind === "exec"
     ? hir.handlers[4].sqliteActions[0].parameters
     : undefined, [{kind: "routeParameter", segment: 1}]);
