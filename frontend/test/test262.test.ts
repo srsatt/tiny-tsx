@@ -220,3 +220,16 @@ test("lowers the complete pinned module function-binding Test262 case", () => {
     span: program.assertions[0]?.span,
   }]);
 });
+
+test("lowers the complete pinned async Promise-brand Test262 case", () => {
+  const program = compileTest262Entry(path.join(
+    repository,
+    "vendor/test262/test/language/expressions/async-function/expression-returns-promise.js",
+  ));
+
+  assert.deepEqual(program.assertions, [{
+    kind: "asyncPromiseBrandProgram",
+    expectedBrand: "Promise",
+    span: program.assertions[0]?.span,
+  }]);
+});

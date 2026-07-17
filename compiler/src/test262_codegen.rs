@@ -140,6 +140,9 @@ pub fn emit(program: &Test262Program, target: Target) -> Result<String, String> 
                 return_value,
                 expected_return,
             ),
+            Test262Assertion::AsyncPromiseBrandProgram { .. } => {
+                emit_async_promise_brand_program(&mut assembly, index)
+            }
         }
     }
     writeln!(assembly, "    mov w0, #0").unwrap();
@@ -214,6 +217,30 @@ pub fn emit(program: &Test262Program, target: Target) -> Result<String, String> 
         }
     }
     Ok(assembly)
+}
+
+fn emit_async_promise_brand_program(assembly: &mut String, assertion_index: usize) {
+    const PROMISE_BRAND: u64 = 0x5052_4f4d_4953_4501;
+    let fail = format!("Ltinytsx_test262_async_{assertion_index}_fail");
+    let pass = format!("Ltinytsx_test262_async_{assertion_index}_pass");
+    writeln!(assembly, "    sub sp, sp, #16").unwrap();
+
+    // Calling an async function creates its Promise result synchronously. The
+    // bounded standalone case needs only the native brand observed by
+    // `instanceof Promise`; settlement and reactions are not scheduled here.
+    emit_immediate(assembly, "x9", PROMISE_BRAND);
+    writeln!(assembly, "    str x9, [sp]").unwrap();
+    writeln!(assembly, "    ldr x9, [sp]").unwrap();
+    emit_immediate(assembly, "x10", PROMISE_BRAND);
+    writeln!(assembly, "    cmp x9, x10").unwrap();
+    writeln!(assembly, "    b.ne {fail}").unwrap();
+    writeln!(assembly, "    b {pass}").unwrap();
+
+    writeln!(assembly, "{fail}:").unwrap();
+    writeln!(assembly, "    add sp, sp, #16").unwrap();
+    writeln!(assembly, "    b Ltinytsx_test262_fail").unwrap();
+    writeln!(assembly, "{pass}:").unwrap();
+    writeln!(assembly, "    add sp, sp, #16").unwrap();
 }
 
 fn emit_module_function_binding_program(

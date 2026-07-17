@@ -161,6 +161,23 @@ fn emits_hoisted_mutable_module_function_binding_checks() {
 }
 
 #[test]
+fn emits_async_function_promise_brand_check() {
+    let mut program = program(Target::LinuxArm64);
+    program.assertions = vec![Test262Assertion::AsyncPromiseBrandProgram {
+        expected_brand: "Promise".to_owned(),
+        span: span(),
+    }];
+
+    let assembly = emit(&program, Target::LinuxArm64).unwrap();
+
+    assert!(assembly.contains("Ltinytsx_test262_async_0_fail:"));
+    assert!(assembly.contains("str x9, [sp]"));
+    assert!(assembly.contains("ldr x9, [sp]"));
+    assert!(assembly.contains("cmp x9, x10"));
+    assert!(assembly.contains("add sp, sp, #16"));
+}
+
+#[test]
 fn emits_runtime_numeric_binding_loads_and_subtraction() {
     let mut program = program(Target::LinuxArm64);
     program.assertions = vec![Test262Assertion::NumericSubtractionProgram {

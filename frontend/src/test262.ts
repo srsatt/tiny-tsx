@@ -48,6 +48,11 @@ import {
   lowerModuleFunctionBindingProgram,
   type ModuleFunctionBindingProgramAssertion,
 } from "./test262-module-function.js";
+import {
+  isAsyncPromiseBrandProgram,
+  lowerAsyncPromiseBrandProgram,
+  type AsyncPromiseBrandProgramAssertion,
+} from "./test262-async.js";
 
 export interface Test262Program {
   version: 3;
@@ -68,7 +73,8 @@ export type Test262Assertion =
   | ClassConstructorProgramAssertion
   | ErrorMessageProgramAssertion
   | RegExpTestProgramAssertion
-  | ModuleFunctionBindingProgramAssertion;
+  | ModuleFunctionBindingProgramAssertion
+  | AsyncPromiseBrandProgramAssertion;
 
 export interface SameValueStringAssertion {
   kind: "sameValueString";
@@ -129,8 +135,10 @@ export function compileTest262Entry(entryPath: string): Test262Program {
     throw tinyError("TINY2601", "Test262 metadata block is required", sourceFile, undefined, sourceFile);
   }
 
-  const assertions = isModuleFunctionBindingProgram(sourceFile)
-    ? [lowerModuleFunctionBindingProgram(sourceFile)]
+  const assertions = isAsyncPromiseBrandProgram(sourceFile)
+    ? [lowerAsyncPromiseBrandProgram(sourceFile)]
+    : isModuleFunctionBindingProgram(sourceFile)
+      ? [lowerModuleFunctionBindingProgram(sourceFile)]
     : isRegExpTestProgram(sourceFile)
       ? [lowerRegExpTestProgram(sourceFile)]
     : isErrorMessageProgram(sourceFile)

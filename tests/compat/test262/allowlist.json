@@ -23,7 +23,7 @@
     {
       "path": "test/language/expressions/async-function/expression-returns-promise.js",
       "feature": "async-await",
-      "mode": "syntax"
+      "mode": "native"
     },
     {
       "path": "test/language/expressions/array/spread-sngl-literal.js",

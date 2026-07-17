@@ -101,6 +101,11 @@ pub enum Test262Assertion {
         expected_return: String,
         span: SourceSpan,
     },
+    AsyncPromiseBrandProgram {
+        #[serde(rename = "expectedBrand")]
+        expected_brand: String,
+        span: SourceSpan,
+    },
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -274,6 +279,11 @@ impl Test262Program {
                         "Test262 module function binding requires a bounded function return"
                             .to_owned(),
                     );
+                }
+                Test262Assertion::AsyncPromiseBrandProgram { expected_brand, .. }
+                    if expected_brand != "Promise" =>
+                {
+                    return Err("Test262 async expected brand must be Promise".to_owned());
                 }
                 _ => {}
             }

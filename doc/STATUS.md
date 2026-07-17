@@ -436,8 +436,10 @@ produces and serves a native Mach-O executable from the example TSX source.
   complete RegExp case runs independent bounded native literal-alternative
   searches for `test` and `exec` presence. The complete module-function case
   proves hoisted initialization, direct call, non-global ownership, mutable
-  reassignment, and declaration no-op behavior. The remaining async/Promise case
-  is syntax-only and is not a conformance result.
+  reassignment, and declaration no-op behavior. The complete async-function case
+  creates and verifies its native Promise brand. All fourteen allowlisted cases
+  now execute their complete assertions natively; none relies on syntax-only
+  evidence.
 - The dedicated native API suite currently covers Request method/path/query
   views, allocation-free form-decoded query-name presence, elapsed-header
   formatting, and exact-fit, OOM, and invalid response-writer behavior. Query

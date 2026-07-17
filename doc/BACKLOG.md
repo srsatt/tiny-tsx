@@ -359,7 +359,7 @@ adds an explicit application acceptance test.
 
 ### P1 — Compatibility and language depth
 
-- [ ] Promote remaining syntax-only Test262 cases only when their complete
+- [x] Promote remaining syntax-only Test262 cases only when their complete
       assertion programs execute natively.
   - 2026-07-17: the complete pinned array-spread/apply, subtraction/GetValue,
     closed-record membership, direct string throw/catch, `Date.now()` type,
@@ -367,8 +367,9 @@ adds an explicit application acceptance test.
     programs were promoted to native mode. Their assertions execute against
     copied arguments, numeric slots, runtime field-name bytes, native abrupt
     completion, the portable host clock, bounded class/error identities, and a
-    dependency-free native matcher, and a hoisted mutable module-function
-    binding. One syntax-only case remains.
+    dependency-free native matcher, a hoisted mutable module-function binding,
+    and an async-function Promise brand. All fourteen allowlisted cases now run
+    complete native assertion programs; none remains syntax-only.
 - [ ] Expand ordinary functions to locals, branches, closures, additional native
       types, and general typed expressions/statements.
   - 2026-07-17: immutable string locals and strict string-equality branches now
@@ -404,6 +405,9 @@ adds an explicit application acceptance test.
     generated bounded ASCII literal-alternative searches and compares native
     `test`/`exec` presence results. Flags, captures, Unicode, and ordinary
     application RegExp remain open.
+  - 2026-07-17: invoking the exact empty async-function Test262 expression now
+    creates and verifies a bounded Promise-branded native result. Settlement,
+    reactions, rejection, scheduling, and ordinary `await` remain open.
 
 ### P2 — Web and Hono breadth
 

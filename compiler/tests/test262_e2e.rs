@@ -61,6 +61,10 @@ fn compiles_and_runs_native_test262_programs() {
             "module-function-binding",
             "vendor/test262/test/language/module-code/instn-local-bndng-fun.js",
         ),
+        (
+            "async-promise-brand",
+            "vendor/test262/test/language/expressions/async-function/expression-returns-promise.js",
+        ),
     ] {
         compile_and_run(&root, &directory.join(name), case);
     }

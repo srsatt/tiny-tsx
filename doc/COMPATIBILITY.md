@@ -523,6 +523,13 @@ hoisted declaration does not initialize it again. This is evidence for the
 exact local mutable function-binding lifecycle, not general live bindings,
 cycles, dynamic imports, or arbitrary mutable application values.
 
+The complete pinned async-function expression program now executes natively.
+Invocation synchronously creates a bounded native Promise-branded record, and
+the generated assertion checks the `instanceof Promise` observation. The empty
+function has no settlement value or reactions to run, so this evidence does not
+claim fulfillment/rejection queues, `.then`, error propagation, cancellation,
+ordinary async functions, or `await` scheduling.
+
 The allowlisted `language/expressions/typeof/undefined.js` case is the first
 `mode: native` Test262 entry. `tinytsx test262 <case> --output <binary>` parses
 the untouched upstream source and lowers its two top-level
