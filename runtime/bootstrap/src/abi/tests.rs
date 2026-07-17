@@ -137,6 +137,39 @@ fn sqlite_parameters_accept_an_empty_parameter_list_without_a_pointer() {
 }
 
 #[test]
+fn sqlite_parameters_generate_distinct_version_four_uuids() {
+    use tinytsx_runtime_sqlite::SqlValue;
+
+    let request = request(b"POST", b"/posts");
+    let parameter = TinySqlParameter {
+        kind: 3,
+        value: 0,
+        pointer: std::ptr::null(),
+    };
+    let first =
+        unsafe { decode_sqlite_parameters(&request, &parameter, 1) }.expect("first UUID parameter");
+    let second = unsafe { decode_sqlite_parameters(&request, &parameter, 1) }
+        .expect("second UUID parameter");
+
+    let [SqlValue::Text(first)] = first.as_slice() else {
+        panic!("UUID parameter must be text");
+    };
+    let [SqlValue::Text(second)] = second.as_slice() else {
+        panic!("UUID parameter must be text");
+    };
+    assert_ne!(first, second);
+    for uuid in [first, second] {
+        assert_eq!(uuid.len(), 36);
+        assert_eq!(&uuid[14..15], "4");
+        assert!(matches!(&uuid[19..20], "8" | "9" | "a" | "b"));
+        assert!(
+            uuid.bytes()
+                .all(|byte| byte.is_ascii_hexdigit() || byte == b'-')
+        );
+    }
+}
+
+#[test]
 fn request_path_matching_uses_the_path_without_the_query() {
     let request = request(b"GET", b"/users?expand=true");
 

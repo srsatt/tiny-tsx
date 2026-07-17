@@ -151,6 +151,7 @@ pub enum SqliteAction {
 pub enum SqliteParameter {
     RouteParameter { segment: usize },
     RequestJsonField { field: usize },
+    RandomUuid,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -810,6 +811,7 @@ impl Program {
                 {
                     return Err("SQLite JSON parameter has an invalid field name".to_owned());
                 }
+                SqliteParameter::RandomUuid => {}
                 _ => {}
             }
         }

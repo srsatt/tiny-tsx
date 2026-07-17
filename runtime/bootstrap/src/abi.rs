@@ -587,6 +587,12 @@ unsafe fn decode_sqlite_parameters(
                     .ok_or(BAD_REQUEST)?;
                 output.push(json_sql_value(value)?);
             }
+            3 => {
+                let uuid = crate::random::uuid_v4().map_err(|_| INTERNAL_ERROR)?;
+                output.push(tinytsx_runtime_sqlite::SqlValue::Text(
+                    String::from_utf8(uuid.to_vec()).map_err(|_| INTERNAL_ERROR)?,
+                ));
+            }
             _ => return Err(INTERNAL_ERROR),
         }
     }

@@ -3,6 +3,7 @@ mod application;
 mod environment;
 mod filesystem;
 mod http;
+mod random;
 
 fn main() {
     match environment::initialize() {

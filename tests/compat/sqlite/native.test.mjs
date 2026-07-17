@@ -30,23 +30,19 @@ test("serializes an in-memory SQLite owner and recovers from SQL errors", async 
   await assertGet(port, "/posts", 200, '{"posts":[]}');
   await assertGet(port, "/first", 200, '{"post":null}');
   await assertResponse(port, "/seed", 201, "created");
-  await assertGet(port, "/posts", 200, '{"posts":[{"title":"Morning","body":null}]}');
-  await assertGet(port, "/first", 200, '{"post":{"title":"Morning","body":null}}');
-  await assertGet(port, "/posts/Morning", 200, '{"post":{"title":"Morning","body":null}}');
+  await assertGet(port, "/posts", 200, '{"posts":[{"id":"morning","title":"Morning","body":null}]}');
+  await assertGet(port, "/first", 200, '{"post":{"id":"morning","title":"Morning","body":null}}');
+  await assertGet(port, "/posts/morning", 200, '{"post":{"id":"morning","title":"Morning","body":null}}');
   await assertResponse(port, "/seed", 500, "internal server error");
   await assertResponse(port, "/bad-sql", 500, "internal server error");
   await assertResponse(port, "/schema", 200, "ready");
-  await assertMethod(port, "/posts/Morning", "DELETE", 200, "deleted");
+  await assertMethod(port, "/posts/morning", "DELETE", 200, "deleted");
   await assertGet(port, "/posts", 200, '{"posts":[]}');
   await assertResponse(port, "/seed", 201, "created");
-  await assertJson(
-    port,
-    "/posts",
-    "POST",
-    {title: "Night", body: "Good Night"},
-    201,
-    '{"post":{"title":"Night","body":"Good Night"}}',
-  );
+  const created = await createPost(port, {title: "Night", body: "Good Night"});
+  const second = await createPost(port, {title: "Dawn", body: "Good Dawn"});
+  assert.notEqual(second.id, created.id);
+  await assertMethod(port, `/posts/${second.id}`, "DELETE", 200, "deleted");
   await assertJson(port, "/posts", "POST", {title: "missing"}, 400, "bad request");
   await assertRawJson(port, "/posts", "POST", "{", 400, "bad request");
   await assertRawJson(
@@ -59,14 +55,14 @@ test("serializes an in-memory SQLite owner and recovers from SQL errors", async 
   );
   await assertJson(
     port,
-    "/posts/Night",
+    `/posts/${created.id}`,
     "PUT",
-    {body: "Still Night"},
+    {title: "Late Night", body: "Still Night"},
     200,
-    '{"post":{"title":"Night","body":"Still Night"}}',
+    JSON.stringify({post: {id: created.id, title: "Late Night", body: "Still Night"}}),
   );
-  await assertMethod(port, "/posts/Night", "DELETE", 200, "deleted");
-  await assertGet(port, "/posts/Night", 200, '{"post":null}');
+  await assertMethod(port, `/posts/${created.id}`, "DELETE", 200, "deleted");
+  await assertGet(port, `/posts/${created.id}`, 200, '{"post":null}');
   await assertResponse(port, "/schema", 200, "ready");
   await assertResponse(port, "/close", 200, "closed");
   await assertResponse(port, "/close", 200, "closed");
@@ -120,6 +116,22 @@ async function assertGet(port, pathname, status, body) {
 
 async function assertJson(port, pathname, method, value, status, body) {
   return assertRawJson(port, pathname, method, JSON.stringify(value), status, body);
+}
+
+async function createPost(port, value) {
+  const response = await fetch(`http://127.0.0.1:${port}/posts`, {
+    method: "POST",
+    headers: {"content-type": "application/json"},
+    body: JSON.stringify(value),
+  });
+  assert.equal(response.status, 201);
+  const result = await response.json();
+  assert.match(
+    result.post.id,
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+  );
+  assert.deepEqual(result.post, {id: result.post.id, ...value});
+  return result.post;
 }
 
 async function assertRawJson(port, pathname, method, value, status, body) {

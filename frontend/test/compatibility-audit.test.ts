@@ -133,7 +133,7 @@ test("lowers a bounded in-memory SQLite owner and effects", () => {
     const posts = database.prepare("SELECT title FROM posts");
     const post = database.prepare("SELECT title FROM posts WHERE title = ?1");
     const deletePost = database.prepare("DELETE FROM posts WHERE title = ?1");
-    const createPost = database.prepare("INSERT INTO posts (title, body) VALUES (?1, ?2)");
+    const createPost = database.prepare("INSERT INTO posts (id, title, body) VALUES (?1, ?2, ?3)");
     const updatePost = database.prepare("UPDATE posts SET body = ?1 WHERE title = ?2");
     const app = new Hono();
     app.post("/schema", async context => {
@@ -154,7 +154,8 @@ test("lowers a bounded in-memory SQLite owner and effects", () => {
     });
     app.post("/posts", async context => {
       const input = await context.req.json() as {title: string; body: string};
-      await createPost.run([input.title, input.body]);
+      const id = crypto.randomUUID();
+      await createPost.run([id, input.title, input.body]);
       return context.text("created", 201);
     });
     app.put("/posts/:title", async context => {
@@ -204,7 +205,7 @@ test("lowers a bounded in-memory SQLite owner and effects", () => {
     : undefined;
   assert.deepEqual(jsonParameters?.map(parameter => parameter.kind === "requestJsonField"
     ? hir.staticStrings[parameter.field]?.value
-    : undefined), ["title", "body"]);
+    : parameter.kind), ["randomUuid", "title", "body"]);
   assert.equal(hir.handlers[4]?.method, "DELETE");
   assert.equal(hir.handlers[6]?.method, "PUT");
   const updateParameters = hir.handlers[6]?.sqliteActions?.[0]?.kind === "exec"

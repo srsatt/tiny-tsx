@@ -39,6 +39,7 @@ export type Value =
   | {kind: "routeParameter"; name: string}
   | {kind: "routeChoice"; name: string; cases: Map<string, Value>; fallback: Value}
   | {kind: "requestHeader"; name: string}
+  | {kind: "randomUuid"}
   | {kind: "environmentVariable"; name: string; required: boolean; fallback?: string}
   | {kind: "fileText"; path: string; maxBytes: number}
   | {kind: "actor"; state: ActorState}
@@ -124,7 +125,8 @@ export interface StatementState {
 
 export type SqliteParameter =
   | {kind: "routeParameter"; name: string}
-  | {kind: "requestJsonField"; name: string};
+  | {kind: "requestJsonField"; name: string}
+  | {kind: "randomUuid"};
 
 export type ResponseHeaderValue = string | RuntimeStringPart[];
 
@@ -310,6 +312,7 @@ export function truthiness(value: Value): boolean | undefined {
     case "workerCall": return undefined;
     case "actorCall": return undefined;
     case "sqliteQuery": return undefined;
+    case "randomUuid": return true;
     case "requestJsonField": return undefined;
     case "openAiProvider":
     case "openAiModel": return true;
@@ -343,6 +346,7 @@ export function typeOf(value: Value): string {
     case "runtimeHtml": return "string";
     case "routeChoice": return "object";
     case "requestHeader": return "string";
+    case "randomUuid": return "string";
     case "requestJsonField": return "string";
     case "environmentVariable": return "string";
     case "fileText": return "string";

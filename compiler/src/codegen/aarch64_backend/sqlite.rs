@@ -55,6 +55,12 @@ pub(super) fn emit_parameters(
                 assembly.address("x9", format_args!("Ltinytsx_string_{field}"));
                 asm_line!(assembly, "    str x9, [sp, #{}]", offset + 16);
             }
+            SqliteParameter::RandomUuid => {
+                emit_immediate(assembly, "x9", 3);
+                asm_line!(assembly, "    str x9, [sp, #{offset}]");
+                asm_line!(assembly, "    str xzr, [sp, #{}]", offset + 8);
+                asm_line!(assembly, "    str xzr, [sp, #{}]", offset + 16);
+            }
         }
     }
 }

@@ -81,7 +81,8 @@ export type SqliteAction =
 
 export type SqliteParameter =
   | {kind: "routeParameter"; segment: number}
-  | {kind: "requestJsonField"; field: number};
+  | {kind: "requestJsonField"; field: number}
+  | {kind: "randomUuid"};
 
 export type ValueExpression =
   | {

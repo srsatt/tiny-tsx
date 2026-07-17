@@ -4,63 +4,76 @@ import {Hono} from "../../../vendor/hono/src/index.ts";
 import {cors} from "../../../vendor/hono/src/middleware/cors/index.ts";
 
 const database = new Database(":memory:");
-database.exec("CREATE TABLE posts (title TEXT PRIMARY KEY, body TEXT)");
+database.exec("CREATE TABLE posts (id TEXT PRIMARY KEY, title TEXT, body TEXT)");
 
-const posts = database.query("SELECT title, body FROM posts ORDER BY title");
-const post = database.query("SELECT title, body FROM posts WHERE title = ?1");
-const createPost = database.query("INSERT INTO posts (title, body) VALUES (?1, ?2)");
-const updatePost = database.query("UPDATE posts SET body = ?1 WHERE title = ?2");
-const deletePost = database.query("DELETE FROM posts WHERE title = ?1");
-const latestPost = database.query("SELECT title, body FROM posts ORDER BY rowid DESC LIMIT 1");
+const posts = database.query("SELECT id, title, body FROM posts ORDER BY title");
+const post = database.query("SELECT id, title, body FROM posts WHERE id = ?1");
+const createPost = database.query("INSERT INTO posts (id, title, body) VALUES (?1, ?2, ?3)");
+const updatePost = database.query("UPDATE posts SET title = ?1, body = ?2 WHERE id = ?3");
+const deletePost = database.query("DELETE FROM posts WHERE id = ?1");
+const latestPost = database.query("SELECT id, title, body FROM posts ORDER BY rowid DESC LIMIT 1");
 const app = new Hono();
 
 app.use("/posts/*", cors({allowHeaders: ["Content-Type"]}));
 
 app.get("/posts", context => context.json({posts: posts.all()}));
-app.get("/posts/:title", context => context.json({
-  post: post.get(context.req.param("title")),
+app.get("/posts/:id", context => context.json({
+  post: post.get(context.req.param("id")),
 }));
 app.post("/posts", async context => {
   const input = await context.req.json<{title: string; body: string}>();
-  createPost.run(input.title, input.body);
+  createPost.run(crypto.randomUUID(), input.title, input.body);
   return context.json({post: latestPost.get()}, 201);
 });
-app.put("/posts/:title", async context => {
-  const input = await context.req.json<{body: string}>();
-  updatePost.run(input.body, context.req.param("title"));
-  return context.json({post: post.get(context.req.param("title"))});
+app.put("/posts/:id", async context => {
+  const input = await context.req.json<{title: string; body: string}>();
+  updatePost.run(input.title, input.body, context.req.param("id"));
+  return context.json({post: post.get(context.req.param("id"))});
 });
-app.delete("/posts/:title", context => {
-  deletePost.run(context.req.param("title"));
+app.delete("/posts/:id", context => {
+  deletePost.run(context.req.param("id"));
   return context.text("deleted");
 });
 
 describe("bounded SQLite Hono adapter reference", () => {
   test("matches the native create, list, get, update, delete, and missing contract", async () => {
     expect(await json("GET", "/posts")).toEqual({status: 200, body: {posts: []}});
-    expect(await json("POST", "/posts", {title: "Night", body: "Good Night"})).toEqual({
-      status: 201,
-      body: {post: {title: "Night", body: "Good Night"}},
+    const created = await json("POST", "/posts", {title: "Night", body: "Good Night"});
+    expect(created.status).toBe(201);
+    const createdPost = (created.body as {post: {id: string; title: string; body: string}}).post;
+    expect(createdPost.id).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
+    expect(createdPost).toEqual({
+      id: createdPost.id,
+      title: "Night",
+      body: "Good Night",
     });
     expect(await json("GET", "/posts")).toEqual({
       status: 200,
-      body: {posts: [{title: "Night", body: "Good Night"}]},
+      body: {posts: [{id: createdPost.id, title: "Night", body: "Good Night"}]},
     });
-    expect(await json("GET", "/posts/Night")).toEqual({
+    expect(await json("GET", `/posts/${createdPost.id}`)).toEqual({
       status: 200,
-      body: {post: {title: "Night", body: "Good Night"}},
+      body: {post: {id: createdPost.id, title: "Night", body: "Good Night"}},
     });
-    expect(await json("PUT", "/posts/Night", {body: "Still Night"})).toEqual({
+    expect(await json("PUT", `/posts/${createdPost.id}`, {
+      title: "Late Night",
+      body: "Still Night",
+    })).toEqual({
       status: 200,
-      body: {post: {title: "Night", body: "Still Night"}},
+      body: {post: {id: createdPost.id, title: "Late Night", body: "Still Night"}},
     });
 
-    const removed = await app.request("/posts/Night", {method: "DELETE"});
+    const removed = await app.request(`/posts/${createdPost.id}`, {method: "DELETE"});
     expect({status: removed.status, body: await removed.text()}).toEqual({
       status: 200,
       body: "deleted",
     });
-    expect(await json("GET", "/posts/Night")).toEqual({status: 200, body: {post: null}});
+    expect(await json("GET", `/posts/${createdPost.id}`)).toEqual({
+      status: 200,
+      body: {post: null},
+    });
   });
 
   test("matches the native default-origin CORS and preflight contract", async () => {

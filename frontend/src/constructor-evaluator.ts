@@ -2268,6 +2268,11 @@ function evaluateCall(
         ? {kind: "number", value: 0}
         : unknown("Math.random arguments are not supported");
     }
+    if (receiver.kind === "reference" && receiver.name === "crypto" && name === "randomUUID") {
+      return arguments_.length === 0
+        ? {kind: "randomUuid"}
+        : unknown("crypto.randomUUID arguments are not supported");
+    }
     if (receiver.kind === "reference" && receiver.name === "Number" && name === "isInteger") {
       const value = arguments_[0];
       return {kind: "boolean", value: value?.kind === "number" && Number.isInteger(value.value)};
@@ -2942,6 +2947,8 @@ function sqliteParameters(arguments_: Value[]): SqliteParameter[] | undefined {
       output.push({kind: "routeParameter", name: parameter.name});
     } else if (parameter.kind === "requestJsonField") {
       output.push({kind: "requestJsonField", name: parameter.name});
+    } else if (parameter.kind === "randomUuid") {
+      output.push({kind: "randomUuid"});
     } else {
       return undefined;
     }
@@ -2952,7 +2959,9 @@ function sqliteParameters(arguments_: Value[]): SqliteParameter[] | undefined {
 function sameSqliteParameters(left: SqliteParameter[], right: SqliteParameter[]): boolean {
   return left.length === right.length && left.every((parameter, index) => {
     const candidate = right[index];
-    return candidate?.kind === parameter.kind && candidate.name === parameter.name;
+    return candidate?.kind === parameter.kind
+      && (parameter.kind === "randomUuid"
+        || candidate.kind !== "randomUuid" && candidate.name === parameter.name);
   });
 }
 

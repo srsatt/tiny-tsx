@@ -435,7 +435,9 @@ function lowerApplicationInitialization(
               ? {}
               : {parameters: action.parameters.map(parameter => parameter.kind === "routeParameter"
                 ? {kind: "routeParameter" as const, segment: routeParameterSegment(route.path, parameter.name)}
-                : {kind: "requestJsonField" as const, field: strings.intern(parameter.name)})}),
+                : parameter.kind === "requestJsonField"
+                  ? {kind: "requestJsonField" as const, field: strings.intern(parameter.name)}
+                  : {kind: "randomUuid" as const})}),
           }
           : {kind: "close" as const, database: action.database.id})}),
       ...(response.stderr === undefined
@@ -715,7 +717,9 @@ function lowerRuntimeString(
           mode: part.mode,
           parameters: part.parameters.map(parameter => parameter.kind === "routeParameter"
             ? {kind: "routeParameter" as const, segment: routeParameterSegment(routePath, parameter.name)}
-            : {kind: "requestJsonField" as const, field: strings.intern(parameter.name)}),
+            : parameter.kind === "requestJsonField"
+              ? {kind: "requestJsonField" as const, field: strings.intern(parameter.name)}
+              : {kind: "randomUuid" as const}),
           span,
         };
       }
