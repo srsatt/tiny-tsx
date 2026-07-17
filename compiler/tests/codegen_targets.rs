@@ -65,6 +65,16 @@ fn emits_assemblable_function_control_flow_for_linux_arm64() {
 }
 
 #[test]
+fn emits_assemblable_numeric_function_for_linux_arm64() {
+    let assembly = compile_linux("examples/function-numbers/server.ts", &[]);
+
+    assert!(assembly.contains("fadd d0, d0, d1"));
+    assert!(assembly.contains("fsub d0, d0, d1"));
+    assert!(assembly.contains("fcmp d0, d1"));
+    assert_assembles_as_elf(&assembly, "function-numbers");
+}
+
+#[test]
 fn emits_assemblable_lambda_lifted_closure_for_linux_arm64() {
     let assembly = compile_linux("examples/function-closures/server.ts", &[]);
 

@@ -121,6 +121,70 @@ fn emits_deterministic_handler_and_static_data() {
 }
 
 #[test]
+fn emits_typed_numeric_function_arithmetic_and_branching() {
+    let program: Program = serde_json::from_str(
+        r#"{
+          "version": 2,
+          "target": "aarch64-apple-darwin",
+          "entry": "server.ts",
+          "modules": [{"path": "server.ts"}],
+          "functions": [{
+            "id": 0,
+            "module": "server.ts",
+            "name": "classify",
+            "parameters": [{
+              "name": "value",
+              "type": "number",
+              "span": {"file":"server.ts","line":1,"column":1,"endLine":1,"endColumn":2}
+            }],
+            "result": "string",
+            "body": {
+              "kind": "numericEqualConditional",
+              "left": {
+                "kind": "numericBinary",
+                "operator": "add",
+                "left": {"kind":"parameter","parameter":0,"span":{"file":"server.ts","line":1,"column":1,"endLine":1,"endColumn":2}},
+                "right": {"kind":"numericLiteral","value":1,"span":{"file":"server.ts","line":1,"column":1,"endLine":1,"endColumn":2}},
+                "span": {"file":"server.ts","line":1,"column":1,"endLine":1,"endColumn":2}
+              },
+              "right": {"kind":"numericLiteral","value":3,"span":{"file":"server.ts","line":1,"column":1,"endLine":1,"endColumn":2}},
+              "whenEqual": {"kind":"stringLiteral","string":0,"span":{"file":"server.ts","line":1,"column":1,"endLine":1,"endColumn":2}},
+              "whenNotEqual": {"kind":"stringLiteral","string":1,"span":{"file":"server.ts","line":1,"column":1,"endLine":1,"endColumn":2}},
+              "span": {"file":"server.ts","line":1,"column":1,"endLine":1,"endColumn":2}
+            },
+            "span": {"file":"server.ts","line":1,"column":1,"endLine":1,"endColumn":2}
+          }],
+          "components": [],
+          "handlers": [{
+            "method": "GET",
+            "response": {
+              "kind": "text",
+              "value": {
+                "kind": "directCall",
+                "function": 0,
+                "arguments": [{"kind":"numericLiteral","value":2,"span":{"file":"server.ts","line":1,"column":1,"endLine":1,"endColumn":2}}],
+                "span": {"file":"server.ts","line":1,"column":1,"endLine":1,"endColumn":2}
+              }
+            },
+            "span": {"file":"server.ts","line":1,"column":1,"endLine":1,"endColumn":2}
+          }],
+          "staticStrings": [{"id":0,"value":"three"},{"id":1,"value":"other"}],
+          "constants": [],
+          "statistics": {"modules":1,"functions":1,"components":0,"constants":0,"staticHtmlBytes":10,"dynamicHtmlExpressions":1}
+        }"#,
+    )
+    .unwrap();
+
+    program.validate().unwrap();
+    let assembly = emit(&program, Options::default()).unwrap();
+
+    assert!(assembly.contains("fadd d0, d0, d1"));
+    assert!(assembly.contains("fcmp d0, d1"));
+    assert!(assembly.contains("Ltinytsx_function_0_numeric_0_not_equal:"));
+    assert!(assembly.contains("bl _tinytsx_function_0"));
+}
+
+#[test]
 fn emits_named_route_matching_and_parameter_writes() {
     let program: Program = serde_json::from_str(
             r#"{

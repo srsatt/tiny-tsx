@@ -1,4 +1,4 @@
-use crate::hir::{ConstantValue, Program, ValueExpression};
+use crate::hir::{ConstantValue, NumericOperator, Program, ValueExpression};
 
 use super::super::{
     aarch64::{Emitter, emit_immediate},
@@ -24,15 +24,25 @@ pub(super) fn emit_value_expression(
             );
             asm_line!(assembly, "    mov x2, #0");
         }
-        ValueExpression::Constant { constant, .. } => {
-            let ConstantValue::String { value } = &program.constants[*constant].value else {
-                return Err("string expression references a non-string constant".to_owned());
-            };
-            assembly.address("x0", format_args!("Ltinytsx_constant_{constant}"));
-            asm_line!(assembly, "    add x0, x0, #5");
-            emit_immediate(assembly, "x1", value.len() as u64);
+        ValueExpression::NumericLiteral { value, .. } => {
+            emit_immediate(assembly, "x0", (*value as f64).to_bits());
+            asm_line!(assembly, "    mov x1, #0");
             asm_line!(assembly, "    mov x2, #0");
         }
+        ValueExpression::Constant { constant, .. } => match &program.constants[*constant].value {
+            ConstantValue::String { value } => {
+                assembly.address("x0", format_args!("Ltinytsx_constant_{constant}"));
+                asm_line!(assembly, "    add x0, x0, #5");
+                emit_immediate(assembly, "x1", value.len() as u64);
+                asm_line!(assembly, "    mov x2, #0");
+            }
+            ConstantValue::Number { value } => {
+                emit_immediate(assembly, "x0", value.to_bits());
+                asm_line!(assembly, "    mov x1, #0");
+                asm_line!(assembly, "    mov x2, #0");
+            }
+            _ => return Err("scalar expression references a non-scalar constant".to_owned()),
+        },
         ValueExpression::Parameter { parameter, .. } => {
             asm_line!(assembly, "    ldp x0, x1, [sp, #{}]", 16 + parameter * 16);
             asm_line!(assembly, "    mov x2, #0");
@@ -119,6 +129,108 @@ pub(super) fn emit_value_expression(
             asm_line!(assembly, "    mov x2, x3");
             assembly.call(format_args!("memcmp"));
             asm_line!(assembly, "    cbnz w0, {not_equal}");
+            emit_value_expression(
+                assembly,
+                when_equal,
+                program,
+                scratch_base,
+                label_scope,
+                conditional_index,
+                caught_exception_offset,
+            )?;
+            asm_line!(assembly, "    b {end}");
+            asm_line!(assembly, "{not_equal}:");
+            emit_value_expression(
+                assembly,
+                when_not_equal,
+                program,
+                scratch_base,
+                label_scope,
+                conditional_index,
+                caught_exception_offset,
+            )?;
+            asm_line!(assembly, "{end}:");
+        }
+        ValueExpression::NumericBinary {
+            operator,
+            left,
+            right,
+            ..
+        } => {
+            let operation_index = *conditional_index;
+            *conditional_index += 1;
+            let end = format!("Ltinytsx_{label_scope}_numeric_binary_{operation_index}_end");
+            let nested_scratch = scratch_base + 16;
+            emit_value_expression(
+                assembly,
+                left,
+                program,
+                nested_scratch,
+                label_scope,
+                conditional_index,
+                caught_exception_offset,
+            )?;
+            asm_line!(assembly, "    cbnz x2, {end}");
+            asm_line!(assembly, "    str x0, [sp, #{scratch_base}]");
+            emit_value_expression(
+                assembly,
+                right,
+                program,
+                nested_scratch,
+                label_scope,
+                conditional_index,
+                caught_exception_offset,
+            )?;
+            asm_line!(assembly, "    cbnz x2, {end}");
+            asm_line!(assembly, "    ldr x3, [sp, #{scratch_base}]");
+            asm_line!(assembly, "    fmov d0, x3");
+            asm_line!(assembly, "    fmov d1, x0");
+            match operator {
+                NumericOperator::Add => asm_line!(assembly, "    fadd d0, d0, d1"),
+                NumericOperator::Subtract => asm_line!(assembly, "    fsub d0, d0, d1"),
+            }
+            asm_line!(assembly, "    fmov x0, d0");
+            asm_line!(assembly, "    mov x1, #0");
+            asm_line!(assembly, "{end}:");
+        }
+        ValueExpression::NumericEqualConditional {
+            left,
+            right,
+            when_equal,
+            when_not_equal,
+            ..
+        } => {
+            let branch_index = *conditional_index;
+            *conditional_index += 1;
+            let not_equal = format!("Ltinytsx_{label_scope}_numeric_{branch_index}_not_equal");
+            let end = format!("Ltinytsx_{label_scope}_numeric_{branch_index}_end");
+            let nested_scratch = scratch_base + 16;
+            emit_value_expression(
+                assembly,
+                left,
+                program,
+                nested_scratch,
+                label_scope,
+                conditional_index,
+                caught_exception_offset,
+            )?;
+            asm_line!(assembly, "    cbnz x2, {end}");
+            asm_line!(assembly, "    str x0, [sp, #{scratch_base}]");
+            emit_value_expression(
+                assembly,
+                right,
+                program,
+                nested_scratch,
+                label_scope,
+                conditional_index,
+                caught_exception_offset,
+            )?;
+            asm_line!(assembly, "    cbnz x2, {end}");
+            asm_line!(assembly, "    ldr x3, [sp, #{scratch_base}]");
+            asm_line!(assembly, "    fmov d0, x3");
+            asm_line!(assembly, "    fmov d1, x0");
+            asm_line!(assembly, "    fcmp d0, d1");
+            asm_line!(assembly, "    b.ne {not_equal}");
             emit_value_expression(
                 assembly,
                 when_equal,

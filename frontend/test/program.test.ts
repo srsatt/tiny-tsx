@@ -291,6 +291,94 @@ test("lowers immutable string locals and runtime equality branches", () => {
   );
 });
 
+test("lowers numeric parameters, locals, arithmetic, and equality branches", () => {
+  const hir = compileSource(`
+    function classify(value: number): string {
+      const next = value + 1;
+      if (next === 3) return "three";
+      return "other";
+    }
+    export function GET(request: Request): Response {
+      return Response.text(classify(2));
+    }
+  `);
+
+  assert.deepEqual(
+    hir.functions[0]?.parameters.map(parameter => [parameter.name, parameter.type]),
+    [["value", "number"]],
+  );
+  assert.equal(hir.functions[0]?.result, "string");
+  assert.deepEqual(hir.functions[0]?.body, {
+    kind: "numericEqualConditional",
+    left: {
+      kind: "numericBinary",
+      operator: "add",
+      left: {kind: "parameter", parameter: 0, span: hir.functions[0]?.body.kind === "numericEqualConditional"
+        ? hir.functions[0].body.left.kind === "numericBinary"
+          ? hir.functions[0].body.left.left.span
+          : undefined
+        : undefined},
+      right: {kind: "numericLiteral", value: 1, span: hir.functions[0]?.body.kind === "numericEqualConditional"
+        ? hir.functions[0].body.left.kind === "numericBinary"
+          ? hir.functions[0].body.left.right.span
+          : undefined
+        : undefined},
+      span: hir.functions[0]?.body.kind === "numericEqualConditional"
+        ? hir.functions[0].body.left.span
+        : undefined,
+    },
+    right: {kind: "numericLiteral", value: 3, span: hir.functions[0]?.body.kind === "numericEqualConditional"
+      ? hir.functions[0].body.right.span
+      : undefined},
+    whenEqual: {kind: "stringLiteral", string: 0, span: hir.functions[0]?.body.kind === "numericEqualConditional"
+      ? hir.functions[0].body.whenEqual.span
+      : undefined},
+    whenNotEqual: {kind: "stringLiteral", string: 1, span: hir.functions[0]?.body.kind === "numericEqualConditional"
+      ? hir.functions[0].body.whenNotEqual.span
+      : undefined},
+    span: hir.functions[0]?.body.span,
+  });
+  assert.equal(
+    hir.handlers[0]?.response.kind === "text"
+      && hir.handlers[0].response.value.kind === "directCall"
+      ? hir.handlers[0].response.value.arguments[0]?.kind
+      : undefined,
+    "numericLiteral",
+  );
+});
+
+test("passes numeric results through nested calls and subtraction", () => {
+  const hir = compileSource(`
+    function decrement(value: number): number { return value - 1; }
+    function classify(value: number): string {
+      const next = value + 2;
+      if (decrement(next) === 3) return "three";
+      return "other";
+    }
+    export function GET(request: Request): Response {
+      return Response.text(classify(2));
+    }
+  `);
+
+  assert.deepEqual(hir.functions.map(func => [func.name, func.result]), [
+    ["classify", "string"],
+    ["decrement", "number"],
+  ]);
+  assert.equal(
+    hir.functions[0]?.body.kind === "numericEqualConditional"
+      ? hir.functions[0].body.left.kind
+      : undefined,
+    "directCall",
+  );
+  assert.equal(hir.functions[1]?.body.kind, "numericBinary");
+  assert.equal(
+    hir.functions[1]?.body.kind === "numericBinary"
+      ? hir.functions[1].body.operator
+      : undefined,
+    "subtract",
+  );
+});
+
 test("lambda-lifts closed local function values and immutable captures", () => {
   const hir = compileSource(`
     function authorize(result: string): string {

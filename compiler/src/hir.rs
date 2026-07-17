@@ -309,10 +309,21 @@ pub enum SqliteQueryMode {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum NumericOperator {
+    Add,
+    Subtract,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum ValueExpression {
     StringLiteral {
         string: usize,
+        span: SourceSpan,
+    },
+    NumericLiteral {
+        value: i64,
         span: SourceSpan,
     },
     Constant {
@@ -329,6 +340,21 @@ pub enum ValueExpression {
         span: SourceSpan,
     },
     StringEqualConditional {
+        left: Box<ValueExpression>,
+        right: Box<ValueExpression>,
+        #[serde(rename = "whenEqual")]
+        when_equal: Box<ValueExpression>,
+        #[serde(rename = "whenNotEqual")]
+        when_not_equal: Box<ValueExpression>,
+        span: SourceSpan,
+    },
+    NumericBinary {
+        operator: NumericOperator,
+        left: Box<ValueExpression>,
+        right: Box<ValueExpression>,
+        span: SourceSpan,
+    },
+    NumericEqualConditional {
         left: Box<ValueExpression>,
         right: Box<ValueExpression>,
         #[serde(rename = "whenEqual")]
@@ -717,15 +743,19 @@ impl Program {
             if function.id != index {
                 return Err(format!("function id {} is not canonical", function.id));
             }
-            if function.parameters.len() > 4 || function.result != "string" {
+            if function.parameters.len() > 4
+                || !matches!(function.result.as_str(), "string" | "number")
+            {
                 return Err(format!(
-                    "function {} must have at most four string parameters and return string",
+                    "function {} must have at most four scalar parameters and return a scalar",
                     function.name
                 ));
             }
             let mut parameter_names = HashSet::new();
             for parameter in &function.parameters {
-                if parameter.value_type != "string" || !parameter_names.insert(&parameter.name) {
+                if !matches!(parameter.value_type.as_str(), "string" | "number")
+                    || !parameter_names.insert(&parameter.name)
+                {
                     return Err(format!(
                         "function {} has invalid or duplicate parameters",
                         function.name
@@ -733,6 +763,17 @@ impl Program {
                 }
             }
             self.validate_expression(&function.body, function.parameters.len())?;
+            let body_type = self.function_expression_type(
+                &function.body,
+                &function.parameters,
+                Some("string"),
+            )?;
+            if body_type != function.result {
+                return Err(format!(
+                    "function {} body type `{body_type}` does not match result `{}`",
+                    function.name, function.result
+                ));
+            }
         }
         if self.statistics.constants != self.constants.len() {
             return Err("HIR constant statistic does not match the constant pool".to_owned());
@@ -832,12 +873,19 @@ impl Program {
                     return Err("expression references a missing static string".to_owned());
                 }
             }
+            ValueExpression::NumericLiteral { .. } => {}
             ValueExpression::Constant { constant, .. } => {
                 let Some(constant) = self.constants.get(*constant) else {
                     return Err("expression references a missing constant".to_owned());
                 };
-                if !matches!(constant.value, ConstantValue::String { .. }) {
-                    return Err("string expression references a non-string constant".to_owned());
+                if !matches!(constant.value, ConstantValue::String { .. })
+                    && !matches!(constant.value, ConstantValue::Number { value }
+                        if value.is_finite()
+                            && value.fract() == 0.0
+                            && value >= i64::MIN as f64
+                            && value <= i64::MAX as f64)
+                {
+                    return Err("scalar expression references a non-scalar constant".to_owned());
                 }
             }
             ValueExpression::Parameter { parameter, .. } => {
@@ -871,13 +919,73 @@ impl Program {
                 when_not_equal,
                 ..
             } => {
-                self.validate_expression_context(left, parameter_count, caught_exception_available)?;
-                self.validate_expression_context(right, parameter_count, caught_exception_available)?;
-                self.validate_expression_context(when_equal, parameter_count, caught_exception_available)?;
-                self.validate_expression_context(when_not_equal, parameter_count, caught_exception_available)?;
+                self.validate_expression_context(
+                    left,
+                    parameter_count,
+                    caught_exception_available,
+                )?;
+                self.validate_expression_context(
+                    right,
+                    parameter_count,
+                    caught_exception_available,
+                )?;
+                self.validate_expression_context(
+                    when_equal,
+                    parameter_count,
+                    caught_exception_available,
+                )?;
+                self.validate_expression_context(
+                    when_not_equal,
+                    parameter_count,
+                    caught_exception_available,
+                )?;
+            }
+            ValueExpression::NumericBinary { left, right, .. } => {
+                self.validate_expression_context(
+                    left,
+                    parameter_count,
+                    caught_exception_available,
+                )?;
+                self.validate_expression_context(
+                    right,
+                    parameter_count,
+                    caught_exception_available,
+                )?;
+            }
+            ValueExpression::NumericEqualConditional {
+                left,
+                right,
+                when_equal,
+                when_not_equal,
+                ..
+            } => {
+                self.validate_expression_context(
+                    left,
+                    parameter_count,
+                    caught_exception_available,
+                )?;
+                self.validate_expression_context(
+                    right,
+                    parameter_count,
+                    caught_exception_available,
+                )?;
+                self.validate_expression_context(
+                    when_equal,
+                    parameter_count,
+                    caught_exception_available,
+                )?;
+                self.validate_expression_context(
+                    when_not_equal,
+                    parameter_count,
+                    caught_exception_available,
+                )?;
             }
             ValueExpression::ThrowValue { value, .. } => {
-                self.validate_expression_context(value, parameter_count, caught_exception_available)?;
+                self.validate_expression_context(
+                    value,
+                    parameter_count,
+                    caught_exception_available,
+                )?;
             }
             ValueExpression::TryCatch {
                 try_value,
@@ -914,6 +1022,156 @@ impl Program {
             }
         }
         Ok(())
+    }
+
+    fn function_expression_type(
+        &self,
+        expression: &ValueExpression,
+        parameters: &[FunctionParameter],
+        caught_type: Option<&str>,
+    ) -> Result<String, String> {
+        match expression {
+            ValueExpression::StringLiteral { .. } => Ok("string".to_owned()),
+            ValueExpression::NumericLiteral { .. } => Ok("number".to_owned()),
+            ValueExpression::Constant { constant, .. } => match self.constants[*constant].value {
+                ConstantValue::String { .. } => Ok("string".to_owned()),
+                ConstantValue::Number { value }
+                    if value.is_finite()
+                        && value.fract() == 0.0
+                        && value >= i64::MIN as f64
+                        && value <= i64::MAX as f64 =>
+                {
+                    Ok("number".to_owned())
+                }
+                _ => Err("native scalar expression references a non-scalar constant".to_owned()),
+            },
+            ValueExpression::Parameter { parameter, .. } => parameters
+                .get(*parameter)
+                .map(|parameter| parameter.value_type.clone())
+                .ok_or_else(|| "expression references a missing typed parameter".to_owned()),
+            ValueExpression::DirectCall {
+                function,
+                arguments,
+                ..
+            } => {
+                let target = &self.functions[*function];
+                for (argument, parameter) in arguments.iter().zip(&target.parameters) {
+                    let argument_type =
+                        self.function_expression_type(argument, parameters, caught_type)?;
+                    if argument_type != parameter.value_type {
+                        return Err(format!(
+                            "direct call argument type `{argument_type}` does not match `{}`",
+                            parameter.value_type
+                        ));
+                    }
+                }
+                Ok(target.result.clone())
+            }
+            ValueExpression::StringEqualConditional {
+                left,
+                right,
+                when_equal,
+                when_not_equal,
+                ..
+            } => {
+                self.require_expression_type(left, parameters, caught_type, "string")?;
+                self.require_expression_type(right, parameters, caught_type, "string")?;
+                self.same_branch_type(when_equal, when_not_equal, parameters, caught_type)
+            }
+            ValueExpression::NumericBinary { left, right, .. } => {
+                self.require_expression_type(left, parameters, caught_type, "number")?;
+                self.require_expression_type(right, parameters, caught_type, "number")?;
+                Ok("number".to_owned())
+            }
+            ValueExpression::NumericEqualConditional {
+                left,
+                right,
+                when_equal,
+                when_not_equal,
+                ..
+            } => {
+                self.require_expression_type(left, parameters, caught_type, "number")?;
+                self.require_expression_type(right, parameters, caught_type, "number")?;
+                self.same_branch_type(when_equal, when_not_equal, parameters, caught_type)
+            }
+            ValueExpression::ThrowValue { value, .. } => {
+                self.require_expression_type(value, parameters, caught_type, "string")?;
+                Ok("string".to_owned())
+            }
+            ValueExpression::TryCatch {
+                try_value,
+                catch_value,
+                ..
+            } => {
+                let try_type = self.function_expression_type(try_value, parameters, caught_type)?;
+                let catch_type =
+                    self.function_expression_type(catch_value, parameters, Some("string"))?;
+                if try_type != catch_type {
+                    return Err("native try/catch branches must have the same type".to_owned());
+                }
+                Ok(try_type)
+            }
+            ValueExpression::CaughtException { .. } => caught_type
+                .map(str::to_owned)
+                .ok_or_else(|| "caught exception has no type context".to_owned()),
+            ValueExpression::Concat { values, .. } => {
+                for value in values {
+                    self.require_expression_type(value, parameters, caught_type, "string")?;
+                }
+                Ok("string".to_owned())
+            }
+            ValueExpression::QueryConditional {
+                when_present,
+                when_absent,
+                ..
+            } => self.same_branch_type(when_present, when_absent, parameters, caught_type),
+            ValueExpression::WorkerCall { input, .. } => {
+                self.require_expression_type(input, parameters, caught_type, "string")?;
+                Ok("string".to_owned())
+            }
+            ValueExpression::RouteParameter { .. }
+            | ValueExpression::RequestHeader { .. }
+            | ValueExpression::EnvironmentVariable { .. }
+            | ValueExpression::FileText { .. }
+            | ValueExpression::ActorCall { .. }
+            | ValueExpression::SqliteQuery { .. }
+            | ValueExpression::FetchStatus { .. }
+            | ValueExpression::QueryParameter { .. }
+            | ValueExpression::OpenAiChatText { .. } => Ok("string".to_owned()),
+        }
+    }
+
+    fn require_expression_type(
+        &self,
+        expression: &ValueExpression,
+        parameters: &[FunctionParameter],
+        caught_type: Option<&str>,
+        expected: &str,
+    ) -> Result<(), String> {
+        let actual = self.function_expression_type(expression, parameters, caught_type)?;
+        if actual == expected {
+            Ok(())
+        } else {
+            Err(format!(
+                "native expression type `{actual}` does not match `{expected}`"
+            ))
+        }
+    }
+
+    fn same_branch_type(
+        &self,
+        left: &ValueExpression,
+        right: &ValueExpression,
+        parameters: &[FunctionParameter],
+        caught_type: Option<&str>,
+    ) -> Result<String, String> {
+        let left_type = self.function_expression_type(left, parameters, caught_type)?;
+        let right_type = self.function_expression_type(right, parameters, caught_type)?;
+        if left_type == right_type {
+            Ok(left_type)
+        } else {
+            Err("native conditional branches must have the same type".to_owned())
+        }
     }
 
     fn validate_stderr(&self, stderr: &[usize]) -> Result<(), String> {
@@ -985,7 +1243,8 @@ impl Program {
                 }) {
                     return Err("GET text response has an unsupported content type".to_owned());
                 }
-                self.validate_handler_expression(value, route_pattern)
+                self.validate_handler_expression(value, route_pattern)?;
+                self.require_expression_type(value, &[], None, "string")
             }
             HandlerResponse::Stream {
                 chunks,
@@ -1012,6 +1271,7 @@ impl Program {
                 }
                 for chunk in chunks {
                     self.validate_handler_expression(chunk, route_pattern)?;
+                    self.require_expression_type(chunk, &[], None, "string")?;
                 }
                 Ok(())
             }
@@ -1283,6 +1543,22 @@ impl Program {
                 self.visit_expression_functions(when_equal, state)?;
                 self.visit_expression_functions(when_not_equal, state)?;
             }
+            ValueExpression::NumericBinary { left, right, .. } => {
+                self.visit_expression_functions(left, state)?;
+                self.visit_expression_functions(right, state)?;
+            }
+            ValueExpression::NumericEqualConditional {
+                left,
+                right,
+                when_equal,
+                when_not_equal,
+                ..
+            } => {
+                self.visit_expression_functions(left, state)?;
+                self.visit_expression_functions(right, state)?;
+                self.visit_expression_functions(when_equal, state)?;
+                self.visit_expression_functions(when_not_equal, state)?;
+            }
             ValueExpression::ThrowValue { value, .. } => {
                 self.visit_expression_functions(value, state)?;
             }
@@ -1317,17 +1593,13 @@ impl Program {
         Ok(())
     }
 
-    fn response_may_throw(
-        &self,
-        response: &HandlerResponse,
-        memo: &mut [Option<bool>],
-    ) -> bool {
+    fn response_may_throw(&self, response: &HandlerResponse, memo: &mut [Option<bool>]) -> bool {
         match response {
             HandlerResponse::Html { .. } => false,
             HandlerResponse::Text { value, .. } => self.expression_may_throw(value, memo),
-            HandlerResponse::Stream { chunks, .. } => {
-                chunks.iter().any(|chunk| self.expression_may_throw(chunk, memo))
-            }
+            HandlerResponse::Stream { chunks, .. } => chunks
+                .iter()
+                .any(|chunk| self.expression_may_throw(chunk, memo)),
         }
     }
 
@@ -1361,6 +1633,18 @@ impl Program {
                     || self.function_may_throw(*function, memo)
             }
             ValueExpression::StringEqualConditional {
+                left,
+                right,
+                when_equal,
+                when_not_equal,
+                ..
+            } => [left, right, when_equal, when_not_equal]
+                .into_iter()
+                .any(|value| self.expression_may_throw(value, memo)),
+            ValueExpression::NumericBinary { left, right, .. } => {
+                self.expression_may_throw(left, memo) || self.expression_may_throw(right, memo)
+            }
+            ValueExpression::NumericEqualConditional {
                 left,
                 right,
                 when_equal,
@@ -1438,6 +1722,18 @@ fn expression_uses_filesystem(expression: &ValueExpression) -> bool {
         } => [left, right, when_equal, when_not_equal]
             .into_iter()
             .any(|value| expression_uses_filesystem(value)),
+        ValueExpression::NumericBinary { left, right, .. } => {
+            expression_uses_filesystem(left) || expression_uses_filesystem(right)
+        }
+        ValueExpression::NumericEqualConditional {
+            left,
+            right,
+            when_equal,
+            when_not_equal,
+            ..
+        } => [left, right, when_equal, when_not_equal]
+            .into_iter()
+            .any(|value| expression_uses_filesystem(value)),
         ValueExpression::ThrowValue { value, .. } => expression_uses_filesystem(value),
         ValueExpression::TryCatch {
             try_value,
@@ -1493,6 +1789,22 @@ fn collect_environment_ids(expression: &ValueExpression, ids: &mut BTreeSet<usiz
             collect_environment_ids(when_equal, ids);
             collect_environment_ids(when_not_equal, ids);
         }
+        ValueExpression::NumericBinary { left, right, .. } => {
+            collect_environment_ids(left, ids);
+            collect_environment_ids(right, ids);
+        }
+        ValueExpression::NumericEqualConditional {
+            left,
+            right,
+            when_equal,
+            when_not_equal,
+            ..
+        } => {
+            collect_environment_ids(left, ids);
+            collect_environment_ids(right, ids);
+            collect_environment_ids(when_equal, ids);
+            collect_environment_ids(when_not_equal, ids);
+        }
         ValueExpression::ThrowValue { value, .. } => collect_environment_ids(value, ids),
         ValueExpression::TryCatch {
             try_value,
@@ -1523,6 +1835,18 @@ fn expression_uses_openai(expression: &ValueExpression) -> bool {
             arguments.iter().any(expression_uses_openai)
         }
         ValueExpression::StringEqualConditional {
+            left,
+            right,
+            when_equal,
+            when_not_equal,
+            ..
+        } => [left, right, when_equal, when_not_equal]
+            .into_iter()
+            .any(|value| expression_uses_openai(value)),
+        ValueExpression::NumericBinary { left, right, .. } => {
+            expression_uses_openai(left) || expression_uses_openai(right)
+        }
+        ValueExpression::NumericEqualConditional {
             left,
             right,
             when_equal,

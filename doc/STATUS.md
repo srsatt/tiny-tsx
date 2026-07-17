@@ -477,15 +477,20 @@ produces and serves a native Mach-O executable from the example TSX source.
   blobs. `examples/staged-constants/server.tsx` passes the complete native build
   and HTTP E2E path, while the Hono test proves its seven-method array reaches
   the same typed HIR representation.
-- Reachable named string functions now lower across ESM modules with up to four
-  required string parameters. Expressions can return literals, parameters,
-  staged string constants, or nested direct calls. Native code passes and
-  returns pointer/length register pairs, uses bounded stack frames for argument
-  evaluation, and rejects recursion.
+- Reachable named scalar functions now lower across ESM modules with up to four
+  required string or number parameters and matching scalar results. Strings use
+  pointer/length pairs; finite numbers use unboxed IEEE-754 bits in the same
+  fixed two-word ABI. Bounded frames support nested argument evaluation, and
+  recursion remains rejected.
 - The first post-alpha function-control-flow slice adds initialized `const`
   string locals plus strict string equality/inequality branches. Native AArch64
   compares pointer/length strings by length and bytes; the dedicated E2E executes
   unequal and equal paths through nested functions.
+- The numeric function slice adds required numeric parameters/results,
+  immutable locals, integer literals/constants, addition/subtraction, strict
+  equality branches, and numeric results passed through nested calls. Apple HTTP
+  executes the selected string result, and Linux AArch64 assembles the `fadd`,
+  `fsub`, and `fcmp` paths without a boxed value or managed heap.
 - Closed local arrow/function values now lambda-lift direct-parent immutable
   string captures into explicit HIR/native parameters. The Apple HTTP E2E and
   Linux assembly test cover both a captured outer parameter and local without a

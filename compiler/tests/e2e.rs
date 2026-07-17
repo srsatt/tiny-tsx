@@ -446,6 +446,15 @@ fn builds_and_serves_native_function_locals_and_branches() {
 }
 
 #[test]
+fn builds_and_serves_native_numeric_function_branches() {
+    build_and_serve(
+        "examples/function-numbers/server.ts",
+        "three",
+        "text/plain; charset=UTF-8",
+    );
+}
+
+#[test]
 fn builds_and_serves_lambda_lifted_function_captures() {
     build_and_serve(
         "examples/function-closures/server.ts",

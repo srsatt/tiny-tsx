@@ -9,6 +9,8 @@ type LoweredFunction =
   | ts.ArrowFunction
   | ts.FunctionExpression;
 
+type NativeValueType = FunctionParameter["type"];
+
 interface ClosureBinding {
   owner: number;
   declaration: ts.VariableDeclaration;
@@ -64,6 +66,35 @@ export class FunctionLowerer {
         span: spanOf(value, value.getSourceFile()),
       };
     }
+    if (ts.isNumericLiteral(value)) {
+      const number = Number(value.text);
+      if (!Number.isSafeInteger(number)) {
+        throw tinyError("TINY1327", "native numeric literals must be safe integers", value);
+      }
+      return {
+        kind: "numericLiteral",
+        value: number,
+        span: spanOf(value, value.getSourceFile()),
+      };
+    }
+    if (
+      ts.isBinaryExpression(value)
+      && [ts.SyntaxKind.PlusToken, ts.SyntaxKind.MinusToken].includes(value.operatorToken.kind)
+    ) {
+      if (
+        nativeTypeAt(this.checker, value.left) !== "number"
+        || nativeTypeAt(this.checker, value.right) !== "number"
+      ) {
+        throw tinyError("TINY1327", "native arithmetic requires number operands", value);
+      }
+      return {
+        kind: "numericBinary",
+        operator: value.operatorToken.kind === ts.SyntaxKind.PlusToken ? "add" : "subtract",
+        left: this.lower(value.left, currentFunction),
+        right: this.lower(value.right, currentFunction),
+        span: spanOf(value, value.getSourceFile()),
+      };
+    }
     if (ts.isIdentifier(value)) {
       const declaration = this.resolveDeclaration(value);
       if (declaration !== undefined && ts.isVariableDeclaration(declaration)) {
@@ -80,6 +111,10 @@ export class FunctionLowerer {
         const local = this.#locals.get(declaration);
         if (local !== undefined) {
           if (local.function !== currentFunction) {
+            const localType = nativeTypeAt(this.checker, declaration.name);
+            if (localType === undefined) {
+              throw tinyError("TINY1308", "captured local is not a native scalar", value);
+            }
             return this.capture(
               declaration,
               local.function,
@@ -87,6 +122,7 @@ export class FunctionLowerer {
               local.value,
               declaration.name.getText(),
               value,
+              localType,
             );
           }
           return local.value;
@@ -109,6 +145,7 @@ export class FunctionLowerer {
             },
             declaration.name.getText(),
             value,
+            this.#contexts.get(parameter.function)?.parameters[parameter.parameter]?.type ?? "string",
           );
         }
         return {
@@ -160,7 +197,7 @@ export class FunctionLowerer {
         throw tinyError("TINY1302", "call target must be a named function declaration", value.expression);
       }
       if (declaration.parameters.length > 4) {
-        throw tinyError("TINY1309", "native string functions support at most four parameters", declaration);
+        throw tinyError("TINY1309", "native functions support at most four parameters", declaration);
       }
       if (value.arguments.length !== declaration.parameters.length) {
         throw tinyError(
@@ -179,7 +216,7 @@ export class FunctionLowerer {
     }
     throw tinyError(
       "TINY1303",
-      "string expressions support literals, closed string constants, and direct calls",
+      "native value expressions support bounded literals, constants, arithmetic, and direct calls",
       value,
     );
   }
@@ -206,8 +243,18 @@ export class FunctionLowerer {
       declaration.getSourceFile().fileName,
       declaration.name.text,
     ));
+    if (constant?.value.kind === "number") {
+      if (!Number.isSafeInteger(constant.value.value)) {
+        throw tinyError("TINY1327", "native numeric constants must be safe integers", identifier);
+      }
+      return {
+        kind: "numericLiteral",
+        value: constant.value.value,
+        span: spanOf(identifier, identifier.getSourceFile()),
+      };
+    }
     if (constant?.value.kind !== "string") {
-      throw tinyError("TINY1304", "identifier must resolve to a closed string constant", identifier);
+      throw tinyError("TINY1304", "identifier must resolve to a closed scalar constant", identifier);
     }
     return {
       kind: "constant",
@@ -234,23 +281,8 @@ export class FunctionLowerer {
     const id = this.#functions.length;
     this.#ids.set(declaration, id);
     this.#functions.push(undefined);
-    const parameters = declaration.parameters.map((parameter, index) => {
-      if (
-        !ts.isIdentifier(parameter.name)
-        || parameter.dotDotDotToken !== undefined
-        || parameter.questionToken !== undefined
-        || parameter.initializer !== undefined
-        || (this.checker.getTypeAtLocation(parameter).flags & ts.TypeFlags.StringLike) === 0
-      ) {
-        throw tinyError("TINY1311", "native function parameters must be required strings", parameter);
-      }
-      this.#parameters.set(parameter, {function: id, parameter: index});
-      return {
-        name: parameter.name.text,
-        type: "string" as const,
-        span: spanOf(parameter, parameter.getSourceFile()),
-      };
-    });
+    const parameters = this.lowerNativeParameters(declaration.parameters, id);
+    const result = functionResultType(this.checker, declaration);
     this.#contexts.set(id, {
       name: declaration.name.text,
       parameters,
@@ -264,7 +296,7 @@ export class FunctionLowerer {
       module: declaration.getSourceFile().fileName,
       name: declaration.name.text,
       parameters,
-      result: "string",
+      result,
       body,
       span: spanOf(declaration, declaration.getSourceFile()),
     };
@@ -304,9 +336,9 @@ export class FunctionLowerer {
         if (
           !ts.isIdentifier(declaration.name)
           || declaration.initializer === undefined
-          || (this.checker.getTypeAtLocation(declaration.name).flags & ts.TypeFlags.StringLike) === 0
+          || nativeTypeAt(this.checker, declaration.name) === undefined
         ) {
-          throw tinyError("TINY1321", "native function locals must be initialized strings", declaration);
+          throw tinyError("TINY1321", "native function locals must be initialized scalars", declaration);
         }
         const value = this.lower(declaration.initializer, currentFunction);
         this.#locals.set(declaration, {function: currentFunction, value});
@@ -383,13 +415,14 @@ export class FunctionLowerer {
     const existing = this.#ids.get(node);
     if (existing !== undefined) return existing;
     if (node.parameters.length > 4) {
-      throw tinyError("TINY1309", "native string functions support at most four values", node);
+      throw tinyError("TINY1309", "native functions support at most four values", node);
     }
 
     const id = this.#functions.length;
     this.#ids.set(node, id);
     this.#functions.push(undefined);
-    const parameters = this.lowerStringParameters(node.parameters, id);
+    const parameters = this.lowerNativeParameters(node.parameters, id);
+    const result = functionResultType(this.checker, node);
     const owner = this.#contexts.get(closure.owner);
     const name = `${owner?.name ?? `function_${closure.owner}`}.${closure.declaration.name.getText()}`;
     this.#contexts.set(id, {
@@ -408,7 +441,7 @@ export class FunctionLowerer {
       module: node.getSourceFile().fileName,
       name,
       parameters,
-      result: "string",
+      result,
       body,
       span: spanOf(node, node.getSourceFile()),
     };
@@ -422,9 +455,10 @@ export class FunctionLowerer {
     argument: ValueExpression,
     name: string,
     occurrence: ts.Node,
+    valueType: NativeValueType,
   ): ValueExpression {
     const context = currentFunction === undefined ? undefined : this.#contexts.get(currentFunction);
-    if (context === undefined || context.parent !== owner) {
+    if (context === undefined || context.parent !== owner || valueType !== "string") {
       throw tinyError("TINY1308", "only direct-parent immutable string captures are supported", occurrence);
     }
     const existing = context.captures.find(capture => capture.declaration === declaration);
@@ -448,18 +482,19 @@ export class FunctionLowerer {
     };
   }
 
-  private lowerStringParameters(
+  private lowerNativeParameters(
     declarations: readonly ts.ParameterDeclaration[],
     functionId: number,
   ): FunctionParameter[] {
     return declarations.map((parameter, index) => {
-      if (!isRequiredStringParameter(this.checker, parameter) || !ts.isIdentifier(parameter.name)) {
-        throw tinyError("TINY1311", "native function parameters must be required strings", parameter);
+      const type = requiredNativeParameterType(this.checker, parameter);
+      if (type === undefined || !ts.isIdentifier(parameter.name)) {
+        throw tinyError("TINY1311", "native function parameters must be required strings or numbers", parameter);
       }
       this.#parameters.set(parameter, {function: functionId, parameter: index});
       return {
         name: parameter.name.text,
-        type: "string",
+        type,
         span: spanOf(parameter, parameter.getSourceFile()),
       };
     });
@@ -488,12 +523,17 @@ export class FunctionLowerer {
       throw tinyError("TINY1322", "both native branch paths must return or throw a string", statement);
     }
     const equal = condition.operatorToken.kind === ts.SyntaxKind.EqualsEqualsEqualsToken;
+    const leftType = nativeTypeAt(this.checker, condition.left);
+    const rightType = nativeTypeAt(this.checker, condition.right);
+    if (leftType === undefined || leftType !== rightType) {
+      throw tinyError("TINY1322", "native equality operands must have the same scalar type", condition);
+    }
     const left = this.lower(condition.left, currentFunction);
     const right = this.lower(condition.right, currentFunction);
     const thenValue = this.lowerCompletion(thenCompletion, currentFunction);
     const elseValue = this.lowerCompletion(elseCompletion, currentFunction);
     return {
-      kind: "stringEqualConditional",
+      kind: leftType === "string" ? "stringEqualConditional" : "numericEqualConditional",
       left,
       right,
       whenEqual: equal ? thenValue : elseValue,
@@ -507,6 +547,9 @@ export class FunctionLowerer {
     currentFunction: number,
   ): ValueExpression {
     const value = this.lower(completion.expression, currentFunction);
+    if (completion.kind === "throw" && nativeTypeAt(this.checker, completion.expression) !== "string") {
+      throw tinyError("TINY1325", "native exceptions currently require string values", completion.expression);
+    }
     return completion.kind === "return"
       ? value
       : {
@@ -708,4 +751,47 @@ function isRequiredStringParameter(
     && parameter.questionToken === undefined
     && parameter.initializer === undefined
     && (checker.getTypeAtLocation(parameter).flags & ts.TypeFlags.StringLike) !== 0;
+}
+
+function requiredNativeParameterType(
+  checker: ts.TypeChecker,
+  parameter: ts.ParameterDeclaration,
+): NativeValueType | undefined {
+  if (
+    !ts.isIdentifier(parameter.name)
+    || parameter.dotDotDotToken !== undefined
+    || parameter.questionToken !== undefined
+    || parameter.initializer !== undefined
+  ) {
+    return undefined;
+  }
+  return nativeTypeAt(checker, parameter);
+}
+
+function functionResultType(
+  checker: ts.TypeChecker,
+  declaration: ts.SignatureDeclaration,
+): NativeValueType {
+  const signature = checker.getSignatureFromDeclaration(declaration);
+  const result = signature === undefined
+    ? undefined
+    : nativeTypeOf(checker.getReturnTypeOfSignature(signature));
+  if (result === undefined) {
+    throw tinyError("TINY1328", "native functions must return a string or number", declaration);
+  }
+  return result;
+}
+
+function nativeTypeAt(checker: ts.TypeChecker, node: ts.Node): NativeValueType | undefined {
+  return nativeTypeOf(checker.getTypeAtLocation(node));
+}
+
+function nativeTypeOf(type: ts.Type): NativeValueType | undefined {
+  if ((type.flags & ts.TypeFlags.StringLike) !== 0) return "string";
+  if ((type.flags & ts.TypeFlags.NumberLike) !== 0) return "number";
+  if (type.isUnion()) {
+    const members = new Set(type.types.map(nativeTypeOf));
+    if (members.size === 1) return members.values().next().value;
+  }
+  return undefined;
 }

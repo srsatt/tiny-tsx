@@ -93,6 +93,11 @@ export type ValueExpression =
       span: SourceSpan;
     }
   | {
+      kind: "numericLiteral";
+      value: number;
+      span: SourceSpan;
+    }
+  | {
       kind: "constant";
       constant: number;
       span: SourceSpan;
@@ -110,6 +115,21 @@ export type ValueExpression =
     }
   | {
       kind: "stringEqualConditional";
+      left: ValueExpression;
+      right: ValueExpression;
+      whenEqual: ValueExpression;
+      whenNotEqual: ValueExpression;
+      span: SourceSpan;
+    }
+  | {
+      kind: "numericBinary";
+      operator: "add" | "subtract";
+      left: ValueExpression;
+      right: ValueExpression;
+      span: SourceSpan;
+    }
+  | {
+      kind: "numericEqualConditional";
       left: ValueExpression;
       right: ValueExpression;
       whenEqual: ValueExpression;
@@ -209,7 +229,7 @@ export type ValueExpression =
 
 export interface FunctionParameter {
   name: string;
-  type: "string";
+  type: "string" | "number";
   span: SourceSpan;
 }
 
@@ -218,7 +238,7 @@ export interface HirFunction {
   module: string;
   name: string;
   parameters: FunctionParameter[];
-  result: "string";
+  result: "string" | "number";
   body: ValueExpression;
   span: SourceSpan;
 }

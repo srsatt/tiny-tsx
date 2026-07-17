@@ -40,6 +40,12 @@ frame sizing, symbol prefixes, address relocations, visibility, and sections.
 The shared backend owns instruction selection and runtime ABI lowering. The two
 thin adapters select the Apple or ELF dialect.
 
+Ordinary value functions use a fixed two-word scalar ABI plus the `x2` abrupt-
+completion flag. Strings occupy pointer/length words; finite numbers occupy the
+first word as unboxed IEEE-754 bits and clear the second. Static HIR types select
+the interpretation, so adding numeric parameters, results, arithmetic, and
+branches does not introduce a boxed JavaScript value or managed heap.
+
 There is deliberately no open-ended target trait. The second concrete target
 showed that a closed AArch64 dialect is the required seam. A future architecture
 should add its own backend rather than forcing non-AArch64 instructions through
