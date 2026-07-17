@@ -247,7 +247,7 @@ def _open_file_descriptor_count(pid: int) -> int:
         ctypes.byref(buffer),
         required,
     )
-    if used < 0:
+    if used <= 0:
         raise ProcessLookupError(pid)
     return used // ctypes.sizeof(ProcFdInfo)
 
