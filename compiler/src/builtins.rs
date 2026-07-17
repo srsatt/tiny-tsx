@@ -68,7 +68,7 @@ fn manifest() -> Manifest {
             },
             Builtin {
                 specifier: "tinytsx:sqlite",
-                status: "native-partial",
+                status: "native",
                 targets: TARGETS,
                 permissions: &["allow-read", "allow-write"],
                 limits: Limits {
@@ -124,6 +124,7 @@ mod tests {
         );
         assert_eq!(manifest().builtins[1].status, "native");
         assert_eq!(manifest().builtins[2].status, "native");
+        assert_eq!(manifest().builtins[3].status, "native");
         assert_eq!(manifest().builtins[4].status, "native");
     }
 }

@@ -991,7 +991,7 @@ function validateAsciiUppercaseWorker(sourceFile: ts.SourceFile): void {
     || returned.expression.expression.text !== parameter.name.text
   ) {
     throw tinyError(
-      "TINY1500",
+      "TINY1600",
       "worker module must default-export one (input: string) => input.toUpperCase() function",
       declaration ?? sourceFile,
     );
