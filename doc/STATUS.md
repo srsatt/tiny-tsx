@@ -109,8 +109,14 @@ produces and serves a native Mach-O executable from the example TSX source.
   create/list/get/update/delete over GET/POST/PUT/DELETE, SQL-error recovery,
   post-close failure, Apple execution, and Linux-arm64 assembly; a Bun/Hono
   `bun:sqlite` test pins the same local adapter contract. Typed execute results,
-  transactions, disk capabilities, UUIDs, bindings, exact upstream blog
+  transactions, disk capabilities, bindings, exact upstream blog
   envelopes, and the persistent actor remain open.
+- `crypto.randomUUID()` now supplies request-time blog IDs from the native OS
+  cryptographic random source. The runtime sets the version-4 and RFC variant
+  bits, formats lowercase ASCII, and binds the value directly into prepared
+  SQLite parameters. ABI and native HTTP tests prove shape and successive-value
+  uniqueness; Bun/Hono is the reference. Arbitrary UUID string reuse and the
+  rest of Web Crypto remain unsupported.
 - The pinned upstream `cors()` factory now lowers for closed wildcard-origin
   options. Native normal responses and generated OPTIONS 204 preflights cover
   static allow-method/header/expose/credentials/max-age values. The SQLite blog
@@ -126,6 +132,7 @@ produces and serves a native Mach-O executable from the example TSX source.
   `cargo test -p tinytsx` (53/53),
   `cargo test -p tinytsx builtins` (1/1),
   `npm run test:actors-native` (2/2),
+  `cargo test -p tinytsx-runtime-bootstrap` (51/51),
   `cargo test -p tinytsx-runtime-sqlite` (4/4),
   `npm run test:sqlite-reference` (2/2),
   `npm run test:sqlite-native` (2/2), and

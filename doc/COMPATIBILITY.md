@@ -174,6 +174,14 @@ Bun/Hono preflight. Origin callbacks/arrays, non-wildcard origin matching,
 dynamic method callbacks, and arbitrary request-header reflection remain
 outside this specialization.
 
+The blog adapter's ID path now evaluates `crypto.randomUUID()` at request time,
+sets the Web Crypto version/variant bits over 16 bytes from the Apple or Linux
+OS cryptographic random source, and binds the lowercase UUID as prepared SQLite
+text. Native tests require two generated IDs to differ and match the version-4
+shape; Bun/Hono uses its real Web API as the behavior reference. The value is
+currently lowerable only as a prepared parameter, not as a general reusable
+runtime JavaScript string or broader Crypto implementation.
+
 Terminal wildcard matching now covers the exact `/api/*` fallback from the
 basic example. Native tests pin Hono's behavior that the pattern matches `/api`,
 `/api/`, and deeper paths. The generated handler returns Hono's explicit status

@@ -101,7 +101,7 @@
       "nativeCompile": {"appleArm64": "pass", "linuxArm64Assembly": "pass", "evidence": "tests/compat/sqlite/native.test.mjs"},
       "httpBehavior": {"status": "pass", "evidence": "tests/compat/sqlite/native.test.mjs"},
       "referenceBehavior": {"runtime": "Bun/Hono with bun:sqlite", "status": "pass", "evidence": "tests/compat/sqlite/reference.behavior.test.ts"},
-      "firstUnsupportedBoundary": "Prepared calls accept at most 16 selected route/JSON values and bounded wildcard-origin CORS on a capability-free in-memory database; general dynamic values, typed execute results, transactions, and disk paths remain pending."
+      "firstUnsupportedBoundary": "Prepared calls accept at most 16 selected route/JSON/UUID values and bounded wildcard-origin CORS on a capability-free in-memory database; general dynamic values, typed execute results, transactions, and disk paths remain pending."
     },
     {
       "id": "upstream-blog",
@@ -114,7 +114,7 @@
       "nativeCompile": {"appleArm64": "adapter-pass", "linuxArm64Assembly": "adapter-pass", "evidence": "tests/compat/sqlite/native.test.mjs"},
       "httpBehavior": {"status": "adapter-pass", "evidence": "tests/compat/sqlite/native.test.mjs"},
       "referenceBehavior": {"runtime": "upstream tests", "status": "pinned", "evidence": "vendor/hono-examples/blog/src/api.test.ts"},
-      "firstUnsupportedBoundary": "The adapter proves bounded in-memory CRUD, prepared body/route values, and wildcard-origin CORS; randomUUID, environment bindings, upstream response envelopes, 404/204 behavior, transactions, and disk persistence remain pending."
+      "firstUnsupportedBoundary": "The adapter proves bounded in-memory CRUD, prepared body/route/UUID values, and wildcard-origin CORS; environment bindings, upstream response envelopes, 404/204 behavior, transactions, and disk persistence remain pending."
     },
     {
       "id": "upstream-durable-objects-counter",

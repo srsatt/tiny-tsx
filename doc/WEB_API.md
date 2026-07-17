@@ -17,6 +17,7 @@ The current boundary is:
 | `Headers` | standard DOM declaration | closed construction/cloning; bounded request-header borrowing and response-header storage with case-insensitive lookup/replacement |
 | `fetch` | standard DOM declaration | one closed URL string; request-time GET; `.status` only; Apple system libcurl transport |
 | `URL` / `URLSearchParams` | standard DOM declaration | native WPT-only bounded ordered pairs, form decoding/serialization, mutation, lookup, and live query linkage for selected URL cases; application API pending |
+| `crypto.randomUUID()` | standard DOM declaration | request-time version-4 UUID when bound directly to a prepared SQLite parameter |
 | body and stream types | standard DOM declaration | pending |
 | encoding types | standard DOM declaration | pending |
 
@@ -56,6 +57,16 @@ computed by the AOT frontend for immutable response bytes; the native runtime
 only compares borrowed `If-None-Match` values and selects the precompiled 304
 response. Streaming bodies, arbitrary digest functions, and runtime Web Crypto
 remain pending.
+
+The bounded blog tracer implements `crypto.randomUUID()` according to the
+[Web Cryptography Level 2 algorithm](https://www.w3.org/TR/WebCryptoAPI/#Crypto-method-randomUUID):
+16 bytes come from the operating-system cryptographic random source, the
+version and variant bits are set to 4 and 2, and the result uses 36 lowercase
+ASCII characters. Runtime and native HTTP tests require the UUID shape and two
+successive values to differ. The current request-time value may flow directly
+into prepared SQLite parameters; it is not yet a general reusable JavaScript
+string, and `getRandomValues`, `subtle`, arbitrary Web Crypto, and secure-context
+policy are not implemented.
 
 The executable Hono route evaluates the upstream `Context.text()` condition and
 reaches `new Response(text)` with a closed string at compile time. A closed

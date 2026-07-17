@@ -45,6 +45,7 @@ Before promotion to `native`, the compiler must expose typed execute results and
 the remaining value families needed by public callers; on-disk paths must use
 separate read/write capabilities; transactions need native tests; and the exact
 Hono blog adapter plus persistent actor tracers must pass end to end. Bounded
-wildcard-origin CORS and Content-Type preflight are native; UUIDs,
-environment-backed bindings, and upstream 404/204 envelopes remain blog parity
-work rather than claims of this local CRUD tracer.
+wildcard-origin CORS, Content-Type preflight, and OS-random version-4 IDs bound
+as prepared values are native; environment-backed bindings and upstream
+404/204 envelopes remain blog parity work rather than claims of this local CRUD
+tracer.
