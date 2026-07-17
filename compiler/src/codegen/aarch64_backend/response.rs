@@ -208,6 +208,7 @@ fn emit_handler_text_expression(
             actor,
             message,
             json_message,
+            timeout_ms,
             ..
         } => {
             asm_line!(assembly, "    ldr x0, [sp, #16]");
@@ -219,6 +220,7 @@ fn emit_handler_text_expression(
                         "x2",
                         message.expect("validated counter message") as u64,
                     );
+                    emit_immediate(assembly, "x3", timeout_ms.unwrap_or(0));
                     assembly.call(format_args!("tinytsx_actor_ask_counter"));
                 }
                 ActorOperation::JsonMailbox => {
@@ -229,6 +231,7 @@ fn emit_handler_text_expression(
                         "x3",
                         program.static_strings[message].value.len() as u64,
                     );
+                    emit_immediate(assembly, "x4", timeout_ms.unwrap_or(0));
                     assembly.call(format_args!("tinytsx_actor_ask_json"));
                 }
             }

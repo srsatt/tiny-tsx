@@ -507,6 +507,12 @@ Hono” task.
     Generic runtime tests also prove isolated state, panic containment with a
     later successful message, and cross-actor parallelism. Deadlines/timeouts,
     restart policy, and supervision remain open.
+  - 2026-07-17: `ask(message, {timeoutMs})` now accepts a static 1–60,000 ms
+    deadline across the SDK, HIR, Apple/Linux code generation, and runtime. A
+    deterministic blocked-handler test proves timeout detaches the waiter
+    without retracting the accepted FIFO message; the public Hono tracer proves
+    a successful bounded ask. Automatic HTTP-disconnect cancellation, restart
+    policy, and supervision remain open.
 - [x] Measure 1,000 and 10,000 idle/local actors, publish bytes per actor and
       thread count, and prove cross-actor parallelism and fairness under a hot
       mailbox before raising the documented actor-count limit.

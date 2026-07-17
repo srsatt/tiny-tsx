@@ -289,14 +289,18 @@ function validateResourceCall(
   if (["ask", "tell"].includes(operation)) {
     const message = invocation.arguments[0];
     if (
-      invocation.arguments.length !== 1
+      invocation.arguments.length < 1
+      || invocation.arguments.length > (operation === "ask" ? 2 : 1)
       || message === undefined
       || !isStaticActorValue(message)
+      || operation === "ask" && !validActorAskOptions(invocation.arguments[1])
     ) {
       addDiagnostic(
         diagnostics,
         "TINY1521",
-        `ActorRef.${operation} requires one bounded static message`,
+        operation === "ask"
+          ? "ActorRef.ask requires one bounded static message and optional timeoutMs from 1 through 60000"
+          : "ActorRef.tell requires one bounded static message",
         invocation,
         sourceFile,
       );
@@ -317,6 +321,19 @@ function validateResourceCall(
     sourceFile,
     "use ask, tell, stop, or dispose from `tinytsx --list-builtins`",
   );
+}
+
+function validActorAskOptions(options: ts.Expression | undefined): boolean {
+  if (options === undefined) return true;
+  if (!ts.isObjectLiteralExpression(options) || options.properties.length !== 1) return false;
+  const property = options.properties[0];
+  if (
+    property === undefined
+    || !ts.isPropertyAssignment(property)
+    || property.name.getText() !== "timeoutMs"
+  ) return false;
+  const timeout = staticInteger(property.initializer);
+  return timeout !== undefined && timeout >= 1 && timeout <= 60_000;
 }
 
 function validateActorSpawn(

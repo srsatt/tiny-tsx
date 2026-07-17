@@ -152,6 +152,12 @@ messages are capped at 4,096 bytes, eight nested levels, 64 array items, and 32
 record fields. Every actor has a compile-time mailbox capacity from 1 through
 64 and remains a local logical worker, not one native thread.
 
+`ask(message, {timeoutMs})` optionally bounds the caller wait with a static
+1–60,000 ms deadline. Timeout detaches the reply receiver and produces the
+recoverable overload response; an already accepted FIFO message is not
+retracted and may still update actor state. Automatic HTTP-disconnect
+cancellation is not implemented.
+
 Dynamic request-derived messages, arbitrary behaviors, supervision, value
 identity/transfer, and general persistence are not native. The optional
 SQLite-backed counter persistence specialization has process-restart evidence;

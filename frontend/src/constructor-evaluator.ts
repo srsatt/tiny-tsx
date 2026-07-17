@@ -1633,7 +1633,8 @@ function sameResponseHeaderValue(left: ResponseHeaderValue, right: ResponseHeade
     if (part.kind === "actorCall") {
       return candidate?.kind === "actorCall"
         && candidate.actor.key === part.actor.key
-        && candidate.message === part.message;
+        && candidate.message === part.message
+        && candidate.timeoutMs === part.timeoutMs;
     }
     if (part.kind === "sqliteQuery") {
       return candidate?.kind === "sqliteQuery"
@@ -2414,18 +2415,29 @@ function evaluateCall(
     }
     if (receiver.kind === "actor" && name === "ask") {
       const message = arguments_[0];
-      if (arguments_.length !== 1 || message === undefined) {
-        return unknown("ActorRef.ask requires one closed message");
+      const timeoutMs = actorAskTimeout(arguments_[1]);
+      if (arguments_.length < 1 || arguments_.length > 2 || message === undefined || timeoutMs === undefined) {
+        return unknown("ActorRef.ask requires one closed message and optional bounded timeoutMs");
       }
       if (receiver.state.operation === "counter") {
         return message.kind === "number" && Number.isSafeInteger(message.value)
-          ? {kind: "actorCall", actor: receiver.state, message: message.value}
+          ? {
+            kind: "actorCall",
+            actor: receiver.state,
+            message: message.value,
+            ...(timeoutMs === 0 ? {} : {timeoutMs}),
+          }
           : unknown("CounterActorRef.ask requires one closed integer message");
       }
       const json = boundedActorJson(message);
       if (json === undefined) return unknown("ValueActorRef.ask requires one bounded closed JSON message");
       markValueEscape(evaluator.memory, message, "message");
-      return {kind: "actorCall", actor: receiver.state, message: json};
+      return {
+        kind: "actorCall",
+        actor: receiver.state,
+        message: json,
+        ...(timeoutMs === 0 ? {} : {timeoutMs}),
+      };
     }
     if (receiver.kind === "actor" && name === "tell") {
       const message = arguments_[0];
@@ -3059,6 +3071,18 @@ function evaluateCall(
         : ""
     }`,
   );
+}
+
+function actorAskTimeout(options: Value | undefined): number | undefined {
+  if (options === undefined) return 0;
+  if (options.kind !== "record" || options.fields.size !== 1) return undefined;
+  const timeout = options.fields.get("timeoutMs");
+  return timeout?.kind === "number"
+    && Number.isSafeInteger(timeout.value)
+    && timeout.value >= 1
+    && timeout.value <= 60_000
+    ? timeout.value
+    : undefined;
 }
 
 function isEnvironmentBuiltin(value: Value & {kind: "reference"}): boolean {

@@ -30,6 +30,7 @@ test("serves a local counter actor with ordered ask, tell, and idempotent stop",
   await assertResponse(port, "/", 200, "0");
   await assertResponse(port, "/increment", 200, "1");
   await assertResponse(port, "/decrement", 200, "0");
+  await assertResponse(port, "/bounded", 200, "0");
   await assertResponse(port, "/tell", 200, "queued");
   await assertResponse(port, "/", 200, "2");
   await assertResponse(port, "/stop", 200, "stopped");

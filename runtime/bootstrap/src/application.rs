@@ -7,7 +7,7 @@ use std::{
 };
 
 use tinytsx_runtime_sqlite::{Connection, SqlValue};
-use tinytsx_runtime_worker::{ApplicationPool, CallError, LogicalWorker, PostError};
+use tinytsx_runtime_worker::{ApplicationPool, CallError, LogicalWorker, PostError, ReplyError};
 
 use crate::abi::{
     APPLICATION_OVERLOAD, INTERNAL_ERROR, OpenAiTransport, RENDER_ERROR, actor_initial_json,
@@ -364,12 +364,10 @@ pub fn read_file(path: &[u8], max_bytes: usize) -> Result<Vec<u8>, u32> {
         .map_err(|_| APPLICATION_OVERLOAD)?
 }
 
-pub fn ask_actor(actor: usize, message: i64) -> Result<Vec<u8>, u32> {
+pub fn ask_actor(actor: usize, message: i64, timeout_ms: u64) -> Result<Vec<u8>, u32> {
     let runtime = APPLICATION.get().ok_or(INTERNAL_ERROR)?;
     let actor = runtime.actors.get(actor).ok_or(INTERNAL_ERROR)?;
-    actor
-        .call(ApplicationMessage::ActorCounter(message))
-        .map_err(actor_call_status)?
+    call_actor(actor, ApplicationMessage::ActorCounter(message), timeout_ms)
 }
 
 pub fn tell_actor(actor: usize, message: i64) -> u32 {
@@ -385,12 +383,10 @@ pub fn tell_actor(actor: usize, message: i64) -> u32 {
     }
 }
 
-pub fn ask_actor_json(actor: usize, message: &[u8]) -> Result<Vec<u8>, u32> {
+pub fn ask_actor_json(actor: usize, message: &[u8], timeout_ms: u64) -> Result<Vec<u8>, u32> {
     let runtime = APPLICATION.get().ok_or(INTERNAL_ERROR)?;
     let actor = runtime.actors.get(actor).ok_or(INTERNAL_ERROR)?;
-    actor
-        .call(ApplicationMessage::ActorJson(message.to_vec()))
-        .map_err(actor_call_status)?
+    call_actor(actor, ApplicationMessage::ActorJson(message.to_vec()), timeout_ms)
 }
 
 pub fn tell_actor_json(actor: usize, message: &[u8]) -> u32 {
@@ -409,8 +405,22 @@ pub fn tell_actor_json(actor: usize, message: &[u8]) -> u32 {
 fn actor_call_status(error: CallError<ApplicationMessage>) -> u32 {
     match error {
         CallError::Post(error) => actor_post_status(error),
+        CallError::Reply(ReplyError::TimedOut) => APPLICATION_OVERLOAD,
         CallError::Reply(_) => RENDER_ERROR,
     }
+}
+
+fn call_actor(
+    actor: &Worker,
+    message: ApplicationMessage,
+    timeout_ms: u64,
+) -> Result<Vec<u8>, u32> {
+    let result = if timeout_ms == 0 {
+        actor.call(message)
+    } else {
+        actor.call_timeout(message, std::time::Duration::from_millis(timeout_ms))
+    };
+    result.map_err(actor_call_status)?
 }
 
 fn actor_post_status(error: PostError<ApplicationMessage>) -> u32 {
@@ -506,4 +516,17 @@ pub fn sqlite_query_json(
             parameters,
         })
         .map_err(actor_call_status)?
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn actor_timeout_is_a_recoverable_application_overload() {
+        assert_eq!(
+            actor_call_status(CallError::Reply(ReplyError::TimedOut)),
+            APPLICATION_OVERLOAD,
+        );
+    }
 }

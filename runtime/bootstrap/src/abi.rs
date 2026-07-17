@@ -410,11 +410,12 @@ pub unsafe extern "C" fn tinytsx_actor_ask_counter(
     writer: *mut TinyResponseWriter,
     actor: usize,
     message: i64,
+    timeout_ms: u64,
 ) -> u32 {
     if writer.is_null() {
         return INTERNAL_ERROR;
     }
-    match crate::application::ask_actor(actor, message) {
+    match crate::application::ask_actor(actor, message, timeout_ms) {
         Ok(output) => unsafe { tinytsx_html_write_static(writer, output.as_ptr(), output.len()) },
         Err(status) => {
             // SAFETY: the writer was validated above.
@@ -435,13 +436,14 @@ pub unsafe extern "C" fn tinytsx_actor_ask_json(
     actor: usize,
     message: *const u8,
     message_len: usize,
+    timeout_ms: u64,
 ) -> u32 {
     if writer.is_null() || message.is_null() || message_len == 0 || message_len > 4_096 {
         return INTERNAL_ERROR;
     }
     // SAFETY: Generated static message bytes are valid for the synchronous copy.
     let message = unsafe { slice::from_raw_parts(message, message_len) };
-    match crate::application::ask_actor_json(actor, message) {
+    match crate::application::ask_actor_json(actor, message, timeout_ms) {
         Ok(output) => unsafe { tinytsx_html_write_static(writer, output.as_ptr(), output.len()) },
         Err(status) => {
             // SAFETY: the writer was validated above.

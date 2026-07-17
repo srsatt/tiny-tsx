@@ -45,7 +45,7 @@ export type Value =
   | {kind: "environmentBindings"}
   | {kind: "fileText"; path: string; maxBytes: number}
   | {kind: "actor"; state: ActorState}
-  | {kind: "actorCall"; actor: ActorState; message: number | string}
+  | {kind: "actorCall"; actor: ActorState; message: number | string; timeoutMs?: number}
   | {kind: "database"; state: DatabaseState}
   | {kind: "statement"; state: StatementState}
   | {kind: "sqliteQuery"; statement: StatementState; mode: "all" | "first"; parameters: SqliteParameter[]}
@@ -91,7 +91,7 @@ export type RuntimeStringPart =
   | {kind: "requestCookie"; name: string; fallback: string | undefined}
   | {kind: "environmentVariable"; name: string; required: boolean; fallback: string | undefined}
   | {kind: "fileText"; path: string; maxBytes: number}
-  | {kind: "actorCall"; actor: ActorState; message: number | string}
+  | {kind: "actorCall"; actor: ActorState; message: number | string; timeoutMs?: number}
   | {kind: "sqliteQuery"; statement: StatementState; mode: "all" | "first"; parameters: SqliteParameter[]}
   | {kind: "queryParameter"; name: string; fallback: string | undefined; escapeHtml: boolean}
   | {kind: "fetchStatus"; url: string}
@@ -424,7 +424,12 @@ export function runtimeStringParts(value: Value): RuntimeStringPart[] | undefine
       fallback: value.fallback,
     }];
     case "fileText": return [{kind: "fileText", path: value.path, maxBytes: value.maxBytes}];
-    case "actorCall": return [{kind: "actorCall", actor: value.actor, message: value.message}];
+    case "actorCall": return [{
+      kind: "actorCall",
+      actor: value.actor,
+      message: value.message,
+      ...(value.timeoutMs === undefined ? {} : {timeoutMs: value.timeoutMs}),
+    }];
     case "sqliteQuery": return [{
       kind: "sqliteQuery",
       statement: value.statement,

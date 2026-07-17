@@ -101,6 +101,25 @@ produces and serves a native Mach-O executable from the example TSX source.
 - Raw JSON and rendered reports are the two
   `benchmarks/results/2026-07-17-m5-max-stable-hono-actor-*` pairs.
 
+### Bounded actor ask deadlines (2026-07-17)
+
+- `CounterActorRef` and `ValueActorRef` accept
+  `ask(message, {timeoutMs})` with a compile-time integer from 1 through 60,000.
+  The timeout flows through typed HIR, Apple/Linux AArch64 calls, and the
+  application mailbox; omitted options preserve the original unbounded wait.
+- Timeout detaches only the reply waiter. A deterministic worker test blocks an
+  active handler, lets a queued call time out, then proves that accepted message
+  still executes in FIFO order and updates state. The timeout maps to the
+  recoverable application-overload response rather than terminating the actor
+  or server.
+- The Hono counter tracer adds a successful one-second bounded ask. Stable
+  `TINY1521` diagnostics reject zero, values above 60 seconds, dynamic options,
+  and extra fields; Linux assembly and the linked Apple native suite exercise
+  the extended ABI.
+- Verification: 114 frontend tests, 55 bootstrap tests, 9 focused application
+  worker tests, 6 actor native/assembly tests, and workspace Clippy with
+  warnings denied.
+
 ### Installed alpha example and failure gates (2026-07-17)
 
 - Every Hono example-manifest row names native and reference scripts reachable

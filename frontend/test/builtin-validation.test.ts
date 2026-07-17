@@ -68,6 +68,41 @@ test("uses stable diagnostics for unsupported actor configuration and calls", ()
 
   expectCode(`
     import {spawn} from "tinytsx:actors";
+    const counter = spawn((context, delta: number) => String(context.state += delta), 0);
+    const options = {timeoutMs: 25};
+    counter.ask(1, options);
+    export function GET(): Response { return Response.text("ok"); }
+  `, "TINY1521");
+
+  expectCode(`
+    import {spawn} from "tinytsx:actors";
+    const counter = spawn((context, delta: number) => String(context.state += delta), 0);
+    counter.ask(1, {timeoutMs: 25, signal: null});
+    export function GET(): Response { return Response.text("ok"); }
+  `, "TINY1521");
+
+  expectCode(`
+    import {spawn} from "tinytsx:actors";
+    const counter = spawn((context, delta: number) => {
+      context.state += delta;
+      return String(context.state);
+    }, 0);
+    counter.ask(1, {timeoutMs: 0});
+    export function GET(): Response { return Response.text("ok"); }
+  `, "TINY1521");
+
+  expectCode(`
+    import {spawn} from "tinytsx:actors";
+    const counter = spawn((context, delta: number) => {
+      context.state += delta;
+      return String(context.state);
+    }, 0);
+    counter.ask(1, {timeoutMs: 60001});
+    export function GET(): Response { return Response.text("ok"); }
+  `, "TINY1521");
+
+  expectCode(`
+    import {spawn} from "tinytsx:actors";
     const mailbox = spawn((context, message: readonly number[]) => {
       context.state = message;
       return JSON.stringify(context.state);

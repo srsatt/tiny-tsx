@@ -345,7 +345,7 @@ test("lowers a bounded counter actor with ask, tell, and stop", () => {
       return String(context.state);
     }, 0);
     const app = new Hono();
-    app.get("/ask", async context => context.text(await counter.ask(1)));
+    app.get("/ask", async context => context.text(await counter.ask(1, {timeoutMs: 25})));
     app.get("/tell", context => {
       counter.tell(2);
       return context.text("queued");
@@ -372,7 +372,7 @@ test("lowers a bounded counter actor with ask, tell, and stop", () => {
     ? hir.handlers[0].response.value
     : undefined, {
     kind: "concat",
-    values: [{kind: "actorCall", actor: 0, message: 1, span: hir.handlers[0]?.span}],
+    values: [{kind: "actorCall", actor: 0, message: 1, timeoutMs: 25, span: hir.handlers[0]?.span}],
     span: hir.handlers[0]?.span,
   });
   assert.deepEqual(hir.handlers[1]?.actorActions, [{kind: "tell", actor: 0, message: 2}]);

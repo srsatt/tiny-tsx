@@ -793,6 +793,7 @@ function lowerRuntimeString(
           ...(typeof part.message === "number"
             ? {message: part.message}
             : {jsonMessage: strings.intern(part.message)}),
+          ...(part.timeoutMs === undefined ? {} : {timeoutMs: part.timeoutMs}),
           span,
         };
       }

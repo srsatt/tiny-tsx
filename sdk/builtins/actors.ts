@@ -24,15 +24,19 @@ export interface ValueActorOptions {
   mailboxCapacity?: number;
 }
 
+export interface ActorAskOptions {
+  timeoutMs: number;
+}
+
 export interface ValueActorRef<Message extends ActorValue> {
-  ask(message: Message): Promise<string>;
+  ask(message: Message, options?: ActorAskOptions): Promise<string>;
   tell(message: Message): void;
   stop(): void;
   dispose(): void;
 }
 
 export interface CounterActorRef {
-  ask(message: number): Promise<string>;
+  ask(message: number, options?: ActorAskOptions): Promise<string>;
   tell(message: number): void;
   stop(): void;
   dispose(): void;

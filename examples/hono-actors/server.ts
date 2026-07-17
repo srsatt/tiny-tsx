@@ -12,6 +12,7 @@ const app = new Hono();
 app.get("/", async context => context.text(await counter.ask(0)));
 app.get("/increment", async context => context.text(await counter.ask(1)));
 app.get("/decrement", async context => context.text(await counter.ask(-1)));
+app.get("/bounded", async context => context.text(await counter.ask(0, {timeoutMs: 1_000})));
 app.get("/tell", context => {
   counter.tell(2);
   return context.text("queued");

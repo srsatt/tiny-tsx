@@ -455,6 +455,8 @@ pub enum ValueExpression {
         message: Option<i64>,
         #[serde(default, rename = "jsonMessage")]
         json_message: Option<usize>,
+        #[serde(default, rename = "timeoutMs")]
+        timeout_ms: Option<u64>,
         span: SourceSpan,
     },
     SqliteQuery {
@@ -1590,12 +1592,16 @@ impl Program {
                 actor,
                 message,
                 json_message,
+                timeout_ms,
                 ..
             } => {
                 if *actor >= self.actors.len() {
                     return Err("actor call references a missing actor".to_owned());
                 }
                 self.validate_actor_message(*actor, *message, *json_message)?;
+                if timeout_ms.is_some_and(|timeout| timeout == 0 || timeout > 60_000) {
+                    return Err("actor ask timeoutMs is outside the native limit".to_owned());
+                }
                 Ok(())
             }
             ValueExpression::SqliteQuery {

@@ -219,6 +219,7 @@ export type ValueExpression =
       actor: number;
       message?: number;
       jsonMessage?: number;
+      timeoutMs?: number;
       span: SourceSpan;
     }
   | {
