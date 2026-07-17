@@ -32,22 +32,22 @@ test("serializes an in-memory SQLite owner and recovers from SQL errors", async 
   await assertResponse(port, "/schema", 200, "ready");
   await assertGet(port, "/config", 200, "Tiny Blog");
   await assertCors(port);
-  await assertGet(port, "/posts", 200, '{"posts":[]}');
+  await assertGet(port, "/posts", 200, '{"posts":[],"ok":true}');
   await assertGet(port, "/first", 200, '{"post":null}');
   await assertResponse(port, "/seed", 201, "created");
-  await assertGet(port, "/posts", 200, '{"posts":[{"id":"morning","title":"Morning","body":null}]}');
+  await assertGet(port, "/posts", 200, '{"posts":[{"id":"morning","title":"Morning","body":null}],"ok":true}');
   await assertGet(port, "/first", 200, '{"post":{"id":"morning","title":"Morning","body":null}}');
-  await assertGet(port, "/posts/morning", 200, '{"post":{"id":"morning","title":"Morning","body":null}}');
+  await assertGet(port, "/posts/morning", 200, '{"post":{"id":"morning","title":"Morning","body":null},"ok":true}');
   await assertResponse(port, "/seed", 500, "internal server error");
   await assertResponse(port, "/bad-sql", 500, "internal server error");
   await assertResponse(port, "/schema", 200, "ready");
-  await assertMethod(port, "/posts/morning", "DELETE", 200, "deleted");
-  await assertGet(port, "/posts", 200, '{"posts":[]}');
+  await assertMethod(port, "/posts/morning", "DELETE", 200, '{"ok":true}');
+  await assertGet(port, "/posts", 200, '{"posts":[],"ok":true}');
   await assertResponse(port, "/seed", 201, "created");
   const created = await createPost(port, {title: "Night", body: "Good Night"});
   const second = await createPost(port, {title: "Dawn", body: "Good Dawn"});
   assert.notEqual(second.id, created.id);
-  await assertMethod(port, `/posts/${second.id}`, "DELETE", 200, "deleted");
+  await assertMethod(port, `/posts/${second.id}`, "DELETE", 200, '{"ok":true}');
   await assertJson(port, "/posts", "POST", {title: "missing"}, 400, "bad request");
   await assertRawJson(port, "/posts", "POST", "{", 400, "bad request");
   await assertRawJson(
@@ -64,10 +64,19 @@ test("serializes an in-memory SQLite owner and recovers from SQL errors", async 
     "PUT",
     {title: "Late Night", body: "Still Night"},
     200,
-    JSON.stringify({post: {id: created.id, title: "Late Night", body: "Still Night"}}),
+    '{"ok":true}',
   );
-  await assertMethod(port, `/posts/${created.id}`, "DELETE", 200, "deleted");
-  await assertGet(port, `/posts/${created.id}`, 200, '{"post":null}');
+  await assertMethod(port, `/posts/${created.id}`, "DELETE", 200, '{"ok":true}');
+  await assertGet(port, `/posts/${created.id}`, 404, '{"error":"Not Found","ok":false}');
+  await assertMethod(port, `/posts/${created.id}`, "DELETE", 204, "");
+  await assertJson(
+    port,
+    `/posts/${created.id}`,
+    "PUT",
+    {title: "Missing", body: "Missing"},
+    204,
+    "",
+  );
   await assertResponse(port, "/schema", 200, "ready");
   await assertResponse(port, "/close", 200, "closed");
   await assertResponse(port, "/close", 200, "closed");
@@ -155,7 +164,7 @@ async function assertCors(port) {
   const response = await fetch(`http://127.0.0.1:${port}/posts`);
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("access-control-allow-origin"), "*");
-  assert.deepEqual(await response.json(), {posts: []});
+  assert.deepEqual(await response.json(), {posts: [], ok: true});
 
   const preflight = await fetch(`http://127.0.0.1:${port}/posts`, {
     method: "OPTIONS",

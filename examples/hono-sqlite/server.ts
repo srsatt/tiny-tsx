@@ -31,25 +31,31 @@ app.post("/bad-sql", async context => {
   await database.exec("THIS IS NOT SQL");
   return context.text("unreachable");
 });
-app.get("/posts", async context => context.json({posts: await posts.all()}));
+app.get("/posts", async context => context.json({posts: await posts.all(), ok: true}));
 app.get("/first", async context => context.json({post: await posts.get()}));
-app.get("/posts/:id", async context => context.json({
-  post: await post.get([context.req.param("id")]),
-}));
+app.get("/posts/:id", async context => {
+  const selected = await post.get([context.req.param("id")]);
+  if (!selected) return context.json({error: "Not Found", ok: false}, 404);
+  return context.json({post: selected, ok: true});
+});
 app.post("/posts", async context => {
   const input = await context.req.json() as {title: string; body: string};
   const id = crypto.randomUUID();
   await createPost.run([id, input.title, input.body]);
-  return context.json({post: await latestPost.get()}, 201);
+  return context.json({post: await latestPost.get(), ok: true}, 201);
 });
 app.put("/posts/:id", async context => {
+  const selected = await post.get([context.req.param("id")]);
+  if (!selected) return new Response(null, {status: 204});
   const input = await context.req.json() as {title: string; body: string};
   await updatePost.run([input.title, input.body, context.req.param("id")]);
-  return context.json({post: await post.get([context.req.param("id")])});
+  return context.json({ok: true});
 });
 app.delete("/posts/:id", async context => {
+  const selected = await post.get([context.req.param("id")]);
+  if (!selected) return new Response(null, {status: 204});
   await deletePost.run([context.req.param("id")]);
-  return context.text("deleted");
+  return context.json({ok: true});
 });
 app.post("/close", context => {
   database.close();

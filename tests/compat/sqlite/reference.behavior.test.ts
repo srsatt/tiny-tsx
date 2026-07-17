@@ -21,23 +21,29 @@ const app = new Hono<{Bindings: Bindings}>();
 app.use("/posts/*", cors({allowHeaders: ["Content-Type"]}));
 app.get("/config", context => context.text(context.env.TINYTSX_BLOG_NAME));
 
-app.get("/posts", context => context.json({posts: posts.all()}));
-app.get("/posts/:id", context => context.json({
-  post: post.get(context.req.param("id")),
-}));
+app.get("/posts", context => context.json({posts: posts.all(), ok: true}));
+app.get("/posts/:id", context => {
+  const selected = post.get(context.req.param("id"));
+  if (!selected) return context.json({error: "Not Found", ok: false}, 404);
+  return context.json({post: selected, ok: true});
+});
 app.post("/posts", async context => {
   const input = await context.req.json<{title: string; body: string}>();
   createPost.run(crypto.randomUUID(), input.title, input.body);
-  return context.json({post: latestPost.get()}, 201);
+  return context.json({post: latestPost.get(), ok: true}, 201);
 });
 app.put("/posts/:id", async context => {
+  const selected = post.get(context.req.param("id"));
+  if (!selected) return new Response(null, {status: 204});
   const input = await context.req.json<{title: string; body: string}>();
   updatePost.run(input.title, input.body, context.req.param("id"));
-  return context.json({post: post.get(context.req.param("id"))});
+  return context.json({ok: true});
 });
 app.delete("/posts/:id", context => {
+  const selected = post.get(context.req.param("id"));
+  if (!selected) return new Response(null, {status: 204});
   deletePost.run(context.req.param("id"));
-  return context.text("deleted");
+  return context.json({ok: true});
 });
 
 describe("bounded SQLite Hono adapter reference", () => {
@@ -48,7 +54,7 @@ describe("bounded SQLite Hono adapter reference", () => {
   });
 
   test("matches the native create, list, get, update, delete, and missing contract", async () => {
-    expect(await json("GET", "/posts")).toEqual({status: 200, body: {posts: []}});
+    expect(await json("GET", "/posts")).toEqual({status: 200, body: {posts: [], ok: true}});
     const created = await json("POST", "/posts", {title: "Night", body: "Good Night"});
     expect(created.status).toBe(201);
     const createdPost = (created.body as {post: {id: string; title: string; body: string}}).post;
@@ -62,29 +68,39 @@ describe("bounded SQLite Hono adapter reference", () => {
     });
     expect(await json("GET", "/posts")).toEqual({
       status: 200,
-      body: {posts: [{id: createdPost.id, title: "Night", body: "Good Night"}]},
+      body: {posts: [{id: createdPost.id, title: "Night", body: "Good Night"}], ok: true},
     });
     expect(await json("GET", `/posts/${createdPost.id}`)).toEqual({
       status: 200,
-      body: {post: {id: createdPost.id, title: "Night", body: "Good Night"}},
+      body: {post: {id: createdPost.id, title: "Night", body: "Good Night"}, ok: true},
     });
     expect(await json("PUT", `/posts/${createdPost.id}`, {
       title: "Late Night",
       body: "Still Night",
     })).toEqual({
       status: 200,
-      body: {post: {id: createdPost.id, title: "Late Night", body: "Still Night"}},
+      body: {ok: true},
     });
 
     const removed = await app.request(`/posts/${createdPost.id}`, {method: "DELETE"});
     expect({status: removed.status, body: await removed.text()}).toEqual({
       status: 200,
-      body: "deleted",
+      body: '{"ok":true}',
     });
     expect(await json("GET", `/posts/${createdPost.id}`)).toEqual({
-      status: 200,
-      body: {post: null},
+      status: 404,
+      body: {error: "Not Found", ok: false},
     });
+    expect(await app.request(`/posts/${createdPost.id}`, {method: "DELETE"}).then(async response => ({
+      status: response.status,
+      body: await response.text(),
+    }))).toEqual({status: 204, body: ""});
+    expect(await app.request(`/posts/${createdPost.id}`, {
+      method: "PUT",
+      headers: {"content-type": "application/json"},
+      body: JSON.stringify({title: "Missing", body: "Missing"}),
+    }).then(async response => ({status: response.status, body: await response.text()})))
+      .toEqual({status: 204, body: ""});
   });
 
   test("matches the native default-origin CORS and preflight contract", async () => {
