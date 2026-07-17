@@ -223,7 +223,7 @@ dependencies = [
 
 [[package]]
 name = "tinytsx"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -231,7 +231,7 @@ dependencies = [
 
 [[package]]
 name = "tinytsx-runtime-bootstrap"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "serde_json",
  "tinytsx-runtime-sqlite",
@@ -240,21 +240,21 @@ dependencies = [
 
 [[package]]
 name = "tinytsx-runtime-sqlite"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "rusqlite",
 ]
 
 [[package]]
 name = "tinytsx-runtime-wasm"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "wasmi",
 ]
 
 [[package]]
 name = "tinytsx-runtime-worker"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 
 [[package]]
 name = "unicode-ident"

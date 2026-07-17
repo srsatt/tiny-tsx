@@ -12,6 +12,7 @@ Usage:
   tinytsx test262 <case.js> [--output path]
   tinytsx wpt <case.js> [--output path]
   tinytsx --list-builtins
+  tinytsx --version
 ";
 
 pub fn run(arguments: impl Iterator<Item = OsString>) -> Result<(), String> {
@@ -31,6 +32,14 @@ pub fn run(arguments: impl Iterator<Item = OsString>) -> Result<(), String> {
         Some("wpt") => wpt(&arguments[1..]),
         Some("--list-builtins") if arguments.len() == 1 => {
             println!("{}", builtins::json()?);
+            Ok(())
+        }
+        Some("--version") if arguments.len() == 1 => {
+            println!(
+                "tinytsx {}; hir=2; runtime-abi=1; target={}; builtins-schema=1; hono=v4.12.30@b2ae3a2204a48ce15a26448fd746d39745eb1837; hono-examples=3b0b6287; test262=f2d14356",
+                env!("CARGO_PKG_VERSION"),
+                Target::default_for_host(),
+            );
             Ok(())
         }
         Some("-h" | "--help") | None => {

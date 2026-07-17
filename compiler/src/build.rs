@@ -36,6 +36,9 @@ pub struct Options {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct BuildReport<'a> {
+    compiler_version: &'static str,
+    hir_version: u32,
+    runtime_abi_version: u32,
     target: &'a str,
     runtime: &'a str,
     binary_bytes: u64,
@@ -58,6 +61,15 @@ struct BuildReport<'a> {
     memory: &'a MemoryReport,
     runtime_features: Vec<&'a str>,
     permissions: BuildPermissions<'a>,
+    compatibility: CompatibilityRevisions,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CompatibilityRevisions {
+    hono: &'static str,
+    hono_examples: &'static str,
+    test262: &'static str,
 }
 
 #[derive(Serialize)]
@@ -94,8 +106,8 @@ pub fn execute(options: &Options) -> Result<PathBuf, String> {
         },
     )?;
 
-    let root = frontend::repository_root();
-    let temporary = temporary_directory(&root)?;
+    let root = frontend::resource_root()?;
+    let temporary = temporary_directory()?;
     let assembly_path = temporary.join("generated.s");
     let object_path = temporary.join("generated.o");
     fs::write(&assembly_path, &assembly)
@@ -139,13 +151,13 @@ pub fn execute(options: &Options) -> Result<PathBuf, String> {
     Ok(output)
 }
 
-fn temporary_directory(root: &Path) -> Result<PathBuf, String> {
+fn temporary_directory() -> Result<PathBuf, String> {
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|error| format!("system clock error: {error}"))?
         .as_nanos();
-    let path = root
-        .join(".tinytsx")
+    let path = std::env::temp_dir()
+        .join("tinytsx")
         .join(format!("build-{}-{timestamp}", std::process::id()));
     fs::create_dir_all(&path)
         .map_err(|error| format!("could not create {}: {error}", path.display()))?;
@@ -282,6 +294,9 @@ fn write_report(
         runtime_features.push("bounded-sqlite");
     }
     let report = BuildReport {
+        compiler_version: env!("CARGO_PKG_VERSION"),
+        hir_version: 2,
+        runtime_abi_version: 1,
         target: options.target.triple(),
         runtime: "bootstrap",
         binary_bytes,
@@ -307,6 +322,11 @@ fn write_report(
             environment: &options.allowed_environment,
             read: &options.allowed_read_roots,
             write: &options.allowed_write_roots,
+        },
+        compatibility: CompatibilityRevisions {
+            hono: "v4.12.30@b2ae3a2204a48ce15a26448fd746d39745eb1837",
+            hono_examples: "3b0b6287",
+            test262: "f2d14356",
         },
     };
     let json = serde_json::to_string_pretty(&report)

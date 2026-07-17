@@ -1,4 +1,4 @@
-use std::{path::PathBuf, process::Command};
+use std::{path::{Path, PathBuf}, process::Command};
 
 use crate::hir::Program;
 use crate::target::Target;
@@ -39,7 +39,7 @@ pub fn compile(
     allowed_read_roots: &[String],
     allowed_write_roots: &[String],
 ) -> Result<Compilation, String> {
-    let root = repository_root();
+    let root = resource_root()?;
     let script = root.join("frontend/dist/src/cli.js");
     if !script.is_file() {
         return Err(format!(
@@ -91,7 +91,7 @@ pub fn compile(
 }
 
 pub fn compile_test262(entry: &str) -> Result<Test262Compilation, String> {
-    let root = repository_root();
+    let root = resource_root()?;
     let script = root.join("frontend/dist/src/cli.js");
     if !script.is_file() {
         return Err(format!(
@@ -119,7 +119,7 @@ pub fn compile_test262(entry: &str) -> Result<Test262Compilation, String> {
 }
 
 pub fn compile_wpt(entry: &str) -> Result<WptCompilation, String> {
-    let root = repository_root();
+    let root = resource_root()?;
     let script = root.join("frontend/dist/src/cli.js");
     if !script.is_file() {
         return Err(format!(
@@ -151,4 +151,34 @@ pub fn repository_root() -> PathBuf {
         .parent()
         .expect("compiler crate must be inside the repository")
         .to_owned()
+}
+
+pub fn resource_root() -> Result<PathBuf, String> {
+    if let Some(root) = std::env::var_os("TINYTSX_HOME") {
+        return validate_resource_root(PathBuf::from(root));
+    }
+    if let Ok(executable) = std::env::current_exe()
+        && let Some(prefix) = executable.parent().and_then(Path::parent)
+    {
+        let installed = prefix.join("lib/tinytsx");
+        if installed.is_dir() {
+            return validate_resource_root(installed);
+        }
+    }
+    if cfg!(debug_assertions) {
+        return validate_resource_root(repository_root());
+    }
+    Err("TinyTSX resources were not found; install `lib/tinytsx` beside the binary or set TINYTSX_HOME".to_owned())
+}
+
+fn validate_resource_root(root: PathBuf) -> Result<PathBuf, String> {
+    for required in ["Cargo.toml", "Cargo.lock", "frontend/dist/src/cli.js", "sdk/index.d.ts"] {
+        if !root.join(required).is_file() {
+            return Err(format!(
+                "TinyTSX resource root `{}` is incomplete: missing `{required}`",
+                root.display(),
+            ));
+        }
+    }
+    Ok(root)
 }
