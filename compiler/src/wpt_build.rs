@@ -5,7 +5,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use crate::{frontend, wpt_codegen};
+use crate::{frontend, target::Target, wpt_codegen};
 
 pub struct Options {
     pub entry: String,
@@ -13,8 +13,9 @@ pub struct Options {
 }
 
 pub fn execute(options: &Options) -> Result<PathBuf, String> {
-    ensure_supported_host()?;
-    let compilation = frontend::compile_wpt(&options.entry)?;
+    let target = Target::host()?;
+    let mut compilation = frontend::compile_wpt(&options.entry)?;
+    compilation.program.target = target.triple().to_owned();
     let c_source = wpt_codegen::emit_c(&compilation.program)?;
     let temporary = temporary_directory(&frontend::repository_root())?;
     let source_path = temporary.join("wpt.c");
@@ -44,14 +45,6 @@ pub fn execute(options: &Options) -> Result<PathBuf, String> {
         output.display()
     );
     Ok(output)
-}
-
-fn ensure_supported_host() -> Result<(), String> {
-    if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
-        Ok(())
-    } else {
-        Err("native WPT builds currently require Apple Silicon macOS".to_owned())
-    }
 }
 
 fn temporary_directory(root: &Path) -> Result<PathBuf, String> {

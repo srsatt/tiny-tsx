@@ -1,23 +1,27 @@
 use std::fmt::Write;
 
+use crate::target::Target;
 use crate::test262_hir::{ArrayUnshiftOperation, Test262Assertion, Test262Program};
 
 const ARRAY_STACK_BYTES: usize = 144;
 const ARRAY_DATA_OFFSET: usize = 16;
 
-pub fn emit_macos_arm64(program: &Test262Program) -> Result<String, String> {
+pub fn emit(program: &Test262Program, target: Target) -> Result<String, String> {
     program.validate()?;
+    if program.target != target.triple() {
+        return Err(format!(
+            "Test262 HIR target `{}` does not match codegen target `{target}`",
+            program.target
+        ));
+    }
     let mut assembly = String::new();
-    writeln!(assembly, ".section __TEXT,__text,regular,pure_instructions").unwrap();
-    writeln!(assembly, ".p2align 2").unwrap();
-    writeln!(assembly, ".globl _main").unwrap();
-    writeln!(assembly, "_main:").unwrap();
+    emit_header(&mut assembly, target);
 
     for (index, assertion) in program.assertions.iter().enumerate() {
         match assertion {
             Test262Assertion::SameValueString {
                 actual, expected, ..
-            } => emit_same_value(&mut assembly, index, actual, expected),
+            } => emit_same_value(&mut assembly, target, index, actual, expected),
             Test262Assertion::ForThrowCounter {
                 initial,
                 threshold,
@@ -45,7 +49,7 @@ pub fn emit_macos_arm64(program: &Test262Program) -> Result<String, String> {
     writeln!(assembly, "    mov w0, #1").unwrap();
     writeln!(assembly, "    ret").unwrap();
 
-    writeln!(assembly, "\n.section __TEXT,__const").unwrap();
+    emit_data_header(&mut assembly, target);
     for (index, assertion) in program.assertions.iter().enumerate() {
         let Test262Assertion::SameValueString {
             actual, expected, ..
@@ -61,6 +65,34 @@ pub fn emit_macos_arm64(program: &Test262Program) -> Result<String, String> {
         emit_bytes(&mut assembly, expected.as_bytes());
     }
     Ok(assembly)
+}
+
+fn emit_header(assembly: &mut String, target: Target) {
+    match target {
+        Target::MacosArm64 => {
+            writeln!(assembly, ".section __TEXT,__text,regular,pure_instructions").unwrap();
+            writeln!(assembly, ".p2align 2").unwrap();
+            writeln!(assembly, ".globl _main").unwrap();
+            writeln!(assembly, "_main:").unwrap();
+        }
+        Target::LinuxArm64 => {
+            writeln!(assembly, ".section .text").unwrap();
+            writeln!(assembly, ".p2align 2").unwrap();
+            writeln!(assembly, ".globl main").unwrap();
+            writeln!(assembly, ".type main, %function").unwrap();
+            writeln!(assembly, "main:").unwrap();
+        }
+    }
+}
+
+fn emit_data_header(assembly: &mut String, target: Target) {
+    match target {
+        Target::MacosArm64 => writeln!(assembly, "\n.section __TEXT,__const").unwrap(),
+        Target::LinuxArm64 => {
+            writeln!(assembly, ".size main, .-main").unwrap();
+            writeln!(assembly, "\n.section .rodata").unwrap();
+        }
+    }
 }
 
 fn emit_array_unshift_program(
@@ -171,31 +203,29 @@ fn emit_array_unshift(
     writeln!(assembly, "    str x9, [sp, #8]").unwrap();
 }
 
-fn emit_same_value(assembly: &mut String, index: usize, actual: &str, expected: &str) {
+fn emit_same_value(
+    assembly: &mut String,
+    target: Target,
+    index: usize,
+    actual: &str,
+    expected: &str,
+) {
     if actual.len() != expected.len() {
         writeln!(assembly, "    b Ltinytsx_test262_fail").unwrap();
         return;
     }
-    writeln!(
+    emit_address(
         assembly,
-        "    adrp x0, Ltinytsx_test262_actual_{index}@PAGE"
-    )
-    .unwrap();
-    writeln!(
+        target,
+        "x0",
+        &format!("Ltinytsx_test262_actual_{index}"),
+    );
+    emit_address(
         assembly,
-        "    add x0, x0, Ltinytsx_test262_actual_{index}@PAGEOFF"
-    )
-    .unwrap();
-    writeln!(
-        assembly,
-        "    adrp x1, Ltinytsx_test262_expected_{index}@PAGE"
-    )
-    .unwrap();
-    writeln!(
-        assembly,
-        "    add x1, x1, Ltinytsx_test262_expected_{index}@PAGEOFF"
-    )
-    .unwrap();
+        target,
+        "x1",
+        &format!("Ltinytsx_test262_expected_{index}"),
+    );
     emit_immediate(assembly, "x2", actual.len() as u64);
     writeln!(assembly, "Ltinytsx_test262_compare_{index}:").unwrap();
     writeln!(assembly, "    cbz x2, Ltinytsx_test262_pass_{index}").unwrap();
@@ -206,6 +236,19 @@ fn emit_same_value(assembly: &mut String, index: usize, actual: &str, expected: 
     writeln!(assembly, "    sub x2, x2, #1").unwrap();
     writeln!(assembly, "    b Ltinytsx_test262_compare_{index}").unwrap();
     writeln!(assembly, "Ltinytsx_test262_pass_{index}:").unwrap();
+}
+
+fn emit_address(assembly: &mut String, target: Target, register: &str, label: &str) {
+    match target {
+        Target::MacosArm64 => {
+            writeln!(assembly, "    adrp {register}, {label}@PAGE").unwrap();
+            writeln!(assembly, "    add {register}, {register}, {label}@PAGEOFF").unwrap();
+        }
+        Target::LinuxArm64 => {
+            writeln!(assembly, "    adrp {register}, {label}").unwrap();
+            writeln!(assembly, "    add {register}, {register}, :lo12:{label}").unwrap();
+        }
+    }
 }
 
 fn emit_for_throw_counter(
@@ -260,3 +303,7 @@ fn emit_bytes(assembly: &mut String, bytes: &[u8]) {
         writeln!(assembly).unwrap();
     }
 }
+
+#[cfg(test)]
+#[path = "test262_codegen_tests.rs"]
+mod tests;

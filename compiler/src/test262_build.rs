@@ -5,7 +5,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use crate::{frontend, test262_codegen};
+use crate::{frontend, target::Target, test262_codegen};
 
 pub struct Options {
     pub entry: String,
@@ -13,9 +13,10 @@ pub struct Options {
 }
 
 pub fn execute(options: &Options) -> Result<PathBuf, String> {
-    ensure_supported_host()?;
-    let compilation = frontend::compile_test262(&options.entry)?;
-    let assembly = test262_codegen::emit_macos_arm64(&compilation.program)?;
+    let target = Target::host()?;
+    let mut compilation = frontend::compile_test262(&options.entry)?;
+    compilation.program.target = target.triple().to_owned();
+    let assembly = test262_codegen::emit(&compilation.program, target)?;
     let temporary = temporary_directory(&frontend::repository_root())?;
     let assembly_path = temporary.join("test262.s");
     let object_path = temporary.join("test262.o");
@@ -54,14 +55,6 @@ pub fn execute(options: &Options) -> Result<PathBuf, String> {
         output.display()
     );
     Ok(output)
-}
-
-fn ensure_supported_host() -> Result<(), String> {
-    if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
-        Ok(())
-    } else {
-        Err("native Test262 builds currently require Apple Silicon macOS".to_owned())
-    }
 }
 
 fn temporary_directory(root: &Path) -> Result<PathBuf, String> {

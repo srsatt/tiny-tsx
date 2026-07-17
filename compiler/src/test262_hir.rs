@@ -65,7 +65,10 @@ impl Test262Program {
         if self.version != 3 {
             return Err(format!("unsupported Test262 HIR version {}", self.version));
         }
-        if self.target != "aarch64-apple-darwin" {
+        if !matches!(
+            self.target.as_str(),
+            "aarch64-apple-darwin" | "aarch64-unknown-linux-gnu"
+        ) {
             return Err(format!("unsupported Test262 target `{}`", self.target));
         }
         if self.entry.is_empty() {

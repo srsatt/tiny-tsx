@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import {fileURLToPath} from "node:url";
+import {assertNativeExecutable} from "../native-format.mjs";
 
 const directory = path.dirname(fileURLToPath(import.meta.url));
 const repository = path.resolve(directory, "../../..");
@@ -35,7 +36,7 @@ for (const testCase of nativeCases) {
         ],
         {cwd: repository, stdio: "pipe"},
       );
-      assert.deepEqual(fs.readFileSync(binary).subarray(0, 4), Buffer.from([0xcf, 0xfa, 0xed, 0xfe]));
+      assertNativeExecutable(binary);
       execFileSync(binary, {stdio: "pipe"});
     } finally {
       fs.rmSync(temporary, {recursive: true, force: true});

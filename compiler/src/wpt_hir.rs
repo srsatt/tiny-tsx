@@ -141,7 +141,10 @@ impl WptProgram {
         if self.version != 3 {
             return Err(format!("unsupported WPT HIR version {}", self.version));
         }
-        if self.target != "aarch64-apple-darwin" {
+        if !matches!(
+            self.target.as_str(),
+            "aarch64-apple-darwin" | "aarch64-unknown-linux-gnu"
+        ) {
             return Err(format!("unsupported WPT target `{}`", self.target));
         }
         if self.entry.is_empty() {
