@@ -9,6 +9,7 @@ import {fileURLToPath} from "node:url";
 const repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const entry = path.join(repository, "examples/hono-actors/server.ts");
 const persistentEntry = path.join(repository, "examples/hono-actors/persistent.ts");
+const messagesEntry = path.join(repository, "examples/hono-actors/messages.ts");
 
 test("serves a local counter actor with ordered ask, tell, and idempotent stop", async context => {
   const directory = mkdtempSync(path.join(tmpdir(), "tinytsx-actors-native-"));
@@ -95,6 +96,42 @@ test("assembles the persistent actor tracer for Linux arm64", () => {
   assert.equal(assembled.status, 0, assembled.stderr);
 });
 
+test("copies bounded primitive array and record actor messages", async context => {
+  const directory = mkdtempSync(path.join(tmpdir(), "tinytsx-actor-messages-"));
+  const binary = path.join(directory, "server");
+  const port = 39_491;
+  context.after(() => rmSync(directory, {recursive: true, force: true}));
+
+  const result = buildMessages(binary, port);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const report = JSON.parse(readFileSync(`${binary}.build.json`, "utf8"));
+  assert.equal(report.actors, 3);
+
+  const server = spawn(binary, [], {stdio: ["ignore", "pipe", "pipe"]});
+  context.after(() => server.kill("SIGTERM"));
+  await waitForServer(port, server, "/primitive");
+  await assertResponse(port, "/primitive", 200, '"ready"');
+  await assertResponse(port, "/array", 200, '["ready","warm"]');
+  await assertResponse(port, "/tell", 200, "queued");
+  await assertResponse(port, "/record", 200, '{"status":"ready","tags":["one","two"]}');
+  await assertResponse(port, "/record", 200, '{"status":"ready","tags":["one","two"]}');
+});
+
+test("assembles bounded actor messages for Linux arm64", () => {
+  const result = spawnSync("cargo", [
+    "run", "-q", "-p", "tinytsx", "--", "check", messagesEntry,
+    "--emit-asm", "--target", "aarch64-unknown-linux-gnu",
+    "--alias", "hono=vendor/hono/src/index.ts",
+    "--api", "hono=tests/compat/hono/api.d.ts",
+  ], {cwd: repository, encoding: "utf8"});
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /tinytsx_actor_ask_json/);
+  const assembled = spawnSync("clang", [
+    "--target=aarch64-unknown-linux-gnu", "-x", "assembler", "-c", "-o", "/dev/null", "-",
+  ], {cwd: repository, input: result.stdout, encoding: "utf8"});
+  assert.equal(assembled.status, 0, assembled.stderr);
+});
+
 function build(binary, port) {
   return spawnSync("cargo", [
     "run", "-q", "-p", "tinytsx", "--", "build", entry,
@@ -117,17 +154,27 @@ function buildPersistent(binary, port, directory) {
   ], {cwd: repository, encoding: "utf8"});
 }
 
+function buildMessages(binary, port) {
+  return spawnSync("cargo", [
+    "run", "-q", "-p", "tinytsx", "--", "build", messagesEntry,
+    "--output", binary,
+    "--port", String(port),
+    "--alias", "hono=vendor/hono/src/index.ts",
+    "--api", "hono=tests/compat/hono/api.d.ts",
+  ], {cwd: repository, encoding: "utf8"});
+}
+
 async function assertResponse(port, pathname, status, body) {
   const response = await fetch(`http://127.0.0.1:${port}${pathname}`);
   assert.equal(response.status, status);
   assert.equal(await response.text(), body);
 }
 
-async function waitForServer(port, server) {
+async function waitForServer(port, server, pathname = "/") {
   for (let attempt = 0; attempt < 100; attempt++) {
     if (server.exitCode !== null) throw new Error(`native server exited with ${server.exitCode}`);
     try {
-      await fetch(`http://127.0.0.1:${port}/`);
+      await fetch(`http://127.0.0.1:${port}${pathname}`);
       return;
     } catch {
       await new Promise(resolve => setTimeout(resolve, 20));

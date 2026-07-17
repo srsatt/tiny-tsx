@@ -10,6 +10,27 @@ export interface ActorOptions {
   persistence?: {database: Database; key: string};
 }
 
+export type ActorPrimitive = string | number | boolean | null;
+export type ActorValue = ActorPrimitive | readonly ActorValue[] | {readonly [key: string]: ActorValue};
+
+export interface ValueActorContext<State extends ActorValue> {
+  state: State;
+}
+
+export type ValueActorBehavior<State extends ActorValue> =
+  (context: ValueActorContext<State>, message: State) => string;
+
+export interface ValueActorOptions {
+  mailboxCapacity?: number;
+}
+
+export interface ValueActorRef<Message extends ActorValue> {
+  ask(message: Message): Promise<string>;
+  tell(message: Message): void;
+  stop(): void;
+  dispose(): void;
+}
+
 export interface CounterActorRef {
   ask(message: number): Promise<string>;
   tell(message: number): void;
@@ -22,4 +43,10 @@ export declare function spawn(
   initialState: number,
   options?: ActorOptions,
 ): CounterActorRef;
+
+export declare function spawn<State extends ActorValue>(
+  behavior: ValueActorBehavior<State>,
+  initialState: State,
+  options?: ValueActorOptions,
+): ValueActorRef<State>;
 import type {Database} from "tinytsx:sqlite";

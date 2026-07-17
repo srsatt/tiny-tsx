@@ -45,7 +45,7 @@ export type Value =
   | {kind: "environmentBindings"}
   | {kind: "fileText"; path: string; maxBytes: number}
   | {kind: "actor"; state: ActorState}
-  | {kind: "actorCall"; actor: ActorState; message: number}
+  | {kind: "actorCall"; actor: ActorState; message: number | string}
   | {kind: "database"; state: DatabaseState}
   | {kind: "statement"; state: StatementState}
   | {kind: "sqliteQuery"; statement: StatementState; mode: "all" | "first"; parameters: SqliteParameter[]}
@@ -91,7 +91,7 @@ export type RuntimeStringPart =
   | {kind: "requestCookie"; name: string; fallback: string | undefined}
   | {kind: "environmentVariable"; name: string; required: boolean; fallback: string | undefined}
   | {kind: "fileText"; path: string; maxBytes: number}
-  | {kind: "actorCall"; actor: ActorState; message: number}
+  | {kind: "actorCall"; actor: ActorState; message: number | string}
   | {kind: "sqliteQuery"; statement: StatementState; mode: "all" | "first"; parameters: SqliteParameter[]}
   | {kind: "queryParameter"; name: string; fallback: string | undefined; escapeHtml: boolean}
   | {kind: "fetchStatus"; url: string}
@@ -111,8 +111,9 @@ export interface WorkerState {
 export interface ActorState {
   id: number;
   key: string;
-  operation: "counter";
+  operation: "counter" | "jsonMailbox";
   initialState: number;
+  initialJson?: string;
   mailboxCapacity: number;
   persistence?: {database: DatabaseState; key: string};
 }

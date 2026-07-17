@@ -10,9 +10,9 @@ use tinytsx_runtime_sqlite::{Connection, SqlValue};
 use tinytsx_runtime_worker::{ApplicationPool, CallError, LogicalWorker, PostError};
 
 use crate::abi::{
-    APPLICATION_OVERLOAD, INTERNAL_ERROR, OpenAiTransport, RENDER_ERROR, actor_initial_state,
-    actor_mailbox_capacity, actor_operation, actor_persistence_database, actor_persistence_key,
-    configured_actors, configured_provider_transport,
+    APPLICATION_OVERLOAD, INTERNAL_ERROR, OpenAiTransport, RENDER_ERROR, actor_initial_json,
+    actor_initial_state, actor_mailbox_capacity, actor_operation, actor_persistence_database,
+    actor_persistence_key, configured_actors, configured_provider_transport,
     configured_sqlite_database_path, configured_sqlite_databases, configured_worker_modules,
     worker_operation,
 };
@@ -30,6 +30,7 @@ enum ApplicationMessage {
     OpenAi(OpenAiRequest),
     ReadFile(ReadFileRequest),
     ActorCounter(i64),
+    ActorJson(Vec<u8>),
     SqliteExecuteBatch(Vec<u8>),
     SqliteTransaction(Vec<u8>),
     SqliteExecute {
@@ -58,6 +59,7 @@ struct WorkerState {
     operation: u32,
     actor_operation: u32,
     actor_counter: i64,
+    actor_json: Option<Result<Vec<u8>, u32>>,
     actor_persistence: Option<Result<ActorPersistence, u32>>,
     provider: OpenAiTransport,
     sqlite: Option<Result<Connection, u32>>,
@@ -165,6 +167,7 @@ pub fn initialize(executor_count: usize) -> io::Result<(usize, bool, bool)> {
                 .checked_sub(worker_count)
                 .filter(|actor| *actor < actor_count);
             let initial_state = actor.map_or(0, actor_initial_state);
+            let actor_operation = actor.map_or(0, actor_operation);
             let (actor_counter, actor_persistence) = initialize_actor_persistence(
                 actor,
                 initial_state,
@@ -172,8 +175,11 @@ pub fn initialize(executor_count: usize) -> io::Result<(usize, bool, bool)> {
             );
             WorkerState {
                 operation: worker_operation(id),
-                actor_operation: actor.map_or(0, actor_operation),
+                actor_operation,
                 actor_counter,
+                actor_json: actor
+                    .filter(|_| actor_operation == 2)
+                    .map(actor_initial_json),
                 actor_persistence,
                 provider: OpenAiTransport::default(),
                 sqlite: id
@@ -217,6 +223,19 @@ pub fn initialize(executor_count: usize) -> io::Result<(usize, bool, bool)> {
                 }
                 state.actor_counter = next;
                 Ok(next.to_string().into_bytes())
+            }
+            ApplicationMessage::ActorJson(message) => {
+                if state.actor_operation != 2 {
+                    return Err(INTERNAL_ERROR);
+                }
+                let value = state
+                    .actor_json
+                    .as_mut()
+                    .ok_or(INTERNAL_ERROR)?
+                    .as_mut()
+                    .map_err(|status| *status)?;
+                *value = message;
+                Ok(value.clone())
             }
             ApplicationMessage::SqliteExecuteBatch(sql) => {
                 let connection = state
@@ -361,6 +380,27 @@ pub fn tell_actor(actor: usize, message: i64) -> u32 {
         return INTERNAL_ERROR;
     };
     match actor.try_post(ApplicationMessage::ActorCounter(message)) {
+        Ok(_reply) => 0,
+        Err(error) => actor_post_status(error),
+    }
+}
+
+pub fn ask_actor_json(actor: usize, message: &[u8]) -> Result<Vec<u8>, u32> {
+    let runtime = APPLICATION.get().ok_or(INTERNAL_ERROR)?;
+    let actor = runtime.actors.get(actor).ok_or(INTERNAL_ERROR)?;
+    actor
+        .call(ApplicationMessage::ActorJson(message.to_vec()))
+        .map_err(actor_call_status)?
+}
+
+pub fn tell_actor_json(actor: usize, message: &[u8]) -> u32 {
+    let Some(runtime) = APPLICATION.get() else {
+        return INTERNAL_ERROR;
+    };
+    let Some(actor) = runtime.actors.get(actor) else {
+        return INTERNAL_ERROR;
+    };
+    match actor.try_post(ApplicationMessage::ActorJson(message.to_vec())) {
         Ok(_reply) => 0,
         Err(error) => actor_post_status(error),
     }

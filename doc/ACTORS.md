@@ -5,7 +5,7 @@ application executor. They are local to one native process. An actor does not
 own an operating-system thread, has no network identity, and is not a
 Cloudflare Durable Object or an Erlang-compatible distributed process.
 
-## Alpha counter surface
+## Native actor surface
 
 The first native slice is intentionally narrow. `tinytsx:actors` exposes
 `spawn`, a typed `CounterActorRef`, and `ask`, `tell`, `stop`, and `dispose`.
@@ -32,19 +32,42 @@ loads the stored signed integer or inserts the declared initial state. Each
 successful actor message writes the next value before publishing it as
 in-memory state, so a failed write cannot move memory ahead of disk.
 
-The initial state and messages are signed integers. State addition is checked,
-and replies are decimal strings. The behavior, initial state, and mailbox
-capacity must be known during compilation. Other behaviors and structured
-messages remain unsupported until their copying and ownership rules are
-implemented.
+Counter initial state and messages are signed integers. State addition is
+checked, and replies are decimal strings. The behavior, initial state, and
+mailbox capacity must be known during compilation.
+
+The post-alpha source tree also admits one exact typed value-mailbox behavior:
+
+```ts
+const mailbox = spawn((context, message: Status) => {
+  context.state = message;
+  return JSON.stringify(context.state);
+}, {status: "idle", tags: []});
+```
+
+`Status` may contain `string`, safe-integer `number`, `boolean`, `null`, closed
+records, and arrays. Values are limited to eight nested levels, 64 array items,
+32 record fields, 128 UTF-8 bytes per field name, 1,024 UTF-8 bytes per string,
+and 4,096 canonical JSON bytes per complete message. Initial state and messages
+must be closed at compile time. Spreads, cycles, dynamic request values, object
+identity, transfer semantics, and persistence for this value behavior are
+rejected with `TINY1520` or `TINY1521`.
+
+The generated server copies each static JSON message into an owned mailbox
+buffer before returning to the HTTP executor. The actor replaces its own state
+buffer and clones the reply into request-owned response memory. Consequently,
+the sender, mailbox, actor state, and response do not alias one another and no
+managed JavaScript heap is required. This is a bounded value-copy contract,
+not a general JavaScript object or arbitrary behavior runtime.
 
 ## Identity, state, and ordering
 
 Each source `spawn` site creates one process-local actor during application
 startup. Its numeric HIR identity is stable within that compiled artifact but
-is not a persistent or public identifier. State is an actor-owned native `i64`
-stored for the process lifetime; it never enters request memory and cannot be
-shared by handlers.
+is not a persistent or public identifier. Counter state is an actor-owned
+native `i64`; value-mailbox state is an owned bounded byte vector. Both live for
+the process lifetime, never enter request memory, and cannot be shared by
+handlers.
 
 Every actor has one FIFO mailbox. The default and release maximum capacity is
 64 queued messages; `mailboxCapacity` may lower it to a compile-time integer in
@@ -107,8 +130,13 @@ capability-scoped SQLite database. Native HTTP drives it to 2, terminates the
 process, restarts the same binary at 2, and advances to 3. The program also
 assembles for Linux arm64.
 
-Before actors can carry general application state, TinyTSX still needs bounded
-copying for primitives, closed records, and bounded arrays; per-actor scale and
-hot-mailbox throughput measurements; timeout/cancellation policy; panic and
-isolation tests beyond the generic runtime; and persistence for arbitrary actor
-behaviors outside the counter specialization.
+`examples/hono-actors/messages.ts` proves the copied value-mailbox contract for
+a primitive, a bounded array, and a nested closed record through native Hono
+HTTP routes on Apple arm64 and assembles the same paths for Linux arm64. Stable
+diagnostic tests reject dynamic messages and exceeded array/string limits.
+
+Before actors can carry general request-derived application state, TinyTSX
+still needs a runtime expression/value representation for dynamic messages;
+hot-mailbox throughput measurements; timeout/cancellation policy; persistence
+for arbitrary actor behaviors outside the counter specialization; and any
+explicit identity or transfer model.

@@ -139,14 +139,20 @@ transactions, and typed execute results are post-alpha.
 
 ### `tinytsx:actors`
 
-The native alpha slice is the compile-time-known signed-integer counter
-documented in `doc/ACTORS.md`. It provides typed `ask`, bounded fire-and-forget
-`tell`, and idempotent `stop`/`dispose` on the fixed application pool. Each
-actor owns one native `i64`, returns decimal text, and has a compile-time mailbox
-capacity from 1 through 64. Actors are local logical workers, not one native
-thread each. Structured messages, arbitrary behaviors, supervision, and
-general persistence are not native. The optional documented SQLite-backed
-counter persistence specialization is native and has process-restart evidence.
+The native surface includes the compile-time-known signed-integer counter and
+one exact typed value-mailbox behavior documented in `doc/ACTORS.md`. Both
+provide typed `ask`, bounded fire-and-forget `tell`, and idempotent
+`stop`/`dispose` on the fixed application pool. A counter owns one native `i64`;
+a value mailbox copies compile-time-known primitive, bounded-array, or
+closed-record messages into actor-owned canonical JSON bytes. Complete value
+messages are capped at 4,096 bytes, eight nested levels, 64 array items, and 32
+record fields. Every actor has a compile-time mailbox capacity from 1 through
+64 and remains a local logical worker, not one native thread.
+
+Dynamic request-derived messages, arbitrary behaviors, supervision, value
+identity/transfer, and general persistence are not native. The optional
+SQLite-backed counter persistence specialization has process-restart evidence;
+value-mailbox persistence is rejected.
 
 Post-alpha candidates are path utilities, signals, subprocesses, raw sockets,
 binary filesystem APIs, remote actors, and actor supervision trees.

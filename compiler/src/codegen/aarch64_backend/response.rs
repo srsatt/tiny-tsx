@@ -1,4 +1,4 @@
-use crate::hir::{HandlerResponse, Program, SqliteQueryMode, ValueExpression};
+use crate::hir::{ActorOperation, HandlerResponse, Program, SqliteQueryMode, ValueExpression};
 
 use super::super::{
     aarch64::{Emitter, HANDLER_SCRATCH_BASE, emit_immediate},
@@ -204,11 +204,34 @@ fn emit_handler_text_expression(
             emit_immediate(assembly, "x3", *max_bytes as u64);
             assembly.call(format_args!("tinytsx_html_write_file_text"));
         }
-        ValueExpression::ActorCall { actor, message, .. } => {
+        ValueExpression::ActorCall {
+            actor,
+            message,
+            json_message,
+            ..
+        } => {
             asm_line!(assembly, "    ldr x0, [sp, #16]");
             emit_immediate(assembly, "x1", *actor as u64);
-            emit_immediate(assembly, "x2", *message as u64);
-            assembly.call(format_args!("tinytsx_actor_ask_counter"));
+            match program.actors[*actor].operation {
+                ActorOperation::Counter => {
+                    emit_immediate(
+                        assembly,
+                        "x2",
+                        message.expect("validated counter message") as u64,
+                    );
+                    assembly.call(format_args!("tinytsx_actor_ask_counter"));
+                }
+                ActorOperation::JsonMailbox => {
+                    let message = json_message.expect("validated JSON message");
+                    assembly.address("x2", format_args!("Ltinytsx_string_{message}"));
+                    emit_immediate(
+                        assembly,
+                        "x3",
+                        program.static_strings[message].value.len() as u64,
+                    );
+                    assembly.call(format_args!("tinytsx_actor_ask_json"));
+                }
+            }
         }
         ValueExpression::SqliteQuery {
             database,

@@ -110,6 +110,8 @@ pub struct ActorModule {
     pub id: usize,
     pub operation: ActorOperation,
     pub initial_state: i64,
+    #[serde(default)]
+    pub initial_json: Option<usize>,
     pub mailbox_capacity: usize,
     #[serde(default)]
     pub persistence: Option<ActorPersistence>,
@@ -125,13 +127,22 @@ pub struct ActorPersistence {
 #[serde(rename_all = "camelCase")]
 pub enum ActorOperation {
     Counter,
+    JsonMailbox,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum ActorAction {
-    Tell { actor: usize, message: i64 },
-    Stop { actor: usize },
+    Tell {
+        actor: usize,
+        #[serde(default)]
+        message: Option<i64>,
+        #[serde(default, rename = "jsonMessage")]
+        json_message: Option<usize>,
+    },
+    Stop {
+        actor: usize,
+    },
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -440,7 +451,10 @@ pub enum ValueExpression {
     },
     ActorCall {
         actor: usize,
-        message: i64,
+        #[serde(default)]
+        message: Option<i64>,
+        #[serde(default, rename = "jsonMessage")]
+        json_message: Option<usize>,
         span: SourceSpan,
     },
     SqliteQuery {
@@ -664,6 +678,14 @@ impl Program {
                 if *actor >= self.actors.len() {
                     return Err("handler actor action references a missing actor".to_owned());
                 }
+                if let ActorAction::Tell {
+                    message,
+                    json_message,
+                    ..
+                } = action
+                {
+                    self.validate_actor_message(*actor, *message, *json_message)?;
+                }
             }
             for action in &handler.sqlite_actions {
                 let database = match action {
@@ -836,6 +858,25 @@ impl Program {
             }
             if actor.mailbox_capacity == 0 || actor.mailbox_capacity > 64 {
                 return Err(format!("actor {index} mailbox capacity is outside 1..=64"));
+            }
+            match actor.operation {
+                ActorOperation::Counter if actor.initial_json.is_some() => {
+                    return Err(format!("counter actor {index} has JSON initial state"));
+                }
+                ActorOperation::JsonMailbox => {
+                    let Some(initial) = actor
+                        .initial_json
+                        .and_then(|initial| self.static_strings.get(initial))
+                    else {
+                        return Err(format!("JSON actor {index} has no initial state"));
+                    };
+                    validate_actor_json(&initial.value)
+                        .map_err(|error| format!("JSON actor {index} initial state {error}"))?;
+                    if actor.persistence.is_some() {
+                        return Err(format!("JSON actor {index} cannot use counter persistence"));
+                    }
+                }
+                ActorOperation::Counter => {}
             }
             if let Some(persistence) = &actor.persistence {
                 if persistence.database >= self.sqlite_databases.len() {
@@ -1280,6 +1321,33 @@ impl Program {
         Ok(())
     }
 
+    fn validate_actor_message(
+        &self,
+        actor: usize,
+        message: Option<i64>,
+        json_message: Option<usize>,
+    ) -> Result<(), String> {
+        let Some(actor) = self.actors.get(actor) else {
+            return Err("actor message references a missing actor".to_owned());
+        };
+        match actor.operation {
+            ActorOperation::Counter if message.is_some() && json_message.is_none() => Ok(()),
+            ActorOperation::JsonMailbox if message.is_none() => {
+                let Some(message) =
+                    json_message.and_then(|message| self.static_strings.get(message))
+                else {
+                    return Err("JSON actor message references a missing static string".to_owned());
+                };
+                validate_actor_json(&message.value)
+                    .map_err(|error| format!("JSON actor message {error}"))
+            }
+            ActorOperation::Counter => Err("counter actor requires one integer message".to_owned()),
+            ActorOperation::JsonMailbox => {
+                Err("JSON actor requires one static JSON message".to_owned())
+            }
+        }
+    }
+
     fn validate_sqlite_parameters(
         &self,
         parameters: &[SqliteParameter],
@@ -1518,10 +1586,16 @@ impl Program {
                 }
                 Ok(())
             }
-            ValueExpression::ActorCall { actor, .. } => {
+            ValueExpression::ActorCall {
+                actor,
+                message,
+                json_message,
+                ..
+            } => {
                 if *actor >= self.actors.len() {
                     return Err("actor call references a missing actor".to_owned());
                 }
+                self.validate_actor_message(*actor, *message, *json_message)?;
                 Ok(())
             }
             ValueExpression::SqliteQuery {
@@ -2303,6 +2377,59 @@ fn validate_constant_value(value: &ConstantValue, depth: usize) -> Result<(), St
     }
 }
 
+fn validate_actor_json(input: &str) -> Result<(), String> {
+    if input.is_empty() || input.len() > 4_096 {
+        return Err("is outside the 1..=4096 byte limit".to_owned());
+    }
+    let value: serde_json::Value =
+        serde_json::from_str(input).map_err(|_| "is not valid JSON".to_owned())?;
+    validate_actor_json_value(&value, 0)
+}
+
+fn validate_actor_json_value(value: &serde_json::Value, depth: usize) -> Result<(), String> {
+    if depth > 8 {
+        return Err("exceeds 8 nested levels".to_owned());
+    }
+    match value {
+        serde_json::Value::Null | serde_json::Value::Bool(_) => Ok(()),
+        serde_json::Value::String(value) if value.len() <= 1_024 => Ok(()),
+        serde_json::Value::String(_) => Err("contains a string larger than 1024 bytes".to_owned()),
+        serde_json::Value::Number(value) => {
+            const MAX_SAFE_INTEGER: u64 = 9_007_199_254_740_991;
+            let safe = value
+                .as_i64()
+                .map(|value| value.unsigned_abs() <= MAX_SAFE_INTEGER)
+                .or_else(|| value.as_u64().map(|value| value <= MAX_SAFE_INTEGER))
+                .unwrap_or(false);
+            if safe {
+                Ok(())
+            } else {
+                Err("contains a non-safe integer".to_owned())
+            }
+        }
+        serde_json::Value::Array(items) => {
+            if items.len() > 64 {
+                return Err("contains an array larger than 64 items".to_owned());
+            }
+            items
+                .iter()
+                .try_for_each(|item| validate_actor_json_value(item, depth + 1))
+        }
+        serde_json::Value::Object(fields) => {
+            if fields.len() > 32 {
+                return Err("contains a record larger than 32 fields".to_owned());
+            }
+            for (name, field) in fields {
+                if name.len() > 128 {
+                    return Err("contains a field name larger than 128 bytes".to_owned());
+                }
+                validate_actor_json_value(field, depth + 1)?;
+            }
+            Ok(())
+        }
+    }
+}
+
 fn is_canonical_bigint(value: &str) -> bool {
     if value == "0" {
         return true;
@@ -2360,5 +2487,29 @@ mod memory_tests {
             validate_memory_report(&memory, &modules),
             Err("memory summary does not match allocation sites".to_owned()),
         );
+    }
+}
+
+#[cfg(test)]
+mod actor_json_tests {
+    use super::*;
+
+    #[test]
+    fn accepts_the_bounded_actor_value_shape() {
+        assert_eq!(
+            validate_actor_json(r#"{"ready":true,"count":3,"tags":["one",null]}"#),
+            Ok(()),
+        );
+    }
+
+    #[test]
+    fn rejects_values_outside_the_actor_contract() {
+        let oversized_array = format!("[{}]", vec!["0"; 65].join(","));
+        let oversized_string = serde_json::to_string(&"x".repeat(1_025)).unwrap();
+
+        assert!(validate_actor_json("{not-json}").is_err());
+        assert!(validate_actor_json("1.5").is_err());
+        assert!(validate_actor_json(&oversized_array).is_err());
+        assert!(validate_actor_json(&oversized_string).is_err());
     }
 }

@@ -1,4 +1,6 @@
-use crate::hir::{ActorAction, GuardedResponse, HandlerResponse, Program, SqliteAction};
+use crate::hir::{
+    ActorAction, ActorOperation, GuardedResponse, HandlerResponse, Program, SqliteAction,
+};
 
 use super::super::{
     aarch64::{
@@ -270,10 +272,32 @@ pub(super) fn emit_handlers(assembly: &mut Emitter, program: &Program) -> Result
         }
         for action in &handler.actor_actions {
             match action {
-                ActorAction::Tell { actor, message } => {
+                ActorAction::Tell {
+                    actor,
+                    message,
+                    json_message,
+                } => {
                     emit_immediate(assembly, "x0", *actor as u64);
-                    emit_immediate(assembly, "x1", *message as u64);
-                    assembly.call(format_args!("tinytsx_actor_tell_counter"));
+                    match program.actors[*actor].operation {
+                        ActorOperation::Counter => {
+                            emit_immediate(
+                                assembly,
+                                "x1",
+                                message.expect("validated counter message") as u64,
+                            );
+                            assembly.call(format_args!("tinytsx_actor_tell_counter"));
+                        }
+                        ActorOperation::JsonMailbox => {
+                            let message = json_message.expect("validated JSON message");
+                            assembly.address("x1", format_args!("Ltinytsx_string_{message}"));
+                            emit_immediate(
+                                assembly,
+                                "x2",
+                                program.static_strings[message].value.len() as u64,
+                            );
+                            assembly.call(format_args!("tinytsx_actor_tell_json"));
+                        }
+                    }
                 }
                 ActorAction::Stop { actor } => {
                     emit_immediate(assembly, "x0", *actor as u64);

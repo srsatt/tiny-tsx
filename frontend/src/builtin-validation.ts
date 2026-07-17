@@ -291,12 +291,12 @@ function validateResourceCall(
     if (
       invocation.arguments.length !== 1
       || message === undefined
-      || staticInteger(message) === undefined
+      || !isStaticActorValue(message)
     ) {
       addDiagnostic(
         diagnostics,
         "TINY1521",
-        `CounterActorRef.${operation} requires one static signed integer message`,
+        `ActorRef.${operation} requires one bounded static message`,
         invocation,
         sourceFile,
       );
@@ -331,25 +331,97 @@ function validateActorSpawn(
   const initialState = arguments_?.[1];
   const options = arguments_?.[2];
   const validBehavior = behavior !== undefined
-    && (ts.isIdentifier(behavior) || isCounterBehavior(behavior));
+    && (ts.isIdentifier(behavior) || isCounterBehavior(behavior) || isJsonMailboxBehavior(behavior));
   if (
     arguments_ === undefined
     || arguments_.length < 2
     || arguments_.length > 3
     || !validBehavior
     || initialState === undefined
-    || staticInteger(initialState) === undefined
+    || !isStaticActorValue(initialState)
     || !validActorOptions(options, resources)
   ) {
     addDiagnostic(
       diagnostics,
       "TINY1520",
-      "actor spawn requires the bounded counter behavior, a static signed integer state, mailbox capacity 1..64, and optional bounded persistence",
+      "actor spawn requires a bounded counter or JSON-mailbox behavior, static state, and mailbox capacity 1..64",
       node,
       sourceFile,
       "use spawn((context, delta) => { context.state += delta; return String(context.state) }, initialState, options)",
     );
   }
+}
+
+function isJsonMailboxBehavior(expression: ts.Expression): boolean {
+  if (!ts.isArrowFunction(expression) && !ts.isFunctionExpression(expression)) return false;
+  if (expression.parameters.length !== 2 || !ts.isBlock(expression.body)) return false;
+  const context = expression.parameters[0]?.name;
+  const message = expression.parameters[1]?.name;
+  if (!context || !message || !ts.isIdentifier(context) || !ts.isIdentifier(message)) return false;
+  const [assignment, returned] = expression.body.statements;
+  return expression.body.statements.length === 2
+    && assignment !== undefined
+    && ts.isExpressionStatement(assignment)
+    && ts.isBinaryExpression(assignment.expression)
+    && assignment.expression.operatorToken.kind === ts.SyntaxKind.EqualsToken
+    && isStateAccess(assignment.expression.left, context.text)
+    && ts.isIdentifier(assignment.expression.right)
+    && assignment.expression.right.text === message.text
+    && returned !== undefined
+    && ts.isReturnStatement(returned)
+    && returned.expression !== undefined
+    && ts.isCallExpression(returned.expression)
+    && ts.isPropertyAccessExpression(returned.expression.expression)
+    && ts.isIdentifier(returned.expression.expression.expression)
+    && returned.expression.expression.expression.text === "JSON"
+    && returned.expression.expression.name.text === "stringify"
+    && returned.expression.arguments.length === 1
+    && isStateAccess(returned.expression.arguments[0]!, context.text);
+}
+
+function isStaticActorValue(expression: ts.Expression, depth = 0): boolean {
+  const json = staticActorJson(expression, depth);
+  return json !== undefined && Buffer.byteLength(json, "utf8") <= 4_096;
+}
+
+function staticActorJson(expression: ts.Expression, depth: number): string | undefined {
+  if (depth > 8) return undefined;
+  const value = ts.isAsExpression(expression) || ts.isTypeAssertionExpression(expression)
+    ? expression.expression
+    : expression;
+  if (ts.isStringLiteral(value) || ts.isNoSubstitutionTemplateLiteral(value)) {
+    return Buffer.byteLength(value.text, "utf8") <= 1_024
+      ? JSON.stringify(value.text)
+      : undefined;
+  }
+  if (value.kind === ts.SyntaxKind.TrueKeyword) return "true";
+  if (value.kind === ts.SyntaxKind.FalseKeyword) return "false";
+  if (value.kind === ts.SyntaxKind.NullKeyword) return "null";
+  const integer = staticInteger(value);
+  if (integer !== undefined) return JSON.stringify(integer);
+  if (ts.isArrayLiteralExpression(value)) {
+    if (value.elements.length > 64 || value.elements.some(ts.isSpreadElement)) return undefined;
+    const items = value.elements.map(element => staticActorJson(element, depth + 1));
+    return items.some(item => item === undefined) ? undefined : `[${items.join(",")}]`;
+  }
+  if (!ts.isObjectLiteralExpression(value) || value.properties.length > 32) return undefined;
+  const fields: string[] = [];
+  for (const property of value.properties) {
+    if (!ts.isPropertyAssignment(property)) return undefined;
+    const name = staticActorFieldName(property.name);
+    const field = staticActorJson(property.initializer, depth + 1);
+    if (name === undefined || Buffer.byteLength(name, "utf8") > 128 || field === undefined) {
+      return undefined;
+    }
+    fields.push(`${JSON.stringify(name)}:${field}`);
+  }
+  return `{${fields.join(",")}}`;
+}
+
+function staticActorFieldName(name: ts.PropertyName): string | undefined {
+  return ts.isIdentifier(name) || ts.isStringLiteral(name) || ts.isNumericLiteral(name)
+    ? name.text
+    : undefined;
 }
 
 function validActorOptions(

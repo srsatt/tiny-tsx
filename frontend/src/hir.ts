@@ -61,8 +61,9 @@ export interface WorkerModule {
 
 export interface ActorModule {
   id: number;
-  operation: "counter";
+  operation: "counter" | "jsonMailbox";
   initialState: number;
+  initialJson?: number;
   mailboxCapacity: number;
   persistence?: {database: number; key: string};
 }
@@ -73,7 +74,7 @@ export interface SqliteDatabase {
 }
 
 export type ActorAction =
-  | {kind: "tell"; actor: number; message: number}
+  | {kind: "tell"; actor: number; message?: number; jsonMessage?: number}
   | {kind: "stop"; actor: number};
 
 export type SqliteAction =
@@ -216,7 +217,8 @@ export type ValueExpression =
   | {
       kind: "actorCall";
       actor: number;
-      message: number;
+      message?: number;
+      jsonMessage?: number;
       span: SourceSpan;
     }
   | {

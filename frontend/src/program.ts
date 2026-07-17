@@ -442,7 +442,13 @@ function lowerApplicationInitialization(
       ...(response.actorActions === undefined || response.actorActions.length === 0
         ? {}
         : {actorActions: response.actorActions.map(action => action.kind === "tell"
-          ? {kind: "tell" as const, actor: action.actor.id, message: action.message!}
+          ? {
+            kind: "tell" as const,
+            actor: action.actor.id,
+            ...(typeof action.message === "number"
+              ? {message: action.message}
+              : {jsonMessage: strings.intern(action.message!)}),
+          }
           : {kind: "stop" as const, actor: action.actor.id})}),
       ...(response.databaseActions === undefined || response.databaseActions.length === 0
         ? {}
@@ -478,6 +484,7 @@ function lowerApplicationInitialization(
       id: actor.id,
       operation: actor.operation,
       initialState: actor.initialState,
+      ...(actor.initialJson === undefined ? {} : {initialJson: strings.intern(actor.initialJson)}),
       mailboxCapacity: actor.mailboxCapacity,
       ...(actor.persistence === undefined
         ? {}
@@ -783,7 +790,9 @@ function lowerRuntimeString(
         return {
           kind: "actorCall" as const,
           actor: part.actor.id,
-          message: part.message,
+          ...(typeof part.message === "number"
+            ? {message: part.message}
+            : {jsonMessage: strings.intern(part.message)}),
           span,
         };
       }

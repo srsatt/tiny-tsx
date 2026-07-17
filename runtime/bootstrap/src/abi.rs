@@ -189,6 +189,11 @@ unsafe extern "C" {
     ) -> u32;
     pub fn tinytsx_actor_operation(actor: usize) -> u32;
     pub fn tinytsx_actor_initial_state(actor: usize) -> i64;
+    pub fn tinytsx_actor_initial_json(
+        actor: usize,
+        pointer: *mut *const u8,
+        length: *mut usize,
+    ) -> u32;
     pub fn tinytsx_actor_mailbox_capacity(actor: usize) -> usize;
     pub fn tinytsx_actor_persistence_database(actor: usize) -> usize;
     pub fn tinytsx_actor_persistence_key(
@@ -287,6 +292,15 @@ unsafe extern "C" fn tinytsx_actor_operation(_actor: usize) -> u32 {
 #[cfg(not(feature = "generated"))]
 unsafe extern "C" fn tinytsx_actor_initial_state(_actor: usize) -> i64 {
     0
+}
+
+#[cfg(not(feature = "generated"))]
+unsafe extern "C" fn tinytsx_actor_initial_json(
+    _actor: usize,
+    _pointer: *mut *const u8,
+    _length: *mut usize,
+) -> u32 {
+    INTERNAL_ERROR
 }
 
 #[cfg(not(feature = "generated"))]
@@ -413,6 +427,42 @@ pub unsafe extern "C" fn tinytsx_actor_ask_counter(
 #[unsafe(no_mangle)]
 pub extern "C" fn tinytsx_actor_tell_counter(actor: usize, message: i64) -> u32 {
     crate::application::tell_actor(actor, message)
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tinytsx_actor_ask_json(
+    writer: *mut TinyResponseWriter,
+    actor: usize,
+    message: *const u8,
+    message_len: usize,
+) -> u32 {
+    if writer.is_null() || message.is_null() || message_len == 0 || message_len > 4_096 {
+        return INTERNAL_ERROR;
+    }
+    // SAFETY: Generated static message bytes are valid for the synchronous copy.
+    let message = unsafe { slice::from_raw_parts(message, message_len) };
+    match crate::application::ask_actor_json(actor, message) {
+        Ok(output) => unsafe { tinytsx_html_write_static(writer, output.as_ptr(), output.len()) },
+        Err(status) => {
+            // SAFETY: the writer was validated above.
+            unsafe { (*writer).status = status };
+            status
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tinytsx_actor_tell_json(
+    actor: usize,
+    message: *const u8,
+    message_len: usize,
+) -> u32 {
+    if message.is_null() || message_len == 0 || message_len > 4_096 {
+        return INTERNAL_ERROR;
+    }
+    // SAFETY: Generated static message bytes are valid for the synchronous copy.
+    let message = unsafe { slice::from_raw_parts(message, message_len) };
+    crate::application::tell_actor_json(actor, message)
 }
 
 #[unsafe(no_mangle)]
@@ -2551,6 +2601,21 @@ pub fn actor_operation(actor: usize) -> u32 {
 pub fn actor_initial_state(actor: usize) -> i64 {
     // SAFETY: The generated object returns zero for an invalid actor.
     unsafe { tinytsx_actor_initial_state(actor) }
+}
+
+pub fn actor_initial_json(actor: usize) -> Result<Vec<u8>, u32> {
+    let mut pointer = ptr::null();
+    let mut length = 0;
+    // SAFETY: The generated object writes one immutable static JSON view.
+    let status = unsafe { tinytsx_actor_initial_json(actor, &mut pointer, &mut length) };
+    if status != OK {
+        return Err(status);
+    }
+    if pointer.is_null() || length == 0 || length > 4_096 {
+        return Err(INTERNAL_ERROR);
+    }
+    // SAFETY: Successful generated configuration points at `length` static bytes.
+    Ok(unsafe { slice::from_raw_parts(pointer, length) }.to_vec())
 }
 
 pub fn actor_mailbox_capacity(actor: usize) -> usize {

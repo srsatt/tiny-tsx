@@ -379,6 +379,42 @@ test("lowers a bounded counter actor with ask, tell, and stop", () => {
   assert.deepEqual(hir.handlers[2]?.actorActions, [{kind: "stop", actor: 0}]);
 });
 
+test("lowers bounded primitive array and record actor messages", () => {
+  const entry = path.join(repository, "examples/hono-actors/messages.ts");
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+    apiAliases: {hono: path.join(repository, "tests/compat/hono/api.d.ts")},
+  });
+
+  assert.deepEqual(hir.actors.map(actor => ({
+    operation: actor.operation,
+    initial: actor.initialJson === undefined ? undefined : hir.staticStrings[actor.initialJson]?.value,
+    mailboxCapacity: actor.mailboxCapacity,
+  })), [
+    {operation: "jsonMailbox", initial: '"idle"', mailboxCapacity: 64},
+    {operation: "jsonMailbox", initial: '["idle"]', mailboxCapacity: 64},
+    {operation: "jsonMailbox", initial: '{"status":"idle","tags":[]}', mailboxCapacity: 64},
+  ]);
+  assert.deepEqual(hir.handlers.map(handler => {
+    const response = handler.response.kind === "text" ? handler.response.value : undefined;
+    const call = response?.kind === "concat" ? response.values[0] : undefined;
+    return call?.kind === "actorCall" && call.jsonMessage !== undefined
+      ? hir.staticStrings[call.jsonMessage]?.value
+      : undefined;
+  }), [
+    '"ready"',
+    '["ready","warm"]',
+    undefined,
+    '{"status":"ready","tags":["one","two"]}',
+  ]);
+  assert.deepEqual(hir.handlers[2]?.actorActions?.map(action => action.kind === "tell"
+    && action.jsonMessage !== undefined
+    ? hir.staticStrings[action.jsonMessage]?.value
+    : undefined), ['{"status":"queued","tags":["fire-and-forget"]}']);
+  assert.ok(hir.memory.summary.message >= 4);
+});
+
 test("binds a counter actor to a capability-scoped SQLite owner", () => {
   const entry = write("persistent-actor-lowering.ts", `
     import {spawn} from "tinytsx:actors";

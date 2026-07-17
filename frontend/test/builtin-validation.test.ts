@@ -65,6 +65,34 @@ test("uses stable diagnostics for unsupported actor configuration and calls", ()
     counter.restart();
     export function GET(): Response { return Response.text("ok"); }
   `, "TINY1521");
+
+  expectCode(`
+    import {spawn} from "tinytsx:actors";
+    const mailbox = spawn((context, message: readonly number[]) => {
+      context.state = message;
+      return JSON.stringify(context.state);
+    }, [${Array.from({length: 65}, (_, index) => index).join(", ")}]);
+    export function GET(): Response { return Response.text("ok"); }
+  `, "TINY1520");
+
+  expectCode(`
+    import {spawn} from "tinytsx:actors";
+    const mailbox = spawn((context, message: string) => {
+      context.state = message;
+      return JSON.stringify(context.state);
+    }, "idle");
+    function send(message: string): void { mailbox.ask(message); }
+    export function GET(): Response { return Response.text("ok"); }
+  `, "TINY1521");
+
+  expectCode(`
+    import {spawn} from "tinytsx:actors";
+    const mailbox = spawn((context, message: string) => {
+      context.state = message;
+      return JSON.stringify(context.state);
+    }, "${"x".repeat(1_025)}");
+    export function GET(): Response { return Response.text("ok"); }
+  `, "TINY1520");
 });
 
 function expectCode(

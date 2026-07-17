@@ -85,7 +85,7 @@ fn manifest() -> Manifest {
                 permissions: &[],
                 limits: Limits {
                     mailbox_messages: Some(64),
-                    value_bytes: Some(65_536),
+                    value_bytes: Some(4_096),
                     ..empty_limits()
                 },
             },

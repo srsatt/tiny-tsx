@@ -68,6 +68,13 @@ per logical worker with no shared objects. A conservative collector may be a
 useful experiment, but accidental retention and process-wide thread scanning
 make it a poor default until measurements say otherwise.
 
+The first structured actor-message slice stays inside this profile. Closed
+primitive, array, and record values are serialized during compilation; the
+runtime copies at most 4,096 bytes into the mailbox, moves that owned buffer
+into actor state, and clones the reply into request output. The HIR memory report
+marks the source value as a message escape. No runtime aliases or cyclic graph
+survive delivery, so this evidence does not cross the managed-heap gate.
+
 The first executable light-lambda slice does not allocate an environment:
 closed local function values with direct-parent immutable string captures are
 lambda-lifted into ordinary native functions, and captures become explicit

@@ -139,6 +139,19 @@
       "firstUnsupportedBoundary": "The adapter proves bounded in-memory CRUD, prepared body/route/UUID values, wildcard-origin CORS, a typed string environment binding, pinned success envelopes, and missing-record 404/204 behavior; a separate native adapter proves disk persistence and static transactions, while platform resource bindings and general transaction callbacks are out of scope."
     },
     {
+      "id": "tinytsx-actors-messages",
+      "provenance": "tinytsx-local",
+      "entry": "examples/hono-actors/messages.ts",
+      "imports": ["hono", "@hono/node-server", "tinytsx:actors"],
+      "apis": ["Hono", "get", "serve", "spawn", "ValueActorRef.ask", "ValueActorRef.tell"],
+      "intake": {"status": "pass", "evidence": "frontend/test/compatibility-audit.test.ts"},
+      "nativeCompile": {"appleArm64": "pass", "linuxArm64Assembly": "pass", "evidence": "tests/compat/actors/native.test.mjs"},
+      "httpBehavior": {"status": "pass", "evidence": "tests/compat/actors/native.test.mjs"},
+      "referenceBehavior": {"runtime": "not-applicable", "status": "not-applicable", "evidence": "doc/ACTORS.md"},
+      "releaseGates": {"native": ["test:actors-native"], "reference": []},
+      "firstUnsupportedBoundary": "Only the exact replace-state-and-JSON-stringify behavior accepts compile-time-known primitives, arrays, and closed records within the documented copy limits; request-derived messages, identity/transfer, arbitrary behaviors, and value persistence are unsupported."
+    },
+    {
       "id": "upstream-durable-objects-counter",
       "provenance": "upstream-contract-with-tinytsx-adapter",
       "entry": "examples/hono-actors/server.ts",
@@ -150,7 +163,7 @@
       "httpBehavior": {"status": "pass", "evidence": "tests/compat/actors/native.test.mjs"},
       "referenceBehavior": {"runtime": "not-applicable", "status": "not-applicable", "evidence": "doc/ACTORS.md"},
       "releaseGates": {"native": ["test:actors-native"], "reference": []},
-      "firstUnsupportedBoundary": "The adapters prove an in-memory and optional SQLite-persistent local signed-integer counter only; Cloudflare bindings, alarms, remote identity, arbitrary persistent actor behaviors, and structured messages are out of scope."
+      "firstUnsupportedBoundary": "The adapters prove an in-memory and optional SQLite-persistent local signed-integer counter only; Cloudflare bindings, alarms, remote identity, arbitrary persistent actor behaviors, and request-derived messages are out of scope."
     }
   ],
   "behaviorAllowlist": [

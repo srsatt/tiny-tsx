@@ -23,7 +23,7 @@ test("uses the pinned Hono examples revision", () => {
   assert.equal(revision, manifest.upstream.commit);
 });
 
-test("records the alpha example matrix with executable evidence and boundaries", () => {
+test("records the example matrix with executable evidence and boundaries", () => {
   const required = [
     "upstream-basic",
     "upstream-jsx-ssr",
@@ -35,6 +35,7 @@ test("records the alpha example matrix with executable evidence and boundaries",
     "upstream-serve-static",
     "tinytsx-sqlite-owner",
     "upstream-blog",
+    "tinytsx-actors-messages",
     "upstream-durable-objects-counter",
   ];
   assert.deepEqual(manifest.matrix.map(row => row.id), required);

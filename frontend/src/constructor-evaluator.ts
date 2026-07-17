@@ -120,7 +120,7 @@ export interface EvaluatedSqliteExistence {
 export interface EvaluatedActorAction {
   kind: "tell" | "stop";
   actor: ActorState;
-  message?: number;
+  message?: number | string;
 }
 
 export interface EvaluatedDatabaseAction {
@@ -2295,12 +2295,17 @@ function evaluateCall(
           && Buffer.byteLength(persistenceKey.value, "utf8") <= 128
           ? {database: persistenceDatabase.state, key: persistenceKey.value}
           : null;
+      const counter = behavior?.kind === "closure"
+        && initialState?.kind === "number"
+        && Number.isSafeInteger(initialState.value)
+        && isCounterActorBehavior(behavior);
+      const initialJson = behavior?.kind === "closure" && isJsonMailboxActorBehavior(behavior)
+        ? boundedActorJson(initialState)
+        : undefined;
       if (
         arguments_.length < 2
         || arguments_.length > 3
         || behavior?.kind !== "closure"
-        || initialState?.kind !== "number"
-        || !Number.isSafeInteger(initialState.value)
         || mailboxCapacity === undefined
         || !Number.isSafeInteger(mailboxCapacity)
         || mailboxCapacity < 1
@@ -2308,9 +2313,10 @@ function evaluateCall(
         || optionFields === undefined
         || [...optionFields.keys()].some(name => name !== "mailboxCapacity" && name !== "persistence")
         || persistence === null
-        || !isCounterActorBehavior(behavior)
+        || (!counter && initialJson === undefined)
+        || (initialJson !== undefined && persistence !== undefined)
       ) {
-        return unknown("actor spawn requires the bounded counter behavior, integer state, and mailbox capacity up to 64");
+        return unknown("actor spawn requires a bounded counter or JSON-mailbox behavior and mailbox capacity up to 64");
       }
       const key = `${module.path}:${call.getStart(module.sourceFile)}`;
       let state = evaluator.actors.get(key);
@@ -2318,8 +2324,9 @@ function evaluateCall(
         state = {
           id: evaluator.actors.size,
           key,
-          operation: "counter",
-          initialState: initialState.value,
+          operation: counter ? "counter" : "jsonMailbox",
+          initialState: counter ? initialState.value : 0,
+          ...(initialJson === undefined ? {} : {initialJson}),
           mailboxCapacity,
           ...(persistence === undefined ? {} : {persistence}),
         };
@@ -2407,21 +2414,37 @@ function evaluateCall(
     }
     if (receiver.kind === "actor" && name === "ask") {
       const message = arguments_[0];
-      return arguments_.length === 1
-        && message?.kind === "number"
-        && Number.isSafeInteger(message.value)
-        ? {kind: "actorCall", actor: receiver.state, message: message.value}
-        : unknown("ActorRef.ask requires one closed integer message");
+      if (arguments_.length !== 1 || message === undefined) {
+        return unknown("ActorRef.ask requires one closed message");
+      }
+      if (receiver.state.operation === "counter") {
+        return message.kind === "number" && Number.isSafeInteger(message.value)
+          ? {kind: "actorCall", actor: receiver.state, message: message.value}
+          : unknown("CounterActorRef.ask requires one closed integer message");
+      }
+      const json = boundedActorJson(message);
+      if (json === undefined) return unknown("ValueActorRef.ask requires one bounded closed JSON message");
+      markValueEscape(evaluator.memory, message, "message");
+      return {kind: "actorCall", actor: receiver.state, message: json};
     }
     if (receiver.kind === "actor" && name === "tell") {
       const message = arguments_[0];
-      if (arguments_.length !== 1 || message?.kind !== "number" || !Number.isSafeInteger(message.value)) {
-        return unknown("ActorRef.tell requires one closed integer message");
+      if (arguments_.length !== 1 || message === undefined) {
+        return unknown("ActorRef.tell requires one closed message");
       }
+      const lowered = receiver.state.operation === "counter"
+        ? message.kind === "number" && Number.isSafeInteger(message.value) ? message.value : undefined
+        : boundedActorJson(message);
+      if (lowered === undefined) {
+        return unknown(receiver.state.operation === "counter"
+          ? "CounterActorRef.tell requires one closed integer message"
+          : "ValueActorRef.tell requires one bounded closed JSON message");
+      }
+      if (receiver.state.operation === "jsonMailbox") markValueEscape(evaluator.memory, message, "message");
       appendActorAction(evaluator, instance, {
         kind: "tell",
         actor: receiver.state,
-        message: message.value,
+        message: lowered,
       });
       return UNDEFINED;
     }
@@ -3091,6 +3114,70 @@ function isCounterActorBehavior(value: Value & {kind: "closure"}): boolean {
     && result.expression.text === "String"
     && result.arguments.length === 1
     && isActorStateAccess(result.arguments[0]!, context.text);
+}
+
+function isJsonMailboxActorBehavior(value: Value & {kind: "closure"}): boolean {
+  const expression = value.expression;
+  const body = expression.body;
+  if (expression.parameters.length !== 2 || body === undefined || !ts.isBlock(body)) return false;
+  const context = expression.parameters[0]?.name;
+  const message = expression.parameters[1]?.name;
+  if (!context || !message || !ts.isIdentifier(context) || !ts.isIdentifier(message)) return false;
+  const [assignment, returned] = body.statements;
+  if (
+    body.statements.length !== 2
+    || assignment === undefined
+    || !ts.isExpressionStatement(assignment)
+    || !ts.isBinaryExpression(assignment.expression)
+    || assignment.expression.operatorToken.kind !== ts.SyntaxKind.EqualsToken
+    || !isActorStateAccess(assignment.expression.left, context.text)
+    || !ts.isIdentifier(assignment.expression.right)
+    || assignment.expression.right.text !== message.text
+    || returned === undefined
+    || !ts.isReturnStatement(returned)
+    || returned.expression === undefined
+  ) return false;
+  const result = returned.expression;
+  return ts.isCallExpression(result)
+    && ts.isPropertyAccessExpression(result.expression)
+    && ts.isIdentifier(result.expression.expression)
+    && result.expression.expression.text === "JSON"
+    && result.expression.name.text === "stringify"
+    && result.arguments.length === 1
+    && isActorStateAccess(result.arguments[0]!, context.text);
+}
+
+function boundedActorJson(value: Value | undefined, depth = 0): string | undefined {
+  if (value === undefined || depth > 8) return undefined;
+  if (value.kind === "array") {
+    if (value.items.length > 64 || value.items.some(item => boundedActorJsonShape(item, depth + 1) === false)) {
+      return undefined;
+    }
+  } else if (value.kind === "record") {
+    if (value.fields.size > 32 || [...value.fields].some(([name, field]) =>
+      Buffer.byteLength(name, "utf8") > 128 || !boundedActorJsonShape(field, depth + 1)
+    )) return undefined;
+  } else if (!boundedActorJsonShape(value, depth)) {
+    return undefined;
+  }
+  const json = stringifyJson(value);
+  return json !== undefined && Buffer.byteLength(json, "utf8") <= 4_096 ? json : undefined;
+}
+
+function boundedActorJsonShape(value: Value, depth: number): boolean {
+  if (depth > 8) return false;
+  if (value.kind === "array") {
+    return value.items.length <= 64 && value.items.every(item => boundedActorJsonShape(item, depth + 1));
+  }
+  if (value.kind === "record") {
+    return value.fields.size <= 32 && [...value.fields].every(([name, field]) =>
+      Buffer.byteLength(name, "utf8") <= 128 && boundedActorJsonShape(field, depth + 1)
+    );
+  }
+  return value.kind === "null"
+    || value.kind === "boolean"
+    || value.kind === "string" && Buffer.byteLength(value.value, "utf8") <= 1_024
+    || value.kind === "number" && Number.isFinite(value.value) && Number.isSafeInteger(value.value);
 }
 
 function isActorStateAccess(expression: ts.Expression, context: string): boolean {

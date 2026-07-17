@@ -748,6 +748,23 @@ not a generic `Map`, and it is not yet wired into application-generated
 inputs from being misreported as compile-time record folding or a production
 Web API implementation.
 
+### Copied actor values
+
+The post-alpha `tinytsx:actors` surface admits one exact value-mailbox behavior
+that replaces `context.state` with its message and returns
+`JSON.stringify(context.state)`. Its type may be a primitive, bounded array, or
+closed record, including nested combinations within the documented depth and
+byte limits. This reuses compile-time record and array knowledge; it does not
+make those values dynamic JavaScript objects at runtime.
+
+Frontend lowering serializes each closed message to canonical JSON and records
+a message-lifetime escape. The native runtime immediately copies the generated
+static bytes into an owned mailbox message, moves that buffer into actor-owned
+state, and clones the reply for the request writer. Apple-arm64 HTTP tests prove
+primitive, array, and nested-record paths; Linux-arm64 assembly exercises the
+same ABI. Dynamic request-derived values, spreads, cycles, object identity,
+transfer, arbitrary actor behavior, and value persistence remain unsupported.
+
 ## Compatibility order
 
 1. ESM runtime graph loading and aggregate diagnostics.

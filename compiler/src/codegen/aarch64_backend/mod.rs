@@ -1,4 +1,7 @@
-use crate::{codegen::Options, hir::Program};
+use crate::{
+    codegen::Options,
+    hir::{ActorOperation, Program},
+};
 
 use super::{
     aarch64::{Dialect, Emitter, emit_immediate},
@@ -162,13 +165,45 @@ fn emit_config(assembly: &mut Emitter, options: &Options, program: &Program) {
         for (index, actor) in program.actors.iter().enumerate() {
             asm_line!(assembly, "L{name}_{index}:");
             let value = match selector {
-                0 => 1,
+                0 => match actor.operation {
+                    ActorOperation::Counter => 1,
+                    ActorOperation::JsonMailbox => 2,
+                },
                 1 => actor.initial_state as u64,
                 _ => actor.mailbox_capacity as u64,
             };
             emit_immediate(assembly, "x0", value);
             asm_line!(assembly, "    ret");
         }
+    }
+
+    assembly.global_function(format_args!("tinytsx_actor_initial_json"));
+    asm_line!(assembly, "    cbz x1, Ltinytsx_actor_initial_json_invalid");
+    asm_line!(assembly, "    cbz x2, Ltinytsx_actor_initial_json_invalid");
+    for (index, actor) in program.actors.iter().enumerate() {
+        if actor.initial_json.is_some() {
+            asm_line!(assembly, "    cmp x0, #{index}");
+            asm_line!(assembly, "    b.eq Ltinytsx_actor_initial_json_{index}");
+        }
+    }
+    asm_line!(assembly, "Ltinytsx_actor_initial_json_invalid:");
+    emit_immediate(assembly, "x0", 4);
+    asm_line!(assembly, "    ret");
+    for (index, actor) in program.actors.iter().enumerate() {
+        let Some(initial) = actor.initial_json else {
+            continue;
+        };
+        asm_line!(assembly, "Ltinytsx_actor_initial_json_{index}:");
+        assembly.address("x3", format_args!("Ltinytsx_string_{initial}"));
+        asm_line!(assembly, "    str x3, [x1]");
+        emit_immediate(
+            assembly,
+            "x3",
+            program.static_strings[initial].value.len() as u64,
+        );
+        asm_line!(assembly, "    str x3, [x2]");
+        asm_line!(assembly, "    mov x0, #0");
+        asm_line!(assembly, "    ret");
     }
 
     assembly.global_function(format_args!("tinytsx_actor_persistence_database"));

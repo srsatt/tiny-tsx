@@ -268,15 +268,16 @@ produces and serves a native Mach-O executable from the example TSX source.
   separation, recoverable errors, blocking/executor rules, bounded ownership,
   close/dispose semantics, and post-alpha OS modules. `declared` intentionally
   does not yet mean a native implementation.
-- `tinytsx:actors` now has a deliberately narrow native counter surface. One
+- `tinytsx:actors` began with a deliberately narrow native counter surface. One
   compile-time `spawn` site owns an `i64` on the fixed application executor;
   `ask`, FIFO `tell`, and idempotent `stop`/`dispose` use a mailbox bounded to
-  1–64 messages without creating one native thread per actor. The Hono tracer
-  covers increment/decrement, tell-before-ask ordering, repeated stop, a
+  1–64 messages without creating one native thread per actor. The counter Hono
+  tracer covers increment/decrement, tell-before-ask ordering, repeated stop, a
   recoverable post-stop request, Apple-arm64 execution, and Linux-arm64
-  assembly. `doc/ACTORS.md` records the local-only boundary and missing
-  structured-message, timeout, supervision, and scale work; a separate
-  SQLite-backed specialization proves counter persistence across restart.
+  assembly. Later post-alpha evidence below adds copied closed values, idle
+  scale, and hot-mailbox fairness. Timeout, supervision, dynamic messages, and
+  general behavior persistence remain open; a separate SQLite-backed
+  specialization proves counter persistence across restart.
 - The SQLite foundation is pinned and reproducible: the focused
   `tinytsx-runtime-sqlite` crate uses `rusqlite` 0.40.1, bundled
   `libsqlite3-sys` 0.38.1, and the SQLite 3.53.2 amalgamation. Its bounded core
@@ -865,6 +866,28 @@ produces and serves a native Mach-O executable from the example TSX source.
   that dropping a reply detaches the caller without canceling an accepted FIFO
   message. Panic containment and later recovery remain generic runtime
   guarantees; timeout, restart, and supervision APIs are still absent.
+
+### Bounded copied actor values (2026-07-17)
+
+- `tinytsx:actors` now declares a recursive `ActorValue` type and an exact value
+  mailbox behavior alongside the counter specialization. Closed strings, safe
+  integers, booleans, nulls, arrays, and records may be initial state and
+  `ask`/`tell` messages.
+- The frontend enforces eight nested levels, 64 array items, 32 record fields,
+  128-byte field names, 1,024-byte strings, and 4,096-byte canonical JSON
+  messages. Stable `TINY1520`/`TINY1521` tests reject oversized initial state and
+  dynamic messages; Rust HIR validation independently rejects malformed or
+  out-of-contract JSON.
+- Generated configuration exposes static initial JSON and dispatches value
+  messages through a separate ABI. The runtime copies bytes into the bounded
+  mailbox, moves the owned buffer into actor state, and clones the reply, so
+  request/static memory cannot alias actor state.
+- `examples/hono-actors/messages.ts` executes primitive, array, and nested-record
+  routes in an Apple-arm64 server and the same generated source assembles for
+  Linux arm64. The example is a named Hono-matrix row and is reached by
+  `test:actors-native`.
+- Request-derived values, arbitrary behaviors, identity/transfer semantics,
+  cycles, and value persistence remain outside this slice.
 
 Verification:
 

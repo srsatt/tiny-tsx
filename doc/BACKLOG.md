@@ -486,9 +486,18 @@ Hono” task.
 
 ### P3 — Actors and persistence depth
 
-- [ ] Extend actor message copying to an explicit structured subset of
+- [x] Extend actor message copying to an explicit structured subset of
       primitives, closed records, and bounded arrays; preserve isolation and
       reject unsupported identity/transfer semantics.
+  - 2026-07-17: the exact replace-state/JSON-stringify value mailbox accepts
+    closed primitive, bounded-array, and closed-record initial state and
+    messages. Frontend and HIR validators enforce depth, shape, string/name, and
+    4 KiB payload limits; stable diagnostics reject dynamic/exceeded input. The
+    runtime copies static bytes into mailbox-owned storage, moves them into
+    actor state, clones replies, and executes primitive/array/record Hono routes
+    on Apple arm64 while assembling the same ABI for Linux arm64. Identity,
+    transfer, cycles, request-derived messages, arbitrary behaviors, and value
+    persistence remain explicitly unsupported.
 - [ ] Define actor timeout, caller cancellation, drain-on-stop, automatic
       restart, and supervision behavior, then prove handler isolation and panic
       recovery beyond the counter specialization.
