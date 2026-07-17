@@ -1,6 +1,6 @@
 # TinyTSX benchmarks
 
-The harness has seven workloads:
+The harness has nine workloads:
 
 - `static-page` compares the current static TinyTSX vertical slice to an
   idiomatic `Bun.serve` server returning the same response;
@@ -17,6 +17,10 @@ The harness has seven workloads:
   requires three finite HTTP/1.1 chunks plus the decoded 19-byte body; and
 - `hono-worker` compares one persistent logical string worker per target,
   including copied request/reply messages through an async Hono route; and
+- `hono-actor` compares a zero-delta read through one persistent TinyTSX
+  counter actor with a Bun Worker-owned counter; and
+- `hono-sqlite` compares one schema-check plus empty prepared query through the
+  bounded TinyTSX SQLite owner with synchronous `bun:sqlite`; and
 - `hono-ai-provider` runs the pinned 656-module Hono + AI SDK Core +
   OpenAI-compatible provider graph against one shared zero-delay loopback
   provider. The support process is excluded from both targets' RSS.
@@ -60,6 +64,8 @@ npm run benchmark:hono-jsx-ssr-keepalive
 npm run benchmark:hono-dynamic-jsx
 npm run benchmark:hono-stream-text
 npm run benchmark:hono-worker
+npm run benchmark:hono-actor
+npm run benchmark:hono-sqlite
 npm run benchmark:hono-ai-provider
 ```
 

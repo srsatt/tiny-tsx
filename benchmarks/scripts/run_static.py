@@ -176,6 +176,42 @@ WORKLOADS = {
             "--tsconfig-override", "benchmarks/bun/hono-runtime-tsconfig.json",
         ],
     },
+    "hono-actor": {
+        "body": b"0",
+        "content_type": "text/plain; charset=UTF-8",
+        "headers": {},
+        "numeric_headers": [],
+        "path": "/",
+        "scope": "one persistent signed counter actor behind a pinned Hono ask/reply route; zero-delta reads through bounded copied messages; HTTP/1.1; localhost",
+        "limitation": "TinyTSX uses its local actor mailbox while Bun uses one Worker-owned counter; the zero-delta route measures ownership/message overhead without persistence, mutation contention, supervision, or distributed actors.",
+        "tiny_entry": "examples/hono-actors/server.ts",
+        "tiny_args": [
+            "--alias", "hono=vendor/hono/src/index.ts",
+            "--api", "hono=tests/compat/hono/api.d.ts",
+        ],
+        "bun_script": "benchmarks/bun/hono-actor-server.ts",
+        "bun_args": [
+            "--tsconfig-override", "benchmarks/bun/hono-runtime-tsconfig.json",
+        ],
+    },
+    "hono-sqlite": {
+        "body": b'{"values":[]}',
+        "content_type": "application/json",
+        "headers": {},
+        "numeric_headers": [],
+        "path": "/sqlite",
+        "scope": "one in-memory SQLite owner behind a pinned Hono route; CREATE TABLE IF NOT EXISTS plus one empty prepared SELECT and JSON envelope per request; HTTP/1.1; localhost",
+        "limitation": "TinyTSX serializes SQLite through its bounded application mailbox while Bun executes synchronous bun:sqlite on the server thread; this does not measure disk I/O, writes, contention, or result copying beyond an empty row set.",
+        "tiny_entry": "benchmarks/tiny/hono-sqlite.ts",
+        "tiny_args": [
+            "--alias", "hono=vendor/hono/src/index.ts",
+            "--api", "hono=tests/compat/hono/api.d.ts",
+        ],
+        "bun_script": "benchmarks/bun/hono-sqlite-server.ts",
+        "bun_args": [
+            "--tsconfig-override", "benchmarks/bun/hono-runtime-tsconfig.json",
+        ],
+    },
     "hono-ai-provider": {
         "body": b"Hello from local provider",
         "content_type": "text/plain; charset=UTF-8",

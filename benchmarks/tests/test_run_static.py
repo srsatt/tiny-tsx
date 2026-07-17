@@ -99,6 +99,24 @@ class StaticHarnessTest(unittest.TestCase):
             "tests/compat/workers/hono-worker-smoke.ts",
         )
 
+    def test_actor_workload_compares_isolated_counter_owners(self) -> None:
+        workload = WORKLOADS["hono-actor"]
+
+        self.assertEqual(workload["path"], "/")
+        self.assertEqual(workload["body"], b"0")
+        self.assertIn("actor mailbox", workload["limitation"])
+        self.assertEqual(workload["tiny_entry"], "examples/hono-actors/server.ts")
+        self.assertEqual(workload["bun_script"], "benchmarks/bun/hono-actor-server.ts")
+
+    def test_sqlite_workload_records_owner_serialization_boundary(self) -> None:
+        workload = WORKLOADS["hono-sqlite"]
+
+        self.assertEqual(workload["path"], "/sqlite")
+        self.assertEqual(workload["body"], b'{"values":[]}')
+        self.assertIn("application mailbox", workload["limitation"])
+        self.assertEqual(workload["tiny_entry"], "benchmarks/tiny/hono-sqlite.ts")
+        self.assertEqual(workload["bun_script"], "benchmarks/bun/hono-sqlite-server.ts")
+
     def test_ai_provider_workload_uses_the_exact_pinned_graph(self) -> None:
         workload = WORKLOADS["hono-ai-provider"]
 
