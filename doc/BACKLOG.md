@@ -48,13 +48,13 @@ The alpha profiles are:
 
 ## Current implementation slice
 
-The bounded persistence tracer, stable built-in diagnostics, reconciled alpha
-contract, and installable Apple archive are complete. The next goal is
-**executable alpha release-gate closure**: make every published example and
-failure contract part of `release:verify`, close the remaining native-target
-evidence, and leave a tag-ready release candidate. Do not widen the language,
-Hono, actor, or SQLite surface during this goal unless an existing alpha gate
-exposes a regression in the already-published contract.
+The alpha implementation, executable example/failure gates, focused packaged
+examples, and installable Apple-arm64 archive are complete. A clean
+Apple-arm64 `npm run release:verify` passed on 2026-07-17. The remaining work is
+**alpha release-candidate closure**: obtain native Linux-arm64 evidence, publish
+the final repeated TinyTSX/Bun comparison, and assemble the tag-ready checklist.
+Do not widen the language, Hono, actor, SQLite, or Web API surface unless one of
+those existing alpha gates exposes a regression in the published contract.
 
 Acceptance criteria are, in order:
 
@@ -88,8 +88,9 @@ Acceptance criteria are, in order:
 - [ ] Repeat the controlled TinyTSX/Bun release benchmark and publish startup,
   idle/warm RSS, throughput, median/p99 latency, binary size, and the measured
   actor/SQLite overhead;
-- [ ] Run the complete clean-tree exit suite and produce a tag-ready
-  `0.1.0-alpha.1` checklist without creating the tag.
+- [ ] After the Linux and benchmark artifacts land, rerun the complete
+  clean-tree exit suite and produce a tag-ready `0.1.0-alpha.1` checklist
+  without creating the tag.
 
 Runtime SQLite symlink/sidecar-race hardening, prepared/callback transactions,
 general actor messages, actor-scale/fairness work, and the combined user-auth
@@ -98,22 +99,24 @@ prominent.
 
 ### Next-goal handoff
 
-Use the goal title **Close executable alpha release gates**. Its scope is the
-unchecked acceptance criteria above, in order. The goal may repair a failing
-existing alpha path, but discovering a broader language, Web, Hono, standard
-library, actor, SQLite, or GC feature creates a post-alpha backlog item instead
-of silently expanding `0.1.0-alpha.1`.
+Use the goal title **Finish the alpha release candidate**. Its scope is the
+three unchecked acceptance criteria above, in order. Native Linux-arm64
+execution is required; cross-assembly does not close that gate. The benchmark
+must include the Hono control plus actor and SQLite workloads, verify equivalent
+responses, and commit the raw JSON and rendered Markdown results before making
+comparative claims. The goal may repair a failing existing alpha path, but a
+broader language, Web, Hono, standard-library, actor, SQLite, or GC requirement
+becomes a post-alpha item instead of silently expanding `0.1.0-alpha.1`.
 
 The goal is complete only when:
 
-- the example manifest has no unexplained `pending` state and every row names a
-  release-reachable test;
 - `npm run release:verify` passes from a clean Apple-arm64 checkout and the
   Linux-arm64 workflow passes the same release contract natively;
 - both archives install outside the checkout and build/run their smoke
   applications from installed resources;
-- the repeated benchmark and final checklist are committed, while the tag is
-  deliberately left for a separate release action.
+- repeated control, actor, and SQLite benchmark artifacts plus the final
+  checklist are committed, while the tag is deliberately left for a separate
+  release action.
 
 ## Alpha critical path
 
@@ -299,15 +302,15 @@ Do not tag `0.1.0-alpha.1` until all of these are true:
 
 - [ ] Every A0–A6 item is complete or explicitly moved to post-alpha with the
       alpha contract adjusted so no documented feature depends on it.
-- [ ] The complete Rust, frontend, Hono, Test262 allowlist, WPT allowlist, native
+- [x] The complete Rust, frontend, Hono, Test262 allowlist, WPT allowlist, native
       API, benchmark-harness, and alpha example suites pass from a clean tree.
 - [ ] Apple and Linux archives install and execute outside the checkout, and
       their checksums, version output, build reports, and HTTP contracts match
       the release manifest.
-- [ ] The published compatibility matrix contains no unqualified “supports
+- [x] The published compatibility matrix contains no unqualified “supports
       Hono/TypeScript/Web APIs” claim and links every supported row to executable
       evidence.
-- [ ] Security/resource limits and known issues for files, SQLite, actors,
+- [x] Security/resource limits and known issues for files, SQLite, actors,
       network transport, and request memory are documented and tested.
 - [ ] A repeated release benchmark records startup, idle/warm RSS, throughput,
       median/p99 latency, binary size, and actor/SQLite overhead without making
