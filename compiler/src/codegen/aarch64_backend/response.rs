@@ -140,6 +140,16 @@ fn emit_handler_text_expression(
             );
             assembly.call(format_args!("tinytsx_html_write_request_header"));
         }
+        ValueExpression::RequestId { header, .. } => {
+            asm_line!(assembly, "    ldr x0, [sp, #16]");
+            assembly.address("x1", format_args!("Ltinytsx_string_{header}"));
+            emit_immediate(
+                assembly,
+                "x2",
+                program.static_strings[*header].value.len() as u64,
+            );
+            assembly.call(format_args!("tinytsx_html_write_response_header"));
+        }
         ValueExpression::RequestCookie {
             cookie, fallback, ..
         } => {

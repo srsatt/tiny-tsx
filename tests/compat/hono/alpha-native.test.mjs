@@ -39,6 +39,12 @@ const bodyLimit = [
   "--alias", "hono/body-limit=vendor/hono/src/middleware/body-limit/index.ts",
   "--api", "hono/body-limit=tests/compat/hono/body-limit-api.d.ts",
 ];
+const requestId = [
+  ...hono,
+  "--alias", "hono/request-id=vendor/hono/src/middleware/request-id/index.ts",
+  "--api", "hono/request-id=tests/compat/hono/request-id-api.d.ts",
+];
+const uuidV4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 test("assembles both supported serve entry contracts for Linux arm64", () => {
   for (const entry of [
@@ -282,6 +288,83 @@ test("assembles the pinned Hono bodyLimit middleware for Linux arm64", () => {
     "--target=aarch64-unknown-linux-gnu", "-x", "assembler", "-c", "-o", "/dev/null", "-",
   ], {cwd: repository, input: checked.stdout, encoding: "utf8"});
   assert.equal(assembled.status, 0, assembled.stderr);
+});
+
+test("executes the pinned Hono requestId middleware natively", async context => {
+  await withServer(
+    context,
+    "tests/compat/hono/request-id-smoke.ts",
+    39_492,
+    requestId,
+    async port => {
+      const generated = await request(port, "/request-id");
+      const generatedBody = await generated.text();
+      assert.match(generatedBody, uuidV4);
+      assert.equal(generated.headers.get("x-request-id"), generatedBody);
+
+      const accepted = await request(port, "/request-id", {
+        headers: {"x-request-id": "hono-is-hot"},
+      });
+      assert.equal(await accepted.text(), "hono-is-hot");
+      assert.equal(accepted.headers.get("x-request-id"), "hono-is-hot");
+
+      const replaced = await request(port, "/request-id", {
+        headers: {"x-request-id": "invalid!"},
+      });
+      const replacedBody = await replaced.text();
+      assert.match(replacedBody, uuidV4);
+      assert.equal(replaced.headers.get("x-request-id"), replacedBody);
+    },
+  );
+});
+
+test("executes closed requestId options and route scope natively", async context => {
+  await withServer(
+    context,
+    "tests/compat/hono/request-id-options-smoke.ts",
+    39_493,
+    requestId,
+    async port => {
+      const generated = await request(port, "/custom-request-id");
+      const generatedBody = await generated.text();
+      assert.match(generatedBody, uuidV4);
+      assert.equal(generated.headers.get("hono-request-id"), generatedBody);
+      assert.equal(generated.headers.get("x-request-id"), null);
+
+      const accepted = await request(port, "/custom-request-id", {
+        headers: {"hono-request-id": "sixteen-byte-id1"},
+      });
+      assert.equal(await accepted.text(), "sixteen-byte-id1");
+      assert.equal(accepted.headers.get("hono-request-id"), "sixteen-byte-id1");
+
+      const oversized = await request(port, "/custom-request-id", {
+        headers: {"hono-request-id": "seventeen-byte-id"},
+      });
+      const oversizedBody = await oversized.text();
+      assert.match(oversizedBody, uuidV4);
+      assert.equal(oversized.headers.get("hono-request-id"), oversizedBody);
+    },
+  );
+});
+
+test("assembles the pinned Hono requestId middleware for Linux arm64", () => {
+  for (const entry of [
+    "tests/compat/hono/request-id-smoke.ts",
+    "tests/compat/hono/request-id-options-smoke.ts",
+  ]) {
+    const checked = spawnSync("cargo", [
+      "run", "-q", "-p", "tinytsx", "--", "check",
+      entry,
+      "--emit-asm", "--target", "aarch64-unknown-linux-gnu",
+      ...requestId,
+    ], {cwd: repository, encoding: "utf8"});
+    assert.equal(checked.status, 0, checked.stderr || checked.stdout);
+    assert.match(checked.stdout, /tinytsx_response_header_request_id/);
+    const assembled = spawnSync("clang", [
+      "--target=aarch64-unknown-linux-gnu", "-x", "assembler", "-c", "-o", "/dev/null", "-",
+    ], {cwd: repository, input: checked.stdout, encoding: "utf8"});
+    assert.equal(assembled.status, 0, `${entry}: ${assembled.stderr}`);
+  }
 });
 
 async function withServer(context, entry, port, options, verify) {

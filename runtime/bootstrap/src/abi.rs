@@ -2319,6 +2319,102 @@ pub unsafe extern "C" fn tinytsx_response_header_static(
 }
 
 #[unsafe(no_mangle)]
+pub unsafe extern "C" fn tinytsx_response_header_request_id(
+    writer: *mut TinyResponseWriter,
+    request: *const TinyRequest,
+    name: *const u8,
+    name_len: usize,
+    max_length: usize,
+) -> u32 {
+    if writer.is_null()
+        || request.is_null()
+        || name.is_null()
+        || name_len == 0
+        || max_length == 0
+        || max_length > 1024
+    {
+        return BAD_REQUEST;
+    }
+    // SAFETY: Generated code supplies static header-name bytes and runtime-owned request/writer values.
+    let name_bytes = unsafe { slice::from_raw_parts(name, name_len) };
+    if !valid_header_name(name_bytes) {
+        return BAD_REQUEST;
+    }
+    // SAFETY: Pointers were checked above and remain valid for synchronous dispatch.
+    let request = unsafe { &*request };
+    let writer = unsafe { &mut *writer };
+    // SAFETY: The request owns its borrowed header views for the duration of dispatch.
+    let incoming = unsafe { request_header_value(request, name_bytes) }.filter(|value| {
+        !value.is_empty()
+            && value.len() <= max_length
+            && value
+                .iter()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'='))
+    });
+    let value = if let Some(incoming) = incoming {
+        TinyStringView::from_bytes(incoming)
+    } else {
+        let Ok(uuid) = crate::random::uuid_v4() else {
+            writer.status = INTERNAL_ERROR;
+            return INTERNAL_ERROR;
+        };
+        if uuid.len() > MAX_DYNAMIC_HEADER_BYTES - writer.dynamic_header_cursor {
+            writer.status = REQUEST_OOM;
+            return REQUEST_OOM;
+        }
+        let start = writer.dynamic_header_cursor;
+        let end = start + uuid.len();
+        writer.dynamic_header_bytes[start..end].copy_from_slice(&uuid);
+        writer.dynamic_header_cursor = end;
+        TinyStringView {
+            // SAFETY: `start` points into fixed writer-owned storage checked above.
+            ptr: unsafe { writer.dynamic_header_bytes.as_ptr().add(start) },
+            len: uuid.len(),
+        }
+    };
+    set_response_header(
+        writer,
+        TinyStringView {
+            ptr: name,
+            len: name_len,
+        },
+        value,
+        name_bytes,
+    )
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tinytsx_html_write_response_header(
+    writer: *mut TinyResponseWriter,
+    name: *const u8,
+    name_len: usize,
+) -> u32 {
+    if writer.is_null() || name.is_null() || name_len == 0 {
+        return INTERNAL_ERROR;
+    }
+    // SAFETY: Generated code supplies a static header name and a runtime-owned writer.
+    let expected = unsafe { slice::from_raw_parts(name, name_len) };
+    let writer_ref = unsafe { &*writer };
+    let value = writer_ref.headers[..writer_ref.header_count]
+        .iter()
+        .find_map(|header| {
+            if header.name.ptr.is_null() && header.name.len != 0 {
+                return None;
+            }
+            // SAFETY: Stored response-header views remain valid through rendering.
+            let actual = unsafe { slice::from_raw_parts(header.name.ptr, header.name.len) };
+            actual
+                .eq_ignore_ascii_case(expected)
+                .then_some(header.value)
+        });
+    let Some(value) = value else {
+        return INTERNAL_ERROR;
+    };
+    // SAFETY: The selected view is borrowed or writer-owned and remains valid for this copy.
+    unsafe { tinytsx_html_write_static(writer, value.ptr, value.len) }
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn tinytsx_date_now_millis() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)

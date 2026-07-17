@@ -5,10 +5,11 @@ use super::{
     decode_sqlite_parameters, render, request, request_with_body, request_with_headers,
     tinytsx_html_write_fetch_status, tinytsx_html_write_path_segment, tinytsx_html_write_path_tail,
     tinytsx_html_write_query_parameter, tinytsx_html_write_request_header,
-    tinytsx_html_write_static, tinytsx_request_basic_auth_equals, tinytsx_request_body_length,
-    tinytsx_request_if_none_match, tinytsx_request_method_equals, tinytsx_request_path_equals,
-    tinytsx_request_path_matches, tinytsx_request_path_segment_min_length,
-    tinytsx_request_query_has, tinytsx_response_begin, tinytsx_response_header_elapsed_millis,
+    tinytsx_html_write_response_header, tinytsx_html_write_static,
+    tinytsx_request_basic_auth_equals, tinytsx_request_body_length, tinytsx_request_if_none_match,
+    tinytsx_request_method_equals, tinytsx_request_path_equals, tinytsx_request_path_matches,
+    tinytsx_request_path_segment_min_length, tinytsx_request_query_has, tinytsx_response_begin,
+    tinytsx_response_header_elapsed_millis, tinytsx_response_header_request_id,
     tinytsx_response_header_static, tinytsx_response_stream_begin,
     tinytsx_response_stream_chunk_begin, tinytsx_response_stream_chunk_end,
     tinytsx_response_stream_chunk_static, write_console_error,
@@ -765,6 +766,49 @@ fn response_headers_set_case_insensitively() {
     assert_eq!(writer.header_count, 1);
     assert_eq!(view(&writer.headers[0].name), b"X-Powered-By");
     assert_eq!(view(&writer.headers[0].value), b"TinyTSX");
+}
+
+#[test]
+fn request_id_reuses_a_valid_header_and_generates_for_invalid_input() {
+    for (input, expected) in [
+        (b"hono-is-hot".as_slice(), Some(b"hono-is-hot".as_slice())),
+        (b"invalid!".as_slice(), None),
+    ] {
+        let headers = [TinyHeader {
+            name: TinyStringView::from_bytes(b"X-Request-Id"),
+            value: TinyStringView::from_bytes(input),
+        }];
+        let request = request_with_headers(b"GET", b"/", &headers);
+        let mut output = [0_u8; 64];
+        let mut writer = writer(&mut output);
+        assert_eq!(
+            unsafe {
+                tinytsx_response_header_request_id(
+                    &mut writer,
+                    &request,
+                    b"X-Request-Id".as_ptr(),
+                    12,
+                    255,
+                )
+            },
+            OK
+        );
+        assert_eq!(
+            unsafe {
+                tinytsx_html_write_response_header(&mut writer, b"X-Request-Id".as_ptr(), 12)
+            },
+            OK
+        );
+        let value = view(&writer.headers[0].value);
+        assert_eq!(&output[..value.len()], value);
+        if let Some(expected) = expected {
+            assert_eq!(value, expected);
+        } else {
+            assert_eq!(value.len(), 36);
+            assert_eq!(value[14], b'4');
+            assert!(matches!(value[19], b'8' | b'9' | b'a' | b'b'));
+        }
+    }
 }
 
 #[test]

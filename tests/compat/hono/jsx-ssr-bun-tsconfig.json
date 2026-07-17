@@ -10,6 +10,7 @@
       "hono/powered-by": ["vendor/hono/src/middleware/powered-by/index.ts"],
       "hono/pretty-json": ["vendor/hono/src/middleware/pretty-json/index.ts"],
       "hono/body-limit": ["vendor/hono/src/middleware/body-limit/index.ts"],
+      "hono/request-id": ["vendor/hono/src/middleware/request-id/index.ts"],
       "hono/streaming": ["vendor/hono/src/helper/streaming/index.ts"],
       "hono/html": ["vendor/hono/src/helper/html/index.ts"],
       "hono/jsx": ["vendor/hono/src/jsx/index.ts"],

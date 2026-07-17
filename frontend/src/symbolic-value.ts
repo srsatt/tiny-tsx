@@ -39,6 +39,7 @@ export type Value =
   | {kind: "routeParameter"; name: string}
   | {kind: "routeChoice"; name: string; cases: Map<string, Value>; fallback: Value}
   | {kind: "requestHeader"; name: string}
+  | {kind: "requestId"; headerName: string}
   | {kind: "requestCookie"; name: string; fallback?: string}
   | {kind: "randomUuid"}
   | {kind: "environmentVariable"; name: string; required: boolean; fallback?: string}
@@ -88,6 +89,7 @@ export type RuntimeStringPart =
   | {kind: "literal"; value: string}
   | {kind: "routeParameter"; name: string}
   | {kind: "requestHeader"; name: string}
+  | {kind: "requestId"; headerName: string}
   | {kind: "requestCookie"; name: string; fallback: string | undefined}
   | {kind: "environmentVariable"; name: string; required: boolean; fallback: string | undefined}
   | {kind: "fileText"; path: string; maxBytes: number}
@@ -336,6 +338,7 @@ export function truthiness(value: Value): boolean | undefined {
     case "routeParameter": return true;
     case "routeChoice": return undefined;
     case "requestHeader": return undefined;
+    case "requestId": return undefined;
     case "requestCookie": return undefined;
     case "environmentVariable": return undefined;
     case "fileText": return undefined;
@@ -363,6 +366,7 @@ export function typeOf(value: Value): string {
     case "runtimeHtml": return "string";
     case "routeChoice": return "object";
     case "requestHeader": return "string";
+    case "requestId": return "string";
     case "requestCookie": return "string";
     case "randomUuid": return "string";
     case "requestJsonField": return "string";
@@ -416,6 +420,7 @@ export function runtimeStringParts(value: Value): RuntimeStringPart[] | undefine
     case "html": return value.value === "" ? [] : [{kind: "literal", value: value.value}];
     case "routeParameter": return [{kind: "routeParameter", name: value.name}];
     case "requestHeader": return [{kind: "requestHeader", name: value.name}];
+    case "requestId": return [{kind: "requestId", headerName: value.headerName}];
     case "requestCookie": return [{kind: "requestCookie", name: value.name, fallback: value.fallback}];
     case "environmentVariable": return [{
       kind: "environmentVariable",

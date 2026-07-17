@@ -196,6 +196,11 @@ export type ValueExpression =
       span: SourceSpan;
     }
   | {
+      kind: "requestId";
+      header: number;
+      span: SourceSpan;
+    }
+  | {
       kind: "requestCookie";
       cookie: number;
       fallback?: number;
@@ -313,6 +318,7 @@ export interface Handler {
   elapsedHeaders?: ElapsedHeader[];
   stderr?: number[];
   basicAuthorization?: BasicAuthorization;
+  requestId?: RequestId;
   bodyLimit?: BodyLimit;
   entityTag?: EntityTag;
   sqliteExistence?: SqliteExistence;
@@ -321,6 +327,11 @@ export interface Handler {
   sqliteActions?: SqliteAction[];
   response: HandlerResponse;
   span: SourceSpan;
+}
+
+export interface RequestId {
+  header: number;
+  maxLength: number;
 }
 
 export interface BodyLimit {

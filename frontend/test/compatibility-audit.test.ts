@@ -1344,6 +1344,154 @@ test("rejects a custom upstream bodyLimit error handler", () => {
   );
 });
 
+test("retains upstream requestId as one reusable request-local value", () => {
+  const entry = path.join(repository, "tests/compat/hono/request-id-smoke.ts");
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    aliases: {
+      hono: path.join(repository, "vendor/hono/src/index.ts"),
+      "hono/request-id": path.join(repository, "vendor/hono/src/middleware/request-id/index.ts"),
+    },
+    apiAliases: {
+      hono: path.join(repository, "tests/compat/hono/api.d.ts"),
+      "hono/request-id": path.join(repository, "tests/compat/hono/request-id-api.d.ts"),
+    },
+  });
+
+  assert.deepEqual(hir.handlers[0]?.requestId, {header: 0, maxLength: 255});
+  assert.equal(hir.handlers[0]?.response.kind, "text");
+  assert.deepEqual(
+    hir.handlers[0]?.response.kind === "text" ? hir.handlers[0].response.value : undefined,
+    {
+      kind: "concat",
+      values: [{kind: "requestId", header: 0, span: hir.handlers[0]?.span}],
+      span: hir.handlers[0]?.span,
+    },
+  );
+});
+
+test("binds closed requestId options to the same route-local value", () => {
+  const entry = path.join(repository, "tests/compat/hono/request-id-options-smoke.ts");
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    aliases: {
+      hono: path.join(repository, "vendor/hono/src/index.ts"),
+      "hono/request-id": path.join(repository, "vendor/hono/src/middleware/request-id/index.ts"),
+    },
+    apiAliases: {
+      hono: path.join(repository, "tests/compat/hono/api.d.ts"),
+      "hono/request-id": path.join(repository, "tests/compat/hono/request-id-api.d.ts"),
+    },
+  });
+
+  const handler = hir.handlers.find(candidate => candidate.path === "/custom-request-id");
+  assert.ok(handler?.requestId);
+  assert.equal(handler.requestId.maxLength, 16);
+  assert.equal(hir.staticStrings[handler.requestId.header]?.value, "Hono-Request-Id");
+  assert.equal(handler.response.kind, "text");
+  const value = handler.response.kind === "text" ? handler.response.value : undefined;
+  assert.equal(value?.kind, "concat");
+  assert.equal(
+    value?.kind === "concat" && value.values[0]?.kind === "requestId"
+      ? hir.staticStrings[value.values[0].header]?.value
+      : undefined,
+    "Hono-Request-Id",
+  );
+});
+
+test("rejects unsupported or missing requestId policies", () => {
+  const cases = [
+    {
+      name: "custom generator",
+      source: `
+        import {Hono} from "hono";
+        import {requestId} from "hono/request-id";
+        const app = new Hono();
+        app.use("*", requestId({generator: () => "fixed"}));
+        app.get("/", context => context.text(context.get("requestId") ?? "missing"));
+        export default app;
+      `,
+      message: "requires its default generator",
+    },
+    {
+      name: "multiple policies",
+      source: `
+        import {Hono} from "hono";
+        import {requestId} from "hono/request-id";
+        const app = new Hono();
+        app.use("*", requestId());
+        app.use("*", requestId({headerName: "Hono-Request-Id"}));
+        app.get("/", context => context.text(context.get("requestId") ?? "missing"));
+        export default app;
+      `,
+      message: "multiple requestId middleware policies",
+    },
+    {
+      name: "missing middleware",
+      source: `
+        import {Hono} from "hono";
+        import {requestId} from "hono/request-id";
+        const app = new Hono();
+        app.get("/", context => context.text(context.get("requestId") ?? "missing"));
+        export default app;
+      `,
+      message: "requires one matched upstream requestId middleware",
+    },
+  ];
+  for (const candidate of cases) {
+    const entry = write(`request-id-${candidate.name.replaceAll(" ", "-")}.ts`, candidate.source);
+    assert.throws(
+      () => compileEntry(entry, {
+        sdkPath: path.join(repository, "sdk/index.d.ts"),
+        aliases: {
+          hono: path.join(repository, "vendor/hono/src/index.ts"),
+          "hono/request-id": path.join(
+            repository,
+            "vendor/hono/src/middleware/request-id/index.ts",
+          ),
+        },
+        apiAliases: {
+          hono: path.join(repository, "tests/compat/hono/api.d.ts"),
+          "hono/request-id": path.join(repository, "tests/compat/hono/request-id-api.d.ts"),
+        },
+      }),
+      error => error instanceof CompileFailure
+        && error.diagnostics.some(diagnostic =>
+          diagnostic.code === "TINY1403" && diagnostic.message.includes(candidate.message)
+        ),
+      candidate.name,
+    );
+  }
+});
+
+test("lowers the pinned published Hono requestId JavaScript shape", () => {
+  const entry = path.join(repository, "tests/compat/hono/request-id-smoke.ts");
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    aliases: {
+      hono: path.join(
+        repository,
+        "tests/compat/node-server/node_modules/hono/dist/index.js",
+      ),
+      "hono/request-id": path.join(
+        repository,
+        "tests/compat/node-server/node_modules/hono/dist/middleware/request-id/index.js",
+      ),
+    },
+    apiAliases: {
+      hono: path.join(repository, "tests/compat/hono/api.d.ts"),
+      "hono/request-id": path.join(repository, "tests/compat/hono/request-id-api.d.ts"),
+    },
+  });
+
+  const requestId = hir.handlers[0]?.requestId;
+  assert.equal(requestId?.maxLength, 255);
+  assert.equal(
+    requestId === undefined ? undefined : hir.staticStrings[requestId.header]?.value,
+    "X-Request-Id",
+  );
+});
+
 test("lowers the pinned published Hono CORS JavaScript shape", () => {
   const entry = path.join(repository, "tests/compat/hono/cors-smoke.ts");
   const hir = compileEntry(entry, {

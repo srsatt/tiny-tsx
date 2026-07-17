@@ -401,6 +401,19 @@ pub(super) fn emit_handlers(assembly: &mut Emitter, program: &Program) -> Result
             }
             asm_line!(assembly, "    cbnz w0, {return_label}");
         }
+        if let Some(request_id) = &handler.request_id {
+            asm_line!(assembly, "    ldr x0, [sp, #16]");
+            asm_line!(assembly, "    ldr x1, [sp, #24]");
+            assembly.address("x2", format_args!("Ltinytsx_string_{}", request_id.header));
+            emit_immediate(
+                assembly,
+                "x3",
+                program.static_strings[request_id.header].value.len() as u64,
+            );
+            emit_immediate(assembly, "x4", request_id.max_length as u64);
+            assembly.call(format_args!("tinytsx_response_header_request_id"));
+            asm_line!(assembly, "    cbnz w0, {return_label}");
+        }
         for (header_index, header) in handler.headers.iter().enumerate() {
             asm_line!(assembly, "    ldr x0, [sp, #16]");
             assembly.address(

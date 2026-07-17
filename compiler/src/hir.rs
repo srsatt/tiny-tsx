@@ -200,6 +200,8 @@ pub struct Handler {
     pub elapsed_headers: Vec<ElapsedHeader>,
     #[serde(default, rename = "basicAuthorization")]
     pub basic_authorization: Option<BasicAuthorization>,
+    #[serde(default, rename = "requestId")]
+    pub request_id: Option<RequestId>,
     #[serde(default, rename = "bodyLimit")]
     pub body_limit: Option<BodyLimit>,
     #[serde(default, rename = "entityTag")]
@@ -252,6 +254,13 @@ pub struct ElapsedHeader {
 pub struct BasicAuthorization {
     pub credentials: Vec<BasicCredential>,
     pub rejected: GuardedResponse,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RequestId {
+    pub header: usize,
+    pub max_length: usize,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -438,6 +447,10 @@ pub enum ValueExpression {
         span: SourceSpan,
     },
     RequestHeader {
+        header: usize,
+        span: SourceSpan,
+    },
+    RequestId {
         header: usize,
         span: SourceSpan,
     },
@@ -743,6 +756,24 @@ impl Program {
                 validate_response_headers(&authorization.rejected.headers, &[])?;
                 self.validate_stderr(&authorization.rejected.stderr)?;
                 self.validate_handler_response(&authorization.rejected.response, &handler.path)?;
+            }
+            if let Some(request_id) = &handler.request_id {
+                let Some(header) = self.static_strings.get(request_id.header) else {
+                    return Err("request ID references a missing header string".to_owned());
+                };
+                if header.value.is_empty()
+                    || header.value.len() > 128
+                    || !valid_header_name(header.value.as_bytes())
+                    || request_id.max_length == 0
+                    || request_id.max_length > 1024
+                {
+                    return Err(
+                        "request ID configuration is outside its bounded contract".to_owned()
+                    );
+                }
+            }
+            for response in handler_responses(handler) {
+                validate_request_id_response(response, handler.request_id.as_ref())?;
             }
             if let Some(limit) = &handler.body_limit {
                 if limit.max_bytes > 64 * 1024 {
@@ -1158,6 +1189,7 @@ impl Program {
             ValueExpression::Concat { .. }
             | ValueExpression::RouteParameter { .. }
             | ValueExpression::RequestHeader { .. }
+            | ValueExpression::RequestId { .. }
             | ValueExpression::RequestCookie { .. }
             | ValueExpression::EnvironmentVariable { .. }
             | ValueExpression::FileText { .. }
@@ -1297,6 +1329,7 @@ impl Program {
             }
             ValueExpression::RouteParameter { .. }
             | ValueExpression::RequestHeader { .. }
+            | ValueExpression::RequestId { .. }
             | ValueExpression::RequestCookie { .. }
             | ValueExpression::EnvironmentVariable { .. }
             | ValueExpression::FileText { .. }
@@ -1541,6 +1574,15 @@ impl Program {
                 };
                 if header.value.is_empty() {
                     return Err("request header name must not be empty".to_owned());
+                }
+                Ok(())
+            }
+            ValueExpression::RequestId { header, .. } => {
+                let Some(header) = self.static_strings.get(*header) else {
+                    return Err("request ID references a missing header string".to_owned());
+                };
+                if header.value.is_empty() {
+                    return Err("request ID header name must not be empty".to_owned());
                 }
                 Ok(())
             }
@@ -2006,6 +2048,95 @@ fn handler_responses(handler: &Handler) -> Vec<&HandlerResponse> {
             .map(|validation| &validation.rejected.response),
     );
     responses
+}
+
+fn validate_request_id_response(
+    response: &HandlerResponse,
+    request_id: Option<&RequestId>,
+) -> Result<(), String> {
+    match response {
+        HandlerResponse::Html { .. } => Ok(()),
+        HandlerResponse::Text { value, .. } => {
+            validate_request_id_expression(value, request_id.map(|config| config.header))
+        }
+        HandlerResponse::Stream { chunks, .. } => chunks.iter().try_for_each(|chunk| {
+            validate_request_id_expression(chunk, request_id.map(|config| config.header))
+        }),
+    }
+}
+
+fn validate_request_id_expression(
+    expression: &ValueExpression,
+    configured_header: Option<usize>,
+) -> Result<(), String> {
+    match expression {
+        ValueExpression::RequestId { header, .. } => match configured_header {
+            None => Err("request ID value requires request ID middleware".to_owned()),
+            Some(configured) if configured != *header => {
+                Err("request ID value does not match its middleware header".to_owned())
+            }
+            Some(_) => Ok(()),
+        },
+        ValueExpression::DirectCall { arguments, .. }
+        | ValueExpression::Concat {
+            values: arguments, ..
+        } => arguments
+            .iter()
+            .try_for_each(|value| validate_request_id_expression(value, configured_header)),
+        ValueExpression::StringEqualConditional {
+            left,
+            right,
+            when_equal,
+            when_not_equal,
+            ..
+        }
+        | ValueExpression::NumericEqualConditional {
+            left,
+            right,
+            when_equal,
+            when_not_equal,
+            ..
+        }
+        | ValueExpression::BooleanEqualConditional {
+            left,
+            right,
+            when_equal,
+            when_not_equal,
+            ..
+        } => {
+            validate_request_id_expression(left, configured_header)?;
+            validate_request_id_expression(right, configured_header)?;
+            validate_request_id_expression(when_equal, configured_header)?;
+            validate_request_id_expression(when_not_equal, configured_header)
+        }
+        ValueExpression::NumericBinary { left, right, .. } => {
+            validate_request_id_expression(left, configured_header)?;
+            validate_request_id_expression(right, configured_header)
+        }
+        ValueExpression::ThrowValue { value, .. } => {
+            validate_request_id_expression(value, configured_header)
+        }
+        ValueExpression::TryCatch {
+            try_value,
+            catch_value,
+            ..
+        } => {
+            validate_request_id_expression(try_value, configured_header)?;
+            validate_request_id_expression(catch_value, configured_header)
+        }
+        ValueExpression::QueryConditional {
+            when_present,
+            when_absent,
+            ..
+        } => {
+            validate_request_id_expression(when_present, configured_header)?;
+            validate_request_id_expression(when_absent, configured_header)
+        }
+        ValueExpression::WorkerCall { input, .. } => {
+            validate_request_id_expression(input, configured_header)
+        }
+        _ => Ok(()),
+    }
 }
 
 fn response_uses_openai(response: &HandlerResponse) -> bool {
@@ -2566,5 +2697,34 @@ mod actor_json_tests {
         assert!(validate_actor_json("1.5").is_err());
         assert!(validate_actor_json(&oversized_array).is_err());
         assert!(validate_actor_json(&oversized_string).is_err());
+    }
+}
+
+#[cfg(test)]
+mod request_id_tests {
+    use super::*;
+
+    #[test]
+    fn requires_request_id_values_to_match_middleware_configuration() {
+        let expression = ValueExpression::RequestId {
+            header: 3,
+            span: SourceSpan {
+                file: "app.ts".to_owned(),
+                line: 1,
+                column: 1,
+                end_line: 1,
+                end_column: 2,
+            },
+        };
+
+        assert_eq!(validate_request_id_expression(&expression, Some(3)), Ok(()));
+        assert_eq!(
+            validate_request_id_expression(&expression, None),
+            Err("request ID value requires request ID middleware".to_owned()),
+        );
+        assert_eq!(
+            validate_request_id_expression(&expression, Some(4)),
+            Err("request ID value does not match its middleware header".to_owned()),
+        );
     }
 }

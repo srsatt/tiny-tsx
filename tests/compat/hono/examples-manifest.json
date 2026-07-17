@@ -46,6 +46,19 @@
       "firstUnsupportedBoundary": "The unchanged upstream factory accepts one default-error closed maxSize from 0 through 64 KiB over Content-Length requests; custom onError, chunked request bodies, and limits above the transport cap are unsupported."
     },
     {
+      "id": "upstream-request-id",
+      "provenance": "official-doc-derived-local-tracer",
+      "entry": "tests/compat/hono/request-id-smoke.ts",
+      "imports": ["hono", "hono/request-id"],
+      "apis": ["Hono", "use", "get", "Context.get", "Context.text", "requestId", "crypto.randomUUID"],
+      "intake": {"status": "pass", "evidence": "frontend/test/compatibility-audit.test.ts"},
+      "nativeCompile": {"appleArm64": "pass", "linuxArm64Assembly": "pass", "evidence": "tests/compat/hono/alpha-native.test.mjs"},
+      "httpBehavior": {"status": "pass", "evidence": "tests/compat/hono/alpha-native.test.mjs"},
+      "referenceBehavior": {"runtime": "Bun/Hono", "status": "pass", "evidence": "tests/compat/hono/request-id.behavior.test.ts"},
+      "releaseGates": {"native": ["test:hono-alpha-native", "test:release-installed"], "reference": ["test:hono-request-id-reference"]},
+      "firstUnsupportedBoundary": "One matched policy per route accepts the default generator with a closed non-empty token header name and closed 1-1024 byte limit; custom generators, empty/dynamic options, conflicting policies, and general Context variables are unsupported."
+    },
+    {
       "id": "published-zod-openapi",
       "provenance": "official-doc-derived-published-packages",
       "entry": "tests/compat/zod-openapi/server.ts",
@@ -184,6 +197,8 @@
     {"source":"vendor/hono/src/middleware/powered-by/index.test.ts","selectors":["Should return with X-Powered-By header"],"evidenceMode":"native-derived","nativeEvidence":"tests/compat/hono/powered-by-smoke.ts"},
     {"source":"vendor/hono/src/middleware/cors/index.test.ts","selectors":["GET default","Preflight default"],"evidenceMode":"native-derived","nativeEvidence":"tests/compat/hono/cors-smoke.ts"},
     {"source":"vendor/hono/src/middleware/body-limit/index.test.ts","selectors":["should return 200 response","should return 413 response"],"evidenceMode":"native-derived","nativeEvidence":"tests/compat/hono/body-limit-smoke.ts"},
+    {"source":"vendor/hono/src/middleware/request-id/index.test.ts","selectors":["Should return random request id","Should return custom request id","Should return random request id without using request header"],"evidenceMode":"native-derived","nativeEvidence":"tests/compat/hono/request-id-smoke.ts"},
+    {"source":"vendor/hono/src/middleware/request-id/index.test.ts","selectors":["Should return custom request id with 256 characters","headerName: 'Hono-Request-Id'"],"evidenceMode":"native-derived","nativeEvidence":"tests/compat/hono/request-id-options-smoke.ts"},
     {"source":"vendor/hono/src/middleware/pretty-json/index.test.ts","selectors":["Should return pretty JSON output"],"evidenceMode":"native-derived","nativeEvidence":"tests/compat/hono/pretty-json-smoke.ts"},
     {"source":"vendor/hono/src/middleware/basic-auth/index.test.ts","selectors":["Should not authorize","Should authorize"],"evidenceMode":"native-derived","nativeEvidence":"tests/compat/hono/basic-auth-smoke.ts"},
     {"source":"vendor/hono/src/hono.test.ts","selectors":["Should match with an optional parameter","Should match without an optional parameter"],"evidenceMode":"native-derived","nativeEvidence":"tests/compat/hono/optional-param-smoke.ts"},

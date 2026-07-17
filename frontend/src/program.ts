@@ -446,6 +446,12 @@ function lowerApplicationInitialization(
       path: route.path,
       ...responseHeaders,
       ...(basicAuthorization === undefined ? {} : {basicAuthorization}),
+      ...(response.requestId === undefined
+        ? {}
+        : {requestId: {
+          header: strings.intern(response.requestId.headerName),
+          maxLength: response.requestId.maxLength,
+        }}),
       ...(bodyLimit === undefined ? {} : {bodyLimit}),
       ...(entityTag === undefined ? {} : {entityTag}),
       ...(sqliteExistence === undefined ? {} : {sqliteExistence}),
@@ -773,6 +779,9 @@ function lowerRuntimeString(
       }
       if (part.kind === "requestHeader") {
         return {kind: "requestHeader" as const, header: strings.intern(part.name), span};
+      }
+      if (part.kind === "requestId") {
+        return {kind: "requestId" as const, header: strings.intern(part.headerName), span};
       }
       if (part.kind === "requestCookie") {
         return {

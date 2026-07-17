@@ -58,6 +58,27 @@ test("ships runnable Hono, node-server, tinytsx serve, and Zod examples", async 
     assert.equal(await rejected.text(), "Payload Too Large");
   });
 
+  const requestIdPort = 39_499;
+  const requestIdBinary = binaryPath(project, "request-id");
+  assertBuilt(build(
+    compiler,
+    project,
+    "hono-request-id/server.ts",
+    requestIdBinary,
+    requestIdPort,
+  ), "request ID");
+  await withServer(requestIdBinary, requestIdPort, async () => {
+    const generated = await request(requestIdPort, "/request-id");
+    const generatedBody = await generated.text();
+    assert.match(generatedBody, /^[0-9a-f-]{36}$/);
+    assert.equal(generated.headers.get("x-request-id"), generatedBody);
+    const accepted = await request(requestIdPort, "/request-id", {
+      headers: {"x-request-id": "release-request"},
+    });
+    assert.equal(await accepted.text(), "release-request");
+    assert.equal(accepted.headers.get("x-request-id"), "release-request");
+  });
+
   const neutralPort = 39_491;
   const neutralBinary = binaryPath(project, "tiny-serve");
   assertBuilt(build(compiler, project, "tiny-serve/server.ts", neutralBinary, neutralPort), "tinytsx:serve");

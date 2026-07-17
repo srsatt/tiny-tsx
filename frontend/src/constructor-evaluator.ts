@@ -106,6 +106,7 @@ export interface EvaluatedResponse {
   headers?: Array<{name: string; value: ResponseHeaderValue}>;
   stderr?: string[];
   basicAuthorization?: EvaluatedBasicAuthorization;
+  requestId?: {headerName: string; maxLength: number};
   bodyLimit?: EvaluatedBodyLimit;
   entityTag?: EvaluatedEntityTag;
   sqliteExistence?: EvaluatedSqliteExistence;
@@ -619,6 +620,7 @@ function evaluateRouteHandler(
     protectedHeaders: Set<string>;
   } | undefined;
   let bodyLimit: number | undefined;
+  let requestId: {headerName: string; maxLength: number} | undefined;
   let entityTag: {
     value: string;
     notModified: Value & {kind: "response"};
@@ -656,6 +658,29 @@ function evaluateRouteHandler(
         bodyLimit = bodyLimit === undefined
           ? requestBodyLimit
           : Math.min(bodyLimit, requestBodyLimit);
+        continue;
+      }
+      if (isRequestIdMiddleware(middlewareHandler)) {
+        const closed = closedRequestId(middlewareHandler);
+        if (closed === undefined) {
+          issue(
+            evaluator,
+            middlewareHandler.expression,
+            middlewareHandler.module,
+            "requestId requires its default generator, a closed valid headerName, and a limitLength from 1 through 1024",
+          );
+          continue;
+        }
+        if (requestId !== undefined) {
+          issue(
+            evaluator,
+            middlewareHandler.expression,
+            middlewareHandler.module,
+            "multiple requestId middleware policies on one route are not supported",
+          );
+          continue;
+        }
+        requestId = closed;
         continue;
       }
       const cors = closedCors(middlewareHandler);
@@ -724,6 +749,20 @@ function evaluateRouteHandler(
       })`,
     );
     return undefined;
+  }
+  if (responseUsesRequestId(response) && requestId === undefined) {
+    issue(
+      evaluator,
+      handler.expression,
+      handler.module,
+      "Context.get(\"requestId\") requires one matched upstream requestId middleware",
+    );
+    return undefined;
+  }
+  if (requestId !== undefined) {
+    const bound = bindResponseRequestId(response, requestId.headerName);
+    response.body = bound.body;
+    response.headers = bound.headers;
   }
   if (basicAuthorization !== undefined) {
     for (const [name, header] of response.headers) {
@@ -797,6 +836,7 @@ function evaluateRouteHandler(
           },
         },
       }),
+    ...(requestId === undefined ? {} : {requestId}),
     ...(entityTag === undefined
       ? {}
       : {
@@ -806,6 +846,38 @@ function evaluateRouteHandler(
         },
       }),
   };
+}
+
+function closedRequestId(
+  middleware: Value & {kind: "closure"},
+): {headerName: string; maxLength: number} | undefined {
+  if (!isRequestIdMiddleware(middleware)) return undefined;
+  const limitLength = middleware.environment.get("limitLength");
+  const headerName = middleware.environment.get("headerName");
+  const generator = middleware.environment.get("generator");
+  if (
+    limitLength?.kind !== "number"
+    || !Number.isSafeInteger(limitLength.value)
+    || limitLength.value < 1
+    || limitLength.value > 1024
+    || headerName?.kind !== "string"
+    || headerName.value.length === 0
+    || Buffer.byteLength(headerName.value, "utf8") > 128
+    || !/^[\w!#$%&'*.^`|~+-]+$/.test(headerName.value)
+    || generator?.kind !== "closure"
+    || !/\/middleware\/request-id\/request-id\.(?:ts|js)$/.test(
+      generator.module.path.replaceAll("\\", "/"),
+    )
+  ) return undefined;
+  return {headerName: headerName.value, maxLength: limitLength.value};
+}
+
+function isRequestIdMiddleware(middleware: Value & {kind: "closure"}): boolean {
+  return /\/middleware\/request-id\/request-id\.(?:ts|js)$/.test(
+    middleware.module.path.replaceAll("\\", "/"),
+  )
+    && ts.isFunctionExpression(middleware.expression)
+    && /^requestId\d*$/.test(middleware.expression.name?.text ?? "");
 }
 
 interface ClosedCors {
@@ -1136,6 +1208,73 @@ function cloneResponse(response: Value & {kind: "response"}): Value & {kind: "re
   };
 }
 
+function responseUsesRequestId(response: Value & {kind: "response"}): boolean {
+  return responseBodyUsesRequestId(response.body)
+    || [...response.headers.values()].some(header => headerValueUsesRequestId(header.value));
+}
+
+function responseBodyUsesRequestId(body: ResponseBody): boolean {
+  if (typeof body === "string") return false;
+  if (Array.isArray(body)) return body.some(part => part.kind === "requestId");
+  if (body.kind === "stream") {
+    return body.chunks.some(chunk =>
+      typeof chunk !== "string" && chunk.some(part => part.kind === "requestId")
+    );
+  }
+  return headerValueUsesRequestId(body.whenPresent)
+    || headerValueUsesRequestId(body.whenAbsent);
+}
+
+function headerValueUsesRequestId(value: ResponseHeaderValue): boolean {
+  return typeof value !== "string" && value.some(part => part.kind === "requestId");
+}
+
+function bindResponseRequestId(
+  response: Value & {kind: "response"},
+  headerName: string,
+): Value & {kind: "response"} {
+  return {
+    ...response,
+    body: bindResponseBodyRequestId(response.body, headerName),
+    headers: new Map([...response.headers].map(([key, header]) => [
+      key,
+      {...header, value: bindHeaderValueRequestId(header.value, headerName)},
+    ])),
+  };
+}
+
+function bindResponseBodyRequestId(body: ResponseBody, headerName: string): ResponseBody {
+  if (typeof body === "string") return body;
+  if (Array.isArray(body)) return bindRuntimePartsRequestId(body, headerName);
+  if (body.kind === "stream") {
+    return {
+      ...body,
+      chunks: body.chunks.map(chunk => typeof chunk === "string"
+        ? chunk
+        : bindRuntimePartsRequestId(chunk, headerName)),
+    };
+  }
+  return {
+    ...body,
+    whenPresent: bindHeaderValueRequestId(body.whenPresent, headerName),
+    whenAbsent: bindHeaderValueRequestId(body.whenAbsent, headerName),
+  };
+}
+
+function bindHeaderValueRequestId(
+  value: ResponseHeaderValue,
+  headerName: string,
+): ResponseHeaderValue {
+  return typeof value === "string" ? value : bindRuntimePartsRequestId(value, headerName);
+}
+
+function bindRuntimePartsRequestId(
+  parts: RuntimeStringPart[],
+  headerName: string,
+): RuntimeStringPart[] {
+  return parts.map(part => part.kind === "requestId" ? {...part, headerName} : part);
+}
+
 function matchingMiddleware(
   route: Value,
   requestMethod: string,
@@ -1187,6 +1326,16 @@ function findRuntimeClass(evaluator: Evaluator, name: string): ResolvedRuntimeCl
     current = resolveBaseRuntimeClass(current, evaluator.modules);
   }
   return undefined;
+}
+
+function isHonoContextInstance(
+  evaluator: Evaluator,
+  instance: Value & {kind: "instance"},
+): boolean {
+  const resolved = evaluator.instanceClasses.get(instance);
+  return resolved !== undefined && /(?:^|\/)hono\/(?:src|dist)\/context\.(?:ts|js)$/.test(
+    resolved.module.path.replaceAll("\\", "/"),
+  );
 }
 
 function executeClass(
@@ -1707,6 +1856,9 @@ function sameResponseHeaderValue(left: ResponseHeaderValue, right: ResponseHeade
         && candidate.statement.sql === part.statement.sql
         && candidate.mode === part.mode
         && sameSqliteParameters(candidate.parameters, part.parameters);
+    }
+    if (part.kind === "requestId") {
+      return candidate?.kind === "requestId" && candidate.headerName === part.headerName;
     }
     return candidate?.kind === part.kind && candidate.name === part.name;
   });
@@ -2808,6 +2960,16 @@ function evaluateCall(
           ],
         })),
       };
+    }
+    if (
+      receiver.kind === "instance"
+      && name === "get"
+      && isHonoContextInstance(evaluator, receiver)
+    ) {
+      const key = arguments_[0];
+      return arguments_.length === 1 && key?.kind === "string" && key.value === "requestId"
+        ? {kind: "requestId", headerName: "X-Request-Id"}
+        : unknown("Context.get requires the supported requestId key");
     }
     if (receiver.kind === "response" && name === "json") {
       if (typeof receiver.body !== "string") {
@@ -4144,6 +4306,7 @@ function evaluateExpression(
         && body.kind !== "actorCall"
         && body.kind !== "sqliteQuery"
         && body.kind !== "routeParameter"
+        && body.kind !== "requestId"
         && body.kind !== "requestCookie"
         && body.kind !== "responseBody"
         && body.kind !== "undefined"
@@ -4155,7 +4318,7 @@ function evaluateExpression(
       }
       const runtimeBody = body.kind === "routeParameter"
         ? [{kind: "routeParameter" as const, name: body.name}]
-        : body.kind === "workerCall" || body.kind === "openAiChatText" || body.kind === "environmentVariable" || body.kind === "fileText" || body.kind === "actorCall" || body.kind === "sqliteQuery" || body.kind === "requestCookie"
+        : body.kind === "workerCall" || body.kind === "openAiChatText" || body.kind === "environmentVariable" || body.kind === "fileText" || body.kind === "actorCall" || body.kind === "sqliteQuery" || body.kind === "requestCookie" || body.kind === "requestId"
           ? runtimeStringParts(body)
         : body.kind === "runtimeString"
           ? body.parts
@@ -4343,6 +4506,7 @@ function evaluateExpression(
       values.push(
         part.kind === "routeParameter"
           || part.kind === "requestHeader"
+          || part.kind === "requestId"
           || part.kind === "requestCookie"
           || part.kind === "fetchStatus"
           || part.kind === "elapsedMilliseconds"
@@ -5205,6 +5369,7 @@ function isTrackedAllocation(expression: ts.Expression, value: Value): boolean {
     || value.kind === "request"
     || value.kind === "routeParameter"
     || value.kind === "requestHeader"
+    || value.kind === "requestId"
     || value.kind === "requestCookie"
     || value.kind === "environmentVariable"
     || value.kind === "fileText"
