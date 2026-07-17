@@ -8,11 +8,11 @@ requires an explicit status, first unsupported boundary, and evidence path for
 every recorded guide, helper, middleware, and core API row.
 
 `native-pass` always means the bounded behavior stated in that row, never the
-whole named Hono API. The current native rows are Basic Auth, ETag, Powered By,
-Pretty JSON, the `html` helper, finite text streaming, and the admitted JSX
-slice. Core Hono, Context, HonoRequest, routing, middleware composition,
-validation, presets, and Node.js startup remain `partial` because only their
-listed tracers compile.
+whole named Hono API. The current native rows are Basic Auth, bounded CORS,
+ETag, Powered By, Pretty JSON, the `html` helper, finite text streaming, and the
+admitted JSX slice. Core Hono, Context, HonoRequest, routing, middleware
+composition, validation, presets, and Node.js startup remain `partial` because
+only their listed tracers compile.
 
 The official-doc review pulls only two new middleware capabilities into the
 alpha critical path:
@@ -25,6 +25,14 @@ The transport and request API now provide the bounded body foundation: a
 SQLite parameters. The configurable upstream Body Limit middleware, including
 its custom `onError` behavior, remains partial. Hono `put()` and `delete()` now
 join the existing closed `get()` and `post()` route slice.
+
+The upstream CORS factory now supplies a bounded native slice for closed
+`origin: "*"` options. Normal responses receive the declared allow-origin,
+credentials, and expose headers; generated OPTIONS routes return 204 with
+closed allow-method/header/max-age values. The blog adapter pins Content-Type
+preflight under both TinyTSX and Bun/Hono. Origin arrays/functions, dynamic
+method functions, reflected request headers, and non-wildcard Vary behavior are
+outside this row.
 
 All other missing helpers and middleware are explicitly post-alpha or out of
 scope. In particular, alpha does not need compression, cache storage,

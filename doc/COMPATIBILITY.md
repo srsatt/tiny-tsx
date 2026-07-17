@@ -165,6 +165,15 @@ missing, boolean, array, nested-object, or oversized input with a recoverable
 client response. It does not construct a general runtime record, implement
 arbitrary JSON access, or complete Hono's configurable Body Limit middleware.
 
+The pinned upstream CORS factory now lowers for closed wildcard-origin options.
+Normal responses carry the configured static headers, while compiler-generated
+OPTIONS handlers return Hono's 204 preflight with closed allow-method,
+allow-header, expose-header, credentials, and max-age values. The SQLite blog
+adapter fixes `Content-Type` as its admitted request header and matches the same
+Bun/Hono preflight. Origin callbacks/arrays, non-wildcard origin matching,
+dynamic method callbacks, and arbitrary request-header reflection remain
+outside this specialization.
+
 Terminal wildcard matching now covers the exact `/api/*` fallback from the
 basic example. Native tests pin Hono's behavior that the pattern matches `/api`,
 `/api/`, and deeper paths. The generated handler returns Hono's explicit status

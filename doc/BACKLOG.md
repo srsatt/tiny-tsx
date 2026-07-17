@@ -67,7 +67,7 @@ Acceptance criteria are:
 - [x] Update `doc/PERSISTENCE.md`, `doc/COMPATIBILITY.md`, `doc/STATUS.md`, and the
   machine-readable Hono example matrix with the exact supported boundary.
 - [ ] Match the pinned upstream response envelopes and missing-post 404/204
-  behavior, then add CORS, UUID generation, and environment-backed bindings.
+  behavior, then add UUID generation and environment-backed bindings.
 
 This slice does not complete A5. On-disk capabilities, transactions,
 contention, restart persistence, and the persistent actor remain separate
@@ -107,7 +107,7 @@ follow-up goals after the in-memory CRUD contract is green.
       adapter from unchanged upstream source.
 - [x] Add bounded JSON request bodies and closed-shape JSON parsing required by
       the blog tracer, with native success, malformed-input, and limit tests.
-- [ ] Add the minimum upstream Hono CORS middleware behavior required by the
+- [x] Add the minimum upstream Hono CORS middleware behavior required by the
       blog tracer and compare its portable response headers with Bun.
 - [ ] Add bounded `crypto.randomUUID()` support with Web-platform evidence and
       native format/uniqueness tests.

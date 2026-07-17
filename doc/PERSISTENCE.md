@@ -44,6 +44,7 @@ reference test pins the same portable CRUD response contract.
 Before promotion to `native`, the compiler must expose typed execute results and
 the remaining value families needed by public callers; on-disk paths must use
 separate read/write capabilities; transactions need native tests; and the exact
-Hono blog adapter plus persistent actor tracers must pass end to end. CORS,
-UUIDs, environment-backed bindings, and upstream 404/204 envelopes remain blog
-parity work rather than claims of this local CRUD tracer.
+Hono blog adapter plus persistent actor tracers must pass end to end. Bounded
+wildcard-origin CORS and Content-Type preflight are native; UUIDs,
+environment-backed bindings, and upstream 404/204 envelopes remain blog parity
+work rather than claims of this local CRUD tracer.

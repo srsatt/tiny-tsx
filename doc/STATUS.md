@@ -109,9 +109,15 @@ produces and serves a native Mach-O executable from the example TSX source.
   create/list/get/update/delete over GET/POST/PUT/DELETE, SQL-error recovery,
   post-close failure, Apple execution, and Linux-arm64 assembly; a Bun/Hono
   `bun:sqlite` test pins the same local adapter contract. Typed execute results,
-  transactions, disk capabilities, CORS, UUIDs, bindings, exact upstream blog
+  transactions, disk capabilities, UUIDs, bindings, exact upstream blog
   envelopes, and the persistent actor remain open.
-- Verification: `npm run test:frontend` (82/82),
+- The pinned upstream `cors()` factory now lowers for closed wildcard-origin
+  options. Native normal responses and generated OPTIONS 204 preflights cover
+  static allow-method/header/expose/credentials/max-age values. The SQLite blog
+  adapter's Content-Type preflight matches Bun/Hono on Apple execution and its
+  Linux-arm64 output assembles. Dynamic/non-wildcard origins, callback options,
+  and arbitrary reflected request headers remain unsupported.
+- Verification: `npm run test:frontend` (83/83),
   `npm run test:zod-openapi-reference` (1/1),
   `npm run test:zod-openapi` (2/2),
   `npm run test:hono-intake` (7/7),
@@ -121,7 +127,7 @@ produces and serves a native Mach-O executable from the example TSX source.
   `cargo test -p tinytsx builtins` (1/1),
   `npm run test:actors-native` (2/2),
   `cargo test -p tinytsx-runtime-sqlite` (4/4),
-  `npm run test:sqlite-reference` (1/1),
+  `npm run test:sqlite-reference` (2/2),
   `npm run test:sqlite-native` (2/2), and
   `cargo clippy --workspace --all-targets -- -D warnings`.
 
