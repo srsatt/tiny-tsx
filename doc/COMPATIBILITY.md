@@ -168,6 +168,20 @@ SQLite mutation. This is one first-row SQLite existence branch with a direct,
 effect-free missing response, not general runtime JavaScript conditionals or
 arbitrary result inspection.
 
+`Statement.run()` now exposes the first closed SQLite mutation result. Its
+immutable `RunResult` has only `changes: number` and
+`lastInsertRowId: string | null`; the row ID is decimal text to preserve every
+signed SQLite `i64` exactly. Zero changed rows produce `null`; a nonzero change
+returns SQLite's connection-local last-insert row ID. The in-memory owner
+tracer captures an insert result, executes a later delete in a separate stable
+action slot, and returns
+the original `{"changes":1,"lastInsertRowId":"1"}`. The multi-module
+user-auth tracer returns the same inserted-row fields and a zero-change update
+as `{"changes":0,"lastInsertRowId":null}`. Apple native HTTP, Linux-arm64
+assembly, and the installed archive cover this boundary. This is fixed
+per-action response lowering, not general result-object identity, mutation,
+iteration, storage, or dynamic property access.
+
 The first request-body slice retains at most 64 KiB and recognizes
 `await c.req.json()` only when statically selected fields flow directly into a
 prepared SQLite call. The bootstrap parses the body once at that ABI boundary,

@@ -20,7 +20,7 @@ The generated servers have no npm or JavaScript runtime dependency.
 | `tiny-serve/server.ts` | `tinytsx build tiny-serve/server.ts --output server --release` | The same entry through Hono-neutral `tinytsx:serve` |
 | `hono-zod-openapi/server.ts` | `tinytsx build hono-zod-openapi/server.ts --output server --release` | Pinned `OpenAPIHono`, `createRoute`, and `z` path validation/document generation |
 | `hono-static/server.ts` | `tinytsx build hono-static/server.ts --allow-read "$PWD/hono-static/assets" --output server --release` | Capability-scoped UTF-8 file reads |
-| `hono-sqlite/server.ts` | `tinytsx build hono-sqlite/server.ts --allow-env TINYTSX_BLOG_NAME --output server --release` | Bounded in-memory SQLite CRUD and JSON input |
+| `hono-sqlite/server.ts` | `tinytsx build hono-sqlite/server.ts --allow-env TINYTSX_BLOG_NAME --output server --release` | Bounded in-memory SQLite CRUD, JSON input, and typed run results |
 | `hono-sqlite/persistent.ts` | `tinytsx build hono-sqlite/persistent.ts --allow-read "$PWD/state" --allow-write "$PWD/state" --output server --release` | Capability-scoped on-disk SQLite and static transactions |
 | `hono-actors/server.ts` | `tinytsx build hono-actors/server.ts --output server --release` | Local bounded counter actor |
 | `hono-actors/messages.ts` | `tinytsx build hono-actors/messages.ts --output server --release` | Copied primitive, bounded-array, and closed-record actor messages |

@@ -24,11 +24,24 @@ malformed SQL recovery, and row/byte/parameter limits.
 The native alpha public slice lowers a compile-time `:memory:` or
 capability-scoped on-disk `Database`, closed `exec(sql)` effects, prepared
 `run()`/`all()`/`get()` calls, static-SQL transactions, bounded JSON row
-encoding, and idempotent `close`/`dispose`. Effect calls return `Promise<void>`;
-typed changes/row-id objects are post-alpha. A prepared call accepts at most 16
-selected values from named route parameters, UUID generation, a closed request
-JSON object, or compile-time string, safe-integer, finite-real, boolean, and
-null literals. Parameters use SQLite binding rather than SQL interpolation.
+encoding, and idempotent `close`/`dispose`. `exec()` and `transaction()` return
+`Promise<void>`; `Statement.run()` returns an immutable `RunResult` with a
+numeric `changes` count and `lastInsertRowId: string | null`. The decimal string
+preserves the complete signed SQLite `i64` domain rather than rounding through
+a JavaScript number. A run with zero changed rows reports `null`; otherwise the
+field contains SQLite's connection-local last-insert row ID. A prepared call
+accepts at most 16 selected values from named route parameters, UUID generation,
+a closed request JSON object, or compile-time string, safe-integer, finite-real,
+boolean, and null literals. Parameters use SQLite binding rather than SQL
+interpolation.
+
+Each handler is limited to 16 SQLite actions and therefore 16 stable result
+slots. A `run()` action sends its slot through the serialized owner request;
+the owner reply carries the changes count and optional signed row ID, and the
+bootstrap copies them into a fixed writer-owned array. Response lowering may
+read only the result produced by that exact action. Ignored results still occupy
+their deterministic slot, and no runtime record allocation or managed heap is
+introduced.
 
 On-disk owners accept one static normalized relative path. Compilation requires
 exactly one canonical root present in both `--allow-read` and `--allow-write`,
@@ -92,9 +105,11 @@ reference test pins the same portable CRUD response contract.
 
 The manifest classifies this bounded surface as `native`. The multi-module
 user-auth tracer additionally proves a closed string parameter written to an
-on-disk database and observed after process restart. Typed execute results,
-additional caller-provided dynamic values, prepared/callback transaction forms,
-and HTTP contention load remain post-alpha. Bounded wildcard-origin CORS,
+on-disk database and observed after process restart. It now also returns both
+fields from an inserted row and proves a zero-change update yields
+`lastInsertRowId: null`. Additional caller-provided dynamic values,
+prepared/callback transaction forms, arbitrary result-object operations, and
+HTTP contention load remain post-alpha. Bounded wildcard-origin CORS,
 Content-Type preflight, and OS-random version-4 IDs bound as prepared values are
 native. The adapter also maps its typed Hono blog-name binding to a permitted
 immutable startup value. The pinned upstream 404/204 envelopes match through

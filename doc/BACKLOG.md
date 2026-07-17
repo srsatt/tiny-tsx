@@ -97,8 +97,8 @@ Runtime SQLite directory/sidecar-race hardening, prepared/callback transactions,
 general actor messages, actor-scale/fairness work, and the combined user-auth
 example were explicitly post-alpha. Later sections record the disk ownership,
 bounded value-message, scale/fairness, and auth work that has since landed;
-callback transactions and the explicitly documented OS-sandbox boundaries
-remain open.
+typed `Statement.run()` results have also landed. Callback transactions and the
+explicitly documented OS-sandbox boundaries remain open.
 
 ### Release handoff
 
@@ -366,9 +366,10 @@ The current stabilization pass has landed the complete native Test262
 allowlist, the multi-module Hono user-auth tracer, copied structured actor
 messages, protected SQLite ownership, actor pressure evidence, and bounded live
 HTTP-connection resubmission. The bounded Hono Body Limit tracer has also
-landed, followed by the bounded Hono Request ID tracer. Their implementation
-and evidence are recorded under P1-P4. Select the next bounded slice explicitly
-before its implementation begins.
+landed, followed by the bounded Hono Request ID tracer and immutable typed
+SQLite `Statement.run()` results. Their implementation and evidence are
+recorded under P1-P4. Select the next bounded slice explicitly before its
+implementation begins.
 
 Do not reopen the completed alpha foundations as broad projects. File reading,
 SQLite, and local actors already have public bounded built-ins. Their next work
@@ -378,12 +379,12 @@ named upstream tracer.
 
 The groomed candidates, in recommended dependency order, are:
 
-1. **SQLite result depth:** add typed execute results and only the dynamic value
-   forms required by the selected application while retaining single-owner,
-   non-interleaving execution.
-2. **Actor lifecycle depth:** specify disconnect cancellation, restart, and
+1. **Actor lifecycle depth:** specify disconnect cancellation, restart, and
    supervision separately; do not bundle distributed actors, snapshots, or a
    managed heap into the local lifecycle goal.
+2. **SQLite transaction/value depth:** add only the prepared/callback
+   transaction and dynamic value forms required by a selected application while
+   retaining single-owner, non-interleaving execution.
 3. **Release-stability evidence:** finish the named P4 workload families and a
    longer controlled TinyTSX/Bun run only after the selected functional slice
    is green. A new release candidate remains a separate explicitly selected
@@ -606,8 +607,12 @@ explicitly promoted into a later goal.
       interleave on one connection.
   - 2026-07-17: prepared `run`/`all`/`get` parameters now accept bounded closed
     string, safe-integer, finite-real, boolean, and null literals in addition to
-    route/JSON/UUID values. Dynamic values, result objects, and callback
-    transactions remain open.
+    route/JSON/UUID values.
+  - 2026-07-17: `Statement.run()` now returns an immutable two-field result;
+    `changes` is numeric and `lastInsertRowId` is an exact decimal string or
+    null. Fixed per-handler result slots preserve single-owner ordering without
+    a general heap. Broader dynamic values, arbitrary result operations, and
+    callback transactions remain open.
 - [ ] Add actor supervision trees, restart intensity, monitors/links, registries,
       persistence snapshots, and remote/distributed actors only from separate
       evidence-driven proposals.

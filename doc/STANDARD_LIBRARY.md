@@ -129,16 +129,24 @@ The native alpha module is a single-owner `:memory:` or capability-scoped
 on-disk database. It provides closed `exec(sql)` effects, prepared
 `run()`/`all()`/`get()` calls, static-SQL `transaction(sql)` batches, and
 idempotent `close`/`dispose`, serialized through one logical application
-worker. Effect calls resolve to `Promise<void>`; changes/row-id result objects
-are deliberately not declared in this alpha.
+worker. `exec()` and `transaction()` resolve to `Promise<void>`;
+`Statement.run()` resolves to a closed immutable `RunResult` containing a
+numeric `changes` count and `lastInsertRowId: string | null`. The row ID uses a
+decimal string so every signed SQLite `i64` remains exact outside JavaScript's
+safe-integer range. A run with zero changed rows reports `null`; otherwise the
+field contains SQLite's connection-local last-insert row ID.
 
 Prepared calls bind at most 16 compile-time-selected route, bounded JSON-body,
 UUID, or closed primitive values (string, safe integer, finite real, boolean,
 and null). SQL is capped at 65,536 bytes; results at 1,024 rows and 1 MiB;
-and the vendored runtime is described in `doc/PERSISTENCE.md`. On-disk paths
+and the vendored runtime is described in `doc/PERSISTENCE.md`. One handler may
+contain at most 16 SQLite actions/result slots; the generated writer owns fixed
+result storage, so returning these fields does not introduce a general object
+heap. On-disk paths
 require one matching canonical read/write root plus the service-owned runtime
 directory/file policy above. General dynamic values, prepared/callback
-transactions, and typed execute results are post-alpha.
+transactions, arbitrary result inspection, and retaining result objects beyond
+the response are post-alpha.
 
 ### `tinytsx:actors`
 

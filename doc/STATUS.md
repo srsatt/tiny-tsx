@@ -9,6 +9,25 @@ produces and serves a native Mach-O executable from the example TSX source.
 
 ## Alpha implementation evidence
 
+### Typed SQLite run results (2026-07-17)
+
+- The protected SDK now exposes immutable `RunResult` values from
+  `Statement.run()`: `changes` is numeric and `lastInsertRowId` is an exact
+  decimal string or null. Zero changed rows produce null; otherwise the value
+  is SQLite's connection-local signed `i64` last-insert row ID.
+- Each handler remains capped at 16 SQLite actions/result slots. The database
+  owner returns a fixed 17-byte payload, the bootstrap stores it in the
+  writer's fixed result array, and HIR validation ties every response read to
+  the exact producing action. This adds no general runtime object heap.
+- The in-memory Hono owner returns an insert result after a later delete action,
+  proving stable slots. The multi-module user-auth tracer returns both inserted
+  fields and a zero-change/null result. The installed package builds and runs
+  the packaged SQLite tracer; Apple native execution and Linux-arm64 assembly
+  remain part of both focused gates.
+- Verification: 123 frontend tests, 177 Rust workspace tests, 60 focused
+  bootstrap tests, Hono intake 8/8, SQLite native 5/5, user-auth native 2/2,
+  and installed release 4/4. Workspace Clippy passes with warnings denied.
+
 ### Tag-ready two-target candidate (2026-07-17)
 
 - The final clean source commit completed `npm run release:verify` on native

@@ -115,13 +115,13 @@
       "provenance": "tinytsx-local",
       "entry": "examples/hono-user-auth/server.ts",
       "imports": ["hono", "hono/basic-auth", "hono/cookie", "@hono/node-server", "tinytsx:sqlite"],
-      "apis": ["Hono", "use", "get", "post", "onError", "Context.env", "Context.text", "Context.json", "basicAuth", "getCookie", "setCookie", "serve", "Database", "Database.exec", "Database.prepare", "Statement.run", "Statement.all"],
+      "apis": ["Hono", "use", "get", "post", "onError", "Context.env", "Context.text", "Context.json", "basicAuth", "getCookie", "setCookie", "serve", "Database", "Database.exec", "Database.prepare", "Statement.run", "Statement.all", "RunResult.changes", "RunResult.lastInsertRowId"],
       "intake": {"status": "pass", "evidence": "tests/compat/hono/user-auth-native.test.mjs"},
       "nativeCompile": {"appleArm64": "pass", "linuxArm64Assembly": "pass", "evidence": "tests/compat/hono/user-auth-native.test.mjs"},
       "httpBehavior": {"status": "pass", "evidence": "tests/compat/hono/user-auth-native.test.mjs"},
       "referenceBehavior": {"runtime": "not-applicable", "status": "not-applicable", "evidence": "doc/COMPATIBILITY.md"},
       "releaseGates": {"native": ["test:hono-user-auth"], "reference": []},
-      "firstUnsupportedBoundary": "The multi-module tracer proves one static Basic Auth guard, a required string environment binding, a closed HttpOnly/SameSite session marker, a closed error response, and SQLite state across restart; dynamic credentials/session IDs, signed cookies, hashing, expiry, and general authorization policy remain unsupported."
+      "firstUnsupportedBoundary": "The multi-module tracer proves one static Basic Auth guard, a required string environment binding, a closed HttpOnly/SameSite session marker, a closed error response, SQLite state across restart, and exact inserted/zero-change RunResult fields; dynamic credentials/session IDs, signed cookies, hashing, expiry, arbitrary result-object operations, and general authorization policy remain unsupported."
     },
     {
       "id": "upstream-serve-static",
@@ -142,13 +142,13 @@
       "provenance": "tinytsx-local",
       "entry": "examples/hono-sqlite/server.ts",
       "imports": ["hono", "hono/cors", "@hono/node-server", "tinytsx:sqlite"],
-      "apis": ["Hono", "get", "post", "put", "delete", "OPTIONS", "Context.req.json", "Context.env", "Context.json", "cors", "serve", "Database", "Database.exec", "Database.prepare", "Statement.run", "Statement.all", "Statement.get", "Database.close"],
+      "apis": ["Hono", "get", "post", "put", "delete", "OPTIONS", "Context.req.json", "Context.env", "Context.json", "cors", "serve", "Database", "Database.exec", "Database.prepare", "Statement.run", "Statement.all", "Statement.get", "RunResult.changes", "RunResult.lastInsertRowId", "Database.close"],
       "intake": {"status": "pass", "evidence": "frontend/test/compatibility-audit.test.ts"},
       "nativeCompile": {"appleArm64": "pass", "linuxArm64Assembly": "pass", "evidence": "tests/compat/sqlite/native.test.mjs"},
       "httpBehavior": {"status": "pass", "evidence": "tests/compat/sqlite/native.test.mjs"},
       "referenceBehavior": {"runtime": "Bun/Hono with bun:sqlite", "status": "pass", "evidence": "tests/compat/sqlite/reference.behavior.test.ts"},
       "releaseGates": {"native": ["test:sqlite-native"], "reference": ["test:sqlite-reference"]},
-      "firstUnsupportedBoundary": "Prepared calls accept at most 16 selected route/JSON/UUID values and bounded wildcard-origin CORS; the disk adapter proves capability-scoped restart persistence, static-SQL commit/rollback, and the documented cross-UID Unix path/sidecar policy, while general dynamic values, typed execute results, prepared/callback transactions, HTTP contention load, and same-UID or unusual-filesystem mutation are unsupported."
+      "firstUnsupportedBoundary": "Prepared calls accept at most 16 selected route/JSON/UUID values, immutable run results expose numeric changes plus an exact decimal row ID or null, and bounded wildcard-origin CORS is native; the disk adapter proves capability-scoped restart persistence, static-SQL commit/rollback, and the documented cross-UID Unix path/sidecar policy, while general dynamic values, arbitrary result-object operations, prepared/callback transactions, HTTP contention load, and same-UID or unusual-filesystem mutation are unsupported."
     },
     {
       "id": "upstream-blog",
