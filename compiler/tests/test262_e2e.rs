@@ -41,6 +41,10 @@ fn compiles_and_runs_native_test262_programs() {
             "string-throw-catch",
             "vendor/test262/test/language/statements/throw/S12.13_A1.js",
         ),
+        (
+            "date-now-type",
+            "vendor/test262/test/built-ins/Date/now/15.9.4.4-0-4.js",
+        ),
     ] {
         compile_and_run(&root, &directory.join(name), case);
     }

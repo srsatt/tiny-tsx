@@ -480,6 +480,15 @@ flag, and verifies final state before returning success. Together with the
 ordinary function E2E, this is bounded string abrupt-completion evidence—not
 general Error-object or exception-unwinding conformance.
 
+The complete pinned `Date.now()` Test262 program now executes natively. Its
+exact `typeof Date.now() === "number"` assertion calls the target host's
+`clock_gettime` symbol and fails if the call does not succeed. The standalone
+Test262 entry preserves its AArch64 frame and link registers across host calls
+on both success and failure paths. This proves the numeric return category and
+portable host-call ABI for this exact assertion; it does not claim ECMAScript
+epoch-millisecond precision, monotonicity, clock adjustment, or general `Date`
+objects.
+
 The allowlisted `language/expressions/typeof/undefined.js` case is the first
 `mode: native` Test262 entry. `tinytsx test262 <case> --output <binary>` parses
 the untouched upstream source and lowers its two top-level

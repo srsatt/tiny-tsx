@@ -362,10 +362,10 @@ adds an explicit application acceptance test.
 - [ ] Promote remaining syntax-only Test262 cases only when their complete
       assertion programs execute natively.
   - 2026-07-17: the complete pinned array-spread/apply, subtraction/GetValue,
-    closed-record membership, and direct string throw/catch programs were
-    promoted to native mode. Their assertions execute against copied arguments,
-    numeric slots, runtime field-name bytes, and native abrupt completion. Six
-    syntax-only cases remain.
+    closed-record membership, direct string throw/catch, and `Date.now()` type
+    programs were promoted to native mode. Their assertions execute against
+    copied arguments, numeric slots, runtime field-name bytes, native abrupt
+    completion, and the portable host clock. Five syntax-only cases remain.
 - [ ] Expand ordinary functions to locals, branches, closures, additional native
       types, and general typed expressions/statements.
   - 2026-07-17: immutable string locals and strict string-equality branches now

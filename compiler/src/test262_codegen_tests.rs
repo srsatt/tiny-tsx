@@ -1,9 +1,7 @@
 use crate::{
     hir::SourceSpan,
     target::Target,
-    test262_hir::{
-        NumericOperand, NumericSubtractionOperation, Test262Assertion, Test262Program,
-    },
+    test262_hir::{NumericOperand, NumericSubtractionOperation, Test262Assertion, Test262Program},
 };
 
 use super::emit;
@@ -142,4 +140,28 @@ fn emits_runtime_string_throw_catch_assertions() {
     assert!(assembly.contains("Ltinytsx_test262_compare_0:"));
     assert!(assembly.contains("Ltinytsx_test262_actual_0:"));
     assert!(assembly.contains("Ltinytsx_test262_expected_0:"));
+}
+
+#[test]
+fn emits_portable_host_clock_calls_for_date_now() {
+    let mut apple = program(Target::MacosArm64);
+    apple.assertions = vec![Test262Assertion::DateNowTypeProgram {
+        expected_type: "number".to_owned(),
+        span: span(),
+    }];
+    let mut linux = program(Target::LinuxArm64);
+    linux.assertions = vec![Test262Assertion::DateNowTypeProgram {
+        expected_type: "number".to_owned(),
+        span: span(),
+    }];
+
+    let apple_assembly = emit(&apple, Target::MacosArm64).unwrap();
+    assert!(apple_assembly.contains("bl _clock_gettime"));
+    assert!(apple_assembly.contains("stp x29, x30, [sp, #-16]!"));
+    assert!(apple_assembly.contains("ldp x29, x30, [sp], #16"));
+    assert!(
+        emit(&linux, Target::LinuxArm64)
+            .unwrap()
+            .contains("bl clock_gettime")
+    );
 }

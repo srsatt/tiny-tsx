@@ -64,6 +64,11 @@ pub enum Test262Assertion {
         final_expected: bool,
         span: SourceSpan,
     },
+    DateNowTypeProgram {
+        #[serde(rename = "expectedType")]
+        expected_type: String,
+        span: SourceSpan,
+    },
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -167,6 +172,11 @@ impl Test262Program {
                     thrown, expected, ..
                 } if thrown.len() > 4096 || expected.len() > 4096 => {
                     return Err("Test262 string throw exceeds the 4096-byte limit".to_owned());
+                }
+                Test262Assertion::DateNowTypeProgram { expected_type, .. }
+                    if expected_type != "number" =>
+                {
+                    return Err("Test262 Date.now expected type must be number".to_owned());
                 }
                 _ => {}
             }

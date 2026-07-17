@@ -90,12 +90,17 @@ pub fn emit(program: &Test262Program, target: Target) -> Result<String, String> 
                 expected,
                 *final_expected,
             ),
+            Test262Assertion::DateNowTypeProgram { .. } => {
+                emit_date_now_type_program(&mut assembly, target, index)
+            }
         }
     }
     writeln!(assembly, "    mov w0, #0").unwrap();
+    writeln!(assembly, "    ldp x29, x30, [sp], #16").unwrap();
     writeln!(assembly, "    ret").unwrap();
     writeln!(assembly, "Ltinytsx_test262_fail:").unwrap();
     writeln!(assembly, "    mov w0, #1").unwrap();
+    writeln!(assembly, "    ldp x29, x30, [sp], #16").unwrap();
     writeln!(assembly, "    ret").unwrap();
 
     emit_data_header(&mut assembly, target);
@@ -127,6 +132,30 @@ pub fn emit(program: &Test262Program, target: Target) -> Result<String, String> 
         }
     }
     Ok(assembly)
+}
+
+fn emit_date_now_type_program(assembly: &mut String, target: Target, assertion_index: usize) {
+    let fail = format!("Ltinytsx_test262_date_now_{assertion_index}_fail");
+    let pass = format!("Ltinytsx_test262_date_now_{assertion_index}_pass");
+    writeln!(assembly, "    sub sp, sp, #32").unwrap();
+    writeln!(assembly, "    mov x0, #0").unwrap();
+    writeln!(assembly, "    mov x1, sp").unwrap();
+    emit_external_call(assembly, target, "clock_gettime");
+    writeln!(assembly, "    cbnz w0, {fail}").unwrap();
+    writeln!(assembly, "    ldp x9, x10, [sp]").unwrap();
+    writeln!(assembly, "    add sp, sp, #32").unwrap();
+    writeln!(assembly, "    b {pass}").unwrap();
+    writeln!(assembly, "{fail}:").unwrap();
+    writeln!(assembly, "    add sp, sp, #32").unwrap();
+    writeln!(assembly, "    b Ltinytsx_test262_fail").unwrap();
+    writeln!(assembly, "{pass}:").unwrap();
+}
+
+fn emit_external_call(assembly: &mut String, target: Target, symbol: &str) {
+    match target {
+        Target::MacosArm64 => writeln!(assembly, "    bl _{symbol}").unwrap(),
+        Target::LinuxArm64 => writeln!(assembly, "    bl {symbol}").unwrap(),
+    }
 }
 
 fn emit_comparison_data(assembly: &mut String, index: usize, actual: &str, expected: &str) {
@@ -170,7 +199,8 @@ fn emit_record_membership_program(
             continue;
         }
         let next = format!("Ltinytsx_test262_membership_{assertion_index}_{field_index}_next");
-        let matched = format!("Ltinytsx_test262_membership_{assertion_index}_{field_index}_matched");
+        let matched =
+            format!("Ltinytsx_test262_membership_{assertion_index}_{field_index}_matched");
         emit_address(
             assembly,
             target,
@@ -194,10 +224,18 @@ fn emit_record_membership_program(
         writeln!(assembly, "    b {matched}").unwrap();
         writeln!(assembly, "{next}:").unwrap();
     }
-    writeln!(assembly, "    b Ltinytsx_test262_membership_{assertion_index}_checked").unwrap();
+    writeln!(
+        assembly,
+        "    b Ltinytsx_test262_membership_{assertion_index}_checked"
+    )
+    .unwrap();
     writeln!(assembly, "{done}:").unwrap();
     emit_immediate(assembly, "x9", 1);
-    writeln!(assembly, "Ltinytsx_test262_membership_{assertion_index}_checked:").unwrap();
+    writeln!(
+        assembly,
+        "Ltinytsx_test262_membership_{assertion_index}_checked:"
+    )
+    .unwrap();
     emit_immediate(assembly, "x10", u64::from(expected));
     writeln!(assembly, "    cmp x9, x10").unwrap();
     writeln!(assembly, "    b.ne Ltinytsx_test262_fail").unwrap();
@@ -322,18 +360,10 @@ fn emit_array_spread_apply_program(
         "    b Ltinytsx_test262_spread_{assertion_index}_pass"
     )
     .unwrap();
-    writeln!(
-        assembly,
-        "Ltinytsx_test262_spread_{assertion_index}_fail:"
-    )
-    .unwrap();
+    writeln!(assembly, "Ltinytsx_test262_spread_{assertion_index}_fail:").unwrap();
     writeln!(assembly, "    add sp, sp, #{ARRAY_STACK_BYTES}").unwrap();
     writeln!(assembly, "    b Ltinytsx_test262_fail").unwrap();
-    writeln!(
-        assembly,
-        "Ltinytsx_test262_spread_{assertion_index}_pass:"
-    )
-    .unwrap();
+    writeln!(assembly, "Ltinytsx_test262_spread_{assertion_index}_pass:").unwrap();
 }
 
 fn emit_header(assembly: &mut String, target: Target) {
@@ -352,6 +382,8 @@ fn emit_header(assembly: &mut String, target: Target) {
             writeln!(assembly, "main:").unwrap();
         }
     }
+    writeln!(assembly, "    stp x29, x30, [sp, #-16]!").unwrap();
+    writeln!(assembly, "    mov x29, sp").unwrap();
 }
 
 fn emit_data_header(assembly: &mut String, target: Target) {

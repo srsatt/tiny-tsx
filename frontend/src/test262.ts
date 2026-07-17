@@ -23,6 +23,11 @@ import {
   lowerThrowCatchProgram,
   type ThrowCatchProgramAssertion,
 } from "./test262-throw.js";
+import {
+  isDateNowTypeProgram,
+  lowerDateNowTypeProgram,
+  type DateNowTypeProgramAssertion,
+} from "./test262-date-now.js";
 
 export interface Test262Program {
   version: 3;
@@ -38,7 +43,8 @@ export type Test262Assertion =
   | ArraySpreadApplyProgramAssertion
   | NumericSubtractionProgramAssertion
   | RecordMembershipProgramAssertion
-  | ThrowCatchProgramAssertion;
+  | ThrowCatchProgramAssertion
+  | DateNowTypeProgramAssertion;
 
 export interface SameValueStringAssertion {
   kind: "sameValueString";
@@ -99,7 +105,9 @@ export function compileTest262Entry(entryPath: string): Test262Program {
     throw tinyError("TINY2601", "Test262 metadata block is required", sourceFile, undefined, sourceFile);
   }
 
-  const assertions = sourceFile.statements.every(isSameValueStatement)
+  const assertions = isDateNowTypeProgram(sourceFile)
+    ? [lowerDateNowTypeProgram(sourceFile)]
+    : sourceFile.statements.every(isSameValueStatement)
     ? sourceFile.statements.map(statement => lowerSameValueAssertion(statement, sourceFile))
     : isArraySpreadApplyProgram(sourceFile)
       ? [lowerArraySpreadApplyProgram(sourceFile)]

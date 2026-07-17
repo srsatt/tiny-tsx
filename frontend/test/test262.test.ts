@@ -145,3 +145,16 @@ test("lowers the complete pinned string throw/catch Test262 case", () => {
     span: program.assertions[0]?.span,
   }]);
 });
+
+test("lowers the complete pinned Date.now type Test262 case", () => {
+  const program = compileTest262Entry(path.join(
+    repository,
+    "vendor/test262/test/built-ins/Date/now/15.9.4.4-0-4.js",
+  ));
+
+  assert.deepEqual(program.assertions, [{
+    kind: "dateNowTypeProgram",
+    expectedType: "number",
+    span: program.assertions[0]?.span,
+  }]);
+});
