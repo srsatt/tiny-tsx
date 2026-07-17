@@ -76,7 +76,7 @@ export type ActorAction =
   | {kind: "stop"; actor: number};
 
 export type SqliteAction =
-  | {kind: "exec"; database: number; sql: number}
+  | {kind: "exec"; database: number; sql: number; parameterSegment?: number}
   | {kind: "close"; database: number};
 
 export type ValueExpression =
@@ -141,6 +141,7 @@ export type ValueExpression =
       database: number;
       sql: number;
       mode: "all" | "first";
+      parameterSegment?: number;
       span: SourceSpan;
     }
   | {

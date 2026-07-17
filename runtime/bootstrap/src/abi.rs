@@ -398,6 +398,26 @@ pub extern "C" fn tinytsx_sqlite_close(database: usize) -> u32 {
 }
 
 #[unsafe(no_mangle)]
+pub unsafe extern "C" fn tinytsx_sqlite_execute_path(
+    database: usize,
+    request: *const TinyRequest,
+    sql: *const u8,
+    sql_len: usize,
+    segment: usize,
+) -> u32 {
+    if sql.is_null() && sql_len != 0 {
+        return INTERNAL_ERROR;
+    }
+    let parameter = match unsafe { decoded_request_path_segment(request, segment) } {
+        Ok(parameter) => parameter,
+        Err(status) => return status,
+    };
+    // SAFETY: Generated code supplies a static SQL view for the duration of the call.
+    let sql = unsafe { slice::from_raw_parts(sql, sql_len) };
+    crate::application::sqlite_execute(database, sql, parameter)
+}
+
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn tinytsx_sqlite_query_json(
     writer: *mut TinyResponseWriter,
     database: usize,
@@ -410,7 +430,7 @@ pub unsafe extern "C" fn tinytsx_sqlite_query_json(
     }
     // SAFETY: Generated code supplies a static SQL view for the duration of the call.
     let sql = unsafe { slice::from_raw_parts(sql, sql_len) };
-    match crate::application::sqlite_query_json(database, sql, first != 0) {
+    match crate::application::sqlite_query_json(database, sql, first != 0, None) {
         Ok(output) => unsafe { tinytsx_html_write_static(writer, output.as_ptr(), output.len()) },
         Err(status) => {
             // SAFETY: The writer was validated above.
@@ -418,6 +438,64 @@ pub unsafe extern "C" fn tinytsx_sqlite_query_json(
             status
         }
     }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tinytsx_sqlite_query_json_path(
+    writer: *mut TinyResponseWriter,
+    request: *const TinyRequest,
+    database: usize,
+    sql: *const u8,
+    sql_len: usize,
+    first: u32,
+    segment: usize,
+) -> u32 {
+    if writer.is_null() || (sql.is_null() && sql_len != 0) {
+        return INTERNAL_ERROR;
+    }
+    let parameter = match unsafe { decoded_request_path_segment(request, segment) } {
+        Ok(parameter) => parameter,
+        Err(status) => return status,
+    };
+    // SAFETY: Generated code supplies a static SQL view for the duration of the call.
+    let sql = unsafe { slice::from_raw_parts(sql, sql_len) };
+    match crate::application::sqlite_query_json(database, sql, first != 0, Some(parameter)) {
+        Ok(output) => unsafe { tinytsx_html_write_static(writer, output.as_ptr(), output.len()) },
+        Err(status) => {
+            // SAFETY: The writer was validated above.
+            unsafe { (*writer).status = status };
+            status
+        }
+    }
+}
+
+unsafe fn decoded_request_path_segment(
+    request: *const TinyRequest,
+    segment: usize,
+) -> Result<Vec<u8>, u32> {
+    if request.is_null() {
+        return Err(INTERNAL_ERROR);
+    }
+    // SAFETY: Generated code passes the request supplied by this runtime.
+    let path = unsafe { &(*request).path };
+    if path.ptr.is_null() && path.len != 0 {
+        return Err(BAD_REQUEST);
+    }
+    // SAFETY: The request path is valid for the duration of request dispatch.
+    let path = unsafe { slice::from_raw_parts(path.ptr, path.len) };
+    let value = route_segments(path).nth(segment).ok_or(BAD_REQUEST)?;
+    let mut output = Vec::with_capacity(value.len());
+    let mut cursor = 0;
+    while cursor < value.len() {
+        if let Some(byte) = percent_byte(value, cursor) {
+            output.push(byte);
+            cursor += 3;
+        } else {
+            output.push(value[cursor]);
+            cursor += 1;
+        }
+    }
+    Ok(output)
 }
 
 fn write_worker_reply(writer: *mut TinyResponseWriter, worker: usize, input: &[u8]) -> u32 {

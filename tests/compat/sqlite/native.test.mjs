@@ -31,7 +31,11 @@ test("serializes an in-memory SQLite owner and recovers from SQL errors", async 
   await assertResponse(port, "/seed", 201, "created");
   await assertGet(port, "/posts", 200, '{"posts":[{"title":"Morning"}]}');
   await assertGet(port, "/first", 200, '{"post":{"title":"Morning"}}');
+  await assertGet(port, "/posts/Morning", 200, '{"post":{"title":"Morning"}}');
   await assertResponse(port, "/seed", 500, "internal server error");
+  await assertResponse(port, "/delete/Morning", 200, "deleted");
+  await assertGet(port, "/posts", 200, '{"posts":[]}');
+  await assertResponse(port, "/seed", 201, "created");
   await assertResponse(port, "/schema", 200, "ready");
   await assertResponse(port, "/close", 200, "closed");
   await assertResponse(port, "/close", 200, "closed");

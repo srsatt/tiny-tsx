@@ -135,8 +135,15 @@ pub struct SqliteDatabase {
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum SqliteAction {
-    Exec { database: usize, sql: usize },
-    Close { database: usize },
+    Exec {
+        database: usize,
+        sql: usize,
+        #[serde(rename = "parameterSegment")]
+        parameter_segment: Option<usize>,
+    },
+    Close {
+        database: usize,
+    },
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -324,6 +331,8 @@ pub enum ValueExpression {
         database: usize,
         sql: usize,
         mode: SqliteQueryMode,
+        #[serde(rename = "parameterSegment")]
+        parameter_segment: Option<usize>,
         span: SourceSpan,
     },
     FetchStatus {
@@ -528,9 +537,21 @@ impl Program {
             }
             for action in &handler.sqlite_actions {
                 let database = match action {
-                    SqliteAction::Exec { database, sql } => {
+                    SqliteAction::Exec {
+                        database,
+                        sql,
+                        parameter_segment,
+                    } => {
                         if *sql >= self.static_strings.len() {
                             return Err("SQLite action references a missing SQL string".to_owned());
+                        }
+                        if parameter_segment.is_some_and(|segment| {
+                            !handler_path_has_parameter_segment(&handler.path, segment)
+                        }) {
+                            return Err(
+                                "SQLite action parameter does not reference a route parameter"
+                                    .to_owned(),
+                            );
                         }
                         database
                     }
@@ -924,7 +945,12 @@ impl Program {
                 }
                 Ok(())
             }
-            ValueExpression::SqliteQuery { database, sql, .. } => {
+            ValueExpression::SqliteQuery {
+                database,
+                sql,
+                parameter_segment,
+                ..
+            } => {
                 if *database >= self.sqlite_databases.len() {
                     return Err("SQLite query references a missing database".to_owned());
                 }
@@ -933,6 +959,13 @@ impl Program {
                 };
                 if sql.value.len() > 65_536 {
                     return Err("SQLite query exceeds the native SQL limit".to_owned());
+                }
+                if parameter_segment.is_some_and(|segment| {
+                    !handler_path_has_parameter_segment(route_pattern, segment)
+                }) {
+                    return Err(
+                        "SQLite query parameter does not reference a route parameter".to_owned(),
+                    );
                 }
                 Ok(())
             }
@@ -1268,6 +1301,14 @@ fn valid_provider_url(url: &str) -> bool {
 fn route_parameter_name(segment: &str) -> Option<&str> {
     let parameter = segment.strip_prefix(':')?;
     Some(parameter.strip_suffix("{[0-9]+}").unwrap_or(parameter))
+}
+
+fn handler_path_has_parameter_segment(path: &str, expected: usize) -> bool {
+    path.split('/')
+        .filter(|part| !part.is_empty())
+        .nth(expected)
+        .and_then(route_parameter_name)
+        .is_some()
 }
 
 fn root_path() -> String {

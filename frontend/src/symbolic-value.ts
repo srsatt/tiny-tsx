@@ -43,7 +43,7 @@ export type Value =
   | {kind: "actorCall"; actor: ActorState; message: number}
   | {kind: "database"; state: DatabaseState}
   | {kind: "statement"; state: StatementState}
-  | {kind: "sqliteQuery"; statement: StatementState; mode: "all" | "first"}
+  | {kind: "sqliteQuery"; statement: StatementState; mode: "all" | "first"; parameter?: string}
   | {kind: "queryParameter"; name: string; fallback?: string}
   | {kind: "queryPredicate"; name: string; test: "truthy" | "empty" | "present"}
   | {kind: "runtimeString"; parts: RuntimeStringPart[]}
@@ -85,7 +85,7 @@ export type RuntimeStringPart =
   | {kind: "environmentVariable"; name: string; required: boolean; fallback: string | undefined}
   | {kind: "fileText"; path: string; maxBytes: number}
   | {kind: "actorCall"; actor: ActorState; message: number}
-  | {kind: "sqliteQuery"; statement: StatementState; mode: "all" | "first"}
+  | {kind: "sqliteQuery"; statement: StatementState; mode: "all" | "first"; parameter?: string}
   | {kind: "queryParameter"; name: string; fallback: string | undefined; escapeHtml: boolean}
   | {kind: "fetchStatus"; url: string}
   | {kind: "elapsedMilliseconds"}
@@ -388,7 +388,12 @@ export function runtimeStringParts(value: Value): RuntimeStringPart[] | undefine
     }];
     case "fileText": return [{kind: "fileText", path: value.path, maxBytes: value.maxBytes}];
     case "actorCall": return [{kind: "actorCall", actor: value.actor, message: value.message}];
-    case "sqliteQuery": return [{kind: "sqliteQuery", statement: value.statement, mode: value.mode}];
+    case "sqliteQuery": return [{
+      kind: "sqliteQuery",
+      statement: value.statement,
+      mode: value.mode,
+      ...(value.parameter === undefined ? {} : {parameter: value.parameter}),
+    }];
     case "queryParameter": return [{
       kind: "queryParameter",
       name: value.name,

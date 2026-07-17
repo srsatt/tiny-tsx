@@ -209,15 +209,35 @@ pub(super) fn emit_handlers(assembly: &mut Emitter, program: &Program) -> Result
         }
         for action in &handler.sqlite_actions {
             match action {
-                SqliteAction::Exec { database, sql } => {
+                SqliteAction::Exec {
+                    database,
+                    sql,
+                    parameter_segment,
+                } => {
                     emit_immediate(assembly, "x0", *database as u64);
-                    assembly.address("x1", format_args!("Ltinytsx_string_{sql}"));
+                    if parameter_segment.is_some() {
+                        asm_line!(assembly, "    ldr x1, [sp, #24]");
+                    } else {
+                        assembly.address("x1", format_args!("Ltinytsx_string_{sql}"));
+                    }
+                    if parameter_segment.is_some() {
+                        assembly.address("x2", format_args!("Ltinytsx_string_{sql}"));
+                    }
                     emit_immediate(
                         assembly,
-                        "x2",
+                        if parameter_segment.is_some() {
+                            "x3"
+                        } else {
+                            "x2"
+                        },
                         program.static_strings[*sql].value.len() as u64,
                     );
-                    assembly.call(format_args!("tinytsx_sqlite_execute_batch"));
+                    if let Some(segment) = parameter_segment {
+                        emit_immediate(assembly, "x4", *segment as u64);
+                        assembly.call(format_args!("tinytsx_sqlite_execute_path"));
+                    } else {
+                        assembly.call(format_args!("tinytsx_sqlite_execute_batch"));
+                    }
                 }
                 SqliteAction::Close { database } => {
                     emit_immediate(assembly, "x0", *database as u64);

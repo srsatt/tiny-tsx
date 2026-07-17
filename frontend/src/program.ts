@@ -425,7 +425,14 @@ function lowerApplicationInitialization(
       ...(response.databaseActions === undefined || response.databaseActions.length === 0
         ? {}
         : {sqliteActions: response.databaseActions.map(action => action.kind === "exec"
-          ? {kind: "exec" as const, database: action.database.id, sql: strings.intern(action.sql!)}
+          ? {
+            kind: "exec" as const,
+            database: action.database.id,
+            sql: strings.intern(action.sql!),
+            ...(action.parameter === undefined
+              ? {}
+              : {parameterSegment: routeParameterSegment(route.path, action.parameter)}),
+          }
           : {kind: "close" as const, database: action.database.id})}),
       ...(response.stderr === undefined
         ? {}
@@ -696,6 +703,9 @@ function lowerRuntimeString(
           database: part.statement.database.id,
           sql: strings.intern(part.statement.sql),
           mode: part.mode,
+          ...(part.parameter === undefined
+            ? {}
+            : {parameterSegment: routeParameterSegment(routePath, part.parameter)}),
           span,
         };
       }

@@ -4,6 +4,8 @@ import {Database} from "tinytsx:sqlite";
 
 const database = new Database(":memory:");
 const posts = database.prepare("SELECT title FROM posts ORDER BY title");
+const post = database.prepare("SELECT title FROM posts WHERE title = ?1");
+const deletePost = database.prepare("DELETE FROM posts WHERE title = ?1");
 const app = new Hono();
 
 app.post("/schema", async context => {
@@ -16,6 +18,13 @@ app.post("/seed", async context => {
 });
 app.get("/posts", async context => context.json({posts: await posts.all()}));
 app.get("/first", async context => context.json({post: await posts.get()}));
+app.get("/posts/:title", async context => context.json({
+  post: await post.get([context.req.param("title")]),
+}));
+app.post("/delete/:title", async context => {
+  await deletePost.run([context.req.param("title")]);
+  return context.text("deleted");
+});
 app.post("/close", context => {
   database.close();
   return context.text("closed");

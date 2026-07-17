@@ -120,6 +120,7 @@ export interface EvaluatedDatabaseAction {
   kind: "exec" | "close";
   database: DatabaseState;
   sql?: string;
+  parameter?: string;
 }
 
 interface EvaluatedRouteChoice {
@@ -1474,7 +1475,8 @@ function sameResponseHeaderValue(left: ResponseHeaderValue, right: ResponseHeade
       return candidate?.kind === "sqliteQuery"
         && candidate.statement.database.key === part.statement.database.key
         && candidate.statement.sql === part.statement.sql
-        && candidate.mode === part.mode;
+        && candidate.mode === part.mode
+        && candidate.parameter === part.parameter;
     }
     return candidate?.kind === part.kind && candidate.name === part.name;
   });
@@ -2070,16 +2072,24 @@ function evaluateCall(
       return UNDEFINED;
     }
     if (receiver.kind === "statement" && (name === "all" || name === "get")) {
-      return arguments_.length === 0
-        ? {kind: "sqliteQuery", statement: receiver.state, mode: name === "all" ? "all" : "first"}
-        : unknown(`Statement.${name} parameters are not native yet`);
+      const parameter = sqliteRouteParameter(arguments_);
+      return parameter !== undefined
+        ? {
+          kind: "sqliteQuery",
+          statement: receiver.state,
+          mode: name === "all" ? "all" : "first",
+          ...(parameter === null ? {} : {parameter}),
+        }
+        : unknown(`Statement.${name} accepts at most one route-parameter value`);
     }
     if (receiver.kind === "statement" && name === "run") {
-      if (arguments_.length !== 0) return unknown("Statement.run parameters are not native yet");
+      const parameter = sqliteRouteParameter(arguments_);
+      if (parameter === undefined) return unknown("Statement.run accepts at most one route-parameter value");
       appendDatabaseAction(evaluator, instance, {
         kind: "exec",
         database: receiver.state.database,
         sql: receiver.state.sql,
+        ...(parameter === null ? {} : {parameter}),
       });
       return UNDEFINED;
     }
@@ -2785,6 +2795,16 @@ function appendDatabaseAction(
   const actions = evaluator.databaseActions.get(instance) ?? [];
   actions.push(action);
   evaluator.databaseActions.set(instance, actions);
+}
+
+function sqliteRouteParameter(arguments_: Value[]): string | null | undefined {
+  if (arguments_.length === 0) return null;
+  const parameters = arguments_[0];
+  if (arguments_.length !== 1 || parameters?.kind !== "array" || parameters.items.length !== 1) {
+    return undefined;
+  }
+  const parameter = parameters.items[0];
+  return parameter?.kind === "routeParameter" ? parameter.name : undefined;
 }
 
 function environmentBuiltinOperation(
@@ -4243,6 +4263,7 @@ function appendRuntimeJsonValue(
       kind: "sqliteQuery",
       statement: value.statement,
       mode: value.mode,
+      ...(value.parameter === undefined ? {} : {parameter: value.parameter}),
     });
     return true;
   }

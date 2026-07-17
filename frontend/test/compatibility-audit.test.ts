@@ -131,6 +131,8 @@ test("lowers a bounded in-memory SQLite owner and effects", () => {
     import {Hono} from "hono";
     const database = new Database(":memory:");
     const posts = database.prepare("SELECT title FROM posts");
+    const post = database.prepare("SELECT title FROM posts WHERE title = ?1");
+    const deletePost = database.prepare("DELETE FROM posts WHERE title = ?1");
     const app = new Hono();
     app.post("/schema", async context => {
       await database.exec("CREATE TABLE posts (id INTEGER PRIMARY KEY, title TEXT)");
@@ -141,6 +143,13 @@ test("lowers a bounded in-memory SQLite owner and effects", () => {
       return context.text("closed");
     });
     app.get("/posts", async context => context.json({posts: await posts.all()}));
+    app.get("/posts/:title", async context => context.json({
+      post: await post.get([context.req.param("title")]),
+    }));
+    app.post("/delete/:title", async context => {
+      await deletePost.run([context.req.param("title")]);
+      return context.text("deleted");
+    });
     serve({fetch: app.fetch});
   `);
 
@@ -166,6 +175,18 @@ test("lowers a bounded in-memory SQLite owner and effects", () => {
       span: hir.handlers[2]?.span,
     },
   );
+  assert.equal(
+    hir.handlers[3]?.response.kind === "text"
+      && hir.handlers[3].response.value.kind === "concat"
+      ? hir.handlers[3].response.value.values[1]?.kind === "sqliteQuery"
+        ? hir.handlers[3].response.value.values[1].parameterSegment
+        : undefined
+      : undefined,
+    1,
+  );
+  assert.equal(hir.handlers[4]?.sqliteActions?.[0]?.kind === "exec"
+    ? hir.handlers[4].sqliteActions[0].parameterSegment
+    : undefined, 1);
 });
 
 test("requires an explicit read root for filesystem access", () => {

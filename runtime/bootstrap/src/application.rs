@@ -29,7 +29,15 @@ enum ApplicationMessage {
     ReadFile(ReadFileRequest),
     ActorCounter(i64),
     SqliteExecuteBatch(Vec<u8>),
-    SqliteQuery { sql: Vec<u8>, first: bool },
+    SqliteExecute {
+        sql: Vec<u8>,
+        parameter: Vec<u8>,
+    },
+    SqliteQuery {
+        sql: Vec<u8>,
+        first: bool,
+        parameter: Option<Vec<u8>>,
+    },
 }
 
 pub struct OpenAiRequest {
@@ -137,7 +145,7 @@ pub fn initialize(executor_count: usize) -> io::Result<(usize, bool, bool)> {
                 tinytsx_runtime_sqlite::execute_batch(connection, sql).map_err(|_| RENDER_ERROR)?;
                 Ok(Vec::new())
             }
-            ApplicationMessage::SqliteQuery { sql, first } => {
+            ApplicationMessage::SqliteExecute { sql, parameter } => {
                 let connection = state
                     .sqlite
                     .as_ref()
@@ -145,10 +153,39 @@ pub fn initialize(executor_count: usize) -> io::Result<(usize, bool, bool)> {
                     .as_ref()
                     .map_err(|status| *status)?;
                 let sql = std::str::from_utf8(&sql).map_err(|_| RENDER_ERROR)?;
+                tinytsx_runtime_sqlite::execute(
+                    connection,
+                    sql,
+                    &[tinytsx_runtime_sqlite::SqlValue::Text(
+                        String::from_utf8(parameter).map_err(|_| RENDER_ERROR)?,
+                    )],
+                )
+                .map(|_| Vec::new())
+                .map_err(|_| RENDER_ERROR)
+            }
+            ApplicationMessage::SqliteQuery {
+                sql,
+                first,
+                parameter,
+            } => {
+                let connection = state
+                    .sqlite
+                    .as_ref()
+                    .ok_or(INTERNAL_ERROR)?
+                    .as_ref()
+                    .map_err(|status| *status)?;
+                let sql = std::str::from_utf8(&sql).map_err(|_| RENDER_ERROR)?;
+                let parameters = parameter
+                    .map(|value| {
+                        String::from_utf8(value)
+                            .map(tinytsx_runtime_sqlite::SqlValue::Text)
+                            .map_err(|_| RENDER_ERROR)
+                    })
+                    .transpose()?;
                 tinytsx_runtime_sqlite::query_json(
                     connection,
                     sql,
-                    &[],
+                    parameters.as_slice(),
                     if first {
                         tinytsx_runtime_sqlite::QueryMode::First
                     } else {
@@ -285,6 +322,23 @@ pub fn sqlite_execute_batch(database: usize, sql: &[u8]) -> u32 {
     }
 }
 
+pub fn sqlite_execute(database: usize, sql: &[u8], parameter: Vec<u8>) -> u32 {
+    let Some(runtime) = APPLICATION.get() else {
+        return INTERNAL_ERROR;
+    };
+    let Some(database) = runtime.databases.get(database) else {
+        return INTERNAL_ERROR;
+    };
+    match database.call(ApplicationMessage::SqliteExecute {
+        sql: sql.to_vec(),
+        parameter,
+    }) {
+        Ok(Ok(_)) => 0,
+        Ok(Err(status)) => status,
+        Err(error) => actor_call_status(error),
+    }
+}
+
 pub fn sqlite_close(database: usize) -> u32 {
     let Some(runtime) = APPLICATION.get() else {
         return INTERNAL_ERROR;
@@ -296,13 +350,19 @@ pub fn sqlite_close(database: usize) -> u32 {
     0
 }
 
-pub fn sqlite_query_json(database: usize, sql: &[u8], first: bool) -> Result<Vec<u8>, u32> {
+pub fn sqlite_query_json(
+    database: usize,
+    sql: &[u8],
+    first: bool,
+    parameter: Option<Vec<u8>>,
+) -> Result<Vec<u8>, u32> {
     let runtime = APPLICATION.get().ok_or(INTERNAL_ERROR)?;
     let database = runtime.databases.get(database).ok_or(INTERNAL_ERROR)?;
     database
         .call(ApplicationMessage::SqliteQuery {
             sql: sql.to_vec(),
             first,
+            parameter,
         })
         .map_err(actor_call_status)?
 }
