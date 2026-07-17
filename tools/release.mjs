@@ -12,11 +12,13 @@ const target = process.platform === "darwin" && process.arch === "arm64"
     ? "aarch64-unknown-linux-gnu"
     : undefined;
 const allowDirty = process.argv.includes("--allow-dirty");
+const sourceCommit = run("git", ["rev-parse", "HEAD"], {encoding: "utf8"}).stdout.trim();
+const sourceStatus = run("git", ["status", "--porcelain"], {encoding: "utf8"}).stdout.trim();
+const sourceDirty = sourceStatus !== "";
 
 if (target === undefined) fail(`release archives require native AArch64, got ${process.platform}/${process.arch}`);
 if (!allowDirty) {
-  const status = run("git", ["status", "--porcelain"], {encoding: "utf8"}).stdout.trim();
-  if (status !== "") fail(`release verification requires a clean tree:\n${status}`);
+  if (sourceDirty) fail(`release verification requires a clean tree:\n${sourceStatus}`);
   run("npm", ["test"]);
   run("npm", ["run", "test:zod-openapi-reference"]);
   run("npm", ["run", "test:zod-openapi"]);
@@ -91,9 +93,10 @@ run("tar", ["-czf", archive, "-C", releaseRoot, name]);
 const checksum = run("shasum", ["-a", "256", archive], {encoding: "utf8"}).stdout.split(/\s+/)[0];
 writeFileSync(`${archive}.sha256`, `${checksum}  ${path.basename(archive)}\n`);
 writeFileSync(path.join(releaseRoot, `${name}.manifest.json`), `${JSON.stringify({
-  schemaVersion: 1,
+  schemaVersion: 2,
   version,
   target,
+  source: {commit: sourceCommit, dirty: sourceDirty},
   archive: path.basename(archive),
   sha256: checksum,
   versionOutput,

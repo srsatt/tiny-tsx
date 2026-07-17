@@ -36,7 +36,16 @@ jobs:
         run: npm run release:verify
       - name: Check artifact target
         shell: bash
-        run: test -f "dist/release/tinytsx-0.1.0-alpha.1-${{ matrix.target }}.tar.gz"
+        run: |
+          base="dist/release/tinytsx-0.1.0-alpha.1-${{ matrix.target }}"
+          test -f "$base.tar.gz"
+          jq -e --arg target "${{ matrix.target }}" --arg commit "$GITHUB_SHA" '
+            .schemaVersion == 2 and
+            .version == "0.1.0-alpha.1" and
+            .target == $target and
+            .source.commit == $commit and
+            .source.dirty == false
+          ' "$base.manifest.json"
       - uses: actions/upload-artifact@v4
         with:
           name: tinytsx-0.1.0-alpha.1-${{ matrix.target }}
