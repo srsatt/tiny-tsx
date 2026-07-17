@@ -77,6 +77,13 @@ export class FunctionLowerer {
         span: spanOf(value, value.getSourceFile()),
       };
     }
+    if (value.kind === ts.SyntaxKind.TrueKeyword || value.kind === ts.SyntaxKind.FalseKeyword) {
+      return {
+        kind: "booleanLiteral",
+        value: value.kind === ts.SyntaxKind.TrueKeyword,
+        span: spanOf(value, value.getSourceFile()),
+      };
+    }
     if (
       ts.isBinaryExpression(value)
       && [ts.SyntaxKind.PlusToken, ts.SyntaxKind.MinusToken].includes(value.operatorToken.kind)
@@ -249,6 +256,13 @@ export class FunctionLowerer {
       }
       return {
         kind: "numericLiteral",
+        value: constant.value.value,
+        span: spanOf(identifier, identifier.getSourceFile()),
+      };
+    }
+    if (constant?.value.kind === "boolean") {
+      return {
+        kind: "booleanLiteral",
         value: constant.value.value,
         span: spanOf(identifier, identifier.getSourceFile()),
       };
@@ -489,7 +503,11 @@ export class FunctionLowerer {
     return declarations.map((parameter, index) => {
       const type = requiredNativeParameterType(this.checker, parameter);
       if (type === undefined || !ts.isIdentifier(parameter.name)) {
-        throw tinyError("TINY1311", "native function parameters must be required strings or numbers", parameter);
+        throw tinyError(
+          "TINY1311",
+          "native function parameters must be required strings, numbers, or booleans",
+          parameter,
+        );
       }
       this.#parameters.set(parameter, {function: functionId, parameter: index});
       return {
@@ -533,7 +551,11 @@ export class FunctionLowerer {
     const thenValue = this.lowerCompletion(thenCompletion, currentFunction);
     const elseValue = this.lowerCompletion(elseCompletion, currentFunction);
     return {
-      kind: leftType === "string" ? "stringEqualConditional" : "numericEqualConditional",
+      kind: leftType === "string"
+        ? "stringEqualConditional"
+        : leftType === "number"
+          ? "numericEqualConditional"
+          : "booleanEqualConditional",
       left,
       right,
       whenEqual: equal ? thenValue : elseValue,
@@ -777,7 +799,11 @@ function functionResultType(
     ? undefined
     : nativeTypeOf(checker.getReturnTypeOfSignature(signature));
   if (result === undefined) {
-    throw tinyError("TINY1328", "native functions must return a string or number", declaration);
+    throw tinyError(
+      "TINY1328",
+      "native functions must return a string, number, or boolean",
+      declaration,
+    );
   }
   return result;
 }
@@ -789,6 +815,7 @@ function nativeTypeAt(checker: ts.TypeChecker, node: ts.Node): NativeValueType |
 function nativeTypeOf(type: ts.Type): NativeValueType | undefined {
   if ((type.flags & ts.TypeFlags.StringLike) !== 0) return "string";
   if ((type.flags & ts.TypeFlags.NumberLike) !== 0) return "number";
+  if ((type.flags & ts.TypeFlags.BooleanLike) !== 0) return "boolean";
   if (type.isUnion()) {
     const members = new Set(type.types.map(nativeTypeOf));
     if (members.size === 1) return members.values().next().value;

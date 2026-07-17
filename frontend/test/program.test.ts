@@ -379,6 +379,38 @@ test("passes numeric results through nested calls and subtraction", () => {
   );
 });
 
+test("lowers boolean parameters, locals, and strict branches", () => {
+  const hir = compileSource(`
+    function select(enabled: boolean): string {
+      const local = enabled;
+      if (local === true) return "enabled";
+      return "disabled";
+    }
+    export function GET(request: Request): Response {
+      return Response.text(select(false));
+    }
+  `);
+
+  assert.deepEqual(
+    hir.functions[0]?.parameters.map(parameter => [parameter.name, parameter.type]),
+    [["enabled", "boolean"]],
+  );
+  assert.equal(hir.functions[0]?.body.kind, "booleanEqualConditional");
+  assert.deepEqual(
+    hir.functions[0]?.body.kind === "booleanEqualConditional"
+      ? [hir.functions[0].body.left.kind, hir.functions[0].body.right.kind]
+      : [],
+    ["parameter", "booleanLiteral"],
+  );
+  assert.equal(
+    hir.handlers[0]?.response.kind === "text"
+      && hir.handlers[0].response.value.kind === "directCall"
+      ? hir.handlers[0].response.value.arguments[0]?.kind
+      : undefined,
+    "booleanLiteral",
+  );
+});
+
 test("lambda-lifts closed local function values and immutable captures", () => {
   const hir = compileSource(`
     function authorize(result: string): string {

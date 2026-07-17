@@ -326,6 +326,10 @@ pub enum ValueExpression {
         value: i64,
         span: SourceSpan,
     },
+    BooleanLiteral {
+        value: bool,
+        span: SourceSpan,
+    },
     Constant {
         constant: usize,
         span: SourceSpan,
@@ -355,6 +359,15 @@ pub enum ValueExpression {
         span: SourceSpan,
     },
     NumericEqualConditional {
+        left: Box<ValueExpression>,
+        right: Box<ValueExpression>,
+        #[serde(rename = "whenEqual")]
+        when_equal: Box<ValueExpression>,
+        #[serde(rename = "whenNotEqual")]
+        when_not_equal: Box<ValueExpression>,
+        span: SourceSpan,
+    },
+    BooleanEqualConditional {
         left: Box<ValueExpression>,
         right: Box<ValueExpression>,
         #[serde(rename = "whenEqual")]
@@ -744,7 +757,7 @@ impl Program {
                 return Err(format!("function id {} is not canonical", function.id));
             }
             if function.parameters.len() > 4
-                || !matches!(function.result.as_str(), "string" | "number")
+                || !matches!(function.result.as_str(), "string" | "number" | "boolean")
             {
                 return Err(format!(
                     "function {} must have at most four scalar parameters and return a scalar",
@@ -753,8 +766,10 @@ impl Program {
             }
             let mut parameter_names = HashSet::new();
             for parameter in &function.parameters {
-                if !matches!(parameter.value_type.as_str(), "string" | "number")
-                    || !parameter_names.insert(&parameter.name)
+                if !matches!(
+                    parameter.value_type.as_str(),
+                    "string" | "number" | "boolean"
+                ) || !parameter_names.insert(&parameter.name)
                 {
                     return Err(format!(
                         "function {} has invalid or duplicate parameters",
@@ -874,11 +889,13 @@ impl Program {
                 }
             }
             ValueExpression::NumericLiteral { .. } => {}
+            ValueExpression::BooleanLiteral { .. } => {}
             ValueExpression::Constant { constant, .. } => {
                 let Some(constant) = self.constants.get(*constant) else {
                     return Err("expression references a missing constant".to_owned());
                 };
                 if !matches!(constant.value, ConstantValue::String { .. })
+                    && !matches!(constant.value, ConstantValue::Boolean { .. })
                     && !matches!(constant.value, ConstantValue::Number { value }
                         if value.is_finite()
                             && value.fract() == 0.0
@@ -980,6 +997,34 @@ impl Program {
                     caught_exception_available,
                 )?;
             }
+            ValueExpression::BooleanEqualConditional {
+                left,
+                right,
+                when_equal,
+                when_not_equal,
+                ..
+            } => {
+                self.validate_expression_context(
+                    left,
+                    parameter_count,
+                    caught_exception_available,
+                )?;
+                self.validate_expression_context(
+                    right,
+                    parameter_count,
+                    caught_exception_available,
+                )?;
+                self.validate_expression_context(
+                    when_equal,
+                    parameter_count,
+                    caught_exception_available,
+                )?;
+                self.validate_expression_context(
+                    when_not_equal,
+                    parameter_count,
+                    caught_exception_available,
+                )?;
+            }
             ValueExpression::ThrowValue { value, .. } => {
                 self.validate_expression_context(
                     value,
@@ -1033,6 +1078,7 @@ impl Program {
         match expression {
             ValueExpression::StringLiteral { .. } => Ok("string".to_owned()),
             ValueExpression::NumericLiteral { .. } => Ok("number".to_owned()),
+            ValueExpression::BooleanLiteral { .. } => Ok("boolean".to_owned()),
             ValueExpression::Constant { constant, .. } => match self.constants[*constant].value {
                 ConstantValue::String { .. } => Ok("string".to_owned()),
                 ConstantValue::Number { value }
@@ -1043,6 +1089,7 @@ impl Program {
                 {
                     Ok("number".to_owned())
                 }
+                ConstantValue::Boolean { .. } => Ok("boolean".to_owned()),
                 _ => Err("native scalar expression references a non-scalar constant".to_owned()),
             },
             ValueExpression::Parameter { parameter, .. } => parameters
@@ -1092,6 +1139,17 @@ impl Program {
             } => {
                 self.require_expression_type(left, parameters, caught_type, "number")?;
                 self.require_expression_type(right, parameters, caught_type, "number")?;
+                self.same_branch_type(when_equal, when_not_equal, parameters, caught_type)
+            }
+            ValueExpression::BooleanEqualConditional {
+                left,
+                right,
+                when_equal,
+                when_not_equal,
+                ..
+            } => {
+                self.require_expression_type(left, parameters, caught_type, "boolean")?;
+                self.require_expression_type(right, parameters, caught_type, "boolean")?;
                 self.same_branch_type(when_equal, when_not_equal, parameters, caught_type)
             }
             ValueExpression::ThrowValue { value, .. } => {
@@ -1543,6 +1601,18 @@ impl Program {
                 self.visit_expression_functions(when_equal, state)?;
                 self.visit_expression_functions(when_not_equal, state)?;
             }
+            ValueExpression::BooleanEqualConditional {
+                left,
+                right,
+                when_equal,
+                when_not_equal,
+                ..
+            } => {
+                self.visit_expression_functions(left, state)?;
+                self.visit_expression_functions(right, state)?;
+                self.visit_expression_functions(when_equal, state)?;
+                self.visit_expression_functions(when_not_equal, state)?;
+            }
             ValueExpression::NumericBinary { left, right, .. } => {
                 self.visit_expression_functions(left, state)?;
                 self.visit_expression_functions(right, state)?;
@@ -1633,6 +1703,15 @@ impl Program {
                     || self.function_may_throw(*function, memo)
             }
             ValueExpression::StringEqualConditional {
+                left,
+                right,
+                when_equal,
+                when_not_equal,
+                ..
+            } => [left, right, when_equal, when_not_equal]
+                .into_iter()
+                .any(|value| self.expression_may_throw(value, memo)),
+            ValueExpression::BooleanEqualConditional {
                 left,
                 right,
                 when_equal,
@@ -1734,6 +1813,15 @@ fn expression_uses_filesystem(expression: &ValueExpression) -> bool {
         } => [left, right, when_equal, when_not_equal]
             .into_iter()
             .any(|value| expression_uses_filesystem(value)),
+        ValueExpression::BooleanEqualConditional {
+            left,
+            right,
+            when_equal,
+            when_not_equal,
+            ..
+        } => [left, right, when_equal, when_not_equal]
+            .into_iter()
+            .any(|value| expression_uses_filesystem(value)),
         ValueExpression::ThrowValue { value, .. } => expression_uses_filesystem(value),
         ValueExpression::TryCatch {
             try_value,
@@ -1805,6 +1893,18 @@ fn collect_environment_ids(expression: &ValueExpression, ids: &mut BTreeSet<usiz
             collect_environment_ids(when_equal, ids);
             collect_environment_ids(when_not_equal, ids);
         }
+        ValueExpression::BooleanEqualConditional {
+            left,
+            right,
+            when_equal,
+            when_not_equal,
+            ..
+        } => {
+            collect_environment_ids(left, ids);
+            collect_environment_ids(right, ids);
+            collect_environment_ids(when_equal, ids);
+            collect_environment_ids(when_not_equal, ids);
+        }
         ValueExpression::ThrowValue { value, .. } => collect_environment_ids(value, ids),
         ValueExpression::TryCatch {
             try_value,
@@ -1847,6 +1947,15 @@ fn expression_uses_openai(expression: &ValueExpression) -> bool {
             expression_uses_openai(left) || expression_uses_openai(right)
         }
         ValueExpression::NumericEqualConditional {
+            left,
+            right,
+            when_equal,
+            when_not_equal,
+            ..
+        } => [left, right, when_equal, when_not_equal]
+            .into_iter()
+            .any(|value| expression_uses_openai(value)),
+        ValueExpression::BooleanEqualConditional {
             left,
             right,
             when_equal,

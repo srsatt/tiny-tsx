@@ -75,6 +75,15 @@ fn emits_assemblable_numeric_function_for_linux_arm64() {
 }
 
 #[test]
+fn emits_assemblable_boolean_function_for_linux_arm64() {
+    let assembly = compile_linux("examples/function-booleans/server.ts", &[]);
+
+    assert!(assembly.contains("boolean_0_not_equal"));
+    assert!(assembly.contains("cmp x3, x0"));
+    assert_assembles_as_elf(&assembly, "function-booleans");
+}
+
+#[test]
 fn emits_assemblable_lambda_lifted_closure_for_linux_arm64() {
     let assembly = compile_linux("examples/function-closures/server.ts", &[]);
 

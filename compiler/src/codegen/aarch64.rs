@@ -183,6 +183,19 @@ fn scratch_slots(expression: &ValueExpression) -> usize {
                 .max()
                 .unwrap_or(0)
         }
+        ValueExpression::BooleanEqualConditional {
+            left,
+            right,
+            when_equal,
+            when_not_equal,
+            ..
+        } => {
+            1 + [left, right, when_equal, when_not_equal]
+                .into_iter()
+                .map(|value| scratch_slots(value))
+                .max()
+                .unwrap_or(0)
+        }
         ValueExpression::ThrowValue { value, .. } => scratch_slots(value),
         ValueExpression::TryCatch {
             try_value,

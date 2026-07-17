@@ -585,23 +585,25 @@ native assembly/linking, and a real HTTP E2E for its first static route.
 A separate compilable staged-constants example passes frontend lowering, Rust
 HIR parsing, native assembly/linking, and a real HTTP test.
 
-Generated scalar expressions now use statically typed string or finite-number
-values. Reachable named functions can accept up to four required scalar
+Generated scalar expressions now use statically typed string, finite-number, or
+boolean values. Reachable named functions can accept up to four required scalar
 parameters and return literals, parameters, imported constants, or another
 direct function call. Function bodies may declare initialized `const` scalar
 locals and end in a strict same-type equality/inequality branch whose paths
 return supported expressions. Numbers additionally support addition and
 subtraction, including numeric results passed through nested calls. Direct-call
-arguments may use the same forms.
+arguments may use the same forms. Booleans support literals, staged constants,
+parameters/results, immutable locals, and strict equality branches.
 
 The arm64 backend passes each scalar in a fixed two-word register pair
 (`x0`/`x1` through `x6`/`x7`). Strings use pointer/length; numbers use unboxed
-IEEE-754 bits in the first word. Runtime string equality compares length and
-bytes, while numeric arithmetic/comparison uses AArch64 floating-point
+IEEE-754 bits; booleans use `0`/`1` in the first word. Runtime string equality
+compares length and bytes, numeric arithmetic/comparison uses AArch64 floating-point
 instructions. Call arguments, parameters, and branch operands spill into a
 bounded native frame only when nested evaluation requires it. The Apple HTTP
 E2E and Linux assembler gate execute numeric parameters, immutable locals,
-addition, subtraction, a numeric-returning helper, and a string branch result.
+addition, subtraction, a numeric-returning helper, and numeric/boolean branches
+that select string results.
 
 Initialized local `const` bindings may hold an arrow or function expression and
 call it within the declaring function. Direct-parent string parameters and
@@ -627,7 +629,7 @@ build, while reachable functions must lower to the explicit HIR above. Other
 whole-module forbidden-syntax checks have not yet moved to this model.
 
 This does not introduce a JavaScript call stack or object model. Mutable locals,
-booleans, non-finite numbers, signed-zero/NaN identity, coercion,
+truthiness/logical operators, non-finite numbers, signed-zero/NaN identity, coercion,
 optional/default/rest parameters, escaping or identity-observable closures,
 transitive captures, arrays, and records remain outside this executable
 function slice.

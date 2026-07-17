@@ -478,10 +478,10 @@ produces and serves a native Mach-O executable from the example TSX source.
   and HTTP E2E path, while the Hono test proves its seven-method array reaches
   the same typed HIR representation.
 - Reachable named scalar functions now lower across ESM modules with up to four
-  required string or number parameters and matching scalar results. Strings use
-  pointer/length pairs; finite numbers use unboxed IEEE-754 bits in the same
-  fixed two-word ABI. Bounded frames support nested argument evaluation, and
-  recursion remains rejected.
+  required string, number, or boolean parameters and matching scalar results.
+  Strings use pointer/length pairs; finite numbers use unboxed IEEE-754 bits;
+  booleans use `0`/`1` in the same fixed two-word ABI. Bounded frames support
+  nested argument evaluation, and recursion remains rejected.
 - The first post-alpha function-control-flow slice adds initialized `const`
   string locals plus strict string equality/inequality branches. Native AArch64
   compares pointer/length strings by length and bytes; the dedicated E2E executes
@@ -491,6 +491,9 @@ produces and serves a native Mach-O executable from the example TSX source.
   equality branches, and numeric results passed through nested calls. Apple HTTP
   executes the selected string result, and Linux AArch64 assembles the `fadd`,
   `fsub`, and `fcmp` paths without a boxed value or managed heap.
+- The boolean function slice adds required boolean parameters/results, staged
+  constants, immutable locals, and strict branches. Apple HTTP executes the
+  false path, while the Linux assembler gate covers the unboxed comparison.
 - Closed local arrow/function values now lambda-lift direct-parent immutable
   string captures into explicit HIR/native parameters. The Apple HTTP E2E and
   Linux assembly test cover both a captured outer parameter and local without a

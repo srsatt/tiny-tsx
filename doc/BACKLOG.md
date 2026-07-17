@@ -378,7 +378,10 @@ adds an explicit application acceptance test.
   - 2026-07-17: required numeric parameters/results, immutable numeric locals,
     finite integer literals/constants, addition/subtraction, nested numeric
     calls, and strict numeric branches now share the unboxed native value ABI.
-    Booleans, mutation, coercion, and general numeric statements remain open.
+    Mutation, coercion, and general numeric statements remain open.
+  - 2026-07-17: required boolean parameters/results, immutable boolean locals
+    and constants, and strict boolean branches now use the same unboxed ABI.
+    Truthiness, logical operators, and mutable flags remain open.
   - 2026-07-17: the complete module-function Test262 case now proves pre-
     evaluation initialization, direct call behavior, mutable reassignment, and
     non-global ownership. General mutable ordinary locals remain open.

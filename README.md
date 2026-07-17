@@ -799,7 +799,7 @@ Every rejected construct must produce a source-level diagnostic.
 Example:
 
 ```text
-error[TINY1311]: native function parameters must be required strings or numbers
+error[TINY1311]: native function parameters must be required strings, numbers, or booleans
 
   src/server.tsx:14:18
    |

@@ -185,6 +185,51 @@ fn emits_typed_numeric_function_arithmetic_and_branching() {
 }
 
 #[test]
+fn emits_typed_boolean_function_branching() {
+    let program: Program = serde_json::from_str(
+        r#"{
+          "version": 2,
+          "target": "aarch64-apple-darwin",
+          "entry": "server.ts",
+          "modules": [{"path": "server.ts"}],
+          "functions": [{
+            "id": 0,
+            "module": "server.ts",
+            "name": "select",
+            "parameters": [{"name":"enabled","type":"boolean","span":{"file":"server.ts","line":1,"column":1,"endLine":1,"endColumn":2}}],
+            "result": "string",
+            "body": {
+              "kind": "booleanEqualConditional",
+              "left": {"kind":"parameter","parameter":0,"span":{"file":"server.ts","line":1,"column":1,"endLine":1,"endColumn":2}},
+              "right": {"kind":"booleanLiteral","value":true,"span":{"file":"server.ts","line":1,"column":1,"endLine":1,"endColumn":2}},
+              "whenEqual": {"kind":"stringLiteral","string":0,"span":{"file":"server.ts","line":1,"column":1,"endLine":1,"endColumn":2}},
+              "whenNotEqual": {"kind":"stringLiteral","string":1,"span":{"file":"server.ts","line":1,"column":1,"endLine":1,"endColumn":2}},
+              "span": {"file":"server.ts","line":1,"column":1,"endLine":1,"endColumn":2}
+            },
+            "span": {"file":"server.ts","line":1,"column":1,"endLine":1,"endColumn":2}
+          }],
+          "components": [],
+          "handlers": [{
+            "method": "GET",
+            "response": {"kind":"text","value":{"kind":"directCall","function":0,"arguments":[{"kind":"booleanLiteral","value":false,"span":{"file":"server.ts","line":1,"column":1,"endLine":1,"endColumn":2}}],"span":{"file":"server.ts","line":1,"column":1,"endLine":1,"endColumn":2}}},
+            "span": {"file":"server.ts","line":1,"column":1,"endLine":1,"endColumn":2}
+          }],
+          "staticStrings": [{"id":0,"value":"enabled"},{"id":1,"value":"disabled"}],
+          "constants": [],
+          "statistics": {"modules":1,"functions":1,"components":0,"constants":0,"staticHtmlBytes":15,"dynamicHtmlExpressions":1}
+        }"#,
+    )
+    .unwrap();
+
+    program.validate().unwrap();
+    let assembly = emit(&program, Options::default()).unwrap();
+
+    assert!(assembly.contains("Ltinytsx_function_0_boolean_0_not_equal:"));
+    assert!(assembly.contains("cmp x3, x0"));
+    assert!(assembly.contains("bl _tinytsx_function_0"));
+}
+
+#[test]
 fn emits_named_route_matching_and_parameter_writes() {
     let program: Program = serde_json::from_str(
             r#"{

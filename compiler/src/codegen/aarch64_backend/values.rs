@@ -29,6 +29,11 @@ pub(super) fn emit_value_expression(
             asm_line!(assembly, "    mov x1, #0");
             asm_line!(assembly, "    mov x2, #0");
         }
+        ValueExpression::BooleanLiteral { value, .. } => {
+            emit_immediate(assembly, "x0", u64::from(*value));
+            asm_line!(assembly, "    mov x1, #0");
+            asm_line!(assembly, "    mov x2, #0");
+        }
         ValueExpression::Constant { constant, .. } => match &program.constants[*constant].value {
             ConstantValue::String { value } => {
                 assembly.address("x0", format_args!("Ltinytsx_constant_{constant}"));
@@ -38,6 +43,11 @@ pub(super) fn emit_value_expression(
             }
             ConstantValue::Number { value } => {
                 emit_immediate(assembly, "x0", value.to_bits());
+                asm_line!(assembly, "    mov x1, #0");
+                asm_line!(assembly, "    mov x2, #0");
+            }
+            ConstantValue::Boolean { value } => {
+                emit_immediate(assembly, "x0", u64::from(*value));
                 asm_line!(assembly, "    mov x1, #0");
                 asm_line!(assembly, "    mov x2, #0");
             }
@@ -230,6 +240,64 @@ pub(super) fn emit_value_expression(
             asm_line!(assembly, "    fmov d0, x3");
             asm_line!(assembly, "    fmov d1, x0");
             asm_line!(assembly, "    fcmp d0, d1");
+            asm_line!(assembly, "    b.ne {not_equal}");
+            emit_value_expression(
+                assembly,
+                when_equal,
+                program,
+                scratch_base,
+                label_scope,
+                conditional_index,
+                caught_exception_offset,
+            )?;
+            asm_line!(assembly, "    b {end}");
+            asm_line!(assembly, "{not_equal}:");
+            emit_value_expression(
+                assembly,
+                when_not_equal,
+                program,
+                scratch_base,
+                label_scope,
+                conditional_index,
+                caught_exception_offset,
+            )?;
+            asm_line!(assembly, "{end}:");
+        }
+        ValueExpression::BooleanEqualConditional {
+            left,
+            right,
+            when_equal,
+            when_not_equal,
+            ..
+        } => {
+            let branch_index = *conditional_index;
+            *conditional_index += 1;
+            let not_equal = format!("Ltinytsx_{label_scope}_boolean_{branch_index}_not_equal");
+            let end = format!("Ltinytsx_{label_scope}_boolean_{branch_index}_end");
+            let nested_scratch = scratch_base + 16;
+            emit_value_expression(
+                assembly,
+                left,
+                program,
+                nested_scratch,
+                label_scope,
+                conditional_index,
+                caught_exception_offset,
+            )?;
+            asm_line!(assembly, "    cbnz x2, {end}");
+            asm_line!(assembly, "    str x0, [sp, #{scratch_base}]");
+            emit_value_expression(
+                assembly,
+                right,
+                program,
+                nested_scratch,
+                label_scope,
+                conditional_index,
+                caught_exception_offset,
+            )?;
+            asm_line!(assembly, "    cbnz x2, {end}");
+            asm_line!(assembly, "    ldr x3, [sp, #{scratch_base}]");
+            asm_line!(assembly, "    cmp x3, x0");
             asm_line!(assembly, "    b.ne {not_equal}");
             emit_value_expression(
                 assembly,

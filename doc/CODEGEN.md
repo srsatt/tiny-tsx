@@ -42,8 +42,9 @@ thin adapters select the Apple or ELF dialect.
 
 Ordinary value functions use a fixed two-word scalar ABI plus the `x2` abrupt-
 completion flag. Strings occupy pointer/length words; finite numbers occupy the
-first word as unboxed IEEE-754 bits and clear the second. Static HIR types select
-the interpretation, so adding numeric parameters, results, arithmetic, and
+first word as unboxed IEEE-754 bits; booleans use `0`/`1` in the first word.
+Non-string scalars clear the second word. Static HIR types select the
+interpretation, so adding numeric/boolean parameters, results, operations, and
 branches does not introduce a boxed JavaScript value or managed heap.
 
 There is deliberately no open-ended target trait. The second concrete target
