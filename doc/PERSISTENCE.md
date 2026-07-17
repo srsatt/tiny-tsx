@@ -41,12 +41,16 @@ also passes Clang assembly.
 
 This is the bounded alpha disk-capability contract, not a final filesystem
 security claim. Static path normalization prevents absolute, empty, dot, and
-parent segments, but runtime protection against symlink replacement and SQLite
-sidecar-file path races is explicitly post-alpha. Prepared/dynamic transaction
-callbacks and HTTP-level contention load are also post-alpha. The native SQLite
-core holds a competing writer through the one-second busy timeout, observes a
-recoverable error, releases the lock, and proves the second connection can
-write successfully afterward.
+parent segments. Runtime opens now add SQLite's `SQLITE_OPEN_NOFOLLOW`, so a
+database path containing a symlink at open time is rejected; a Unix regression
+test replaces the final database file with a symlink and observes the bounded
+open error. Races involving renamed/replaced directories and SQLite journal/WAL
+sidecar creation remain unresolved, so the granted root must still not be
+writable by untrusted users. Prepared/dynamic transaction callbacks and
+HTTP-level contention load are also post-alpha. The native SQLite core holds a
+competing writer through the one-second busy timeout, observes a recoverable
+error, releases the lock, and proves the second connection can write
+successfully afterward.
 
 `Database.transaction(sql)` is the first explicit transaction surface. It
 accepts one compile-time SQL batch up to 65,536 bytes and sends the complete

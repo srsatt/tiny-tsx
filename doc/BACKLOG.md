@@ -93,10 +93,11 @@ Acceptance criteria are, in order:
   clean-tree exit suite and produce a tag-ready `0.1.0-alpha.1` checklist
   without creating the tag.
 
-Runtime SQLite symlink/sidecar-race hardening, prepared/callback transactions,
+Runtime SQLite directory/sidecar-race hardening, prepared/callback transactions,
 general actor messages, actor-scale/fairness work, and the combined user-auth
-example are explicitly post-alpha. The alpha documents must keep those limits
-prominent.
+example are explicitly post-alpha. Database opens now reject paths containing
+symlinks, but the remaining directory and sidecar boundary stays prominent in
+the alpha documents.
 
 ### Next-goal handoff
 
@@ -471,6 +472,10 @@ adds an explicit application acceptance test.
       mailbox before raising the documented actor-count limit.
 - [ ] Harden on-disk SQLite opens against symlink replacement and path races
       across compilation, startup, and sidecar-file creation.
+  - 2026-07-17: all runtime connections add SQLite's native
+    `SQLITE_OPEN_NOFOLLOW`; a Unix regression test proves a symlink replacing
+    the database file is rejected. Directory replacement and journal/WAL
+    sidecar races remain open.
 - [ ] Add bounded prepared-parameter/callback transactions, typed execute
       results, and broader dynamic SQLite values without allowing operations to
       interleave on one connection.

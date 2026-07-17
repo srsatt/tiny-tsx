@@ -1,6 +1,6 @@
 use std::{fmt, time::Duration};
 
-use rusqlite::{params_from_iter, types::ValueRef};
+use rusqlite::{OpenFlags, params_from_iter, types::ValueRef};
 
 pub use rusqlite::Connection;
 
@@ -93,8 +93,9 @@ impl fmt::Display for Error {
 impl std::error::Error for Error {}
 
 pub fn open(path: &str) -> Result<Connection, Error> {
-    let connection =
-        Connection::open(path).map_err(|error| Error::sqlite(ErrorKind::Open, error))?;
+    let flags = OpenFlags::default() | OpenFlags::SQLITE_OPEN_NOFOLLOW;
+    let connection = Connection::open_with_flags(path, flags)
+        .map_err(|error| Error::sqlite(ErrorKind::Open, error))?;
     connection
         .busy_timeout(BUSY_TIMEOUT)
         .map_err(|error| Error::sqlite(ErrorKind::Open, error))?;
@@ -391,7 +392,9 @@ mod tests {
 
     #[test]
     fn busy_connection_recovers_after_the_competing_writer_rolls_back() {
-        let path = std::env::temp_dir().join(format!(
+        let temporary = std::fs::canonicalize(std::env::temp_dir())
+            .expect("canonicalize temporary directory");
+        let path = temporary.join(format!(
             "tinytsx-sqlite-contention-{}-{}.db",
             std::process::id(),
             DATABASE_ID.fetch_add(1, Ordering::Relaxed),
@@ -415,6 +418,33 @@ mod tests {
         drop(first);
         drop(second);
         std::fs::remove_file(path).expect("remove contention database");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn rejects_a_symlink_as_the_database_file() {
+        use std::os::unix::fs::symlink;
+
+        let directory = std::env::temp_dir().join(format!(
+            "tinytsx-sqlite-no-follow-{}-{}",
+            std::process::id(),
+            DATABASE_ID.fetch_add(1, Ordering::Relaxed),
+        ));
+        std::fs::create_dir(&directory).expect("create no-follow test directory");
+        let directory = std::fs::canonicalize(&directory).expect("canonicalize test directory");
+        let target = directory.join("target.db");
+        let redirected = directory.join("redirected.db");
+        drop(open(target.to_str().expect("UTF-8 target path")).expect("create target database"));
+        symlink(&target, &redirected).expect("create database symlink");
+
+        assert_eq!(
+            open(redirected.to_str().expect("UTF-8 symlink path"))
+                .expect_err("database symlink must be rejected")
+                .kind,
+            ErrorKind::Open,
+        );
+
+        std::fs::remove_dir_all(directory).expect("remove no-follow test directory");
     }
 
     #[test]

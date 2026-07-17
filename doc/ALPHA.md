@@ -23,9 +23,10 @@ Apple-arm64 archives must execute on Apple arm64. Linux-arm64 archives must be
 built and executed on Linux arm64; cross-assembled ELF output from macOS is not
 a substitute. No x86 native target is claimed in this alpha.
 
-Known security boundary: on-disk SQLite paths are lexically scoped to matching
-read/write roots, but runtime symlink replacement and SQLite sidecar-file races
-remain unresolved. Do not grant a database root writable by untrusted users.
+Known security boundary: on-disk SQLite paths are scoped to matching canonical
+read/write roots and runtime opens reject paths containing symlinks. Directory
+replacement and SQLite journal/WAL sidecar-file races remain unresolved. Do not
+grant a database root writable by untrusted users.
 
 ## Supported alpha contract
 

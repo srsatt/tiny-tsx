@@ -35,7 +35,9 @@ separate allowlists so granting one capability never implies another:
 
 File-read capability checks canonicalize again before I/O, so symlink and `..`
 traversal cannot escape an allowed read root. SQLite paths reject lexical
-traversal, but runtime symlink/sidecar-race hardening remains open. Missing
+traversal, and runtime database opens reject paths containing symlinks with
+SQLite's native no-follow flag. Directory replacement and journal/WAL sidecar
+races remain open. Missing
 resources, invalid UTF-8, permission denial, capacity overflow, busy databases,
 full mailboxes, stopped actors, and closed handles are recoverable typed errors.
 The compiler reserves `TINY1500`–`TINY1599` for built-in diagnostics:
@@ -132,7 +134,7 @@ UUID, or closed primitive values (string, safe integer, finite real, boolean,
 and null). SQL is capped at 65,536 bytes; results at 1,024 rows and 1 MiB;
 and the vendored runtime is described in `doc/PERSISTENCE.md`. On-disk paths
 require one matching canonical read/write root and carry the documented
-symlink/sidecar-race warning. General dynamic values, prepared/callback
+directory/sidecar-race warning. General dynamic values, prepared/callback
 transactions, and typed execute results are post-alpha.
 
 ### `tinytsx:actors`

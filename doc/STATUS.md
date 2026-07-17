@@ -158,8 +158,10 @@ produces and serves a native Mach-O executable from the example TSX source.
   arm64. Its static transaction endpoints prove a failed two-statement batch
   rolls back completely and a successful batch commits atomically. The
   disk-backed program also assembles for Linux arm64.
-- Runtime symlink-replacement/sidecar races, prepared/callback transactions, and
-  HTTP-level contention load are post-alpha. Core native evidence holds a
+- Runtime database opens now use `SQLITE_OPEN_NOFOLLOW`, and a Unix regression
+  test rejects a database-file symlink. Directory-replacement/sidecar races,
+  prepared/callback transactions, and HTTP-level contention load are post-alpha.
+  Core native evidence holds a
   competing writer through the bounded busy timeout and proves the second
   connection recovers after the lock is released; the persistent counter actor
   is covered separately above.
