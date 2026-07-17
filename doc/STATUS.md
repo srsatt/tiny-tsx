@@ -24,7 +24,9 @@ produces and serves a native Mach-O executable from the example TSX source.
   rolls back completely and a successful batch commits atomically. The
   disk-backed program also assembles for Linux arm64.
 - Runtime symlink-replacement/sidecar races, prepared/callback transactions,
-  contention recovery, and the persistent actor remain open.
+  HTTP-level contention load, and the persistent actor remain open. Core native
+  evidence holds a competing writer through the bounded busy timeout and proves
+  the second connection recovers after the lock is released.
 - Verification: `npm run test:frontend` (85/85),
   `npm run test:sqlite-native` (4/4), `cargo test --workspace`, and
   `cargo clippy --workspace --all-targets -- -D warnings`.

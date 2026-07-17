@@ -40,7 +40,10 @@ This is the first disk-capability slice, not the final filesystem security
 contract. Static path normalization prevents absolute, empty, dot, and parent
 segments, but runtime protection against symlink replacement and SQLite
 sidecar-file path races remains open. Prepared/dynamic transaction callbacks,
-contention, and busy recovery also remain the next persistence gate.
+HTTP-level contention load and symlink hardening remain the next persistence
+gate. The native SQLite core holds a competing writer through the one-second
+busy timeout, observes a recoverable error, releases the lock, and proves the
+second connection can write successfully afterward.
 
 `Database.transaction(sql)` is the first explicit transaction surface. It
 accepts one compile-time SQL batch up to 65,536 bytes and sends the complete

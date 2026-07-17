@@ -65,7 +65,7 @@ Acceptance criteria are:
   rollback, nested-transaction rejection, and handler-failure behavior;
 - [ ] Extend transactions to prepared parameters or a bounded callback form
   without allowing other database messages to interleave;
-- [ ] Prove schema creation, CRUD, rollback, busy/contention recovery, close,
+- [x] Prove schema creation, CRUD, rollback, busy/contention recovery, close,
   process restart, and retained rows on Apple arm64; assemble the same program
   for Linux arm64;
 - [ ] Persist one bounded counter actor through the public SQLite and actor APIs,
@@ -227,7 +227,7 @@ pinned blog success envelopes plus missing-record 404/204 behavior.
       `:memory:` for deterministic tests.
 - [ ] Bound SQL length, parameter count, row count, row bytes, open statements,
       busy timeout, and queued operations; surface typed recoverable failures.
-- [ ] Prove schema creation, insert/select/update/delete, rollback, contention,
+- [x] Prove schema creation, insert/select/update/delete, rollback, contention,
       malformed SQL, limit recovery, shutdown, and restart persistence.
 - [x] Run the in-memory Hono blog tracer end to end against the public SQLite
       built-in with the pinned success envelopes and missing-record semantics.
