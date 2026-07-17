@@ -392,6 +392,31 @@ The groomed candidates, in recommended dependency order, are:
    is green. A new release candidate remains a separate explicitly selected
    goal.
 
+#### Selected tracer — bounded prepared transaction callback
+
+The next P3 slice is the project-owned
+`examples/hono-sqlite/callback-transaction.ts` tracer. It overloads
+`Database.transaction` with one zero-argument async callback whose block
+contains 1–16 awaited `Statement.run(...)` expression statements. Every
+statement must belong to the receiving database. The complete transaction is
+one database-owner message with at most 65,536 aggregate SQL bytes and 64
+aggregate parameters, so concurrent request work cannot interleave between its
+steps.
+
+The success route must commit two prepared writes using bounded route/JSON
+parameters. The failure route must make the second write violate a constraint
+and prove the first write was rolled back. Apple arm64 executes both paths;
+Linux arm64 assembles the same single-message transaction ABI. Frontend and HIR
+tests pin the closed shape and limits, the SQLite runtime pins atomic rollback,
+and the installed SDK declaration exposes the overload.
+
+This tracer does not admit transaction queries, callback arguments or return
+values, visible per-step `RunResult` objects, `Database.exec` inside the
+callback, nested transactions, statements from another database, more general
+control flow, manual `BEGIN`/`COMMIT`, or an interactive transaction object.
+Static-SQL `Database.transaction(sql)` remains supported unchanged. Broader
+dynamic values and callback forms require separate tracers.
+
 Before implementation, the selected goal must be copied into the active goal
 with: its exact tracer/source revision; admitted and rejected boundaries; Apple
 execution and Linux-arm64 evidence; failure, saturation, and disposal tests as
