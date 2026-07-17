@@ -263,6 +263,16 @@ example's custom-error ordering: rejected auth logs `Error`, returns the custom
 500 response, retains outer `X-Powered-By`, and correctly omits downstream
 `X-Response-Time`.
 
+The post-alpha user-auth tracer links configuration, authentication, storage,
+and the server from separate local modules. It combines one required typed
+environment binding, the pinned static Basic Auth guard, a custom Hono error
+handler, and an on-disk SQLite audit row retained across process restart. Closed
+prepared parameters now include bounded strings, safe integers, finite reals,
+booleans, and null without constructing a runtime JavaScript array or record.
+Apple native HTTP and Linux-arm64 assembly are release-gated. This does not add
+dynamic credentials, password hashing, cookies, sessions, or a general policy
+engine.
+
 The exact `/etag/cached` middleware now specializes the closed response bytes
 to Hono's default SHA-1 entity tag. HIR retains both the normal response and its
 304 branch; the native borrowed-header predicate implements wildcard, weak-tag,

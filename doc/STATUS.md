@@ -787,6 +787,22 @@ produces and serves a native Mach-O executable from the example TSX source.
   profile reports `BackendDisabled`. The profile is not yet exposed through
   TypeScript `WebAssembly` syntax or linked into generated applications.
 
+### Multi-module Hono user-auth tracer (2026-07-17)
+
+- `examples/hono-user-auth` separates its typed binding, upstream Basic Auth
+  middleware construction, SQLite owner/statements, and server registrations
+  into local modules. The native gate proves environment configuration,
+  rejected and accepted middleware paths, custom error handling, and one audit
+  row retained after process restart without network credentials.
+- Prepared SQLite bindings now carry closed string, safe-integer, finite-real,
+  boolean, and null values through typed HIR and a bounded 24-byte AArch64 ABI
+  entry. Bootstrap decoding binds the values without interpolation or a managed
+  JavaScript heap; malformed tags, oversized strings, and non-finite reals fail
+  closed.
+- Verification: 110 frontend tests, 40 focused bootstrap ABI tests, 33 compiler
+  binary tests, Apple-arm64 native HTTP/restart behavior, and Linux-arm64 Clang
+  assembly.
+
 Verification:
 
 ```bash

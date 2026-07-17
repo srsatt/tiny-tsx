@@ -85,6 +85,19 @@
       "firstUnsupportedBoundary": "Names are static and individually permitted; typed required Context.env strings are supported, while dynamic lookup, resource bindings, ambient enumeration, and mutation are unsupported."
     },
     {
+      "id": "tinytsx-user-auth",
+      "provenance": "tinytsx-local",
+      "entry": "examples/hono-user-auth/server.ts",
+      "imports": ["hono", "hono/basic-auth", "@hono/node-server", "tinytsx:sqlite"],
+      "apis": ["Hono", "use", "get", "post", "onError", "Context.env", "Context.text", "Context.json", "basicAuth", "serve", "Database", "Database.exec", "Database.prepare", "Statement.run", "Statement.all"],
+      "intake": {"status": "pass", "evidence": "tests/compat/hono/user-auth-native.test.mjs"},
+      "nativeCompile": {"appleArm64": "pass", "linuxArm64Assembly": "pass", "evidence": "tests/compat/hono/user-auth-native.test.mjs"},
+      "httpBehavior": {"status": "pass", "evidence": "tests/compat/hono/user-auth-native.test.mjs"},
+      "referenceBehavior": {"runtime": "not-applicable", "status": "not-applicable", "evidence": "doc/COMPATIBILITY.md"},
+      "releaseGates": {"native": ["test:hono-user-auth"], "reference": []},
+      "firstUnsupportedBoundary": "The multi-module tracer proves one static Basic Auth guard, a required string environment binding, a closed error response, and SQLite state across restart; dynamic credentials, sessions, cookies, hashing, and general authorization policy remain unsupported."
+    },
+    {
       "id": "upstream-serve-static",
       "provenance": "upstream-contract-with-tinytsx-adapter",
       "entry": "examples/hono-static/server.ts",

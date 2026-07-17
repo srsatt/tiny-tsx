@@ -128,7 +128,8 @@ worker. Effect calls resolve to `Promise<void>`; changes/row-id result objects
 are deliberately not declared in this alpha.
 
 Prepared calls bind at most 16 compile-time-selected route, bounded JSON-body,
-or UUID values. SQL is capped at 65,536 bytes; results at 1,024 rows and 1 MiB;
+UUID, or closed primitive values (string, safe integer, finite real, boolean,
+and null). SQL is capped at 65,536 bytes; results at 1,024 rows and 1 MiB;
 and the vendored runtime is described in `doc/PERSISTENCE.md`. On-disk paths
 require one matching canonical read/write root and carry the documented
 symlink/sidecar-race warning. General dynamic values, prepared/callback

@@ -422,9 +422,15 @@ adds an explicit application acceptance test.
 
 ### P2 — Web and Hono breadth
 
-- [ ] Add a multi-module user-auth/configuration example covering environment
+- [x] Add a multi-module user-auth/configuration example covering environment
       input, middleware, error handling, and persistent state without network
       credentials in the automated suite.
+  - 2026-07-17: `examples/hono-user-auth` separates typed configuration, the
+    pinned Hono Basic Auth middleware, and SQLite ownership across local modules.
+    Its Apple native test covers required environment input, rejected and
+    accepted authentication, custom error handling, and a row retained across
+    process restart; the same source assembles for Linux arm64. The tracer also
+    promoted bounded closed string/integer/real/boolean/null prepared values.
 - [ ] Generalize Request, Response, Headers, Fetch, URL, encoding, request bodies
       beyond the alpha JSON subset, abort/timeout, and portable non-macOS
       transports.
@@ -452,6 +458,10 @@ adds an explicit application acceptance test.
 - [ ] Add bounded prepared-parameter/callback transactions, typed execute
       results, and broader dynamic SQLite values without allowing operations to
       interleave on one connection.
+  - 2026-07-17: prepared `run`/`all`/`get` parameters now accept bounded closed
+    string, safe-integer, finite-real, boolean, and null literals in addition to
+    route/JSON/UUID values. Dynamic values, result objects, and callback
+    transactions remain open.
 - [ ] Add actor supervision trees, restart intensity, monitors/links, registries,
       persistence snapshots, and remote/distributed actors only from separate
       evidence-driven proposals.

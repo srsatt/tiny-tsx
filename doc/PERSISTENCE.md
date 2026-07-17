@@ -26,9 +26,9 @@ capability-scoped on-disk `Database`, closed `exec(sql)` effects, prepared
 `run()`/`all()`/`get()` calls, static-SQL transactions, bounded JSON row
 encoding, and idempotent `close`/`dispose`. Effect calls return `Promise<void>`;
 typed changes/row-id objects are post-alpha. A prepared call accepts at most 16
-selected values from named route parameters, UUID generation, and a closed
-request JSON object. Parameters use SQLite binding rather than SQL
-interpolation.
+selected values from named route parameters, UUID generation, a closed request
+JSON object, or compile-time string, safe-integer, finite-real, boolean, and
+null literals. Parameters use SQLite binding rather than SQL interpolation.
 
 On-disk owners accept one static normalized relative path. Compilation requires
 exactly one canonical root present in both `--allow-read` and `--allow-write`,
@@ -70,7 +70,9 @@ constraint and malformed-SQL recovery, repeated close, post-close failure,
 Apple execution, and Linux-arm64 assembly. A Bun/Hono plus `bun:sqlite`
 reference test pins the same portable CRUD response contract.
 
-The manifest classifies this bounded surface as `native`. Typed execute results,
+The manifest classifies this bounded surface as `native`. The multi-module
+user-auth tracer additionally proves a closed string parameter written to an
+on-disk database and observed after process restart. Typed execute results,
 additional caller-provided dynamic values, prepared/callback transaction forms,
 and HTTP contention load remain post-alpha. Bounded wildcard-origin CORS,
 Content-Type preflight, and OS-random version-4 IDs bound as prepared values are
