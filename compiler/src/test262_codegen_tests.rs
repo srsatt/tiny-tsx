@@ -125,3 +125,21 @@ fn emits_runtime_record_field_name_membership() {
     assert!(assembly.contains("Ltinytsx_test262_membership_field_0_0:"));
     assert!(assembly.contains("ldrb w3, [x0], #1"));
 }
+
+#[test]
+fn emits_runtime_string_throw_catch_assertions() {
+    let mut program = program(Target::LinuxArm64);
+    program.assertions = vec![Test262Assertion::ThrowCatchProgram {
+        initial_caught: false,
+        thrown: "expected".to_owned(),
+        expected: "expected".to_owned(),
+        final_expected: true,
+        span: span(),
+    }];
+
+    let assembly = emit(&program, Target::LinuxArm64).unwrap();
+
+    assert!(assembly.contains("Ltinytsx_test262_compare_0:"));
+    assert!(assembly.contains("Ltinytsx_test262_actual_0:"));
+    assert!(assembly.contains("Ltinytsx_test262_expected_0:"));
+}

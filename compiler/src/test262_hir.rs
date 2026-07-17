@@ -55,6 +55,15 @@ pub enum Test262Assertion {
         expected: bool,
         span: SourceSpan,
     },
+    ThrowCatchProgram {
+        #[serde(rename = "initialCaught")]
+        initial_caught: bool,
+        thrown: String,
+        expected: String,
+        #[serde(rename = "finalExpected")]
+        final_expected: bool,
+        span: SourceSpan,
+    },
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -154,6 +163,11 @@ impl Test262Program {
                 Test262Assertion::RecordMembershipProgram {
                     fields, property, ..
                 } => validate_record_membership(fields, property)?,
+                Test262Assertion::ThrowCatchProgram {
+                    thrown, expected, ..
+                } if thrown.len() > 4096 || expected.len() > 4096 => {
+                    return Err("Test262 string throw exceeds the 4096-byte limit".to_owned());
+                }
                 _ => {}
             }
         }

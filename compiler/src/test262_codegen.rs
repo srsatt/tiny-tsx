@@ -75,6 +75,21 @@ pub fn emit(program: &Test262Program, target: Target) -> Result<String, String> 
                 property,
                 *expected,
             ),
+            Test262Assertion::ThrowCatchProgram {
+                initial_caught,
+                thrown,
+                expected,
+                final_expected,
+                ..
+            } => emit_throw_catch_program(
+                &mut assembly,
+                target,
+                index,
+                *initial_caught,
+                thrown,
+                expected,
+                *final_expected,
+            ),
         }
     }
     writeln!(assembly, "    mov w0, #0").unwrap();
@@ -85,13 +100,16 @@ pub fn emit(program: &Test262Program, target: Target) -> Result<String, String> 
 
     emit_data_header(&mut assembly, target);
     for (index, assertion) in program.assertions.iter().enumerate() {
-        let Test262Assertion::SameValueString {
-            actual, expected, ..
-        } = assertion else {
-            if let Test262Assertion::RecordMembershipProgram {
+        match assertion {
+            Test262Assertion::SameValueString {
+                actual, expected, ..
+            } => emit_comparison_data(&mut assembly, index, actual, expected),
+            Test262Assertion::ThrowCatchProgram {
+                thrown, expected, ..
+            } => emit_comparison_data(&mut assembly, index, thrown, expected),
+            Test262Assertion::RecordMembershipProgram {
                 fields, property, ..
-            } = assertion
-            {
+            } => {
                 writeln!(assembly, ".p2align 3").unwrap();
                 writeln!(assembly, "Ltinytsx_test262_membership_property_{index}:").unwrap();
                 emit_bytes(&mut assembly, property.as_bytes());
@@ -105,16 +123,36 @@ pub fn emit(program: &Test262Program, target: Target) -> Result<String, String> 
                     emit_bytes(&mut assembly, field.as_bytes());
                 }
             }
-            continue;
-        };
-        writeln!(assembly, ".p2align 3").unwrap();
-        writeln!(assembly, "Ltinytsx_test262_actual_{index}:").unwrap();
-        emit_bytes(&mut assembly, actual.as_bytes());
-        writeln!(assembly, ".p2align 3").unwrap();
-        writeln!(assembly, "Ltinytsx_test262_expected_{index}:").unwrap();
-        emit_bytes(&mut assembly, expected.as_bytes());
+            _ => {}
+        }
     }
     Ok(assembly)
+}
+
+fn emit_comparison_data(assembly: &mut String, index: usize, actual: &str, expected: &str) {
+    writeln!(assembly, ".p2align 3").unwrap();
+    writeln!(assembly, "Ltinytsx_test262_actual_{index}:").unwrap();
+    emit_bytes(assembly, actual.as_bytes());
+    writeln!(assembly, ".p2align 3").unwrap();
+    writeln!(assembly, "Ltinytsx_test262_expected_{index}:").unwrap();
+    emit_bytes(assembly, expected.as_bytes());
+}
+
+fn emit_throw_catch_program(
+    assembly: &mut String,
+    target: Target,
+    assertion_index: usize,
+    initial_caught: bool,
+    thrown: &str,
+    expected: &str,
+    final_expected: bool,
+) {
+    emit_immediate(assembly, "x9", u64::from(initial_caught));
+    emit_same_value(assembly, target, assertion_index, thrown, expected);
+    emit_immediate(assembly, "x9", 1);
+    emit_immediate(assembly, "x10", u64::from(final_expected));
+    writeln!(assembly, "    cmp x9, x10").unwrap();
+    writeln!(assembly, "    b.ne Ltinytsx_test262_fail").unwrap();
 }
 
 fn emit_record_membership_program(

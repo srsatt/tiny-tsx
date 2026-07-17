@@ -474,6 +474,12 @@ against it at runtime before checking the expected boolean. It proves the exact
 own-field `in` assertion; prototype traversal, deletion, dynamic records, and
 ordinary application-code membership remain outside the claim.
 
+The direct string throw/catch Test262 program now executes natively as well. It
+compares the thrown and caught message bytes, mutates the callback-local catch
+flag, and verifies final state before returning success. Together with the
+ordinary function E2E, this is bounded string abrupt-completion evidence—not
+general Error-object or exception-unwinding conformance.
+
 The allowlisted `language/expressions/typeof/undefined.js` case is the first
 `mode: native` Test262 entry. `tinytsx test262 <case> --output <binary>` parses
 the untouched upstream source and lowers its two top-level

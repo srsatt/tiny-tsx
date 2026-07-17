@@ -18,6 +18,11 @@ import {
   lowerRecordMembershipProgram,
   type RecordMembershipProgramAssertion,
 } from "./test262-membership.js";
+import {
+  isThrowCatchProgram,
+  lowerThrowCatchProgram,
+  type ThrowCatchProgramAssertion,
+} from "./test262-throw.js";
 
 export interface Test262Program {
   version: 3;
@@ -32,7 +37,8 @@ export type Test262Assertion =
   | ArrayUnshiftProgramAssertion
   | ArraySpreadApplyProgramAssertion
   | NumericSubtractionProgramAssertion
-  | RecordMembershipProgramAssertion;
+  | RecordMembershipProgramAssertion
+  | ThrowCatchProgramAssertion;
 
 export interface SameValueStringAssertion {
   kind: "sameValueString";
@@ -101,6 +107,8 @@ export function compileTest262Entry(entryPath: string): Test262Program {
       ? [lowerNumericSubtractionProgram(sourceFile)]
     : isRecordMembershipProgram(sourceFile)
       ? [lowerRecordMembershipProgram(sourceFile)]
+    : isThrowCatchProgram(sourceFile)
+      ? [lowerThrowCatchProgram(sourceFile)]
     : isEmptyArrayDeclaration(sourceFile.statements[0])
       ? [lowerArrayUnshiftProgram(sourceFile)]
       : [lowerForThrowCounter(sourceFile)];

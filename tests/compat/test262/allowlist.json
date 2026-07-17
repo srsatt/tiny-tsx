@@ -48,7 +48,7 @@
     {
       "path": "test/language/statements/throw/S12.13_A1.js",
       "feature": "throw-completion",
-      "mode": "syntax"
+      "mode": "native"
     },
     {
       "path": "test/built-ins/Error/message_property.js",

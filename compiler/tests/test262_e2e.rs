@@ -37,6 +37,10 @@ fn compiles_and_runs_native_test262_programs() {
             "record-membership",
             "vendor/test262/test/language/expressions/in/S8.12.6_A1.js",
         ),
+        (
+            "string-throw-catch",
+            "vendor/test262/test/language/statements/throw/S12.13_A1.js",
+        ),
     ] {
         compile_and_run(&root, &directory.join(name), case);
     }

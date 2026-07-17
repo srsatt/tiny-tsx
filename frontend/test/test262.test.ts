@@ -129,3 +129,19 @@ test("lowers the complete pinned closed-record membership Test262 case", () => {
     span: program.assertions[0]?.span,
   }]);
 });
+
+test("lowers the complete pinned string throw/catch Test262 case", () => {
+  const program = compileTest262Entry(path.join(
+    repository,
+    "vendor/test262/test/language/statements/throw/S12.13_A1.js",
+  ));
+
+  assert.deepEqual(program.assertions, [{
+    kind: "throwCatchProgram",
+    initialCaught: false,
+    thrown: "expected_message",
+    expected: "expected_message",
+    finalExpected: true,
+    span: program.assertions[0]?.span,
+  }]);
+});
