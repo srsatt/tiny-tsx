@@ -1,14 +1,41 @@
 import ts from "typescript";
 import {spanOf, tinyError} from "./diagnostics.js";
-import type {Constant, HirFunction, ValueExpression} from "./hir.js";
+import type {Constant, FunctionParameter, HirFunction, ValueExpression} from "./hir.js";
 import {StringTable} from "./hir.js";
+
+type LoweredFunction =
+  | ts.FunctionDeclaration
+  | ts.MethodDeclaration
+  | ts.ArrowFunction
+  | ts.FunctionExpression;
+
+interface ClosureBinding {
+  owner: number;
+  declaration: ts.VariableDeclaration;
+  function: ts.ArrowFunction | ts.FunctionExpression;
+}
+
+interface Capture {
+  declaration: ts.Declaration;
+  argument: ValueExpression;
+  parameter: number;
+}
+
+interface FunctionContext {
+  name: string;
+  parent?: number;
+  parameters: FunctionParameter[];
+  captures: Capture[];
+}
 
 export class FunctionLowerer {
   readonly #functions: Array<HirFunction | undefined> = [];
-  readonly #ids = new Map<ts.FunctionDeclaration | ts.MethodDeclaration, number>();
-  readonly #active = new Set<ts.FunctionDeclaration | ts.MethodDeclaration>();
+  readonly #ids = new Map<LoweredFunction, number>();
+  readonly #active = new Set<LoweredFunction>();
   readonly #parameters = new Map<ts.ParameterDeclaration, {function: number; parameter: number}>();
   readonly #locals = new Map<ts.VariableDeclaration, {function: number; value: ValueExpression}>();
+  readonly #closures = new Map<ts.VariableDeclaration, ClosureBinding>();
+  readonly #contexts = new Map<number, FunctionContext>();
   readonly #fields = new Map<number, ReadonlyMap<string, number>>();
   readonly #constants: ReadonlyMap<string, Constant>;
 
@@ -38,15 +65,36 @@ export class FunctionLowerer {
         const local = this.#locals.get(declaration);
         if (local !== undefined) {
           if (local.function !== currentFunction) {
-            throw tinyError("TINY1308", "captured locals require closure lowering", value);
+            return this.capture(
+              declaration,
+              local.function,
+              currentFunction,
+              local.value,
+              declaration.name.getText(),
+              value,
+            );
           }
           return local.value;
         }
       }
       if (declaration !== undefined && ts.isParameter(declaration)) {
         const parameter = this.#parameters.get(declaration);
-        if (parameter === undefined || parameter.function !== currentFunction) {
-          throw tinyError("TINY1308", "captured parameters require closure lowering", value);
+        if (parameter === undefined) {
+          throw tinyError("TINY1308", "parameter is outside the active native function", value);
+        }
+        if (parameter.function !== currentFunction) {
+          return this.capture(
+            declaration,
+            parameter.function,
+            currentFunction,
+            {
+              kind: "parameter",
+              parameter: parameter.parameter,
+              span: spanOf(value, value.getSourceFile()),
+            },
+            declaration.name.getText(),
+            value,
+          );
         }
         return {
           kind: "parameter",
@@ -87,6 +135,12 @@ export class FunctionLowerer {
         );
       }
       const declaration = this.resolveDeclaration(value.expression);
+      if (declaration !== undefined && ts.isVariableDeclaration(declaration)) {
+        const closure = this.#closures.get(declaration);
+        if (closure !== undefined) {
+          return this.lowerClosureCall(value, closure, currentFunction);
+        }
+      }
       if (declaration === undefined || !ts.isFunctionDeclaration(declaration)) {
         throw tinyError("TINY1302", "call target must be a named function declaration", value.expression);
       }
@@ -182,6 +236,11 @@ export class FunctionLowerer {
         span: spanOf(parameter, parameter.getSourceFile()),
       };
     });
+    this.#contexts.set(id, {
+      name: declaration.name.text,
+      parameters,
+      captures: [],
+    });
     this.#active.add(declaration);
     const body = this.lowerFunctionBody(declaration.body.statements, id, declaration);
     this.#active.delete(declaration);
@@ -203,6 +262,7 @@ export class FunctionLowerer {
     owner: ts.Node,
   ): ValueExpression {
     const locals: ts.VariableDeclaration[] = [];
+    const closures: ts.VariableDeclaration[] = [];
     let index = 0;
     while (index < statements.length && ts.isVariableStatement(statements[index]!)) {
       const statement = statements[index] as ts.VariableStatement;
@@ -210,6 +270,22 @@ export class FunctionLowerer {
         throw tinyError("TINY1321", "native function locals must be immutable `const` bindings", statement);
       }
       for (const declaration of statement.declarationList.declarations) {
+        const initializer = declaration.initializer === undefined
+          ? undefined
+          : unwrap(declaration.initializer);
+        if (
+          ts.isIdentifier(declaration.name)
+          && initializer !== undefined
+          && (ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer))
+        ) {
+          this.#closures.set(declaration, {
+            owner: currentFunction,
+            declaration,
+            function: initializer,
+          });
+          closures.push(declaration);
+          continue;
+        }
         if (
           !ts.isIdentifier(declaration.name)
           || declaration.initializer === undefined
@@ -246,7 +322,129 @@ export class FunctionLowerer {
       );
     } finally {
       for (const declaration of locals) this.#locals.delete(declaration);
+      for (const declaration of closures) this.#closures.delete(declaration);
     }
+  }
+
+  private lowerClosureCall(
+    call: ts.CallExpression,
+    closure: ClosureBinding,
+    currentFunction?: number,
+  ): ValueExpression {
+    if (currentFunction !== closure.owner) {
+      throw tinyError(
+        "TINY1323",
+        "closed function values may only be called in their declaring function",
+        call,
+      );
+    }
+    if (call.arguments.length !== closure.function.parameters.length) {
+      throw tinyError(
+        "TINY1310",
+        `function value \`${closure.declaration.name.getText()}\` expects ${closure.function.parameters.length} arguments`,
+        call,
+      );
+    }
+    const explicitArguments = call.arguments.map(argument => this.lower(argument, currentFunction));
+    const functionId = this.lowerClosureFunction(closure);
+    const context = this.#contexts.get(functionId);
+    if (context === undefined) throw new Error(`closure function ${functionId} has no context`);
+    return {
+      kind: "directCall",
+      function: functionId,
+      arguments: [...explicitArguments, ...context.captures.map(capture => capture.argument)],
+      span: spanOf(call, call.getSourceFile()),
+    };
+  }
+
+  private lowerClosureFunction(closure: ClosureBinding): number {
+    const node = closure.function;
+    if (this.#active.has(node)) {
+      throw tinyError("TINY1305", "recursive function values are not supported yet", node);
+    }
+    const existing = this.#ids.get(node);
+    if (existing !== undefined) return existing;
+    if (node.parameters.length > 4) {
+      throw tinyError("TINY1309", "native string functions support at most four values", node);
+    }
+
+    const id = this.#functions.length;
+    this.#ids.set(node, id);
+    this.#functions.push(undefined);
+    const parameters = this.lowerStringParameters(node.parameters, id);
+    const owner = this.#contexts.get(closure.owner);
+    const name = `${owner?.name ?? `function_${closure.owner}`}.${closure.declaration.name.getText()}`;
+    this.#contexts.set(id, {
+      name,
+      parent: closure.owner,
+      parameters,
+      captures: [],
+    });
+    this.#active.add(node);
+    const body = ts.isBlock(node.body)
+      ? this.lowerFunctionBody(node.body.statements, id, node)
+      : this.lower(node.body, id);
+    this.#active.delete(node);
+    this.#functions[id] = {
+      id,
+      module: node.getSourceFile().fileName,
+      name,
+      parameters,
+      result: "string",
+      body,
+      span: spanOf(node, node.getSourceFile()),
+    };
+    return id;
+  }
+
+  private capture(
+    declaration: ts.Declaration,
+    owner: number,
+    currentFunction: number | undefined,
+    argument: ValueExpression,
+    name: string,
+    occurrence: ts.Node,
+  ): ValueExpression {
+    const context = currentFunction === undefined ? undefined : this.#contexts.get(currentFunction);
+    if (context === undefined || context.parent !== owner) {
+      throw tinyError("TINY1308", "only direct-parent immutable string captures are supported", occurrence);
+    }
+    const existing = context.captures.find(capture => capture.declaration === declaration);
+    const parameter = existing?.parameter ?? (() => {
+      if (context.parameters.length >= 4) {
+        throw tinyError("TINY1324", "native closure exceeds four explicit and captured strings", occurrence);
+      }
+      const index = context.parameters.length;
+      context.parameters.push({
+        name: `$capture.${name}`,
+        type: "string",
+        span: spanOf(occurrence, occurrence.getSourceFile()),
+      });
+      context.captures.push({declaration, argument, parameter: index});
+      return index;
+    })();
+    return {
+      kind: "parameter",
+      parameter,
+      span: spanOf(occurrence, occurrence.getSourceFile()),
+    };
+  }
+
+  private lowerStringParameters(
+    declarations: readonly ts.ParameterDeclaration[],
+    functionId: number,
+  ): FunctionParameter[] {
+    return declarations.map((parameter, index) => {
+      if (!isRequiredStringParameter(this.checker, parameter) || !ts.isIdentifier(parameter.name)) {
+        throw tinyError("TINY1311", "native function parameters must be required strings", parameter);
+      }
+      this.#parameters.set(parameter, {function: functionId, parameter: index});
+      return {
+        name: parameter.name.text,
+        type: "string",
+        span: spanOf(parameter, parameter.getSourceFile()),
+      };
+    });
   }
 
   private lowerConditional(
@@ -272,12 +470,14 @@ export class FunctionLowerer {
       throw tinyError("TINY1322", "both native branch paths must return a string", statement);
     }
     const equal = condition.operatorToken.kind === ts.SyntaxKind.EqualsEqualsEqualsToken;
+    const left = this.lower(condition.left, currentFunction);
+    const right = this.lower(condition.right, currentFunction);
     const thenValue = this.lower(thenExpression, currentFunction);
     const elseValue = this.lower(elseExpression, currentFunction);
     return {
       kind: "stringEqualConditional",
-      left: this.lower(condition.left, currentFunction),
-      right: this.lower(condition.right, currentFunction),
+      left,
+      right,
       whenEqual: equal ? thenValue : elseValue,
       whenNotEqual: equal ? elseValue : thenValue,
       span: spanOf(statement, statement.getSourceFile()),

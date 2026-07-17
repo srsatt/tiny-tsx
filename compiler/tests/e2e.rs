@@ -446,6 +446,15 @@ fn builds_and_serves_native_function_locals_and_branches() {
 }
 
 #[test]
+fn builds_and_serves_lambda_lifted_function_captures() {
+    build_and_serve(
+        "examples/function-closures/server.ts",
+        "allowed",
+        "text/plain; charset=UTF-8",
+    );
+}
+
+#[test]
 fn builds_and_serves_the_pinned_hono_basic_route() {
     build_and_serve_with_options(
         "tests/compat/hono/basic-smoke.ts",

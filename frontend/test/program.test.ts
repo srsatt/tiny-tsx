@@ -291,6 +291,40 @@ test("lowers immutable string locals and runtime equality branches", () => {
   );
 });
 
+test("lambda-lifts closed local function values and immutable captures", () => {
+  const hir = compileSource(`
+    function authorize(result: string): string {
+      const expected = "admin";
+      const decide = (candidate: string): string => {
+        if (candidate === expected) return result;
+        return "denied";
+      };
+      return decide("admin");
+    }
+    export function GET(request: Request): Response {
+      return Response.text(authorize("allowed"));
+    }
+  `);
+
+  assert.deepEqual(hir.functions.map(func => ({
+    name: func.name,
+    parameters: func.parameters.map(parameter => parameter.name),
+    body: func.body.kind,
+  })), [
+    {name: "authorize", parameters: ["result"], body: "directCall"},
+    {
+      name: "authorize.decide",
+      parameters: ["candidate", "$capture.expected", "$capture.result"],
+      body: "stringEqualConditional",
+    },
+  ]);
+  const call = hir.functions[0]?.body;
+  assert.deepEqual(
+    call?.kind === "directCall" ? call.arguments.map(argument => argument.kind) : [],
+    ["stringLiteral", "stringLiteral", "parameter"],
+  );
+});
+
 test("lowers a closed class field and immediate method call", () => {
   const hir = compileSource(`
     const MESSAGE = "Hono!!";

@@ -528,10 +528,18 @@ returns the selected string in `x0`/`x1`. Call arguments, parameters, and branch
 operands are spilled into a bounded native frame when nested evaluation requires
 it.
 
+Initialized local `const` bindings may hold an arrow or function expression and
+call it within the declaring function. Direct-parent string parameters and
+immutable string locals referenced by that function value are lambda-lifted:
+the frontend adds them as explicit HIR parameters and passes their values at the
+call site. This gives closed callbacks native execution without allocating a
+closure object. Explicit parameters plus captures remain bounded to four
+pointer/length values.
+
 This does not introduce a JavaScript call stack or object model. Mutable or
 non-string locals, general boolean/numeric conditions, optional/default/rest
-parameters, closures, arrays, and records remain outside this executable
-function slice.
+parameters, escaping or identity-observable closures, transitive captures,
+arrays, and records remain outside this executable function slice.
 
 ### Closed class slice
 
@@ -611,7 +619,8 @@ Web API implementation.
 ## Compatibility order
 
 1. ESM runtime graph loading and aggregate diagnostics.
-2. Functions as values, closures, records, arrays, and ordinary control flow.
+2. Broader/escaping function values and closures, records, arrays, and ordinary
+   control flow.
 3. Restricted classes, fields, inheritance, and object identity.
 4. Rest/spread forms used by `hono/tiny`.
 5. RegExp and required String, Array, Object, Map, and encoding operations.

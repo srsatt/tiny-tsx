@@ -327,10 +327,13 @@ Do not tag `0.1.0-alpha.1` until all of these are true:
       types, and general typed expressions/statements.
   - 2026-07-17: immutable string locals and strict string-equality branches now
     lower through HIR and execute natively on both branch paths. Mutable locals,
-    closures, non-string types, and general statements remain open.
+    non-string types, escaping closures, and general statements remain open.
 - [ ] Compile function values, closures, records, arrays, ordinary loops, the
       restricted class semantics required by `hono/tiny`, and required runtime
       rest/spread operations.
+  - 2026-07-17: closed local arrow/function values can capture direct-parent
+    immutable strings and are lambda-lifted into native calls. Escaping identity,
+    nested/transitive captures, and dynamic function selection remain open.
 - [ ] Implement bounded native `Map`, constant `symbol`, signed zero, `NaN`, and
       infinities with complete semantics evidence.
 - [ ] Replace whole-module forbidden-syntax rejection with request/initialization

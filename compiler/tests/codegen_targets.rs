@@ -64,6 +64,15 @@ fn emits_assemblable_function_control_flow_for_linux_arm64() {
     assert_assembles_as_elf(&assembly, "function-control-flow");
 }
 
+#[test]
+fn emits_assemblable_lambda_lifted_closure_for_linux_arm64() {
+    let assembly = compile_linux("examples/function-closures/server.ts", &[]);
+
+    assert!(assembly.contains("tinytsx_function_1"));
+    assert!(assembly.contains("bl memcmp"));
+    assert_assembles_as_elf(&assembly, "function-closure");
+}
+
 fn compile_linux(entry: &str, extra_arguments: &[&str]) -> String {
     let compiler = env!("CARGO_BIN_EXE_tinytsx");
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..");

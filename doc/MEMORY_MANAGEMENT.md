@@ -68,6 +68,12 @@ per logical worker with no shared objects. A conservative collector may be a
 useful experiment, but accidental retention and process-wide thread scanning
 make it a poor default until measurements say otherwise.
 
+The first executable light-lambda slice does not allocate an environment:
+closed local function values with direct-parent immutable string captures are
+lambda-lifted into ordinary native functions, and captures become explicit
+pointer/length arguments. Escaping closures or identity-observable function
+values still cross the managed-heap decision gate above.
+
 No production tracing collector should be written from scratch as part of the
 worker milestone.
 

@@ -471,6 +471,10 @@ produces and serves a native Mach-O executable from the example TSX source.
   string locals plus strict string equality/inequality branches. Native AArch64
   compares pointer/length strings by length and bytes; the dedicated E2E executes
   unequal and equal paths through nested functions.
+- Closed local arrow/function values now lambda-lift direct-parent immutable
+  string captures into explicit HIR/native parameters. The Apple HTTP E2E and
+  Linux assembly test cover both a captured outer parameter and local without a
+  heap closure; escaping identity and transitive captures remain unsupported.
 - Closed classes can expose required string parameter properties to an immediate
   method call. The call is devirtualized into ordinary HIR with no heap object or
   prototype runtime; inheritance and persistent identity remain unsupported.
