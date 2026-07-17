@@ -395,13 +395,13 @@ function summarizeRoutes(
     const hasLaterHandler = routes.items.slice(routeIndex + 1).some(candidate =>
       sameRoute(candidate, method.value, path.value)
     );
-    if (["GET", "POST"].includes(method.value) && hasLaterHandler) {
+    if (isSupportedHttpMethod(method.value) && hasLaterHandler) {
       return [];
     }
     const middleware = routes.items.slice(0, routeIndex).flatMap(candidate =>
       matchingMiddleware(candidate, method.value, path.value)
     );
-    const response = ["GET", "POST"].includes(method.value) && handler?.kind === "closure"
+    const response = isSupportedHttpMethod(method.value) && handler?.kind === "closure"
       ? evaluateRouteHandler(
         evaluator,
         handler,
@@ -440,6 +440,10 @@ function summarizeRoutes(
     }
     return [{...route, ...(response === undefined ? {} : {response})}];
   });
+}
+
+function isSupportedHttpMethod(method: string): boolean {
+  return ["GET", "POST", "PUT", "DELETE"].includes(method);
 }
 
 function parameterValidations(

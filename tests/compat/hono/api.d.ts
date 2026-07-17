@@ -44,6 +44,8 @@ export type HonoErrorHandlerApi = (
 export declare class Hono {
   get(path: string, ...handlers: HonoRouteHandlerApi[]): this;
   post(path: string, ...handlers: HonoRouteHandlerApi[]): this;
+  put(path: string, ...handlers: HonoRouteHandlerApi[]): this;
+  delete(path: string, ...handlers: HonoRouteHandlerApi[]): this;
   use(path: string, ...middleware: HonoMiddlewareApi[]): this;
   on(method: string | string[], path: string | string[], ...handlers: HonoHandlerApi[]): this;
   route(path: string, application: Hono): this;

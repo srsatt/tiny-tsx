@@ -225,7 +225,7 @@ export type HandlerResponse =
     };
 
 export interface Handler {
-  method: "GET" | "POST";
+  method: "GET" | "POST" | "PUT" | "DELETE";
   path: string;
   headers?: StaticHeader[];
   elapsedHeaders?: ElapsedHeader[];

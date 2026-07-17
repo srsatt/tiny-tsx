@@ -33,17 +33,28 @@ test("serializes an in-memory SQLite owner and recovers from SQL errors", async 
   await assertGet(port, "/first", 200, '{"post":{"title":"Morning","body":null}}');
   await assertGet(port, "/posts/Morning", 200, '{"post":{"title":"Morning","body":null}}');
   await assertResponse(port, "/seed", 500, "internal server error");
-  await assertResponse(port, "/delete/Morning", 200, "deleted");
+  await assertMethod(port, "/posts/Morning", "DELETE", 200, "deleted");
   await assertGet(port, "/posts", 200, '{"posts":[]}');
   await assertResponse(port, "/seed", 201, "created");
-  await assertJsonPost(
+  await assertJson(
     port,
     "/posts",
+    "POST",
     {title: "Night", body: "Good Night"},
     201,
     '{"post":{"title":"Night","body":"Good Night"}}',
   );
-  await assertJsonPost(port, "/posts", {title: "missing"}, 400, "bad request");
+  await assertJson(port, "/posts", "POST", {title: "missing"}, 400, "bad request");
+  await assertJson(
+    port,
+    "/posts/Night",
+    "PUT",
+    {body: "Still Night"},
+    200,
+    '{"post":{"title":"Night","body":"Still Night"}}',
+  );
+  await assertMethod(port, "/posts/Night", "DELETE", 200, "deleted");
+  await assertGet(port, "/posts/Night", 200, '{"post":null}');
   await assertResponse(port, "/schema", 200, "ready");
   await assertResponse(port, "/close", 200, "closed");
   await assertResponse(port, "/close", 200, "closed");
@@ -76,7 +87,11 @@ function build(binary, port) {
 }
 
 async function assertResponse(port, pathname, status, body) {
-  const response = await fetch(`http://127.0.0.1:${port}${pathname}`, {method: "POST"});
+  return assertMethod(port, pathname, "POST", status, body);
+}
+
+async function assertMethod(port, pathname, method, status, body) {
+  const response = await fetch(`http://127.0.0.1:${port}${pathname}`, {method});
   assert.equal(response.status, status);
   assert.equal(await response.text(), body);
 }
@@ -87,9 +102,9 @@ async function assertGet(port, pathname, status, body) {
   assert.equal(await response.text(), body);
 }
 
-async function assertJsonPost(port, pathname, value, status, body) {
+async function assertJson(port, pathname, method, value, status, body) {
   const response = await fetch(`http://127.0.0.1:${port}${pathname}`, {
-    method: "POST",
+    method,
     headers: {"content-type": "application/json"},
     body: JSON.stringify(value),
   });

@@ -510,13 +510,13 @@ impl Program {
             return Err("HIR may reference at most 64 environment variables".to_owned());
         }
         if self.handlers.is_empty()
-            || self
-                .handlers
-                .iter()
-                .any(|handler| !matches!(handler.method.as_str(), "GET" | "POST"))
+            || self.handlers.iter().any(|handler| {
+                !matches!(handler.method.as_str(), "GET" | "POST" | "PUT" | "DELETE")
+            })
         {
             return Err(
-                "HIR must contain at least one GET/POST handler and no other methods".to_owned(),
+                "HIR must contain at least one GET/POST/PUT/DELETE handler and no other methods"
+                    .to_owned(),
             );
         }
         let mut handler_paths = HashSet::new();

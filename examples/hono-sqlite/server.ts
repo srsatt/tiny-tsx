@@ -7,6 +7,7 @@ const posts = database.prepare("SELECT title, body FROM posts ORDER BY title");
 const post = database.prepare("SELECT title, body FROM posts WHERE title = ?1");
 const deletePost = database.prepare("DELETE FROM posts WHERE title = ?1");
 const createPost = database.prepare("INSERT INTO posts (title, body) VALUES (?1, ?2)");
+const updatePost = database.prepare("UPDATE posts SET body = ?1 WHERE title = ?2");
 const latestPost = database.prepare("SELECT title, body FROM posts ORDER BY rowid DESC LIMIT 1");
 const app = new Hono();
 
@@ -23,14 +24,19 @@ app.get("/first", async context => context.json({post: await posts.get()}));
 app.get("/posts/:title", async context => context.json({
   post: await post.get([context.req.param("title")]),
 }));
-app.post("/delete/:title", async context => {
-  await deletePost.run([context.req.param("title")]);
-  return context.text("deleted");
-});
 app.post("/posts", async context => {
   const input = await context.req.json() as {title: string; body: string};
   await createPost.run([input.title, input.body]);
   return context.json({post: await latestPost.get()}, 201);
+});
+app.put("/posts/:title", async context => {
+  const input = await context.req.json() as {body: string};
+  await updatePost.run([input.body, context.req.param("title")]);
+  return context.json({post: await post.get([context.req.param("title")])});
+});
+app.delete("/posts/:title", async context => {
+  await deletePost.run([context.req.param("title")]);
+  return context.text("deleted");
 });
 app.post("/close", context => {
   database.close();

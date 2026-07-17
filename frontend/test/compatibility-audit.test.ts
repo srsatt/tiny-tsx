@@ -134,6 +134,7 @@ test("lowers a bounded in-memory SQLite owner and effects", () => {
     const post = database.prepare("SELECT title FROM posts WHERE title = ?1");
     const deletePost = database.prepare("DELETE FROM posts WHERE title = ?1");
     const createPost = database.prepare("INSERT INTO posts (title, body) VALUES (?1, ?2)");
+    const updatePost = database.prepare("UPDATE posts SET body = ?1 WHERE title = ?2");
     const app = new Hono();
     app.post("/schema", async context => {
       await database.exec("CREATE TABLE posts (id INTEGER PRIMARY KEY, title TEXT)");
@@ -147,7 +148,7 @@ test("lowers a bounded in-memory SQLite owner and effects", () => {
     app.get("/posts/:title", async context => context.json({
       post: await post.get([context.req.param("title")]),
     }));
-    app.post("/delete/:title", async context => {
+    app.delete("/posts/:title", async context => {
       await deletePost.run([context.req.param("title")]);
       return context.text("deleted");
     });
@@ -155,6 +156,11 @@ test("lowers a bounded in-memory SQLite owner and effects", () => {
       const input = await context.req.json() as {title: string; body: string};
       await createPost.run([input.title, input.body]);
       return context.text("created", 201);
+    });
+    app.put("/posts/:title", async context => {
+      const input = await context.req.json() as {body: string};
+      await updatePost.run([input.body, context.req.param("title")]);
+      return context.text("updated");
     });
     serve({fetch: app.fetch});
   `);
@@ -199,6 +205,14 @@ test("lowers a bounded in-memory SQLite owner and effects", () => {
   assert.deepEqual(jsonParameters?.map(parameter => parameter.kind === "requestJsonField"
     ? hir.staticStrings[parameter.field]?.value
     : undefined), ["title", "body"]);
+  assert.equal(hir.handlers[4]?.method, "DELETE");
+  assert.equal(hir.handlers[6]?.method, "PUT");
+  const updateParameters = hir.handlers[6]?.sqliteActions?.[0]?.kind === "exec"
+    ? hir.handlers[6].sqliteActions[0].parameters
+    : undefined;
+  assert.deepEqual(updateParameters?.map(parameter => parameter.kind === "requestJsonField"
+    ? hir.staticStrings[parameter.field]?.value
+    : parameter.kind), ["body", "routeParameter"]);
 });
 
 test("requires an explicit read root for filesystem access", () => {

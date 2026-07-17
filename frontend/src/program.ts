@@ -313,7 +313,7 @@ function lowerApplicationInitialization(
   initialization: ApplicationInitializationEvaluation,
   server: {port?: number} | undefined,
 ): HirProgram | undefined {
-  const routes = initialization.routes.filter(route => ["GET", "POST"].includes(route.method));
+  const routes = initialization.routes.filter(route => isSupportedHttpMethod(route.method));
   const fallbackRoutes = initialization.notFoundResponse === undefined
     ? []
     : (["GET", "POST"] as const).flatMap(method =>
@@ -344,7 +344,9 @@ function lowerApplicationInitialization(
   );
   if (
     routes.length === 0
-    || initialization.routes.some(route => !["GET", "POST", "ALL"].includes(route.method))
+    || initialization.routes.some(route =>
+      route.method !== "ALL" && !isSupportedHttpMethod(route.method)
+    )
   ) {
     return undefined;
   }
@@ -409,7 +411,7 @@ function lowerApplicationInitialization(
       rejected: lowerGuardedResponse(validation.rejected, route.path, strings, workers, span),
     }));
     return {
-      method: route.method as "GET" | "POST",
+      method: route.method as "GET" | "POST" | "PUT" | "DELETE",
       path: route.path,
       ...responseHeaders,
       ...(basicAuthorization === undefined ? {} : {basicAuthorization}),
@@ -480,6 +482,12 @@ function lowerApplicationInitialization(
       0),
     },
   };
+}
+
+function isSupportedHttpMethod(
+  method: string,
+): method is "GET" | "POST" | "PUT" | "DELETE" {
+  return ["GET", "POST", "PUT", "DELETE"].includes(method);
 }
 
 function emptyMemoryReport(): MemoryReport {
