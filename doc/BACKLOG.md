@@ -48,30 +48,30 @@ The alpha profiles are:
 
 ## Current implementation slice
 
-Finish one vertical persistence slice before widening the language or
-standard-library surface. The bounded JSON-to-prepared-SQLite foundation and a
-local Hono CRUD adapter are now green; the remaining work is exact upstream
-blog parity.
+Finish the first durable persistence slice before widening the language or
+standard-library surface. The bounded in-memory Hono blog contract is green;
+the active work is capability-gated disk databases, explicit transactions,
+restart evidence, and one persistent counter actor.
 
 Acceptance criteria are:
 
-- [x] Accept a closed JSON object no larger than 64 KiB and bind at most 16 selected
-  fields and route parameters without SQL interpolation;
-- [x] Support SQLite `null`, integer, finite number, and text values in this slice;
-  reject missing fields, booleans, arrays, nested objects, non-finite numbers,
-  oversized input, and unsupported values with a recoverable client error;
-- [x] Exercise create, list, get, update, and delete through a native Hono server,
-  including malformed-body, missing-field, malformed-SQL, and not-found paths;
-- [x] Compare the portable local-adapter HTTP behavior with Hono under Bun and
-  assemble the Linux-arm64 output in the compatibility suite;
-- [x] Update `doc/PERSISTENCE.md`, `doc/COMPATIBILITY.md`, `doc/STATUS.md`, and the
-  machine-readable Hono example matrix with the exact supported boundary.
-- [ ] Match the pinned upstream response envelopes and missing-post 404/204
-  behavior.
+- [ ] Define one explicit database-path capability; reject ambient, dynamic,
+  escaping, and undeclared paths before opening a native handle;
+- [ ] Add a bounded explicit transaction surface with deterministic commit,
+  rollback, nested-transaction rejection, and handler-failure behavior;
+- [ ] Prove schema creation, CRUD, rollback, busy/contention recovery, close,
+  process restart, and retained rows on Apple arm64; assemble the same program
+  for Linux arm64;
+- [ ] Persist one bounded counter actor through the public SQLite and actor APIs,
+  with restart and mailbox-order evidence;
+- [ ] Publish limits, permissions, failure mapping, operational prerequisites,
+  and benchmark deltas in the persistence, compatibility, status, and release
+  artifacts.
 
-This slice does not complete A5. On-disk capabilities, transactions,
-contention, restart persistence, and the persistent actor remain separate
-follow-up goals after the in-memory CRUD contract is green.
+The completed in-memory slice accepts a closed JSON object no larger than 64
+KiB, binds at most 16 selected route/body/UUID parameters, exercises CRUD and
+failure recovery, matches Bun/Hono, assembles for Linux arm64, and preserves the
+pinned blog success envelopes plus missing-record 404/204 behavior.
 
 ## Alpha critical path
 
@@ -102,7 +102,7 @@ follow-up goals after the in-memory CRUD contract is green.
 - [x] Compile and execute the pinned upstream `serve-static` landing application,
       then extend it with `tinytsx:fs` using the pinned assets as the file API
       tracer.
-- [ ] Use the pinned upstream `blog` routes and behavior as the CRUD contract for
+- [x] Use the pinned upstream `blog` routes and behavior as the CRUD contract for
       a Hono + `tinytsx:sqlite` example. Clearly distinguish any TinyTSX binding
       adapter from unchanged upstream source.
 - [x] Add bounded JSON request bodies and closed-shape JSON parsing required by
@@ -223,8 +223,10 @@ follow-up goals after the in-memory CRUD contract is green.
       busy timeout, and queued operations; surface typed recoverable failures.
 - [ ] Prove schema creation, insert/select/update/delete, rollback, contention,
       malformed SQL, limit recovery, shutdown, and restart persistence.
-- [ ] Run the Hono blog tracer end to end against the public SQLite built-in,
-      then add the persistent variant of the A4 counter tracer.
+- [x] Run the in-memory Hono blog tracer end to end against the public SQLite
+      built-in with the pinned success envelopes and missing-record semantics.
+- [ ] Add the persistent variant of the A4 counter tracer after disk databases
+      and transactions are green.
 
 ### A6 — Make the alpha release installable
 

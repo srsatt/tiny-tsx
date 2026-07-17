@@ -114,7 +114,7 @@
       "nativeCompile": {"appleArm64": "adapter-pass", "linuxArm64Assembly": "adapter-pass", "evidence": "tests/compat/sqlite/native.test.mjs"},
       "httpBehavior": {"status": "adapter-pass", "evidence": "tests/compat/sqlite/native.test.mjs"},
       "referenceBehavior": {"runtime": "upstream tests", "status": "pinned", "evidence": "vendor/hono-examples/blog/src/api.test.ts"},
-      "firstUnsupportedBoundary": "The adapter proves bounded in-memory CRUD, prepared body/route/UUID values, wildcard-origin CORS, and a typed string environment binding; upstream response envelopes, 404/204 behavior, platform resource bindings, transactions, and disk persistence remain pending."
+      "firstUnsupportedBoundary": "The adapter proves bounded in-memory CRUD, prepared body/route/UUID values, wildcard-origin CORS, a typed string environment binding, pinned success envelopes, and missing-record 404/204 behavior; platform resource bindings, transactions, and disk persistence remain pending."
     },
     {
       "id": "upstream-durable-objects-counter",

@@ -157,6 +157,14 @@ Hono routing. A Bun/Hono plus `bun:sqlite` test pins the same response bodies an
 statuses. This evidence covers four closed HTTP methods, not arbitrary Hono
 `on()` method sets, HEAD/OPTIONS synthesis, or a general native router.
 
+The adapter now also matches the pinned blog's `{posts, ok}`, `{post, ok}`, and
+`{ok}` success envelopes. A bounded `Statement.get()` presence guard executes
+before route effects: a missing GET returns `{error: "Not Found", ok: false}`
+with status 404, while missing PUT and DELETE return an empty 204 and skip their
+SQLite mutation. This is one first-row SQLite existence branch with a direct,
+effect-free missing response, not general runtime JavaScript conditionals or
+arbitrary result inspection.
+
 The first request-body slice retains at most 64 KiB and recognizes
 `await c.req.json()` only when statically selected fields flow directly into a
 prepared SQLite call. The bootstrap parses the body once at that ABI boundary,

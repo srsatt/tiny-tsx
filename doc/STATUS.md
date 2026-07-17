@@ -9,6 +9,24 @@ produces and serves a native Mach-O executable from the example TSX source.
 
 ## Alpha implementation evidence
 
+### Pinned Hono blog response contract (2026-07-17)
+
+- The `tinytsx:sqlite` adapter now matches the pinned upstream blog's list,
+  create, get, update, and delete success envelopes. Missing GET returns the
+  upstream JSON error envelope with 404; missing PUT and DELETE return an empty
+  204 and perform no mutation.
+- The compiler lowers `if (!await statement.get(...)) return response` as one
+  bounded first-row existence guard. The generated server performs the guard
+  before SQLite actions and supports only a direct effect-free missing branch;
+  this does not claim general dynamic JavaScript branching.
+- Bun/Hono with `bun:sqlite` pins the portable behavior. Native Apple-arm64 HTTP
+  covers found and missing CRUD paths, malformed input and SQL recovery, while
+  the same generated handler assembles for Linux arm64.
+- Verification: `npm run test:frontend` (84/84),
+  `npm run test:sqlite-reference` (3/3), `npm run test:sqlite-native` (2/2),
+  `cargo test -p tinytsx-runtime-bootstrap` (51/51), `cargo test -p tinytsx`,
+  and `cargo clippy --workspace --all-targets -- -D warnings`.
+
 ### Environment capability (2026-07-17)
 
 - `tinytsx:env` is native on the declared Apple-arm64 and Linux-arm64 targets.
@@ -110,8 +128,7 @@ produces and serves a native Mach-O executable from the example TSX source.
   create/list/get/update/delete over GET/POST/PUT/DELETE, SQL-error recovery,
   post-close failure, Apple execution, and Linux-arm64 assembly; a Bun/Hono
   `bun:sqlite` test pins the same local adapter contract. Typed execute results,
-  transactions, disk capabilities, exact upstream blog
-  envelopes, and the persistent actor remain open.
+  transactions, disk capabilities, and the persistent actor remain open.
 - Typed Hono `Bindings` string fields now lower through the immutable
   `tinytsx:env` snapshot and exact `--allow-env` capability. The blog adapter's
   `context.env.TINYTSX_BLOG_NAME` matches Bun/Hono; denied, missing, invalid,
@@ -141,7 +158,7 @@ produces and serves a native Mach-O executable from the example TSX source.
   `npm run test:actors-native` (2/2),
   `cargo test -p tinytsx-runtime-bootstrap` (51/51),
   `cargo test -p tinytsx-runtime-sqlite` (4/4),
-  `npm run test:sqlite-reference` (2/2),
+  `npm run test:sqlite-reference` (3/3),
   `npm run test:sqlite-native` (2/2), and
   `cargo clippy --workspace --all-targets -- -D warnings`.
 
