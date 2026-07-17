@@ -160,6 +160,27 @@ fn termination_cancels_queued_messages_after_active_work() {
 }
 
 #[test]
+fn dropping_a_reply_does_not_cancel_an_accepted_message() {
+    let pool = ApplicationPool::new(
+        1,
+        2,
+        2,
+        |_| 0_i64,
+        |state, delta| {
+            *state += delta;
+            *state
+        },
+    )
+    .expect("create application pool");
+    let actor = pool.spawn();
+
+    drop(actor.try_post(2).expect("accept detached message"));
+    assert_eq!(actor.call(0), Ok(2));
+
+    pool.join();
+}
+
+#[test]
 fn panic_is_reported_and_later_messages_recover() {
     let pool = ApplicationPool::new(
         1,

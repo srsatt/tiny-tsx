@@ -467,6 +467,11 @@ adds an explicit application acceptance test.
 - [ ] Define actor timeout, caller cancellation, drain-on-stop, automatic
       restart, and supervision behavior, then prove handler isolation and panic
       recovery beyond the counter specialization.
+  - 2026-07-17: stop is explicitly active-finish/queued-cancel, and abandoning
+    a reply detaches only the waiter without retracting accepted FIFO effects.
+    Generic runtime tests also prove isolated state, panic containment with a
+    later successful message, and cross-actor parallelism. Deadlines/timeouts,
+    restart policy, and supervision remain open.
 - [x] Measure 1,000 and 10,000 idle/local actors, publish bytes per actor and
       thread count, and prove cross-actor parallelism and fairness under a hot
       mailbox before raising the documented actor-count limit.

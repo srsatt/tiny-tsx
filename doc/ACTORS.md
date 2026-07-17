@@ -77,17 +77,22 @@ executors are configured.
 ## Stop and failures
 
 `stop()` and `dispose()` are idempotent. Stopping rejects new messages and
-fails queued replies; it does not destroy an executor thread. There is no
-automatic restart, supervision tree, general durable snapshot, timeout,
-cancellation, or mailbox drain-on-stop in this alpha slice. Optional counter
-persistence restores state after a process restart; it does not restart a
-failed actor in-process.
+fails queued replies; an already executing message is allowed to finish. It
+does not destroy an executor thread. Dropping an `ask`/post reply (including a
+caller that no longer waits) detaches the waiter but does not cancel an accepted
+message; FIFO effects remain visible to the next call. There is no deadline or
+timeout API, automatic restart, supervision tree, general durable snapshot, or
+message retraction in this slice. Optional counter persistence restores state
+after a process restart; it does not restart a failed actor in-process.
 
 Mailbox or application-queue saturation is a recoverable overload response.
 Use after stop, a disconnected reply, a handler panic, and checked-integer
 overflow become bounded internal response errors. They do not terminate the
 HTTP server. The public error payload is deliberately generic; stable typed
 application errors and caller-selected timeout behavior remain release work.
+Generic runtime tests pin active-finish/queued-cancel stop semantics, detached
+reply behavior, panic containment with a later successful message, isolated
+state, and cross-actor parallelism independently of the counter adapter.
 
 ## Evidence and remaining work
 

@@ -861,6 +861,10 @@ produces and serves a native Mach-O executable from the example TSX source.
   cold actor runs before the hot 64-message backlog completes; the existing
   barrier test proves cross-actor parallelism with two executors. Sustained
   fairness throughput remains unmeasured.
+- Lifecycle tests now pin active-finish/queued-cancel stop semantics and prove
+  that dropping a reply detaches the caller without canceling an accepted FIFO
+  message. Panic containment and later recovery remain generic runtime
+  guarantees; timeout, restart, and supervision APIs are still absent.
 
 Verification:
 
