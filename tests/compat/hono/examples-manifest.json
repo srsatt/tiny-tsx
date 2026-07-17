@@ -189,7 +189,7 @@
       "httpBehavior": {"status": "pass", "evidence": "tests/compat/actors/native.test.mjs"},
       "referenceBehavior": {"runtime": "not-applicable", "status": "not-applicable", "evidence": "doc/ACTORS.md"},
       "releaseGates": {"native": ["test:actors-native"], "reference": []},
-      "firstUnsupportedBoundary": "The adapters prove an in-memory and optional SQLite-persistent local signed-integer counter only; Cloudflare bindings, alarms, remote identity, arbitrary persistent actor behaviors, and request-derived messages are out of scope."
+      "firstUnsupportedBoundary": "The adapters prove an in-memory and optional SQLite-persistent local signed-integer counter plus hard-reset waiter detachment that preserves accepted effects; clean-close and general AbortSignal cancellation, Cloudflare bindings, alarms, remote identity, arbitrary persistent actor behaviors, and request-derived messages are out of scope."
     }
   ],
   "behaviorAllowlist": [

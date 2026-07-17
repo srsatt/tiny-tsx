@@ -9,6 +9,25 @@ produces and serves a native Mach-O executable from the example TSX source.
 
 ## Alpha implementation evidence
 
+### Bounded actor hard-reset cancellation (2026-07-17)
+
+- Pending `actor.ask()` reply waits now check the HTTP connection's pending
+  socket error every 10 milliseconds. A hard client reset detaches the HTTP
+  waiter and releases that executor without retracting the accepted FIFO actor
+  message. Clean read-side EOF remains valid half-close rather than cancellation.
+- The one-worker persistent-counter tracer holds an external SQLite write lock,
+  resets an accepted increment request, serves `/health` within 500 milliseconds
+  before releasing the lock, and then observes the detached increment. This
+  proves both executor release and continued actor effects without a managed
+  task heap or per-request monitor thread.
+- The internal disconnect status closes the dead HTTP connection without a
+  response write. General `AbortSignal`, clean-close propagation, message
+  retraction, cancellation of other built-ins, restart, and supervision remain
+  explicit boundaries.
+- Verification: 18 worker tests, 60 bootstrap tests, 178 Rust workspace tests,
+  actor native/assembly 6/6 across Apple arm64 and Linux arm64, and workspace
+  Clippy with warnings denied.
+
 ### Typed SQLite run results (2026-07-17)
 
 - The protected SDK now exposes immutable `RunResult` values from

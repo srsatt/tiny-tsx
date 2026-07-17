@@ -809,6 +809,16 @@ primitive, array, and nested-record paths; Linux-arm64 assembly exercises the
 same ABI. Dynamic request-derived values, spreads, cycles, object identity,
 transfer, arbitrary actor behavior, and value persistence remain unsupported.
 
+Actor waits now have one bounded transport cancellation path. During
+`actor.ask()`, the HTTP executor polls the connection's pending socket error at
+10-millisecond intervals. The SQLite-backed counter tracer holds an external
+write lock, sends an increment, hard-resets that client, and proves a one-worker
+static health route responds before the lock is released. Releasing the lock
+then makes the accepted increment visible, so disconnect detaches only the
+waiter and preserves FIFO effects. Clean TCP half-close is not treated as
+cancellation, and this does not add Web `AbortSignal`, message retraction,
+interruptible actor behavior, or cancellation for SQLite, fetch, or files.
+
 ## Compatibility order
 
 1. ESM runtime graph loading and aggregate diagnostics.

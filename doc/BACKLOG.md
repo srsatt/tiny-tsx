@@ -367,9 +367,10 @@ allowlist, the multi-module Hono user-auth tracer, copied structured actor
 messages, protected SQLite ownership, actor pressure evidence, and bounded live
 HTTP-connection resubmission. The bounded Hono Body Limit tracer has also
 landed, followed by the bounded Hono Request ID tracer and immutable typed
-SQLite `Statement.run()` results. Their implementation and evidence are
-recorded under P1-P4. Select the next bounded slice explicitly before its
-implementation begins.
+SQLite `Statement.run()` results. Hard-reset cancellation now also detaches an
+actor HTTP waiter without retracting accepted work. Their implementation and
+evidence are recorded under P1-P4. Select the next bounded slice explicitly
+before its implementation begins.
 
 Do not reopen the completed alpha foundations as broad projects. File reading,
 SQLite, and local actors already have public bounded built-ins. Their next work
@@ -379,9 +380,9 @@ named upstream tracer.
 
 The groomed candidates, in recommended dependency order, are:
 
-1. **Actor lifecycle depth:** specify disconnect cancellation, restart, and
-   supervision separately; do not bundle distributed actors, snapshots, or a
-   managed heap into the local lifecycle goal.
+1. **Actor restart policy:** select one failure-producing application behavior,
+   then specify bounded restart intensity and state reset/recovery separately
+   from supervision, links, distributed actors, snapshots, or a managed heap.
 2. **SQLite transaction/value depth:** add only the prepared/callback
    transaction and dynamic value forms required by a selected application while
    retaining single-owner, non-interleaving execution.
@@ -575,18 +576,17 @@ explicitly promoted into a later goal.
     deadline across the SDK, HIR, Apple/Linux code generation, and runtime. A
     deterministic blocked-handler test proves timeout detaches the waiter
     without retracting the accepted FIFO message; the public Hono tracer proves
-    a successful bounded ask. Automatic HTTP-disconnect cancellation, restart
-    policy, and supervision remain open.
-  - Selected next tracer (2026-07-17): detach an `actor.ask()` HTTP waiter after
-    a hard client reset without retracting its accepted mailbox message. Use the
-    one-worker SQLite-backed counter with an externally held write lock: reset
-    the requesting socket while the actor is waiting, require a static health
-    route to respond before the lock is released, then release it and require
-    the accepted increment to become visible. Add a deterministic generic
-    cancellation test, Apple-arm64 HTTP execution, Linux-arm64 assembly, and
-    bounded polling evidence. Clean TCP half-close, arbitrary `AbortSignal`
-    sources, cancellation of SQLite/fetch/file operations, message retraction,
-    restart, and supervision remain outside this tracer.
+    a successful bounded ask. Clean-close/general-signal cancellation, restart
+    policy, and supervision remain open after the hard-reset slice below.
+  - 2026-07-17: a hard client reset now detaches an `actor.ask()` HTTP waiter at
+    the next 10-millisecond socket-error poll without retracting its accepted
+    mailbox message. The one-worker SQLite-backed tracer holds an external write
+    lock, resets the blocked requester, serves a static health route before the
+    lock is released, then observes the detached increment. Generic worker tests
+    pin cancelled and timed-out waiters; Apple HTTP and Linux assembly remain in
+    `test:actors-native`. Clean TCP half-close, arbitrary `AbortSignal` sources,
+    cancellation of SQLite/fetch/file operations, message retraction, restart,
+    and supervision remain outside this tracer.
 - [x] Measure 1,000 and 10,000 idle/local actors, publish bytes per actor and
       thread count, and prove cross-actor parallelism and fairness under a hot
       mailbox before raising the documented actor-count limit.

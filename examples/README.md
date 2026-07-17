@@ -24,7 +24,7 @@ The generated servers have no npm or JavaScript runtime dependency.
 | `hono-sqlite/persistent.ts` | `tinytsx build hono-sqlite/persistent.ts --allow-read "$PWD/state" --allow-write "$PWD/state" --output server --release` | Capability-scoped on-disk SQLite and static transactions |
 | `hono-actors/server.ts` | `tinytsx build hono-actors/server.ts --output server --release` | Local bounded counter actor |
 | `hono-actors/messages.ts` | `tinytsx build hono-actors/messages.ts --output server --release` | Copied primitive, bounded-array, and closed-record actor messages |
-| `hono-actors/persistent.ts` | `tinytsx build hono-actors/persistent.ts --allow-read "$PWD/state" --allow-write "$PWD/state" --output server --release` | SQLite-backed counter persistence |
+| `hono-actors/persistent.ts` | `tinytsx build hono-actors/persistent.ts --allow-read "$PWD/state" --allow-write "$PWD/state" --output server --release` | SQLite-backed counter persistence and hard-reset waiter cancellation |
 
 Create the `state` directory before building a persistent example. Each source
 file demonstrates only the bounded contract described in `doc/ALPHA.md`; it is

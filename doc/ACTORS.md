@@ -108,20 +108,30 @@ caller that no longer waits) or reaching an explicit ask timeout detaches the
 waiter but does not cancel an accepted message; FIFO effects remain visible to
 the next call. A timed-out native HTTP ask returns the same recoverable 503
 overload envelope as bounded queue saturation. Omitting `timeoutMs` retains the
-original unbounded wait. There is no automatic HTTP-disconnect cancellation,
-message retraction, automatic restart, supervision tree, or general durable
-snapshot in this slice. Optional counter persistence restores state
-after a process restart; it does not restart a failed actor in-process.
+original unbounded deadline.
+
+While an HTTP handler is waiting in `ask()`, the reply receiver checks the
+connection's pending socket error every 10 milliseconds. A hard client reset
+detaches that HTTP waiter and releases its executor promptly; the accepted FIFO
+message is not retracted and may still update actor state. A clean read-side EOF
+is deliberately not cancellation because valid raw HTTP clients may half-close
+their request stream while still awaiting the response. This narrow transport
+policy does not expose an `AbortSignal`, cancel SQLite/fetch/file operations, or
+make messages interruptible. Automatic restart, supervision trees, message
+retraction, and general durable snapshots remain outside this slice. Optional
+counter persistence restores state after a process restart; it does not restart
+a failed actor in-process.
 
 Mailbox or application-queue saturation is a recoverable overload response.
 Use after stop, a disconnected reply, a handler panic, and checked-integer
 overflow become bounded internal response errors. They do not terminate the
-HTTP server. The public error payload is deliberately generic; stable typed
-application errors and automatic caller-disconnect propagation remain release
-work. Generic runtime tests pin active-finish/queued-cancel stop semantics,
-detached and timed-out reply behavior, panic containment with a later successful
-message, isolated state, and cross-actor parallelism independently of the
-counter adapter.
+HTTP server. The hard-reset status is internal and causes the HTTP connection to
+close without attempting another response write. The public error payload is
+deliberately generic; stable typed application errors and general caller-driven
+cancellation remain release work. Generic runtime tests pin
+active-finish/queued-cancel stop semantics, detached, cancelled, and timed-out
+reply behavior, panic containment with a later successful message, isolated
+state, and cross-actor parallelism independently of the counter adapter.
 
 ## Evidence and remaining work
 
@@ -134,7 +144,10 @@ source compatibility.
 `examples/hono-actors/persistent.ts` binds the same counter behavior to a
 capability-scoped SQLite database. Native HTTP drives it to 2, terminates the
 process, restarts the same binary at 2, and advances to 3. The program also
-assembles for Linux arm64.
+assembles for Linux arm64. Its one-worker lifecycle case holds an external
+SQLite write lock, resets the client during an accepted increment, requires the
+static health route to respond within 500 milliseconds before releasing the
+lock, then observes the detached increment at state 4.
 
 `examples/hono-actors/messages.ts` proves the copied value-mailbox contract for
 a primitive, a bounded array, and a nested closed record through native Hono
@@ -143,6 +156,6 @@ diagnostic tests reject dynamic messages and exceeded array/string limits.
 
 Before actors can carry general request-derived application state, TinyTSX
 still needs a runtime expression/value representation for dynamic messages;
-hot-mailbox profiling; HTTP-disconnect cancellation policy; persistence
-for arbitrary actor behaviors outside the counter specialization; and any
-explicit identity or transfer model.
+hot-mailbox profiling; clean-close and general `AbortSignal` cancellation
+policy; persistence for arbitrary actor behaviors outside the counter
+specialization; and any explicit identity or transfer model.

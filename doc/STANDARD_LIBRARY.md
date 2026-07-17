@@ -163,8 +163,11 @@ record fields. Every actor has a compile-time mailbox capacity from 1 through
 `ask(message, {timeoutMs})` optionally bounds the caller wait with a static
 1–60,000 ms deadline. Timeout detaches the reply receiver and produces the
 recoverable overload response; an already accepted FIFO message is not
-retracted and may still update actor state. Automatic HTTP-disconnect
-cancellation is not implemented.
+retracted and may still update actor state. A hard TCP reset while an HTTP
+handler waits in `ask()` detaches the response waiter within the runtime's
+10-millisecond polling interval, releases that HTTP executor, and likewise does
+not retract accepted work. Clean half-close and general `AbortSignal`
+cancellation are not implemented.
 
 Dynamic request-derived messages, arbitrary behaviors, supervision, value
 identity/transfer, and general persistence are not native. The optional
