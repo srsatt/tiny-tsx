@@ -315,6 +315,9 @@ fn write_json_string(output: &mut Vec<u8>, value: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static DATABASE_ID: AtomicU64 = AtomicU64::new(0);
 
     fn database() -> Connection {
         let connection = open(":memory:").expect("open memory database");
@@ -384,6 +387,34 @@ mod tests {
         );
         execute(&connection, "INSERT INTO posts (title) VALUES ('reused')", &[])
             .expect("connection remains reusable after nested rejection");
+    }
+
+    #[test]
+    fn busy_connection_recovers_after_the_competing_writer_rolls_back() {
+        let path = std::env::temp_dir().join(format!(
+            "tinytsx-sqlite-contention-{}-{}.db",
+            std::process::id(),
+            DATABASE_ID.fetch_add(1, Ordering::Relaxed),
+        ));
+        let path = path.to_string_lossy().into_owned();
+        let first = open(&path).expect("open first connection");
+        execute_batch(&first, "CREATE TABLE values_table (value TEXT NOT NULL)")
+            .expect("create contention schema");
+        let second = open(&path).expect("open second connection");
+
+        execute_batch(&first, "BEGIN IMMEDIATE").expect("hold writer lock");
+        assert_eq!(
+            execute(&second, "INSERT INTO values_table VALUES ('blocked')", &[])
+                .expect_err("second writer must respect the bounded busy timeout")
+                .kind,
+            ErrorKind::Sql,
+        );
+        execute_batch(&first, "ROLLBACK").expect("release writer lock");
+        execute(&second, "INSERT INTO values_table VALUES ('recovered')", &[])
+            .expect("second connection recovers after contention");
+        drop(first);
+        drop(second);
+        std::fs::remove_file(path).expect("remove contention database");
     }
 
     #[test]
