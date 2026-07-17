@@ -260,6 +260,37 @@ test("lowers string parameters and direct-call arguments", () => {
   );
 });
 
+test("lowers immutable string locals and runtime equality branches", () => {
+  const hir = compileSource(`
+    function select(value: string): string {
+      const local = value;
+      if (local === "admin") return "allowed";
+      return "denied";
+    }
+    export function GET(request: Request): Response {
+      return Response.text(select("admin"));
+    }
+  `);
+
+  assert.equal(hir.functions[0]?.body.kind, "stringEqualConditional");
+  assert.deepEqual(
+    hir.functions[0]?.body.kind === "stringEqualConditional"
+      ? {
+          left: hir.functions[0].body.left.kind,
+          right: hir.functions[0].body.right.kind,
+          whenEqual: hir.functions[0].body.whenEqual.kind,
+          whenNotEqual: hir.functions[0].body.whenNotEqual.kind,
+        }
+      : undefined,
+    {
+      left: "parameter",
+      right: "stringLiteral",
+      whenEqual: "stringLiteral",
+      whenNotEqual: "stringLiteral",
+    },
+  );
+});
+
 test("lowers a closed class field and immediate method call", () => {
   const hir = compileSource(`
     const MESSAGE = "Hono!!";

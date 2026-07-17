@@ -73,7 +73,15 @@ pub(super) fn emit_value_function(
             16 + index * 16
         );
     }
-    emit_value_expression(assembly, body, program, scratch_base)?;
+    let mut conditional_index = 0;
+    emit_value_expression(
+        assembly,
+        body,
+        program,
+        scratch_base,
+        &format!("function_{id}"),
+        &mut conditional_index,
+    )?;
     emit_epilogue(assembly, frame_size);
     Ok(())
 }

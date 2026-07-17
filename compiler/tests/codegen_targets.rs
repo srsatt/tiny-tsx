@@ -55,6 +55,15 @@ fn emits_linux_target_in_retargeted_hir() {
     assert_eq!(hir["target"], "aarch64-unknown-linux-gnu");
 }
 
+#[test]
+fn emits_assemblable_function_control_flow_for_linux_arm64() {
+    let assembly = compile_linux("examples/function-control-flow/server.ts", &[]);
+
+    assert!(assembly.contains("bl memcmp"));
+    assert!(assembly.contains("string_0_not_equal"));
+    assert_assembles_as_elf(&assembly, "function-control-flow");
+}
+
 fn compile_linux(entry: &str, extra_arguments: &[&str]) -> String {
     let compiler = env!("CARGO_BIN_EXE_tinytsx");
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..");

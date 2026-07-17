@@ -10,6 +10,8 @@ pub(super) fn emit_value_expression(
     expression: &ValueExpression,
     program: &Program,
     scratch_base: usize,
+    label_scope: &str,
+    conditional_index: &mut usize,
 ) -> Result<(), String> {
     match expression {
         ValueExpression::StringLiteral { string, .. } => {
@@ -38,7 +40,14 @@ pub(super) fn emit_value_expression(
         } => {
             let nested_scratch = scratch_base + arguments.len() * 16;
             for (index, argument) in arguments.iter().enumerate() {
-                emit_value_expression(assembly, argument, program, nested_scratch)?;
+                emit_value_expression(
+                    assembly,
+                    argument,
+                    program,
+                    nested_scratch,
+                    label_scope,
+                    conditional_index,
+                )?;
                 asm_line!(
                     assembly,
                     "    stp x0, x1, [sp, #{}]",
@@ -57,6 +66,64 @@ pub(super) fn emit_value_expression(
                 );
             }
             assembly.call(format_args!("tinytsx_function_{function}"));
+        }
+        ValueExpression::StringEqualConditional {
+            left,
+            right,
+            when_equal,
+            when_not_equal,
+            ..
+        } => {
+            let branch_index = *conditional_index;
+            *conditional_index += 1;
+            let not_equal = format!("Ltinytsx_{label_scope}_string_{branch_index}_not_equal");
+            let end = format!("Ltinytsx_{label_scope}_string_{branch_index}_end");
+            let nested_scratch = scratch_base + 32;
+            emit_value_expression(
+                assembly,
+                left,
+                program,
+                nested_scratch,
+                label_scope,
+                conditional_index,
+            )?;
+            asm_line!(assembly, "    stp x0, x1, [sp, #{scratch_base}]");
+            emit_value_expression(
+                assembly,
+                right,
+                program,
+                nested_scratch,
+                label_scope,
+                conditional_index,
+            )?;
+            asm_line!(assembly, "    mov x3, x1");
+            asm_line!(assembly, "    mov x2, x0");
+            asm_line!(assembly, "    ldp x0, x1, [sp, #{scratch_base}]");
+            asm_line!(assembly, "    cmp x1, x3");
+            asm_line!(assembly, "    b.ne {not_equal}");
+            asm_line!(assembly, "    mov x1, x2");
+            asm_line!(assembly, "    mov x2, x3");
+            assembly.call(format_args!("memcmp"));
+            asm_line!(assembly, "    cbnz w0, {not_equal}");
+            emit_value_expression(
+                assembly,
+                when_equal,
+                program,
+                scratch_base,
+                label_scope,
+                conditional_index,
+            )?;
+            asm_line!(assembly, "    b {end}");
+            asm_line!(assembly, "{not_equal}:");
+            emit_value_expression(
+                assembly,
+                when_not_equal,
+                program,
+                scratch_base,
+                label_scope,
+                conditional_index,
+            )?;
+            asm_line!(assembly, "{end}:");
         }
         ValueExpression::Concat { .. }
         | ValueExpression::RouteParameter { .. }

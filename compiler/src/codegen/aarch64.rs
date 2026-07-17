@@ -154,6 +154,19 @@ fn scratch_slots(expression: &ValueExpression) -> usize {
         ValueExpression::DirectCall { arguments, .. } => {
             arguments.len() + arguments.iter().map(scratch_slots).max().unwrap_or(0)
         }
+        ValueExpression::StringEqualConditional {
+            left,
+            right,
+            when_equal,
+            when_not_equal,
+            ..
+        } => {
+            2 + [left, right, when_equal, when_not_equal]
+                .into_iter()
+                .map(|value| scratch_slots(value))
+                .max()
+                .unwrap_or(0)
+        }
         ValueExpression::Concat { values, .. } => {
             values.iter().map(scratch_slots).max().unwrap_or(0)
         }

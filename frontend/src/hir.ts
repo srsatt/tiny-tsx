@@ -109,6 +109,14 @@ export type ValueExpression =
       span: SourceSpan;
     }
   | {
+      kind: "stringEqualConditional";
+      left: ValueExpression;
+      right: ValueExpression;
+      whenEqual: ValueExpression;
+      whenNotEqual: ValueExpression;
+      span: SourceSpan;
+    }
+  | {
       kind: "concat";
       values: ValueExpression[];
       span: SourceSpan;

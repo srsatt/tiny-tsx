@@ -322,6 +322,9 @@ Do not tag `0.1.0-alpha.1` until all of these are true:
       assertion programs execute natively.
 - [ ] Expand ordinary functions to locals, branches, closures, additional native
       types, and general typed expressions/statements.
+  - 2026-07-17: immutable string locals and strict string-equality branches now
+    lower through HIR and execute natively on both branch paths. Mutable locals,
+    closures, non-string types, and general statements remain open.
 - [ ] Compile function values, closures, records, arrays, ordinary loops, the
       restricted class semantics required by `hono/tiny`, and required runtime
       rest/spread operations.

@@ -463,6 +463,10 @@ produces and serves a native Mach-O executable from the example TSX source.
   staged string constants, or nested direct calls. Native code passes and
   returns pointer/length register pairs, uses bounded stack frames for argument
   evaluation, and rejects recursion.
+- The first post-alpha function-control-flow slice adds initialized `const`
+  string locals plus strict string equality/inequality branches. Native AArch64
+  compares pointer/length strings by length and bytes; the dedicated E2E executes
+  unequal and equal paths through nested functions.
 - Closed classes can expose required string parameter properties to an immediate
   method call. The call is devirtualized into ordinary HIR with no heap object or
   prototype runtime; inheritance and persistent identity remain unsupported.

@@ -437,6 +437,15 @@ fn builds_and_serves_native_text_through_direct_function_calls() {
 }
 
 #[test]
+fn builds_and_serves_native_function_locals_and_branches() {
+    build_and_serve(
+        "examples/function-control-flow/server.ts",
+        "denied",
+        "text/plain; charset=UTF-8",
+    );
+}
+
+#[test]
 fn builds_and_serves_the_pinned_hono_basic_route() {
     build_and_serve_with_options(
         "tests/compat/hono/basic-smoke.ts",

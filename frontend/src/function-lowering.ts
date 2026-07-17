@@ -8,6 +8,7 @@ export class FunctionLowerer {
   readonly #ids = new Map<ts.FunctionDeclaration | ts.MethodDeclaration, number>();
   readonly #active = new Set<ts.FunctionDeclaration | ts.MethodDeclaration>();
   readonly #parameters = new Map<ts.ParameterDeclaration, {function: number; parameter: number}>();
+  readonly #locals = new Map<ts.VariableDeclaration, {function: number; value: ValueExpression}>();
   readonly #fields = new Map<number, ReadonlyMap<string, number>>();
   readonly #constants: ReadonlyMap<string, Constant>;
 
@@ -33,6 +34,15 @@ export class FunctionLowerer {
     }
     if (ts.isIdentifier(value)) {
       const declaration = this.resolveDeclaration(value);
+      if (declaration !== undefined && ts.isVariableDeclaration(declaration)) {
+        const local = this.#locals.get(declaration);
+        if (local !== undefined) {
+          if (local.function !== currentFunction) {
+            throw tinyError("TINY1308", "captured locals require closure lowering", value);
+          }
+          return local.value;
+        }
+      }
       if (declaration !== undefined && ts.isParameter(declaration)) {
         const parameter = this.#parameters.get(declaration);
         if (parameter === undefined || parameter.function !== currentFunction) {
@@ -148,12 +158,8 @@ export class FunctionLowerer {
     if (declaration.name === undefined || declaration.parameters.length > 4) {
       throw tinyError("TINY1306", "lowered functions must be named and accept at most four parameters", declaration);
     }
-    if (declaration.body?.statements.length !== 1) {
-      throw tinyError("TINY1307", "a lowered function must contain one return statement", declaration);
-    }
-    const statement = declaration.body.statements[0]!;
-    if (!ts.isReturnStatement(statement) || statement.expression === undefined) {
-      throw tinyError("TINY1307", "a lowered function must contain one return statement", statement);
+    if (declaration.body === undefined) {
+      throw tinyError("TINY1307", "a lowered function must have a body", declaration);
     }
 
     const id = this.#functions.length;
@@ -177,7 +183,7 @@ export class FunctionLowerer {
       };
     });
     this.#active.add(declaration);
-    const body = this.lower(statement.expression, id);
+    const body = this.lowerFunctionBody(declaration.body.statements, id, declaration);
     this.#active.delete(declaration);
     this.#functions[id] = {
       id,
@@ -189,6 +195,93 @@ export class FunctionLowerer {
       span: spanOf(declaration, declaration.getSourceFile()),
     };
     return id;
+  }
+
+  private lowerFunctionBody(
+    statements: readonly ts.Statement[],
+    currentFunction: number,
+    owner: ts.Node,
+  ): ValueExpression {
+    const locals: ts.VariableDeclaration[] = [];
+    let index = 0;
+    while (index < statements.length && ts.isVariableStatement(statements[index]!)) {
+      const statement = statements[index] as ts.VariableStatement;
+      if ((statement.declarationList.flags & ts.NodeFlags.Const) === 0) {
+        throw tinyError("TINY1321", "native function locals must be immutable `const` bindings", statement);
+      }
+      for (const declaration of statement.declarationList.declarations) {
+        if (
+          !ts.isIdentifier(declaration.name)
+          || declaration.initializer === undefined
+          || (this.checker.getTypeAtLocation(declaration.name).flags & ts.TypeFlags.StringLike) === 0
+        ) {
+          throw tinyError("TINY1321", "native function locals must be initialized strings", declaration);
+        }
+        const value = this.lower(declaration.initializer, currentFunction);
+        this.#locals.set(declaration, {function: currentFunction, value});
+        locals.push(declaration);
+      }
+      index += 1;
+    }
+
+    try {
+      const remaining = statements.slice(index);
+      if (remaining.length === 1) {
+        const returned = returnExpression(remaining[0]!);
+        if (returned !== undefined) return this.lower(returned, currentFunction);
+        if (ts.isIfStatement(remaining[0]!)) {
+          return this.lowerConditional(remaining[0] as ts.IfStatement, undefined, currentFunction);
+        }
+      }
+      if (remaining.length === 2 && ts.isIfStatement(remaining[0]!)) {
+        const fallback = returnExpression(remaining[1]!);
+        if (fallback !== undefined) {
+          return this.lowerConditional(remaining[0] as ts.IfStatement, fallback, currentFunction);
+        }
+      }
+      throw tinyError(
+        "TINY1307",
+        "native functions require a terminal return or a string-equality branch with terminal returns",
+        owner,
+      );
+    } finally {
+      for (const declaration of locals) this.#locals.delete(declaration);
+    }
+  }
+
+  private lowerConditional(
+    statement: ts.IfStatement,
+    fallback: ts.Expression | undefined,
+    currentFunction: number,
+  ): ValueExpression {
+    const condition = unwrap(statement.expression);
+    if (
+      !ts.isBinaryExpression(condition)
+      || ![
+        ts.SyntaxKind.EqualsEqualsEqualsToken,
+        ts.SyntaxKind.ExclamationEqualsEqualsToken,
+      ].includes(condition.operatorToken.kind)
+    ) {
+      throw tinyError("TINY1322", "native branches require strict string equality", condition);
+    }
+    const thenExpression = returnExpression(statement.thenStatement);
+    const elseExpression = statement.elseStatement === undefined
+      ? fallback
+      : returnExpression(statement.elseStatement);
+    if (thenExpression === undefined || elseExpression === undefined) {
+      throw tinyError("TINY1322", "both native branch paths must return a string", statement);
+    }
+    const equal = condition.operatorToken.kind === ts.SyntaxKind.EqualsEqualsEqualsToken;
+    const thenValue = this.lower(thenExpression, currentFunction);
+    const elseValue = this.lower(elseExpression, currentFunction);
+    return {
+      kind: "stringEqualConditional",
+      left: this.lower(condition.left, currentFunction),
+      right: this.lower(condition.right, currentFunction),
+      whenEqual: equal ? thenValue : elseValue,
+      whenNotEqual: equal ? elseValue : thenValue,
+      span: spanOf(statement, statement.getSourceFile()),
+    };
   }
 
   private lowerImmediateMethodCall(
@@ -318,6 +411,15 @@ function unwrap(expression: ts.Expression): ts.Expression {
     current = current.expression;
   }
   return current;
+}
+
+function returnExpression(statement: ts.Statement): ts.Expression | undefined {
+  if (ts.isReturnStatement(statement)) return statement.expression;
+  if (ts.isBlock(statement) && statement.statements.length === 1) {
+    const [only] = statement.statements;
+    return only === undefined ? undefined : returnExpression(only);
+  }
+  return undefined;
 }
 
 function bindingKey(module: string, name: string): string {

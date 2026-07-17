@@ -371,7 +371,14 @@ fn emit_handler_text_expression(
             assembly.call(format_args!("tinytsx_html_write_openai_chat_text"));
         }
         _ => {
-            emit_value_expression(assembly, expression, program, HANDLER_SCRATCH_BASE)?;
+            emit_value_expression(
+                assembly,
+                expression,
+                program,
+                HANDLER_SCRATCH_BASE,
+                &format!("handler_{handler_index}"),
+                conditional_index,
+            )?;
             asm_line!(assembly, "    mov x2, x1");
             asm_line!(assembly, "    mov x1, x0");
             asm_line!(assembly, "    ldr x0, [sp, #16]");

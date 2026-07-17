@@ -328,6 +328,15 @@ pub enum ValueExpression {
         arguments: Vec<ValueExpression>,
         span: SourceSpan,
     },
+    StringEqualConditional {
+        left: Box<ValueExpression>,
+        right: Box<ValueExpression>,
+        #[serde(rename = "whenEqual")]
+        when_equal: Box<ValueExpression>,
+        #[serde(rename = "whenNotEqual")]
+        when_not_equal: Box<ValueExpression>,
+        span: SourceSpan,
+    },
     Concat {
         values: Vec<ValueExpression>,
         span: SourceSpan,
@@ -595,7 +604,9 @@ impl Program {
                     }
                     SqliteAction::Transaction { database, sql } => {
                         if *sql >= self.static_strings.len() {
-                            return Err("SQLite transaction references a missing SQL string".to_owned());
+                            return Err(
+                                "SQLite transaction references a missing SQL string".to_owned()
+                            );
                         }
                         database
                     }
@@ -735,10 +746,14 @@ impl Program {
             }
             if let Some(persistence) = &actor.persistence {
                 if persistence.database >= self.sqlite_databases.len() {
-                    return Err(format!("actor {index} persistence references a missing database"));
+                    return Err(format!(
+                        "actor {index} persistence references a missing database"
+                    ));
                 }
                 if persistence.key.is_empty() || persistence.key.len() > 128 {
-                    return Err(format!("actor {index} persistence key is outside 1..=128 bytes"));
+                    return Err(format!(
+                        "actor {index} persistence key is outside 1..=128 bytes"
+                    ));
                 }
             }
         }
@@ -749,8 +764,13 @@ impl Program {
                     database.id
                 ));
             }
-            if database.path.is_empty() || database.path.len() > 4096 || database.path.contains('\0') {
-                return Err(format!("SQLite database {index} path is outside the bounded contract"));
+            if database.path.is_empty()
+                || database.path.len() > 4096
+                || database.path.contains('\0')
+            {
+                return Err(format!(
+                    "SQLite database {index} path is outside the bounded contract"
+                ));
             }
         }
         for (index, constant) in self.constants.iter().enumerate() {
@@ -815,6 +835,18 @@ impl Program {
                 for argument in arguments {
                     self.validate_expression(argument, parameter_count)?;
                 }
+            }
+            ValueExpression::StringEqualConditional {
+                left,
+                right,
+                when_equal,
+                when_not_equal,
+                ..
+            } => {
+                self.validate_expression(left, parameter_count)?;
+                self.validate_expression(right, parameter_count)?;
+                self.validate_expression(when_equal, parameter_count)?;
+                self.validate_expression(when_not_equal, parameter_count)?;
             }
             ValueExpression::Concat { .. }
             | ValueExpression::RouteParameter { .. }
@@ -1191,6 +1223,18 @@ impl Program {
                 self.visit_expression_functions(when_present, state)?;
                 self.visit_expression_functions(when_absent, state)?;
             }
+            ValueExpression::StringEqualConditional {
+                left,
+                right,
+                when_equal,
+                when_not_equal,
+                ..
+            } => {
+                self.visit_expression_functions(left, state)?;
+                self.visit_expression_functions(right, state)?;
+                self.visit_expression_functions(when_equal, state)?;
+                self.visit_expression_functions(when_not_equal, state)?;
+            }
             ValueExpression::WorkerCall { input, .. } => {
                 self.visit_expression_functions(input, state)?;
             }
@@ -1223,6 +1267,15 @@ fn expression_uses_filesystem(expression: &ValueExpression) -> bool {
         ValueExpression::DirectCall { arguments, .. } => {
             arguments.iter().any(expression_uses_filesystem)
         }
+        ValueExpression::StringEqualConditional {
+            left,
+            right,
+            when_equal,
+            when_not_equal,
+            ..
+        } => [left, right, when_equal, when_not_equal]
+            .into_iter()
+            .any(|value| expression_uses_filesystem(value)),
         ValueExpression::QueryConditional {
             when_present,
             when_absent,
@@ -1260,6 +1313,18 @@ fn collect_environment_ids(expression: &ValueExpression, ids: &mut BTreeSet<usiz
                 collect_environment_ids(argument, ids);
             }
         }
+        ValueExpression::StringEqualConditional {
+            left,
+            right,
+            when_equal,
+            when_not_equal,
+            ..
+        } => {
+            collect_environment_ids(left, ids);
+            collect_environment_ids(right, ids);
+            collect_environment_ids(when_equal, ids);
+            collect_environment_ids(when_not_equal, ids);
+        }
         ValueExpression::QueryConditional {
             when_present,
             when_absent,
@@ -1280,6 +1345,15 @@ fn expression_uses_openai(expression: &ValueExpression) -> bool {
         ValueExpression::DirectCall { arguments, .. } => {
             arguments.iter().any(expression_uses_openai)
         }
+        ValueExpression::StringEqualConditional {
+            left,
+            right,
+            when_equal,
+            when_not_equal,
+            ..
+        } => [left, right, when_equal, when_not_equal]
+            .into_iter()
+            .any(|value| expression_uses_openai(value)),
         ValueExpression::QueryConditional {
             when_present,
             when_absent,

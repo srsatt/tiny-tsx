@@ -515,14 +515,19 @@ HIR parsing, native assembly/linking, and a real HTTP test.
 Generated string expressions now reference staged string blobs. Reachable named
 functions can accept up to four required string parameters and return string
 literals, parameters, imported string constants, or another direct function
-call. Direct-call arguments may use the same expression forms. The arm64 backend
-passes each string as a pointer/length register pair (`x0`/`x1` through
-`x6`/`x7`) and returns a string in `x0`/`x1`. Call arguments and parameters are
-spilled into a bounded native frame when nested evaluation requires it.
+call. Function bodies may also declare initialized `const` string locals and end
+in a strict string equality/inequality branch whose two paths return supported
+string expressions. Direct-call arguments may use the same expression forms.
+The arm64 backend passes each string as a pointer/length register pair
+(`x0`/`x1` through `x6`/`x7`), compares runtime strings by length and bytes, and
+returns the selected string in `x0`/`x1`. Call arguments, parameters, and branch
+operands are spilled into a bounded native frame when nested evaluation requires
+it.
 
-This does not introduce a JavaScript call stack or object model. Optional,
-default, and rest parameters, locals, branches, closures, arrays, and records
-remain outside this executable function slice.
+This does not introduce a JavaScript call stack or object model. Mutable or
+non-string locals, general boolean/numeric conditions, optional/default/rest
+parameters, closures, arrays, and records remain outside this executable
+function slice.
 
 ### Closed class slice
 
