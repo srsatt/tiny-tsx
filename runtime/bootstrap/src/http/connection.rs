@@ -6,7 +6,7 @@ use std::{
 
 use crate::abi::{
     APPLICATION_OVERLOAD, BAD_REQUEST, CONTENT_TYPE_TEXT, INTERNAL_ERROR, NOT_FOUND, OK,
-    RENDER_ERROR, REQUEST_OOM, RequestArena, render, request_with_headers,
+    RENDER_ERROR, REQUEST_OOM, RequestArena, render, request_with_body,
 };
 
 use super::{
@@ -53,11 +53,12 @@ pub(super) fn handle_connection(
         if parsed.content_length > MAX_REQUEST_BODY {
             return write_terminal_response(stream, 413, b"request body too large");
         }
-        if input.discard_body(stream, parsed.content_length).is_err() {
-            return write_terminal_response(stream, 400, b"bad request");
-        }
+        let body = match input.read_body(stream, parsed.content_length) {
+            Ok(body) => body,
+            Err(_) => return write_terminal_response(stream, 400, b"bad request"),
+        };
 
-        let request = request_with_headers(method, target, &parsed.headers);
+        let request = request_with_body(method, target, &parsed.headers, &body);
         let response = render(&request, arena);
         let can_reuse = version == b"HTTP/1.1"
             && !parsed.connection_close

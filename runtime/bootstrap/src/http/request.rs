@@ -6,7 +6,7 @@ use std::{
 use crate::abi::{TinyHeader, TinyStringView};
 
 const MAX_REQUEST_HEAD: usize = 16 * 1024;
-pub(super) const MAX_REQUEST_BODY: usize = 1024 * 1024;
+pub(super) const MAX_REQUEST_BODY: usize = 64 * 1024;
 const MAX_REQUEST_HEADERS: usize = 64;
 
 pub(super) struct ConnectionInput {
@@ -51,10 +51,14 @@ impl ConnectionInput {
         }
     }
 
-    pub(super) fn discard_body(&mut self, stream: &mut impl Read, length: usize) -> io::Result<()> {
+    pub(super) fn read_body(
+        &mut self,
+        stream: &mut impl Read,
+        length: usize,
+    ) -> io::Result<Vec<u8>> {
         let buffered = length.min(self.bytes.len());
-        self.bytes.drain(..buffered);
-        let mut remaining = length - buffered;
+        let mut body = self.bytes.drain(..buffered).collect::<Vec<_>>();
+        let mut remaining = length - body.len();
         let mut buffer = [0_u8; 4096];
         while remaining != 0 {
             let available = remaining.min(buffer.len());
@@ -65,9 +69,10 @@ impl ConnectionInput {
                     "incomplete request body",
                 ));
             }
+            body.extend_from_slice(&buffer[..read]);
             remaining -= read;
         }
-        Ok(())
+        Ok(body)
     }
 }
 
@@ -221,7 +226,7 @@ mod tests {
     }
 
     #[test]
-    fn preserves_pipelined_bytes_and_discards_only_the_body() {
+    fn preserves_the_bounded_body_and_pipelined_bytes() {
         let mut input = ConnectionInput::new();
         let mut stream = Cursor::new(
             b"POST /first HTTP/1.1\r\nContent-Length: 4\r\n\r\nbodyGET /second HTTP/1.1\r\n\r\n",
@@ -232,7 +237,7 @@ mod tests {
             .expect("read first head")
             .expect("first request");
         assert!(first.starts_with(b"POST /first"));
-        input.discard_body(&mut stream, 4).expect("discard body");
+        assert_eq!(input.read_body(&mut stream, 4).expect("read body"), b"body");
         let second = input
             .read_head(&mut stream)
             .expect("read second head")

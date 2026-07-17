@@ -129,6 +129,7 @@ pub struct TinyRequest {
     pub method: TinyStringView,
     pub path: TinyStringView,
     pub query: TinyStringView,
+    pub body: TinyStringView,
     pub headers: *const TinyHeader,
     pub header_count: usize,
     pub arena: *mut TinyArena,
@@ -2131,12 +2132,23 @@ pub fn request(method: &[u8], target: &[u8]) -> TinyRequest {
     request_with_headers(method, target, &[])
 }
 
+#[cfg(test)]
 pub fn request_with_headers(method: &[u8], target: &[u8], headers: &[TinyHeader]) -> TinyRequest {
+    request_with_body(method, target, headers, &[])
+}
+
+pub fn request_with_body(
+    method: &[u8],
+    target: &[u8],
+    headers: &[TinyHeader],
+    body: &[u8],
+) -> TinyRequest {
     let (path, query) = query_parts(target);
     TinyRequest {
         method: TinyStringView::from_bytes(method),
         path: TinyStringView::from_bytes(path),
         query: TinyStringView::from_bytes(query),
+        body: TinyStringView::from_bytes(body),
         headers: headers.as_ptr(),
         header_count: headers.len(),
         arena: ptr::null_mut(),
