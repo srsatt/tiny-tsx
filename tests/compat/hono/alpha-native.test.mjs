@@ -3,6 +3,8 @@ import {mkdtempSync, readFileSync, rmSync} from "node:fs";
 import {tmpdir} from "node:os";
 import path from "node:path";
 import {spawn, spawnSync} from "node:child_process";
+import {once} from "node:events";
+import net from "node:net";
 import {test} from "node:test";
 import {fileURLToPath} from "node:url";
 
@@ -31,6 +33,11 @@ const cookie = [
   ...hono,
   "--alias", "hono/cookie=vendor/hono/src/helper/cookie/index.ts",
   "--api", "hono/cookie=tests/compat/hono/cookie-api.d.ts",
+];
+const bodyLimit = [
+  ...hono,
+  "--alias", "hono/body-limit=vendor/hono/src/middleware/body-limit/index.ts",
+  "--api", "hono/body-limit=tests/compat/hono/body-limit-api.d.ts",
 ];
 
 test("assembles both supported serve entry contracts for Linux arm64", () => {
@@ -220,6 +227,63 @@ test("assembles the pinned Hono cookie helper for Linux arm64", () => {
   assert.equal(assembled.status, 0, assembled.stderr);
 });
 
+test("executes the pinned Hono bodyLimit middleware natively", async context => {
+  await withServer(
+    context,
+    "tests/compat/hono/body-limit-smoke.ts",
+    39_491,
+    bodyLimit,
+    async port => {
+      await assertText(port, "/", 200, "index");
+      await assertText(port, "/body-limit", 200, "pass :)", {
+        method: "POST",
+        body: "hono is so hot",
+      });
+      const rejected = await request(port, "/body-limit", {
+        method: "POST",
+        body: "hono is so hot and cute",
+      });
+      assert.equal(rejected.status, 413);
+      assert.equal(rejected.headers.get("content-type"), "text/plain;charset=UTF-8");
+      assert.equal(await rejected.text(), "Payload Too Large");
+
+      const pipelined = await rawRequest(port,
+        "POST /body-limit HTTP/1.1\r\n"
+        + "Host: localhost\r\nContent-Length: 23\r\nConnection: keep-alive\r\n\r\n"
+        + "hono is so hot and cute"
+        + "GET / HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
+      );
+      assert.match(pipelined, /^HTTP\/1\.1 413 Payload Too Large\r\n/);
+      assert.match(pipelined, /Connection: keep-alive\r\n/);
+      assert.match(pipelined, /Payload Too LargeHTTP\/1\.1 200 OK\r\n/);
+      assert.ok(pipelined.endsWith("index"), pipelined);
+
+      const chunked = await rawRequest(port,
+        "POST /body-limit HTTP/1.1\r\nHost: localhost\r\n"
+        + "Transfer-Encoding: chunked\r\nConnection: close\r\n\r\n"
+        + "e\r\nhono is so hot\r\n0\r\n\r\n",
+      );
+      assert.match(chunked, /^HTTP\/1\.1 400 Bad Request\r\n/);
+      await assertText(port, "/", 200, "index");
+    },
+  );
+});
+
+test("assembles the pinned Hono bodyLimit middleware for Linux arm64", () => {
+  const checked = spawnSync("cargo", [
+    "run", "-q", "-p", "tinytsx", "--", "check",
+    "tests/compat/hono/body-limit-smoke.ts",
+    "--emit-asm", "--target", "aarch64-unknown-linux-gnu",
+    ...bodyLimit,
+  ], {cwd: repository, encoding: "utf8"});
+  assert.equal(checked.status, 0, checked.stderr || checked.stdout);
+  assert.match(checked.stdout, /tinytsx_request_body_length/);
+  const assembled = spawnSync("clang", [
+    "--target=aarch64-unknown-linux-gnu", "-x", "assembler", "-c", "-o", "/dev/null", "-",
+  ], {cwd: repository, input: checked.stdout, encoding: "utf8"});
+  assert.equal(assembled.status, 0, assembled.stderr);
+});
+
 async function withServer(context, entry, port, options, verify) {
   const directory = mkdtempSync(path.join(tmpdir(), "tinytsx-alpha-native-"));
   const binary = path.join(directory, "server");
@@ -247,10 +311,21 @@ async function request(port, pathname, init = {}) {
   });
 }
 
-async function assertText(port, pathname, status, body) {
-  const response = await request(port, pathname);
+async function assertText(port, pathname, status, body, init = {}) {
+  const response = await request(port, pathname, init);
   assert.equal(response.status, status);
   assert.equal(await response.text(), body);
+}
+
+async function rawRequest(port, bytes) {
+  const socket = net.createConnection({host: "127.0.0.1", port});
+  socket.setEncoding("utf8");
+  let response = "";
+  socket.on("data", chunk => { response += chunk; });
+  await once(socket, "connect");
+  socket.end(bytes);
+  await once(socket, "close");
+  return response;
 }
 
 async function waitForServer(port, server) {

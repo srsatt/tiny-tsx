@@ -33,6 +33,19 @@
       "firstUnsupportedBoundary": "The post collection is closed at compile time; general runtime arrays, JSX state, and arbitrary route regular expressions are unsupported."
     },
     {
+      "id": "upstream-body-limit",
+      "provenance": "official-doc-derived-local-tracer",
+      "entry": "tests/compat/hono/body-limit-smoke.ts",
+      "imports": ["hono", "hono/body-limit"],
+      "apis": ["Hono", "use", "get", "post", "Context.text", "bodyLimit"],
+      "intake": {"status": "pass", "evidence": "frontend/test/compatibility-audit.test.ts"},
+      "nativeCompile": {"appleArm64": "pass", "linuxArm64Assembly": "pass", "evidence": "tests/compat/hono/alpha-native.test.mjs"},
+      "httpBehavior": {"status": "pass", "evidence": "tests/compat/hono/alpha-native.test.mjs"},
+      "referenceBehavior": {"runtime": "Bun/Hono", "status": "pass", "evidence": "tests/compat/hono/body-limit.behavior.test.ts"},
+      "releaseGates": {"native": ["test:hono-alpha-native", "test:release-installed"], "reference": ["test:hono-body-limit-reference"]},
+      "firstUnsupportedBoundary": "The unchanged upstream factory accepts one default-error closed maxSize from 0 through 64 KiB over Content-Length requests; custom onError, chunked request bodies, and limits above the transport cap are unsupported."
+    },
+    {
       "id": "published-zod-openapi",
       "provenance": "official-doc-derived-published-packages",
       "entry": "tests/compat/zod-openapi/server.ts",
@@ -170,6 +183,7 @@
     {"source":"vendor/hono-examples/basic/src/index.test.ts","selectors":["expect(res.status).toBe(200)","expect(res.headers.get('x-powered-by')).toBe('Hono')"],"evidenceMode":"native-derived","nativeEvidence":"compiler/tests/e2e.rs"},
     {"source":"vendor/hono/src/middleware/powered-by/index.test.ts","selectors":["Should return with X-Powered-By header"],"evidenceMode":"native-derived","nativeEvidence":"tests/compat/hono/powered-by-smoke.ts"},
     {"source":"vendor/hono/src/middleware/cors/index.test.ts","selectors":["GET default","Preflight default"],"evidenceMode":"native-derived","nativeEvidence":"tests/compat/hono/cors-smoke.ts"},
+    {"source":"vendor/hono/src/middleware/body-limit/index.test.ts","selectors":["should return 200 response","should return 413 response"],"evidenceMode":"native-derived","nativeEvidence":"tests/compat/hono/body-limit-smoke.ts"},
     {"source":"vendor/hono/src/middleware/pretty-json/index.test.ts","selectors":["Should return pretty JSON output"],"evidenceMode":"native-derived","nativeEvidence":"tests/compat/hono/pretty-json-smoke.ts"},
     {"source":"vendor/hono/src/middleware/basic-auth/index.test.ts","selectors":["Should not authorize","Should authorize"],"evidenceMode":"native-derived","nativeEvidence":"tests/compat/hono/basic-auth-smoke.ts"},
     {"source":"vendor/hono/src/hono.test.ts","selectors":["Should match with an optional parameter","Should match without an optional parameter"],"evidenceMode":"native-derived","nativeEvidence":"tests/compat/hono/optional-param-smoke.ts"},

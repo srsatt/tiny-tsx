@@ -32,7 +32,7 @@ test("covers the official Hono guide, helper, middleware, and core API inventory
 test("keeps alpha priorities explicit instead of implying blanket Hono support", () => {
   assert.deepEqual(
     matrix.rows.filter(row => row.status === "planned-alpha").map(row => row.id),
-    ["middleware-body-limit"],
+    [],
   );
   assert.ok(matrix.rows.some(row => row.status === "partial"));
   assert.ok(matrix.rows.some(row => row.status === "out-of-scope"));

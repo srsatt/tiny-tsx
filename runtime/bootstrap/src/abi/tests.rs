@@ -5,12 +5,13 @@ use super::{
     decode_sqlite_parameters, render, request, request_with_body, request_with_headers,
     tinytsx_html_write_fetch_status, tinytsx_html_write_path_segment, tinytsx_html_write_path_tail,
     tinytsx_html_write_query_parameter, tinytsx_html_write_request_header,
-    tinytsx_html_write_static, tinytsx_request_basic_auth_equals, tinytsx_request_if_none_match,
-    tinytsx_request_method_equals, tinytsx_request_path_equals, tinytsx_request_path_matches,
-    tinytsx_request_path_segment_min_length, tinytsx_request_query_has, tinytsx_response_begin,
-    tinytsx_response_header_elapsed_millis, tinytsx_response_header_static,
-    tinytsx_response_stream_begin, tinytsx_response_stream_chunk_begin,
-    tinytsx_response_stream_chunk_end, tinytsx_response_stream_chunk_static, write_console_error,
+    tinytsx_html_write_static, tinytsx_request_basic_auth_equals, tinytsx_request_body_length,
+    tinytsx_request_if_none_match, tinytsx_request_method_equals, tinytsx_request_path_equals,
+    tinytsx_request_path_matches, tinytsx_request_path_segment_min_length,
+    tinytsx_request_query_has, tinytsx_response_begin, tinytsx_response_header_elapsed_millis,
+    tinytsx_response_header_static, tinytsx_response_stream_begin,
+    tinytsx_response_stream_chunk_begin, tinytsx_response_stream_chunk_end,
+    tinytsx_response_stream_chunk_static, write_console_error,
 };
 use std::{
     io::{Read, Write},
@@ -47,6 +48,16 @@ fn request_without_query_exposes_an_empty_query_view() {
     assert_eq!(view(&request.method), b"POST");
     assert_eq!(view(&request.path), b"/users");
     assert_eq!(view(&request.query), b"");
+}
+
+#[test]
+fn request_body_length_rejects_invalid_views() {
+    let request = request_with_body(b"POST", b"/", &[], b"four");
+    assert_eq!(unsafe { tinytsx_request_body_length(&request) }, 4);
+    assert_eq!(
+        unsafe { tinytsx_request_body_length(std::ptr::null()) },
+        usize::MAX
+    );
 }
 
 #[test]

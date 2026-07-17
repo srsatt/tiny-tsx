@@ -417,6 +417,18 @@ function lowerApplicationInitialization(
     const basicAuthorization = response.basicAuthorization === undefined
       ? undefined
       : lowerBasicAuthorization(response.basicAuthorization, route.path, strings, workers, span);
+    const bodyLimit = response.bodyLimit === undefined
+      ? undefined
+      : {
+        maxBytes: response.bodyLimit.maxBytes,
+        rejected: lowerGuardedResponse(
+          response.bodyLimit.rejected,
+          route.path,
+          strings,
+          workers,
+          span,
+        ),
+      };
     const entityTag = response.entityTag === undefined
       ? undefined
       : lowerEntityTag(response.entityTag, route.path, strings, workers, span);
@@ -434,6 +446,7 @@ function lowerApplicationInitialization(
       path: route.path,
       ...responseHeaders,
       ...(basicAuthorization === undefined ? {} : {basicAuthorization}),
+      ...(bodyLimit === undefined ? {} : {bodyLimit}),
       ...(entityTag === undefined ? {} : {entityTag}),
       ...(sqliteExistence === undefined ? {} : {sqliteExistence}),
       ...(parameterValidations === undefined || parameterValidations.length === 0

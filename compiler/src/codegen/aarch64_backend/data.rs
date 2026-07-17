@@ -77,6 +77,22 @@ pub(super) fn emit_static_data(
                 emit_bytes(assembly, header.value.as_bytes());
             }
         }
+        if let Some(limit) = &handler.body_limit {
+            for (header_index, header) in limit.rejected.headers.iter().enumerate() {
+                asm_line!(assembly, ".p2align 3");
+                asm_line!(
+                    assembly,
+                    "Ltinytsx_handler_{index}_body_limit_header_{header_index}_name:"
+                );
+                emit_bytes(assembly, header.name.as_bytes());
+                asm_line!(assembly, ".p2align 3");
+                asm_line!(
+                    assembly,
+                    "Ltinytsx_handler_{index}_body_limit_header_{header_index}_value:"
+                );
+                emit_bytes(assembly, header.value.as_bytes());
+            }
+        }
         if let Some(entity_tag) = &handler.entity_tag {
             asm_line!(assembly, ".p2align 3");
             asm_line!(assembly, "Ltinytsx_handler_{index}_etag:");

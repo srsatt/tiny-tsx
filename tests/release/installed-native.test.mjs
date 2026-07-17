@@ -35,6 +35,29 @@ test("ships runnable Hono, node-server, tinytsx serve, and Zod examples", async 
     await assertText(nodePort, "/missing", 404, "404 Not Found");
   });
 
+  const bodyLimitPort = 39_498;
+  const bodyLimitBinary = binaryPath(project, "body-limit");
+  assertBuilt(build(
+    compiler,
+    project,
+    "hono-body-limit/server.ts",
+    bodyLimitBinary,
+    bodyLimitPort,
+  ), "body limit");
+  await withServer(bodyLimitBinary, bodyLimitPort, async () => {
+    await assertText(bodyLimitPort, "/body-limit", 200, "pass :)", {
+      method: "POST",
+      body: "hono is so hot",
+    });
+    const rejected = await request(bodyLimitPort, "/body-limit", {
+      method: "POST",
+      body: "hono is so hot and cute",
+    });
+    assert.equal(rejected.status, 413);
+    assert.equal(rejected.headers.get("content-type"), "text/plain;charset=UTF-8");
+    assert.equal(await rejected.text(), "Payload Too Large");
+  });
+
   const neutralPort = 39_491;
   const neutralBinary = binaryPath(project, "tiny-serve");
   assertBuilt(build(compiler, project, "tiny-serve/server.ts", neutralBinary, neutralPort), "tinytsx:serve");

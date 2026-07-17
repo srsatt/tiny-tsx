@@ -1023,6 +1023,20 @@ pub unsafe extern "C" fn tinytsx_request_method_equals(
 }
 
 #[unsafe(no_mangle)]
+pub unsafe extern "C" fn tinytsx_request_body_length(request: *const TinyRequest) -> usize {
+    if request.is_null() {
+        return usize::MAX;
+    }
+    // SAFETY: Generated code passes the request supplied by this runtime.
+    let body = unsafe { &(*request).body };
+    if body.ptr.is_null() && body.len != 0 {
+        usize::MAX
+    } else {
+        body.len
+    }
+}
+
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn tinytsx_request_query_has(
     request: *const TinyRequest,
     expected: *const u8,
@@ -1469,10 +1483,16 @@ pub unsafe extern "C" fn tinytsx_html_write_request_cookie(
 }
 
 fn trim_cookie_whitespace(mut value: &[u8]) -> &[u8] {
-    while value.first().is_some_and(|byte| matches!(byte, b' ' | b'\t')) {
+    while value
+        .first()
+        .is_some_and(|byte| matches!(byte, b' ' | b'\t'))
+    {
         value = &value[1..];
     }
-    while value.last().is_some_and(|byte| matches!(byte, b' ' | b'\t')) {
+    while value
+        .last()
+        .is_some_and(|byte| matches!(byte, b' ' | b'\t'))
+    {
         value = &value[..value.len() - 1];
     }
     value

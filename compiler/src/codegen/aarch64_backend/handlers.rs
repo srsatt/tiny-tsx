@@ -27,7 +27,13 @@ pub(super) fn emit_handlers(assembly: &mut Emitter, program: &Program) -> Result
                 .map(|guard| handler_response_frame_size(&guard.missing.response))
                 .transpose()?
                 .unwrap_or(HANDLER_SCRATCH_BASE);
-            Ok::<usize, String>(response.max(missing))
+            let body_limit = handler
+                .body_limit
+                .as_ref()
+                .map(|guard| handler_response_frame_size(&guard.rejected.response))
+                .transpose()?
+                .unwrap_or(HANDLER_SCRATCH_BASE);
+            Ok::<usize, String>(response.max(missing).max(body_limit))
         })
         .collect::<Result<Vec<_>, _>>()?
         .into_iter()
@@ -95,6 +101,47 @@ pub(super) fn emit_handlers(assembly: &mut Emitter, program: &Program) -> Result
     asm_line!(assembly, "    b {return_label}");
     for (index, handler) in program.handlers.iter().enumerate() {
         asm_line!(assembly, "Ltinytsx_handle_get_match_{index}:");
+        if let Some(limit) = &handler.body_limit {
+            let accepted_label = format!("Ltinytsx_handler_{index}_body_limit_accepted");
+            asm_line!(assembly, "    ldr x0, [sp, #24]");
+            assembly.call(format_args!("tinytsx_request_body_length"));
+            emit_immediate(assembly, "x1", limit.max_bytes as u64);
+            asm_line!(assembly, "    cmp x0, x1");
+            asm_line!(assembly, "    b.ls {accepted_label}");
+            for string in &limit.rejected.stderr {
+                assembly.address("x0", format_args!("Ltinytsx_string_{string}"));
+                emit_immediate(
+                    assembly,
+                    "x1",
+                    program.static_strings[*string].value.len() as u64,
+                );
+                assembly.call(format_args!("tinytsx_console_error_static"));
+            }
+            for (header_index, header) in limit.rejected.headers.iter().enumerate() {
+                asm_line!(assembly, "    ldr x0, [sp, #16]");
+                assembly.address(
+                    "x1",
+                    format_args!("Ltinytsx_handler_{index}_body_limit_header_{header_index}_name"),
+                );
+                emit_immediate(assembly, "x2", header.name.len() as u64);
+                assembly.address(
+                    "x3",
+                    format_args!("Ltinytsx_handler_{index}_body_limit_header_{header_index}_value"),
+                );
+                emit_immediate(assembly, "x4", header.value.len() as u64);
+                assembly.call(format_args!("tinytsx_response_header_static"));
+                asm_line!(assembly, "    cbnz w0, {return_label}");
+            }
+            emit_handler_response(
+                assembly,
+                &limit.rejected.response,
+                program,
+                return_label,
+                index,
+            )?;
+            asm_line!(assembly, "    b {return_label}");
+            asm_line!(assembly, "{accepted_label}:");
+        }
         for (validation_index, validation) in handler.parameter_validations.iter().enumerate() {
             let valid_label =
                 format!("Ltinytsx_handler_{index}_validation_{validation_index}_valid");
@@ -421,7 +468,11 @@ fn emit_guarded_response(
 ) -> Result<(), String> {
     for string in &guarded.stderr {
         assembly.address("x0", format_args!("Ltinytsx_string_{string}"));
-        emit_immediate(assembly, "x1", program.static_strings[*string].value.len() as u64);
+        emit_immediate(
+            assembly,
+            "x1",
+            program.static_strings[*string].value.len() as u64,
+        );
         assembly.call(format_args!("tinytsx_console_error_static"));
     }
     for (header_index, header) in guarded.headers.iter().enumerate() {

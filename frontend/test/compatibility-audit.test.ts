@@ -1210,6 +1210,140 @@ test("lowers bounded upstream CORS headers and preflight", () => {
   ]);
 });
 
+test("retains the upstream bodyLimit factory as a request-body guard", () => {
+  const entry = path.join(repository, "tests/compat/hono/body-limit-smoke.ts");
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    aliases: {
+      hono: path.join(repository, "vendor/hono/src/index.ts"),
+      "hono/body-limit": path.join(
+        repository,
+        "vendor/hono/src/middleware/body-limit/index.ts",
+      ),
+    },
+    apiAliases: {
+      hono: path.join(repository, "tests/compat/hono/api.d.ts"),
+      "hono/body-limit": path.join(repository, "tests/compat/hono/body-limit-api.d.ts"),
+    },
+  });
+
+  for (const handler of hir.handlers) {
+    assert.deepEqual(
+      (handler as unknown as {bodyLimit?: unknown}).bodyLimit,
+      {
+        maxBytes: 14,
+        rejected: {
+          response: {
+            kind: "text",
+            value: {kind: "stringLiteral", string: 1, span: handler.span},
+            status: 413,
+            contentType: "text/plain;charset=UTF-8",
+          },
+        },
+      },
+    );
+  }
+});
+
+test("lowers the pinned published Hono bodyLimit JavaScript shape", () => {
+  const entry = path.join(repository, "tests/compat/hono/body-limit-smoke.ts");
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    aliases: {
+      hono: path.join(repository, "vendor/hono/src/index.ts"),
+      "hono/body-limit": path.join(
+        repository,
+        "tests/compat/node-server/node_modules/hono/dist/middleware/body-limit/index.js",
+      ),
+    },
+    apiAliases: {
+      hono: path.join(repository, "tests/compat/hono/api.d.ts"),
+      "hono/body-limit": path.join(repository, "tests/compat/hono/body-limit-api.d.ts"),
+    },
+  });
+
+  assert.equal(hir.handlers.length, 2);
+  for (const handler of hir.handlers) {
+    assert.equal(handler.bodyLimit?.maxBytes, 14);
+    assert.equal(handler.bodyLimit?.rejected.response.kind, "text");
+    assert.equal(handler.bodyLimit?.rejected.response.status, 413);
+  }
+});
+
+test("rejects an upstream bodyLimit beyond the native transport bound", () => {
+  const entry = write("body-limit-too-large.ts", `
+    import {Hono} from "hono";
+    import {bodyLimit} from "hono/body-limit";
+    const app = new Hono();
+    app.use("*", bodyLimit({maxSize: 65537}));
+    app.post("/", context => context.text("unreachable"));
+    export default app;
+  `);
+  assert.throws(
+    () => compileEntry(entry, {
+      sdkPath: path.join(repository, "sdk/index.d.ts"),
+      aliases: {
+        hono: path.join(repository, "vendor/hono/src/index.ts"),
+        "hono/body-limit": path.join(
+          repository,
+          "vendor/hono/src/middleware/body-limit/index.ts",
+        ),
+      },
+      apiAliases: {
+        hono: path.join(repository, "tests/compat/hono/api.d.ts"),
+        "hono/body-limit": path.join(repository, "tests/compat/hono/body-limit-api.d.ts"),
+      },
+    }),
+    error => error instanceof CompileFailure
+      && error.diagnostics.some(diagnostic =>
+        diagnostic.message.includes("closed maxSize from 0 through 65536")
+      ),
+  );
+});
+
+test("rejects a custom upstream bodyLimit error handler", () => {
+  const bodyLimitApi = write("body-limit-custom-api.d.ts", `
+    declare module "hono/body-limit" {
+      import type {HonoContextApi, HonoMiddlewareApi} from "hono";
+      export function bodyLimit(options: {
+        maxSize: number;
+        onError?: (context: HonoContextApi) => Response;
+      }): HonoMiddlewareApi;
+    }
+  `);
+  const entry = write("body-limit-custom-handler.ts", `
+    import {Hono} from "hono";
+    import {bodyLimit} from "hono/body-limit";
+    const app = new Hono();
+    app.use("*", bodyLimit({
+      maxSize: 14,
+      onError: context => context.text("custom", 413),
+    }));
+    app.post("/", context => context.text("unreachable"));
+    export default app;
+  `);
+  assert.throws(
+    () => compileEntry(entry, {
+      sdkPath: path.join(repository, "sdk/index.d.ts"),
+      aliases: {
+        hono: path.join(repository, "vendor/hono/src/index.ts"),
+        "hono/body-limit": path.join(
+          repository,
+          "vendor/hono/src/middleware/body-limit/index.ts",
+        ),
+      },
+      apiAliases: {
+        hono: path.join(repository, "tests/compat/hono/api.d.ts"),
+        "hono/body-limit": bodyLimitApi,
+      },
+    }),
+    error => error instanceof CompileFailure
+      && error.diagnostics.some(diagnostic =>
+        diagnostic.message.includes("requires a default error handler")
+      ),
+  );
+});
+
 test("lowers the pinned published Hono CORS JavaScript shape", () => {
   const entry = path.join(repository, "tests/compat/hono/cors-smoke.ts");
   const hir = compileEntry(entry, {

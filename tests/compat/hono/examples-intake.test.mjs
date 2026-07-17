@@ -27,6 +27,7 @@ test("records the example matrix with executable evidence and boundaries", () =>
   const required = [
     "upstream-basic",
     "upstream-jsx-ssr",
+    "upstream-body-limit",
     "published-zod-openapi",
     "hono-node-server-entry",
     "tinytsx-serve-entry",
@@ -59,7 +60,7 @@ test("makes every alpha example gate reachable from release verification", () =>
   assert.match(releaseSource, /run\("npm", \["test"\]\)/);
   const directReleaseScripts = [
     "test",
-    ...[...releaseSource.matchAll(/run\("npm", \["run", "([^"]+)"\]\)/g)]
+    ...[...releaseSource.matchAll(/run\("npm", \["run", "([^"]+)"\]/g)]
       .map(match => match[1]),
   ];
   const reachable = reachableScripts(directReleaseScripts, workspace.scripts);

@@ -106,10 +106,16 @@ export interface EvaluatedResponse {
   headers?: Array<{name: string; value: ResponseHeaderValue}>;
   stderr?: string[];
   basicAuthorization?: EvaluatedBasicAuthorization;
+  bodyLimit?: EvaluatedBodyLimit;
   entityTag?: EvaluatedEntityTag;
   sqliteExistence?: EvaluatedSqliteExistence;
   actorActions?: EvaluatedActorAction[];
   databaseActions?: EvaluatedDatabaseAction[];
+}
+
+export interface EvaluatedBodyLimit {
+  maxBytes: number;
+  rejected: EvaluatedResponse;
 }
 
 export interface EvaluatedSqliteExistence {
@@ -612,6 +618,7 @@ function evaluateRouteHandler(
     rejectedStderr: string[];
     protectedHeaders: Set<string>;
   } | undefined;
+  let bodyLimit: number | undefined;
   let entityTag: {
     value: string;
     notModified: Value & {kind: "response"};
@@ -635,6 +642,22 @@ function evaluateRouteHandler(
       });
       middlewareContext.fields.set("#res", cloneResponse(response));
       middlewareContext.fields.set("finalized", {kind: "boolean", value: true});
+      if (isBodyLimitMiddleware(middlewareHandler)) {
+        const requestBodyLimit = closedBodyLimit(middlewareHandler);
+        if (requestBodyLimit === undefined) {
+          issue(
+            evaluator,
+            middlewareHandler.expression,
+            middlewareHandler.module,
+            "bodyLimit requires a default error handler and a closed maxSize from 0 through 65536",
+          );
+          continue;
+        }
+        bodyLimit = bodyLimit === undefined
+          ? requestBodyLimit
+          : Math.min(bodyLimit, requestBodyLimit);
+        continue;
+      }
       const cors = closedCors(middlewareHandler);
       if (cors !== undefined) {
         applyCorsHeaders(response, cors);
@@ -761,6 +784,19 @@ function evaluateRouteHandler(
           ),
         },
       }),
+    ...(bodyLimit === undefined
+      ? {}
+      : {
+        bodyLimit: {
+          maxBytes: bodyLimit,
+          rejected: {
+            kind: "text" as const,
+            body: "Payload Too Large",
+            status: 413,
+            contentType: "text/plain;charset=UTF-8",
+          },
+        },
+      }),
     ...(entityTag === undefined
       ? {}
       : {
@@ -778,6 +814,35 @@ interface ClosedCors {
   exposeHeaders: string[];
   credentials: boolean;
   maxAge?: number;
+}
+
+function closedBodyLimit(middleware: Value & {kind: "closure"}): number | undefined {
+  if (!isBodyLimitMiddleware(middleware)) {
+    return undefined;
+  }
+  const maxSize = middleware.environment.get("maxSize");
+  const onError = middleware.environment.get("onError");
+  if (
+    maxSize?.kind !== "number"
+    || !Number.isSafeInteger(maxSize.value)
+    || maxSize.value < 0
+    || maxSize.value > 64 * 1024
+    || onError?.kind !== "closure"
+    || !/\/middleware\/body-limit\/index\.(?:ts|js)$/.test(
+      onError.module.path.replaceAll("\\", "/"),
+    )
+  ) {
+    return undefined;
+  }
+  return maxSize.value;
+}
+
+function isBodyLimitMiddleware(middleware: Value & {kind: "closure"}): boolean {
+  return /\/middleware\/body-limit\/index\.(?:ts|js)$/.test(
+    middleware.module.path.replaceAll("\\", "/"),
+  )
+    && ts.isFunctionExpression(middleware.expression)
+    && /^bodyLimit\d*$/.test(middleware.expression.name?.text ?? "");
 }
 
 function closedCors(middleware: Value & {kind: "closure"}): ClosedCors | undefined {

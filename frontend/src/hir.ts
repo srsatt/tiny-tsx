@@ -313,6 +313,7 @@ export interface Handler {
   elapsedHeaders?: ElapsedHeader[];
   stderr?: number[];
   basicAuthorization?: BasicAuthorization;
+  bodyLimit?: BodyLimit;
   entityTag?: EntityTag;
   sqliteExistence?: SqliteExistence;
   parameterValidations?: ParameterValidation[];
@@ -320,6 +321,11 @@ export interface Handler {
   sqliteActions?: SqliteAction[];
   response: HandlerResponse;
   span: SourceSpan;
+}
+
+export interface BodyLimit {
+  maxBytes: number;
+  rejected: GuardedResponse;
 }
 
 export interface SqliteExistence {

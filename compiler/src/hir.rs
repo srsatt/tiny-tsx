@@ -200,6 +200,8 @@ pub struct Handler {
     pub elapsed_headers: Vec<ElapsedHeader>,
     #[serde(default, rename = "basicAuthorization")]
     pub basic_authorization: Option<BasicAuthorization>,
+    #[serde(default, rename = "bodyLimit")]
+    pub body_limit: Option<BodyLimit>,
     #[serde(default, rename = "entityTag")]
     pub entity_tag: Option<EntityTag>,
     #[serde(default, rename = "sqliteExistence")]
@@ -249,6 +251,13 @@ pub struct ElapsedHeader {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct BasicAuthorization {
     pub credentials: Vec<BasicCredential>,
+    pub rejected: GuardedResponse,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BodyLimit {
+    pub max_bytes: usize,
     pub rejected: GuardedResponse,
 }
 
@@ -573,6 +582,10 @@ impl Program {
                     .as_ref()
                     .is_some_and(|guard| response_uses_filesystem(&guard.rejected.response))
                 || handler
+                    .body_limit
+                    .as_ref()
+                    .is_some_and(|guard| response_uses_filesystem(&guard.rejected.response))
+                || handler
                     .entity_tag
                     .as_ref()
                     .is_some_and(|guard| response_uses_filesystem(&guard.not_modified.response))
@@ -594,6 +607,9 @@ impl Program {
             if let Some(authorization) = &handler.basic_authorization {
                 collect_response_environment_ids(&authorization.rejected.response, &mut ids);
             }
+            if let Some(limit) = &handler.body_limit {
+                collect_response_environment_ids(&limit.rejected.response, &mut ids);
+            }
             if let Some(entity_tag) = &handler.entity_tag {
                 collect_response_environment_ids(&entity_tag.not_modified.response, &mut ids);
             }
@@ -612,6 +628,10 @@ impl Program {
             response_uses_openai(&handler.response)
                 || handler
                     .basic_authorization
+                    .as_ref()
+                    .is_some_and(|guard| response_uses_openai(&guard.rejected.response))
+                || handler
+                    .body_limit
                     .as_ref()
                     .is_some_and(|guard| response_uses_openai(&guard.rejected.response))
                 || handler
@@ -723,6 +743,14 @@ impl Program {
                 validate_response_headers(&authorization.rejected.headers, &[])?;
                 self.validate_stderr(&authorization.rejected.stderr)?;
                 self.validate_handler_response(&authorization.rejected.response, &handler.path)?;
+            }
+            if let Some(limit) = &handler.body_limit {
+                if limit.max_bytes > 64 * 1024 {
+                    return Err("request body limit exceeds 64 KiB".to_owned());
+                }
+                validate_response_headers(&limit.rejected.headers, &[])?;
+                self.validate_stderr(&limit.rejected.stderr)?;
+                self.validate_handler_response(&limit.rejected.response, &handler.path)?;
             }
             if let Some(entity_tag) = &handler.entity_tag {
                 if entity_tag.value.is_empty() {
@@ -1526,13 +1554,31 @@ impl Program {
                     || cookie.value.len() > 128
                     || !cookie.value.bytes().all(|byte| {
                         byte.is_ascii_alphanumeric()
-                            || matches!(byte, b'_' | b'!' | b'#' | b'$' | b'%' | b'&' | b'\'' | b'*' | b'.' | b'^' | b'`' | b'|' | b'~' | b'+' | b'-')
+                            || matches!(
+                                byte,
+                                b'_' | b'!'
+                                    | b'#'
+                                    | b'$'
+                                    | b'%'
+                                    | b'&'
+                                    | b'\''
+                                    | b'*'
+                                    | b'.'
+                                    | b'^'
+                                    | b'`'
+                                    | b'|'
+                                    | b'~'
+                                    | b'+'
+                                    | b'-'
+                            )
                     })
                 {
                     return Err("request cookie name is invalid".to_owned());
                 }
                 if fallback.is_some_and(|fallback| fallback >= self.static_strings.len()) {
-                    return Err("request cookie fallback references a missing static string".to_owned());
+                    return Err(
+                        "request cookie fallback references a missing static string".to_owned()
+                    );
                 }
                 Ok(())
             }
@@ -1943,6 +1989,9 @@ fn handler_responses(handler: &Handler) -> Vec<&HandlerResponse> {
     let mut responses = vec![&handler.response];
     if let Some(authorization) = &handler.basic_authorization {
         responses.push(&authorization.rejected.response);
+    }
+    if let Some(limit) = &handler.body_limit {
+        responses.push(&limit.rejected.response);
     }
     if let Some(entity_tag) = &handler.entity_tag {
         responses.push(&entity_tag.not_modified.response);
