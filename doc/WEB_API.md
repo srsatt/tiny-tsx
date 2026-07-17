@@ -18,7 +18,7 @@ The current boundary is:
 | `fetch` | standard DOM declaration | one closed URL string; request-time GET; `.status` only; Apple system libcurl transport |
 | `URL` / `URLSearchParams` | standard DOM declaration | native WPT-only bounded ordered pairs, form decoding/serialization, mutation, lookup, and live query linkage for selected URL cases; application API pending |
 | `crypto.randomUUID()` | standard DOM declaration | request-time version-4 UUID when bound directly to a prepared SQLite parameter |
-| body and stream types | standard DOM declaration | pending |
+| body and stream types | standard DOM declaration | borrowed request bytes with a 64 KiB transport ceiling; closed Hono `bodyLimit()` guard over `Content-Length`; general body/stream objects pending |
 | encoding types | standard DOM declaration | pending |
 
 `Response.html(element)` and `Response.text(string)` are temporary compiler
@@ -51,6 +51,18 @@ The Basic Authorization guard uses the same borrowed header table through a
 dedicated ABI predicate. It implements the exact closed credentials required by
 the pinned Hono example without claiming general runtime `Request.headers`,
 `TextDecoder`, Base64, RegExp, Promise, or Web Crypto objects.
+
+The pinned Hono `bodyLimit()` middleware lowers to a per-route guard over the
+already buffered borrowed request-body view. A closed integer maximum from 0
+through 65,536 bytes selects Hono's default `413 Payload Too Large` response;
+the normal handler runs only when the body length is at most that maximum. The
+transport still owns framing and rejects unsupported transfer encoding with
+400 before application dispatch. Custom `onError`, dynamic limits, streaming
+reads, and chunked bodies are not implemented. The native default response uses
+Fetch's WPT-derived `text/plain;charset=UTF-8` for its string body. Bun 1.3.13
+omits that inferred header on the same `new Response(string)` path, so the
+reference test records the runtime difference rather than redefining the Web
+contract.
 
 Closed ETag middleware uses a second dedicated request predicate. SHA-1 is
 computed by the AOT frontend for immutable response bytes; the native runtime

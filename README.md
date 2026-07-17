@@ -86,7 +86,7 @@ The central product idea is:
 > Bounded request memory.
 > No JavaScript engine.
 
-## Current implementation: native Hono basic and JSX SSR
+## Current implementation: native Hono applications
 
 The repository compiles the complete pinned upstream Hono basic application to
 a native Apple-arm64 Mach-O server. Its 34-module runtime graph lowers to 16
@@ -98,6 +98,10 @@ slice remains available. A separate request-time JSX route also lowers decoded
 query data through nested component props and emits Bun-equivalent escaping
 from the bounded request arena. The pinned upstream `streamText()` path also
 emits finite native HTTP/1.1 chunks without collecting its body in that arena.
+The executable matrix additionally covers published-package middleware and
+backend tracers, including a closed 0–64 KiB Hono `bodyLimit()` guard with its
+default 413 response. Each admitted row and its first unsupported boundary is
+listed in `tests/compat/hono/examples-manifest.json` and `doc/HONO.md`.
 
 Install the pinned build-time frontend and compile the Rust driver:
 

@@ -168,6 +168,27 @@ produces and serves a native Mach-O executable from the example TSX source.
   `npm run test:release-runtime` (68/68), the focused compiler saturation E2E,
   and `npm run release:package` including installed release tests (4/4).
 
+### Bounded Hono Body Limit middleware (2026-07-17)
+
+- The unchanged pinned `hono/body-limit` factory lowers from both upstream
+  TypeScript and the published `hono@4.12.30` JavaScript distribution. A closed
+  integer `maxSize` from 0 through 64 KiB becomes a per-route guard over the
+  borrowed request body; multiple guards retain the smallest maximum.
+- Apple native HTTP proves an exact-limit body reaches the handler, an exceeded
+  body returns the default 413 `Payload Too Large` response, a following
+  pipelined request remains framed, and a chunked request is rejected at the
+  transport boundary before the server recovers. Linux-arm64 output assembles
+  and calls the new body-length ABI helper.
+- Stable frontend diagnostics reject custom `onError`, dynamic or out-of-range
+  limits, while the narrow declaration exposes only `maxSize`. The installed
+  archive ships and executes `examples/hono-body-limit` against the pinned npm
+  package. The Bun/Hono reference matches status/body and records Bun 1.3.13's
+  missing string BodyInit content type; TinyTSX retains the pinned Fetch/WPT
+  header.
+- Verification: 118 frontend tests, 57 bootstrap tests, the complete Hono alpha
+  native/assembly suite (12/12), Hono intake (8/8), workspace Clippy, and
+  installed release tests (4/4).
+
 ### Installable alpha archive (2026-07-17)
 
 - Workspace, frontend, and SDK versions are `0.1.0-alpha.1`. `tinytsx

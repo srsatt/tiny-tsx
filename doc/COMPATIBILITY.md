@@ -174,7 +174,18 @@ prepared SQLite call. The bootstrap parses the body once at that ABI boundary,
 binds up to 16 route/body values without interpolation, and rejects malformed,
 missing, boolean, array, nested-object, or oversized input with a recoverable
 client response. It does not construct a general runtime record, implement
-arbitrary JSON access, or complete Hono's configurable Body Limit middleware.
+arbitrary JSON access, or expose a general body object.
+
+The pinned upstream Hono `bodyLimit()` factory now compiles unchanged from both
+its TypeScript source and the published `hono@4.12.30` JavaScript package. One
+or more closed integer limits from 0 through 64 KiB become a native request-body
+guard; the smallest applicable limit wins. A body at the limit reaches the
+handler, while a larger `Content-Length` body returns Hono's default status 413
+and `Payload Too Large` body. Raw native HTTP proves the rejected response keeps
+the connection framed for a following pipelined request. Custom `onError`,
+dynamic/out-of-range limits, streaming/no-length requests, and chunked transfer
+encoding remain unsupported. TinyTSX applies the pinned Fetch/WPT string-body
+content type; Bun 1.3.13 returns the same status/body without that header.
 
 The pinned upstream CORS factory now lowers for closed wildcard-origin options.
 Normal responses carry the configured static headers, while compiler-generated
