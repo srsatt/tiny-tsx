@@ -13,6 +13,7 @@ const entry = path.join(repository, "examples/hono-actors/server.ts");
 const persistentEntry = path.join(repository, "examples/hono-actors/persistent.ts");
 const messagesEntry = path.join(repository, "examples/hono-actors/messages.ts");
 const restartEntry = path.join(repository, "examples/hono-actors/restart.ts");
+const supervisionEntry = path.join(repository, "examples/hono-actors/supervision.ts");
 const multiEntry = path.join(repository, "benchmarks/tiny/hono-actor-multi.ts");
 
 test("serves a local counter actor with ordered ask, tell, and idempotent stop", async context => {
@@ -200,6 +201,60 @@ test("assembles the fallible actor restart policy for Linux arm64", () => {
   assert.equal(assembled.status, 0, assembled.stderr);
 });
 
+test("supervises two fallible counters with one shared root intensity", async context => {
+  const directory = mkdtempSync(path.join(tmpdir(), "tinytsx-actor-supervision-"));
+  const binary = path.join(directory, "server");
+  const port = 39_500;
+  context.after(() => rmSync(directory, {recursive: true, force: true}));
+
+  const result = buildSupervision(binary, port);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const report = JSON.parse(readFileSync(`${binary}.build.json`, "utf8"));
+  assert.equal(report.supervisors, 1);
+  assert.equal(report.actors, 3);
+  assert.ok(report.runtimeFeatures.includes("bounded-one-for-one-supervision"));
+
+  const server = spawn(binary, [], {stdio: ["ignore", "pipe", "pipe"]});
+  context.after(() => server.kill("SIGTERM"));
+  await waitForServer(port, server, "/supervision/outside/read");
+
+  await assertResponse(port, "/supervision/left/add", 200, "15");
+  await assertResponse(port, "/supervision/right/add", 200, "107");
+  await assertResponse(port, "/supervision/outside/add", 200, "2");
+
+  await assertResponse(port, "/supervision/left/fail", 500, "internal server error");
+  await assertResponse(port, "/supervision/left/read", 200, "10");
+  await assertResponse(port, "/supervision/right/read", 200, "107");
+
+  await assertResponse(port, "/supervision/right/fail", 500, "internal server error");
+  await assertResponse(port, "/supervision/left/read", 200, "10");
+  await assertResponse(port, "/supervision/right/read", 200, "100");
+
+  await assertResponse(port, "/supervision/left/fail", 500, "internal server error");
+  await assertResponse(port, "/supervision/left/read", 500, "internal server error");
+  await assertResponse(port, "/supervision/right/read", 500, "internal server error");
+  await assertResponse(port, "/supervision/outside/read", 200, "2");
+  await assertResponse(port, "/supervision/outside/add", 200, "3");
+});
+
+test("assembles the root supervisor ABI for Linux arm64", () => {
+  const result = spawnSync("cargo", [
+    "run", "-q", "-p", "tinytsx", "--", "check", supervisionEntry,
+    "--emit-asm", "--target", "aarch64-unknown-linux-gnu",
+    "--alias", "hono=vendor/hono/src/index.ts",
+    "--api", "hono=tests/compat/hono/api.d.ts",
+  ], {cwd: repository, encoding: "utf8"});
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /tinytsx_config_supervisors/);
+  assert.match(result.stdout, /tinytsx_supervisor_restart_max/);
+  assert.match(result.stdout, /tinytsx_supervisor_restart_within_ms/);
+  assert.match(result.stdout, /tinytsx_actor_supervisor/);
+  const assembled = spawnSync("clang", [
+    "--target=aarch64-unknown-linux-gnu", "-x", "assembler", "-c", "-o", "/dev/null", "-",
+  ], {cwd: repository, input: result.stdout, encoding: "utf8"});
+  assert.equal(assembled.status, 0, assembled.stderr);
+});
+
 test("keeps eight native counter actors isolated under concurrent mutation", async context => {
   const directory = mkdtempSync(path.join(tmpdir(), "tinytsx-actor-multi-"));
   const binary = path.join(directory, "server");
@@ -283,6 +338,16 @@ function buildMessages(binary, port) {
 function buildRestart(binary, port) {
   return spawnSync("cargo", [
     "run", "-q", "-p", "tinytsx", "--", "build", restartEntry,
+    "--output", binary,
+    "--port", String(port),
+    "--alias", "hono=vendor/hono/src/index.ts",
+    "--api", "hono=tests/compat/hono/api.d.ts",
+  ], {cwd: repository, encoding: "utf8"});
+}
+
+function buildSupervision(binary, port) {
+  return spawnSync("cargo", [
+    "run", "-q", "-p", "tinytsx", "--", "build", supervisionEntry,
     "--output", binary,
     "--port", String(port),
     "--alias", "hono=vendor/hono/src/index.ts",

@@ -178,6 +178,55 @@ test("runs capability, malformed-input, and disposal failures in release servers
     await assertText(39_495, "/stop", 200, "stopped");
     await assertText(39_495, "/", 500, "internal server error");
   });
+
+  const supervisionPort = 39_502;
+  const supervisionBinary = binaryPath(project, "actor-supervision");
+  assertBuilt(build(
+    compiler,
+    project,
+    "hono-actors/supervision.ts",
+    supervisionBinary,
+    supervisionPort,
+  ), "actor supervision");
+  await withServer(supervisionBinary, supervisionPort, async () => {
+    await assertText(supervisionPort, "/supervision/left/add", 200, "15");
+    await assertText(supervisionPort, "/supervision/right/add", 200, "107");
+    await assertText(supervisionPort, "/supervision/outside/add", 200, "2");
+    await assertText(
+      supervisionPort,
+      "/supervision/left/fail",
+      500,
+      "internal server error",
+    );
+    await assertText(supervisionPort, "/supervision/left/read", 200, "10");
+    await assertText(supervisionPort, "/supervision/right/read", 200, "107");
+    await assertText(
+      supervisionPort,
+      "/supervision/right/fail",
+      500,
+      "internal server error",
+    );
+    await assertText(supervisionPort, "/supervision/right/read", 200, "100");
+    await assertText(
+      supervisionPort,
+      "/supervision/left/fail",
+      500,
+      "internal server error",
+    );
+    await assertText(
+      supervisionPort,
+      "/supervision/left/read",
+      500,
+      "internal server error",
+    );
+    await assertText(
+      supervisionPort,
+      "/supervision/right/read",
+      500,
+      "internal server error",
+    );
+    await assertText(supervisionPort, "/supervision/outside/read", 200, "2");
+  }, {waitPath: "/supervision/outside/read"});
 });
 
 test("recovers from release request-memory exhaustion", async () => {

@@ -28,6 +28,7 @@ The generated servers have no npm or JavaScript runtime dependency.
 | `hono-actors/server.ts` | `tinytsx build hono-actors/server.ts --output server --release` | Local bounded counter actor |
 | `hono-actors/messages.ts` | `tinytsx build hono-actors/messages.ts --output server --release` | Copied primitive, bounded-array, and closed-record actor messages |
 | `hono-actors/restart.ts` | `tinytsx build hono-actors/restart.ts --output server --release` | Fallible counter with bounded restart intensity |
+| `hono-actors/supervision.ts` | `tinytsx build hono-actors/supervision.ts --output server --release` | Static one-for-one root supervisor with a shared bounded restart window |
 | `hono-actors/persistent.ts` | `tinytsx build hono-actors/persistent.ts --allow-read "$PWD/state" --allow-write "$PWD/state" --output server --release` | SQLite-backed counter persistence and hard-reset waiter cancellation |
 
 Create the `state` directory before building a persistent example. Each source
