@@ -2,9 +2,10 @@
 
 Release: `0.1.0-alpha.1`
 
-Current decision: **GO for a separate tag-and-publish action.** Both native
-targets have completed the full contract from one exact clean commit, and their
-schema-v2 manifests name that candidate.
+Current decision: **HOLD pending exact-source native Linux verification.** The
+pressure-aware candidate behavior has completed an Apple rehearsal, but Apple
+and Linux must still produce schema-v2 manifests from one final exact commit
+before the separate tag-and-publish action.
 
 This checklist prepares a release candidate; it does not create or push a tag.
 Run it from the exact commit intended for `v0.1.0-alpha.1`.
@@ -21,10 +22,11 @@ Run it from the exact commit intended for `v0.1.0-alpha.1`.
 - [x] `@hono/zod-openapi`, `@hono/node-server`, and Hono-neutral
       `tinytsx:serve` have reference, native HTTP, installed-resource, and
       Linux-assembly gates appropriate to their contracts.
-- [x] The repeated Hono control, actor, and SQLite TinyTSX/Bun benchmark and raw
-      samples are committed under `benchmarks/results/2026-07-17-m5-max-alpha-*`.
-- [x] Post-alpha syntax, Web, Hono, actor, SQLite, OS, and managed-memory work
-      remains explicitly outside this release.
+- [x] The pressure-aware Hono control, actor, SQLite, and nested-profile
+      TinyTSX/Bun benchmark and raw samples are committed under
+      `benchmarks/results/2026-07-18-m5-max-pressure-aware-15s-*`.
+- [x] Remaining syntax, Web, Hono, actor, SQLite, OS, performance, and
+      managed-memory work is explicitly bounded outside this release.
 
 ## Clean native verification
 
@@ -38,10 +40,11 @@ npm ci --prefix frontend
 npm run release:verify
 ```
 
-- [x] Apple arm64 has completed the clean `release:verify` contract.
-- [x] Linux arm64 has completed the clean `release:verify` contract on a native
+- [ ] Apple arm64 has completed the clean `release:verify` contract at the
+      final exact-source candidate commit.
+- [ ] Linux arm64 has completed the clean `release:verify` contract on a native
       `ubuntu-24.04-arm` or equivalent host.
-- [x] The exact release-candidate commit has completed both native jobs without
+- [ ] The exact release-candidate commit has completed both native jobs without
       generated tracked changes.
 
 ## Artifact inspection
@@ -73,11 +76,11 @@ tar -tzf "$base.tar.gz" | grep '/bin/tinytsx$'
 tar -tzf "$base.tar.gz" | grep '/lib/tinytsx/examples/README.md$'
 ```
 
-- [x] Apple archive checksum, manifest, version output, installed layout, and
+- [ ] Apple archive checksum, manifest, version output, installed layout, and
       outside-checkout HTTP smoke have been verified.
-- [x] Linux archive checksum, manifest, version output, installed layout, and
+- [ ] Linux archive checksum, manifest, version output, installed layout, and
       outside-checkout HTTP smoke have been verified.
-- [x] Both artifact manifests identify the same source contract, HIR 2, runtime
+- [ ] Both artifact manifests identify the same source contract, HIR 2, runtime
       ABI 1, built-in schema 1, and pinned compatibility revisions.
 
 The generated archive checksums belong in the uploaded `.sha256` files and
@@ -88,14 +91,14 @@ document would change the archive being attested.
 
 Before tagging, confirm all of the following:
 
-- [x] Every alpha exit gate in `doc/BACKLOG.md` is checked.
-- [x] Both native archives are collected together with their `.sha256` and
+- [ ] Every exact-source alpha exit gate in `doc/BACKLOG.md` is checked.
+- [ ] Both native archives are collected together with their `.sha256` and
       manifest files.
 - [x] The limitations in `doc/ALPHA.md` match the shipped compiler diagnostics
       and executable tests.
 - [x] No release note claims general TypeScript, ECMAScript, Node, Bun, Deno,
       Web API, Hono, actor, SQLite, AI SDK, or GC compatibility.
-- [x] The release commit is clean and is the commit verified by both native
+- [ ] The release commit is clean and is the commit verified by both native
       jobs.
 
 Only after this section is green may a separate release action create
