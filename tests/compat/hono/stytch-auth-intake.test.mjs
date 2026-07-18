@@ -24,6 +24,12 @@ test("pins the next real-world Hono backend without widening its boundary", () =
   assert.equal(tracer.referenceBehavior.status, "pass");
   assert.equal(tracer.persistenceAdapter.status, "pass");
   assert.equal(tracer.packagedExample.status, "pass");
+  assert.equal(tracer.performanceEvidence.status, "pass");
+  assert.equal(tracer.performanceEvidence.workload, "hono-stytch-todo");
+  assert.ok(readFileSync(
+    path.join(repository, tracer.performanceEvidence.evidence),
+    "utf8",
+  ).includes('"success_rate": 1.0'));
   assert.ok(tracer.releaseGates.native.includes("test:release-installed"));
   assert.match(tracer.firstUnsupportedBoundary, /React\/Vite/);
   assert.match(tracer.firstUnsupportedBoundary, /live Stytch/);

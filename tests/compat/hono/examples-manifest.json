@@ -444,6 +444,14 @@
       "compilerInputs": "vendor/hono/src",
       "evidence": "tests/release/installed-native.test.mjs"
     },
+    "performanceEvidence": {
+      "status": "pass",
+      "workload": "hono-stytch-todo",
+      "sourceCommit": "efed239",
+      "configuration": "eight TinyTSX workers; keep-alive; five startup samples; three 15-second samples at concurrency 8 and 64 per target",
+      "stateContract": "Every create/list/complete/delete response is checked; one fixed user per client worker owns at most one TODO and finishes empty; every interval includes post-load recovery reads.",
+      "evidence": "benchmarks/results/2026-07-18-m5-max-sustained-15s-hono-stytch-todo-keepalive-w8.json"
+    },
     "releaseGates": {
       "native": ["test:hono-stytch-todo", "test:release-installed"],
       "reference": ["test:hono-stytch-todo-reference"]
