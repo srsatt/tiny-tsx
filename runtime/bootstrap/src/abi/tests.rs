@@ -67,9 +67,16 @@ fn request_body_length_rejects_invalid_views() {
 fn sqlite_parameters_decode_route_and_closed_json_values_in_order() {
     use tinytsx_runtime_sqlite::SqlValue;
 
-    let body = br#"{"title":"Hello","count":3,"score":1.5,"nothing":null}"#;
+    let body = br#"{"title":"Hello","count":3,"score":1.5,"nothing":null,"enabled":true,"disabled":false}"#;
     let request = request_with_body(b"POST", b"/posts/hello%20world", &[], body);
-    let fields = [b"title".as_slice(), b"count", b"score", b"nothing"];
+    let fields = [
+        b"title".as_slice(),
+        b"count",
+        b"score",
+        b"nothing",
+        b"enabled",
+        b"disabled",
+    ];
     let parameters = [
         TinySqlParameter {
             kind: 1,
@@ -96,6 +103,16 @@ fn sqlite_parameters_decode_route_and_closed_json_values_in_order() {
             value: fields[3].len(),
             pointer: fields[3].as_ptr(),
         },
+        TinySqlParameter {
+            kind: 2,
+            value: fields[4].len(),
+            pointer: fields[4].as_ptr(),
+        },
+        TinySqlParameter {
+            kind: 2,
+            value: fields[5].len(),
+            pointer: fields[5].as_ptr(),
+        },
     ];
 
     let decoded =
@@ -110,7 +127,39 @@ fn sqlite_parameters_decode_route_and_closed_json_values_in_order() {
             SqlValue::Integer(3),
             SqlValue::Real(1.5),
             SqlValue::Null,
+            SqlValue::Integer(1),
+            SqlValue::Integer(0),
         ]
+    );
+}
+
+#[test]
+fn sqlite_parameters_traverse_bounded_nested_request_json_paths() {
+    use tinytsx_runtime_sqlite::SqlValue;
+
+    let body =
+        br#"{"profile":{"name":"TinyTSX","preferences":{"theme":"dark","alerts":true}},"score":7}"#;
+    let request = request_with_body(b"POST", b"/profiles/1", &[], body);
+    let paths = [
+        b"profile\0name".as_slice(),
+        b"profile\0preferences\0theme",
+        b"profile\0preferences\0alerts",
+        b"score",
+    ];
+    let parameters = paths.map(|path| TinySqlParameter {
+        kind: 2,
+        value: path.len(),
+        pointer: path.as_ptr(),
+    });
+
+    assert_eq!(
+        unsafe { decode_sqlite_parameters(&request, parameters.as_ptr(), parameters.len()) },
+        Ok(vec![
+            SqlValue::Text("TinyTSX".into()),
+            SqlValue::Text("dark".into()),
+            SqlValue::Integer(1),
+            SqlValue::Integer(7),
+        ]),
     );
 }
 
@@ -126,7 +175,6 @@ fn sqlite_parameters_reject_malformed_missing_and_structured_json_values() {
     for body in [
         b"{".as_slice(),
         br#"{}"#,
-        br#"{"title":true}"#,
         br#"{"title":[]}"#,
         br#"{"title":{}}"#,
     ] {
@@ -700,6 +748,37 @@ fn response_writer_serializes_selected_request_json_primitives() {
 }
 
 #[test]
+fn response_writer_traverses_bounded_nested_request_json_paths() {
+    let body =
+        br#"{"profile":{"name":"TinyTSX","preferences":{"theme":"dark","alerts":true}},"score":7}"#;
+    let request = request_with_body(b"POST", b"/profiles/1", &[], body);
+    let mut output = [0_u8; 64];
+    let mut writer = writer(&mut output);
+
+    for path in [
+        b"profile\0name".as_slice(),
+        b"profile\0preferences\0theme",
+        b"profile\0preferences\0alerts",
+        b"score",
+    ] {
+        assert_eq!(
+            unsafe {
+                tinytsx_html_write_request_json_field(
+                    &mut writer,
+                    &request,
+                    path.as_ptr(),
+                    path.len(),
+                )
+            },
+            OK,
+        );
+    }
+
+    let written = writer.cursor as usize - writer.start as usize;
+    assert_eq!(&output[..written], br#""TinyTSX""dark"true7"#);
+}
+
+#[test]
 fn response_writer_rejects_invalid_request_json_fields() {
     for body in [
         b"{".as_slice(),
@@ -718,6 +797,41 @@ fn response_writer_rejects_invalid_request_json_fields() {
         );
         assert_eq!(writer.cursor, writer.start);
     }
+}
+
+#[test]
+fn request_json_paths_enforce_static_shape_and_selected_string_bounds() {
+    let body = format!(r#"{{"profile":{{"name":"{}"}}}}"#, "x".repeat(4_097));
+    let request = request_with_body(b"POST", b"/profiles/1", &[], body.as_bytes());
+    let mut output = [0_u8; 32];
+    let mut writer = writer(&mut output);
+
+    assert_eq!(
+        unsafe {
+            tinytsx_html_write_request_json_field(
+                &mut writer,
+                &request,
+                b"profile\0name".as_ptr(),
+                b"profile\0name".len(),
+            )
+        },
+        BAD_REQUEST,
+    );
+
+    for path in [b"a\0b\0c\0d\0e".as_slice(), b"a\0\0b", &[b'x'; 129]] {
+        assert_eq!(
+            unsafe {
+                tinytsx_html_write_request_json_field(
+                    &mut writer,
+                    &request,
+                    path.as_ptr(),
+                    path.len(),
+                )
+            },
+            INTERNAL_ERROR,
+        );
+    }
+    assert_eq!(writer.cursor, writer.start);
 }
 
 #[test]

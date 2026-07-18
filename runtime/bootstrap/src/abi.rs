@@ -935,7 +935,6 @@ unsafe fn decode_sqlite_parameters(
     } else {
         None
     };
-    let object = json.as_ref().and_then(serde_json::Value::as_object);
     let mut output = Vec::with_capacity(parameter_count);
     for parameter in parameters {
         match parameter.kind {
@@ -946,15 +945,12 @@ unsafe fn decode_sqlite_parameters(
                 ));
             }
             2 => {
-                if parameter.pointer.is_null() || parameter.value == 0 || parameter.value > 128 {
+                if parameter.pointer.is_null() || parameter.value == 0 || parameter.value > 512 {
                     return Err(INTERNAL_ERROR);
                 }
-                // SAFETY: Generated field names point at immutable static strings.
-                let field = unsafe { slice::from_raw_parts(parameter.pointer, parameter.value) };
-                let field = std::str::from_utf8(field).map_err(|_| INTERNAL_ERROR)?;
-                let value = object
-                    .and_then(|object| object.get(field))
-                    .ok_or(BAD_REQUEST)?;
+                // SAFETY: Generated paths point at immutable static strings.
+                let path = unsafe { slice::from_raw_parts(parameter.pointer, parameter.value) };
+                let value = request_json_path_value(json.as_ref().ok_or(INTERNAL_ERROR)?, path)?;
                 output.push(json_sql_value(value)?);
             }
             3 => {
@@ -1021,6 +1017,7 @@ fn json_sql_value(value: &serde_json::Value) -> Result<tinytsx_runtime_sqlite::S
     use tinytsx_runtime_sqlite::SqlValue;
     match value {
         serde_json::Value::Null => Ok(SqlValue::Null),
+        serde_json::Value::Bool(value) => Ok(SqlValue::Integer(i64::from(*value))),
         serde_json::Value::Number(value) => value
             .as_i64()
             .map(SqlValue::Integer)
@@ -1681,15 +1678,12 @@ pub unsafe extern "C" fn tinytsx_html_write_request_json_field(
     field: *const u8,
     field_len: usize,
 ) -> u32 {
-    if writer.is_null() || request.is_null() || field.is_null() || field_len == 0 || field_len > 128
+    if writer.is_null() || request.is_null() || field.is_null() || field_len == 0 || field_len > 512
     {
         return INTERNAL_ERROR;
     }
     // SAFETY: Generated static data and the request body remain valid during dispatch.
     let field = unsafe { slice::from_raw_parts(field, field_len) };
-    let Ok(field) = std::str::from_utf8(field) else {
-        return INTERNAL_ERROR;
-    };
     // SAFETY: Generated code passes the request supplied by this runtime.
     let body = unsafe { &(*request).body };
     if body.ptr.is_null() && body.len != 0 {
@@ -1700,20 +1694,48 @@ pub unsafe extern "C" fn tinytsx_html_write_request_json_field(
     let Ok(json) = serde_json::from_slice::<serde_json::Value>(body) else {
         return BAD_REQUEST;
     };
-    let Some(value) = json.as_object().and_then(|object| object.get(field)) else {
-        return BAD_REQUEST;
+    let value = match request_json_path_value(&json, field) {
+        Ok(value) => value,
+        Err(status) => return status,
     };
-    if matches!(
-        value,
-        serde_json::Value::Array(_) | serde_json::Value::Object(_)
-    ) {
-        return BAD_REQUEST;
-    }
     let Ok(encoded) = serde_json::to_vec(value) else {
         return INTERNAL_ERROR;
     };
     // SAFETY: The encoded primitive remains alive for this synchronous copy.
     unsafe { tinytsx_html_write_static(writer, encoded.as_ptr(), encoded.len()) }
+}
+
+fn request_json_path_value<'a>(
+    json: &'a serde_json::Value,
+    encoded_path: &[u8],
+) -> Result<&'a serde_json::Value, u32> {
+    if encoded_path.is_empty() || encoded_path.len() > 512 {
+        return Err(INTERNAL_ERROR);
+    }
+    let mut depth = 0_usize;
+    for segment in encoded_path.split(|byte| *byte == 0) {
+        depth += 1;
+        if depth > 4 || segment.is_empty() || segment.len() > 128 {
+            return Err(INTERNAL_ERROR);
+        }
+        std::str::from_utf8(segment).map_err(|_| INTERNAL_ERROR)?;
+    }
+    let mut value = json;
+    for segment in encoded_path.split(|byte| *byte == 0) {
+        let segment = std::str::from_utf8(segment).map_err(|_| INTERNAL_ERROR)?;
+        value = value
+            .as_object()
+            .and_then(|object| object.get(segment))
+            .ok_or(BAD_REQUEST)?;
+    }
+    if matches!(
+        value,
+        serde_json::Value::Array(_) | serde_json::Value::Object(_)
+    ) || value.as_str().is_some_and(|value| value.len() > 4_096)
+    {
+        return Err(BAD_REQUEST);
+    }
+    Ok(value)
 }
 
 #[unsafe(no_mangle)]
