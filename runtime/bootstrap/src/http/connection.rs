@@ -21,91 +21,51 @@ use super::{
 
 const MAX_REQUESTS_PER_CONNECTION: usize = 100;
 const REQUESTS_PER_TURN: usize = 16;
-const MAX_PRESSURE_IDLE_PROBES: u8 = 16;
 const CONNECTION_IO_TIMEOUT: Duration = Duration::from_secs(5);
-const QUEUED_KEEP_ALIVE_WAIT: Duration = Duration::from_millis(1);
-const POST_PRESSURE_IDLE_WAIT: Duration = Duration::from_millis(100);
 const OVERLOAD_HEAD_TIMEOUT: Duration = Duration::from_millis(10);
 
 pub(super) struct Connection {
     stream: TcpStream,
     input: ConnectionInput,
     requests_completed: usize,
-    pressure_idle_probes: u8,
-    pressure_seen: bool,
-    single_worker: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Turn {
     Complete,
-    Resubmit,
+    Ready,
+    WaitReadable,
 }
 
 impl Connection {
-    pub(super) fn new(stream: TcpStream, worker_count: usize) -> io::Result<Self> {
+    pub(super) fn new(stream: TcpStream) -> io::Result<Self> {
         stream.set_read_timeout(Some(CONNECTION_IO_TIMEOUT))?;
         stream.set_write_timeout(Some(CONNECTION_IO_TIMEOUT))?;
         Ok(Self {
             stream,
             input: ConnectionInput::new(),
             requests_completed: 0,
-            pressure_idle_probes: 0,
-            pressure_seen: false,
-            single_worker: worker_count == 1,
         })
     }
 
-    pub(super) fn handle_turn(
-        &mut self,
-        arena: &mut RequestArena,
-        queued_work: bool,
-    ) -> io::Result<Turn> {
-        self.pressure_seen |= queued_work;
+    pub(super) fn handle_turn(&mut self, arena: &mut RequestArena) -> io::Result<Turn> {
         for turn_index in 0..REQUESTS_PER_TURN {
-            if (self.single_worker || self.pressure_seen)
-                && self.requests_completed != 0
-                && !self.input.has_complete_head()
-            {
-                if self.has_ready_input(if queued_work {
-                    QUEUED_KEEP_ALIVE_WAIT
-                } else {
-                    POST_PRESSURE_IDLE_WAIT
-                })? {
-                    self.pressure_idle_probes = 0;
-                } else if queued_work && self.pressure_idle_probes < MAX_PRESSURE_IDLE_PROBES {
-                    self.pressure_idle_probes += 1;
-                    return Ok(Turn::Resubmit);
-                } else {
-                    return Ok(Turn::Complete);
-                }
-            }
             let turn = self.handle_request(arena)?;
             if turn == Turn::Complete {
                 return Ok(Turn::Complete);
             }
+            if !self.input.has_complete_head() {
+                return Ok(Turn::WaitReadable);
+            }
             if turn_index + 1 == REQUESTS_PER_TURN {
-                return Ok(Turn::Resubmit);
+                return Ok(Turn::Ready);
             }
         }
         unreachable!("a connection turn has at least one request slot")
     }
 
-    fn has_ready_input(&self, timeout: Duration) -> io::Result<bool> {
-        let timeout_ms = i32::try_from(timeout.as_millis())
-            .map_err(|_| io::Error::other("connection readiness timeout overflow"))?;
-        let mut descriptor = libc::pollfd {
-            fd: self.stream.as_raw_fd(),
-            events: libc::POLLIN,
-            revents: 0,
-        };
-        // SAFETY: `descriptor` is valid for one element and the borrowed socket
-        // remains alive for the duration of this bounded readiness call.
-        let result = unsafe { libc::poll(&mut descriptor, 1, timeout_ms) };
-        if result < 0 {
-            return Err(io::Error::last_os_error());
-        }
-        Ok(result != 0)
+    pub(super) fn descriptor(&self) -> std::os::fd::RawFd {
+        self.stream.as_raw_fd()
     }
 
     pub(super) fn into_stream(self) -> TcpStream {
@@ -251,7 +211,7 @@ impl Connection {
             stream.shutdown(Shutdown::Write)?;
             Ok(Turn::Complete)
         } else {
-            Ok(Turn::Resubmit)
+            Ok(Turn::Ready)
         }
     }
 }
@@ -283,7 +243,7 @@ mod tests {
         time::Duration,
     };
 
-    use tinytsx_runtime_worker::{JobControl, WorkerPool};
+    use tinytsx_runtime_worker::{EventControl, EventWorkerPool};
 
     use crate::abi::RequestArena;
 
@@ -309,18 +269,14 @@ mod tests {
             .write_all(&requests)
             .expect("send pipelined requests");
 
-        let mut connection = Connection::new(server, 1).expect("configure connection");
+        let mut connection = Connection::new(server).expect("configure connection");
         let mut arena = RequestArena::new(4096);
         assert_eq!(
-            connection
-                .handle_turn(&mut arena, false)
-                .expect("first turn"),
-            Turn::Resubmit
+            connection.handle_turn(&mut arena).expect("first turn"),
+            Turn::Ready
         );
         assert_eq!(
-            connection
-                .handle_turn(&mut arena, false)
-                .expect("second turn"),
+            connection.handle_turn(&mut arena).expect("second turn"),
             Turn::Complete
         );
 
@@ -362,25 +318,25 @@ mod tests {
             .write_all(b"GET /queued HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
             .expect("send queued request");
 
-        let pool = WorkerPool::new_resumable(
+        let pool = EventWorkerPool::new(
             1,
             2,
             |_| RequestArena::new(4096),
-            |arena, mut connection: Connection, queued_work| match connection
-                .handle_turn(arena, queued_work)
-            {
-                Ok(Turn::Complete) | Err(_) => JobControl::Complete,
-                Ok(Turn::Resubmit) => JobControl::Resubmit(connection),
+            Connection::descriptor,
+            |arena, mut connection: Connection| match connection.handle_turn(arena) {
+                Ok(Turn::Complete) | Err(_) => EventControl::Complete,
+                Ok(Turn::Ready) => EventControl::Ready(connection),
+                Ok(Turn::WaitReadable) => EventControl::WaitReadable(connection),
             },
         )
         .expect("create HTTP worker pool");
         assert!(
-            pool.try_submit(Connection::new(idle_server, 1).expect("configure idle connection"))
+            pool.try_wait(Connection::new(idle_server).expect("configure idle connection"))
                 .is_ok(),
             "submit idle connection",
         );
         assert!(
-            pool.try_submit(Connection::new(queued_server, 1).expect("configure queued connection"))
+            pool.try_wait(Connection::new(queued_server).expect("configure queued connection"))
                 .is_ok(),
             "submit queued connection",
         );

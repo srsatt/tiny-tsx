@@ -4,7 +4,7 @@ mod response;
 
 use std::{io::ErrorKind, net::TcpListener, thread, time::Duration};
 
-use tinytsx_runtime_worker::{JobControl, WorkerPool};
+use tinytsx_runtime_worker::{EventControl, EventWorkerPool};
 
 use crate::abi::{RequestArena, configured_port, configured_request_memory, configured_workers};
 use crate::shutdown;
@@ -23,27 +23,28 @@ pub fn serve() -> std::io::Result<()> {
     let queue_capacity = workers
         .checked_mul(CONNECTION_QUEUE_PER_WORKER)
         .ok_or_else(|| std::io::Error::other("connection queue capacity overflow"))?;
-    let pool = WorkerPool::new_resumable(
+    let pool = EventWorkerPool::new(
         workers,
         queue_capacity,
         move |_| HttpWorker {
             request_arena: RequestArena::new(request_memory),
         },
-        |worker, mut connection: Connection, queued_work| match connection
-            .handle_turn(&mut worker.request_arena, queued_work)
+        Connection::descriptor,
+        |worker, mut connection: Connection| match connection.handle_turn(&mut worker.request_arena)
         {
-            Ok(Turn::Complete) => JobControl::Complete,
-            Ok(Turn::Resubmit) => JobControl::Resubmit(connection),
+            Ok(Turn::Complete) => EventControl::Complete,
+            Ok(Turn::Ready) => EventControl::Ready(connection),
+            Ok(Turn::WaitReadable) => EventControl::WaitReadable(connection),
             Err(error) => {
                 eprintln!("request error: {error}");
-                JobControl::Complete
+                EventControl::Complete
             }
         },
     )?;
     let listener = TcpListener::bind(("127.0.0.1", port))?;
     listener.set_nonblocking(true)?;
     println!("TinyTSX listening on http://127.0.0.1:{port}");
-    println!("Workers: {workers}; queued connections: {queue_capacity}");
+    println!("Workers: {workers}; live connections: {queue_capacity}");
 
     while !shutdown::requested() {
         match listener.accept() {
@@ -51,9 +52,9 @@ pub fn serve() -> std::io::Result<()> {
                 // macOS may propagate the listener's nonblocking flag to an
                 // accepted socket. Request workers use bounded blocking I/O.
                 stream.set_nonblocking(false)?;
-                match Connection::new(stream, workers) {
+                match Connection::new(stream) {
                     Ok(connection) => {
-                        if let Err(rejected) = pool.try_submit(connection) {
+                        if let Err(rejected) = pool.try_wait(connection) {
                             let mut rejected = rejected.into_inner().into_stream();
                             if let Err(error) = write_overload_response(&mut rejected) {
                                 eprintln!("overload response error: {error}");
