@@ -14,6 +14,16 @@ fn parses_canonical_triples_and_short_aliases() {
         Ok(Target::LinuxArm64)
     );
     assert_eq!(Target::from_str("linux-arm64"), Ok(Target::LinuxArm64));
+    assert_eq!(
+        Target::from_str("x86_64-unknown-linux-gnu"),
+        Ok(Target::LinuxX86_64)
+    );
+    assert_eq!(Target::from_str("linux-x64"), Ok(Target::LinuxX86_64));
+    assert_eq!(
+        Target::from_str("x86_64-apple-darwin"),
+        Ok(Target::MacosX86_64)
+    );
+    assert_eq!(Target::from_str("macos-x64"), Ok(Target::MacosX86_64));
 }
 
 #[test]
@@ -21,4 +31,13 @@ fn rejects_unknown_targets_with_supported_values() {
     let error = Target::from_str("wasm32-wasi").unwrap_err();
     assert!(error.contains("unsupported target `wasm32-wasi`"));
     assert!(error.contains("aarch64-unknown-linux-gnu"));
+    assert!(error.contains("x86_64-unknown-linux-gnu"));
+    assert!(error.contains("x86_64-apple-darwin"));
+}
+
+#[test]
+fn apple_silicon_can_link_intel_macos_artifacts() {
+    assert!(Target::MacosX86_64.can_link_from(Target::MacosArm64));
+    assert!(Target::MacosX86_64.can_link_from(Target::MacosX86_64));
+    assert!(!Target::LinuxX86_64.can_link_from(Target::MacosArm64));
 }

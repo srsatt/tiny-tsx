@@ -25,6 +25,11 @@ pub fn emit(program: &Test262Program, target: Target) -> Result<String, String> 
             program.target
         ));
     }
+    if !target.is_aarch64() {
+        return Err(format!(
+            "Test262 code generation for `{target}` is not implemented"
+        ));
+    }
     let mut assembly = String::new();
     emit_header(&mut assembly, target);
 
@@ -1062,6 +1067,7 @@ fn emit_external_call(assembly: &mut String, target: Target, symbol: &str) {
     match target {
         Target::MacosArm64 => writeln!(assembly, "    bl _{symbol}").unwrap(),
         Target::LinuxArm64 => writeln!(assembly, "    bl {symbol}").unwrap(),
+        Target::MacosX86_64 | Target::LinuxX86_64 => unreachable!("validated AArch64 target"),
     }
 }
 
@@ -1288,6 +1294,7 @@ fn emit_header(assembly: &mut String, target: Target) {
             writeln!(assembly, ".type main, %function").unwrap();
             writeln!(assembly, "main:").unwrap();
         }
+        Target::MacosX86_64 | Target::LinuxX86_64 => unreachable!("validated AArch64 target"),
     }
     writeln!(assembly, "    stp x29, x30, [sp, #-16]!").unwrap();
     writeln!(assembly, "    mov x29, sp").unwrap();
@@ -1300,6 +1307,7 @@ fn emit_data_header(assembly: &mut String, target: Target) {
             writeln!(assembly, ".size main, .-main").unwrap();
             writeln!(assembly, "\n.section .rodata").unwrap();
         }
+        Target::MacosX86_64 | Target::LinuxX86_64 => unreachable!("validated AArch64 target"),
     }
 }
 
@@ -1456,6 +1464,7 @@ fn emit_address(assembly: &mut String, target: Target, register: &str, label: &s
             writeln!(assembly, "    adrp {register}, {label}").unwrap();
             writeln!(assembly, "    add {register}, {register}, :lo12:{label}").unwrap();
         }
+        Target::MacosX86_64 | Target::LinuxX86_64 => unreachable!("validated AArch64 target"),
     }
 }
 

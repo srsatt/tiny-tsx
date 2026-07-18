@@ -4,6 +4,12 @@ mod assembly;
 mod constant_data;
 mod linux_arm64;
 mod macos_arm64;
+mod portable_c;
+mod x86_64;
+
+#[cfg(test)]
+#[path = "x86_64_tests.rs"]
+mod x86_64_tests;
 
 use crate::hir::Program;
 use crate::target::Target;
@@ -45,5 +51,6 @@ pub fn emit(program: &Program, target: Target, options: Options) -> Result<Strin
     match target {
         Target::MacosArm64 => emit_macos_arm64(program, options),
         Target::LinuxArm64 => emit_linux_arm64(program, options),
+        Target::MacosX86_64 | Target::LinuxX86_64 => x86_64::emit(program, options, target),
     }
 }
