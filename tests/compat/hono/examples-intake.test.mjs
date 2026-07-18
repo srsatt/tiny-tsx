@@ -103,6 +103,17 @@ test("prepares the published Hono fixture before frontend tests", () => {
   );
 });
 
+test("prepares the pinned Stytch auth fixture before its intake audit", () => {
+  assert.equal(
+    workspace.scripts["prepare:stytch-auth-fixture"],
+    "npm ci --prefix tests/compat/stytch-auth",
+  );
+  assert.match(
+    workspace.scripts["test:hono-intake"],
+    /^npm run prepare:stytch-auth-fixture && /,
+  );
+});
+
 test("pins the explicit upstream Hono behavior allowlist", () => {
   for (const item of manifest.behaviorAllowlist) {
     assert.equal(item.evidenceMode, "native-derived");

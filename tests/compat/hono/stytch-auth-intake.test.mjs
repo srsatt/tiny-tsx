@@ -36,7 +36,40 @@ test("pins the next real-world Hono backend without widening its boundary", () =
     packageJson.dependencies[tracer.packageDeclaration.specifier],
     tracer.packageDeclaration.declaredRange,
   );
-  assert.equal(tracer.packageDeclaration.resolvedVersion, null);
+  assert.equal(tracer.packageDeclaration.resolvedVersion, "0.1.0");
+});
+
+test("pins and audits the exact published authentication package", () => {
+  const lock = JSON.parse(readFileSync(
+    path.join(repository, tracer.packageDeclaration.fixtureLock),
+    "utf8",
+  ));
+  const published = lock.packages["node_modules/@hono/stytch-auth"];
+  assert.equal(published.version, tracer.packageDeclaration.resolvedVersion);
+  assert.equal(published.integrity, tracer.packageDeclaration.integrity);
+  assert.equal(lock.packages["node_modules/hono"].version, "4.12.30");
+  assert.equal(lock.packages["node_modules/stytch"].version, "12.21.0");
+
+  const audit = runAudit(tracer.packageDeclaration.publishedEntry);
+  assert.deepEqual(audit.diagnostics, []);
+  assert.deepEqual(audit.statistics, {modules: 7, sourceBytes: 30122, sourceLines: 946});
+  assert.deepEqual(Object.fromEntries(audit.requirements.map(item => [item.feature, item.occurrences])), {
+    "functions-as-values": 78,
+    classes: 1,
+    "async-await": 39,
+    exceptions: 42,
+    "computed-access": 52,
+    "object-literals": 54,
+    "array-literals": 9,
+    "new-expressions": 30,
+    loops: 13,
+    "rest-spread": 14,
+    destructuring: 8,
+    "regular-expressions": 15,
+    "template-expressions": 17,
+  });
+  assert.equal(audit.staging.runtimeSpreads, 14);
+  assert.ok(audit.modules.some(module => module.path.endsWith("stytch/dist/index.js")));
 });
 
 test("retains the exact TodoService language requirements before native admission", () => {

@@ -373,7 +373,10 @@
       "path": "vendor/hono-examples/stytch-auth/package.json",
       "specifier": "@hono/stytch-auth",
       "declaredRange": "^0.1.0",
-      "resolvedVersion": null
+      "resolvedVersion": "0.1.0",
+      "fixtureLock": "tests/compat/stytch-auth/package-lock.json",
+      "integrity": "sha512-TSj5tNmu/lSiK17wEgxJV8HyAqAwgLzkmmGz8xbAMWjFLKZALTiRLsBbKWYe0P3Qi9g/n6GRS1fUmQyJLOQgRQ==",
+      "publishedEntry": "tests/compat/stytch-auth/node_modules/@hono/stytch-auth/dist/index.js"
     },
     "intake": {
       "status": "audit-pass",

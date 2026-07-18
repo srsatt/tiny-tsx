@@ -1,0 +1,10 @@
+{
+  "name": "@tinytsx/stytch-auth-compat",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@hono/stytch-auth": "0.1.0",
+    "hono": "4.12.30",
+    "stytch": "12.21.0"
+  }
+}
