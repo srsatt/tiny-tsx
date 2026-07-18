@@ -230,11 +230,18 @@ server is available separately:
 npm run benchmark:static
 npm run benchmark:hono
 npm run benchmark:hono-jsx-ssr
+npm run benchmark:hono-dynamic-jsx
+npm run benchmark:hono-stream-text
+npm run benchmark:hono-actor
+npm run benchmark:hono-sqlite
 ```
 
 The harness verifies equivalent status, content type, content length, and body,
 then records repeated startup-to-first-response, RSS, throughput, and latency
-samples through `oha`. See `benchmarks/README.md` for methodology and limitations.
+samples through `oha`. The current five-workload sustained comparison is
+`benchmarks/results/2026-07-17-m5-max-sustained-15s-summary.md`. See
+`benchmarks/README.md` for the exact protocol, reproduction commands, and
+limitations.
 
 The present bootstrap accepts GET and POST requests over bounded HTTP/1.1
 keep-alive on a configurable fixed native worker pool. One acceptor submits

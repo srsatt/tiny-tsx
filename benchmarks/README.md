@@ -173,6 +173,42 @@ adds process pressure plus peak-RSS evidence. The adjacent
 with TinyTSX allocator counters enabled; use it only for allocation pressure,
 not as an uninstrumented throughput comparison.
 
+## Sustained release-stability matrix
+
+The current five-workload comparison is retained in
+`results/2026-07-17-m5-max-sustained-15s-summary.md`, with five adjacent raw
+JSON/rendered report pairs. Each workload uses eight TinyTSX HTTP workers,
+keep-alive for both targets, five startup samples, and three 15-second load
+samples at concurrency 8 and 64. Reproduce it with:
+
+```bash
+python3 benchmarks/scripts/run_static.py \
+  --workload hono-basic --duration 15 --runs 3 --startup-runs 5 \
+  --concurrency 8,64 --workers 8 --keep-alive \
+  --output-prefix benchmarks/results/local-sustained-hono-basic
+python3 benchmarks/scripts/run_static.py \
+  --workload hono-dynamic-jsx --duration 15 --runs 3 --startup-runs 5 \
+  --concurrency 8,64 --workers 8 --keep-alive \
+  --output-prefix benchmarks/results/local-sustained-hono-dynamic-jsx
+python3 benchmarks/scripts/run_static.py \
+  --workload hono-stream-text --duration 15 --runs 3 --startup-runs 5 \
+  --concurrency 8,64 --workers 8 --keep-alive \
+  --output-prefix benchmarks/results/local-sustained-hono-stream-text
+python3 benchmarks/scripts/run_static.py \
+  --workload hono-actor --duration 15 --runs 3 --startup-runs 5 \
+  --concurrency 8,64 --workers 8 --keep-alive \
+  --output-prefix benchmarks/results/local-sustained-hono-actor
+python3 benchmarks/scripts/run_static.py \
+  --workload hono-sqlite --duration 15 --runs 3 --startup-runs 5 \
+  --concurrency 8,64 --workers 8 --keep-alive \
+  --output-prefix benchmarks/results/local-sustained-hono-sqlite
+```
+
+Allocator instrumentation remains disabled for this comparison. The matrix
+does not cover file access, non-empty or on-disk SQLite, transaction writes,
+large responses, route parameters, JSON branch mixes, cancellation, or
+multi-actor contention.
+
 For credible comparative runs, connect the Mac to power, disable Low Power Mode,
 close unnecessary applications, and avoid indexing or builds while measuring.
 

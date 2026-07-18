@@ -4,49 +4,50 @@ Last updated: 2026-07-17
 
 ## Current conclusion
 
-TinyTSX is compelling for deployment and resident footprint, but the alpha
-eight-worker keep-alive comparison does not show throughput parity with Bun.
-Across the Hono basic, counter actor, and SQLite-owner routes,
-TinyTSX stays at 6.6–7.9 MiB after warm-up versus Bun at 70–124 MiB. Repeated
-startup is close at 22.6–23.8 ms versus Bun at 20.3–21.4 ms.
+TinyTSX is compelling for deployment and resident footprint, but the sustained
+eight-worker keep-alive matrix does not show throughput or tail-latency parity
+with Bun. The current comparison covers Hono basic, request-time dynamic JSX,
+finite text streaming, one counter actor, and one in-memory empty SQLite query.
+Every one of the 60 load samples passed its response contract.
 
-TinyTSX reaches 0.24–0.36x Bun throughput at concurrency 1–8 and 0.41–0.69x at
-concurrency 32–64. Its ratio improves rather than collapsing under load, but
-the original connection-affinity policy produced 37–46 ms p99 at concurrency
-64 versus Bun at 0.8–1.2 ms.
+Across three 15-second samples at concurrency 8 and 64, TinyTSX reaches
+0.24–0.46x Bun throughput at concurrency 8 and 0.40–0.72x at concurrency 64.
+Its concurrency-64 p99 is 9.575–15.622 ms versus Bun at 0.821–1.683 ms. The
+connection-turn hardening therefore holds over the longer run, but it does not
+close the owner/scheduling tail-latency gap.
 
-A subsequent actor-only profile drove bounded live-connection rotation. The
-same eight-worker concurrency-64 actor point now reaches 67,001 requests/second
-(94.4% of its committed pre-change baseline and 0.71x Bun) while p99 falls from
-41.94 to 13.72 ms. Repeated basic and SQLite points also fall to 12.46 and
-16.20 ms p99. Peak RSS remains 6.80–7.89 MiB and open descriptors return from
-68 peak to 4 at every interval end. This validates the scheduling change for
-the three measured routes; longer controlled runs have not yet been repeated,
-so it is not a general tail-latency claim.
+The honest current claim is:
 
-The honest claim is therefore:
+- **yes for footprint:** TinyTSX stays at 6.30–8.06 MiB warm RSS; Bun uses 8.7x
+  as much on SQLite and 16.4x–24.6x on the other four routes;
+- **repeated startup is close:** TinyTSX takes 20.99–22.86 ms and Bun takes
+  17.49–21.31 ms, while TinyTSX's separately reported first post-build launch
+  remains a 450.78–547.26 ms outlier;
+- **no throughput-parity claim:** TinyTSX reaches 40–72% of Bun at concurrency
+  64 on these exact routes;
+- **tail latency remains open:** TinyTSX's concurrency-64 p99 is 9.3–18.6x
+  Bun's despite improving throughput ratios under load;
+- **owner boundaries are visible:** the actor route is 11.5% below TinyTSX's
+  basic control at concurrency 64 and the SQLite route is 24.7% below it;
+- **process pressure needs profiling:** TinyTSX records greater aggregate CPU,
+  Unix-syscall, and context-switch counts on every route, with the actor and
+  SQLite owners producing the highest context-switch counts;
+- **bounded resources recover:** every TinyTSX workload returns from 68 peak
+  descriptors to its baseline of 4.
 
-- **yes for footprint:** Bun uses 5.3–7.0x the idle RSS and 9.0–18.6x the warm
-  RSS across the release workloads;
-- **startup is a tie in practical terms:** TinyTSX is 1.3–3.5 ms slower in this
-  run, despite earlier warm-launch experiments favoring TinyTSX;
-- **no throughput-parity claim:** TinyTSX reaches 41–69% of Bun at concurrency
-  32–64 for these exact keep-alive routes;
-- **actors remain inexpensive:** the TinyTSX actor route is 12–13% below its
-  Hono control at concurrency 8–64, while the paired Bun Worker route is
-  27–31% below Bun's control;
-- **SQLite ownership is visible:** the serialized TinyTSX SQLite route is
-  23–26% below its control at concurrency 32–64, versus 2–3% for Bun's
-  synchronous SQLite route.
+The current summary is
+`benchmarks/results/2026-07-17-m5-max-sustained-15s-summary.md`; its adjacent
+JSON files retain every raw sample and each per-workload Markdown report pins
+the response differences and limitations. Files, non-empty or on-disk SQLite,
+transaction writes, large responses, route parameters, JSON branch mixes,
+cancellation, and multiple actors remain unmeasured.
 
-The release summary is
-`benchmarks/results/2026-07-17-m5-max-alpha-release-summary.md`; its adjacent
-basic, actor, and SQLite JSON/Markdown reports retain every sample. Earlier
-connection-close, JSX, streaming, Worker, and AI-provider evidence below is
-historical and remains useful for identifying which boundary a workload
-measures.
+The five-second alpha comparison and earlier connection-close, JSX, streaming,
+Worker, and AI-provider results below are historical evidence. They remain
+useful for explaining the optimization sequence, but the sustained matrix is
+the current release-stability baseline.
 
-## Alpha release comparison
+## Alpha release comparison (historical five-second baseline)
 
 All three workloads use commit `0e8f53e`, one server process, eight TinyTSX
 workers, keep-alive, five startup samples, and three five-second load samples at

@@ -427,7 +427,7 @@ connection reuse; Linux arm64 assembles the descriptor ABI; and the SDK,
 manifest, examples, persistence contract, and release matrix expose the same
 boundary. The next selected work is the P4 release-stability evidence pass.
 
-#### Selected P4 tracer — sustained five-workload comparison
+#### Selected P4 tracer — sustained five-workload comparison (landed 2026-07-17)
 
 Run the committed benchmark harness on Apple arm64 for `hono-basic`,
 `hono-dynamic-jsx`, `hono-stream-text`, `hono-actor`, and `hono-sqlite`. Each
@@ -453,10 +453,23 @@ parameter, JSON-branch, cancellation, or multi-actor workload families. Those
 require separate equivalence-checked harness entries before the broad P4 item
 can be marked complete.
 
-Before implementation, the selected goal must be copied into the active goal
-with: its exact tracer/source revision; admitted and rejected boundaries; Apple
-execution and Linux-arm64 evidence; failure, saturation, and disposal tests as
-applicable; manifest/declaration/package changes; and documentation updates.
+The selected matrix is green on clean commit `7c1a22c`: all 60 load samples
+pass with success rate 1.0, every TinyTSX process returns from 68 peak file
+descriptors to its baseline of 4, and the adjacent JSON/Markdown reports retain
+all samples. TinyTSX uses 6.30–8.06 MiB warm RSS and reaches 0.40–0.72x Bun
+throughput at concurrency 64, while its p99 remains 9.575–15.622 ms versus
+Bun's 0.821–1.683 ms. The combined report is
+`benchmarks/results/2026-07-17-m5-max-sustained-15s-summary.md`.
+
+The next P4 tracer must come from the unmeasured families above; the sustained
+matrix does not promote a general performance claim or close the broad P4
+workload item.
+
+Before implementing the next tracer, its selected goal must be copied into the
+active goal with: its exact tracer/source revision; admitted and rejected
+boundaries; Apple execution and Linux-arm64 evidence; failure, saturation, and
+disposal tests as applicable; manifest/declaration/package changes; and
+documentation updates.
 General JavaScript object identity, blanket Hono compatibility, distributed
 actors, production GC, and a new release tag remain out of scope unless
 explicitly promoted into a later goal.
@@ -720,8 +733,17 @@ explicitly promoted into a later goal.
     concurrency 1/8/32/64, plus a separate allocation-instrumented three-run
     concurrency-64 probe. TinyTSX reaches 0.68x Bun at concurrency 32/64 with
     6.77 MiB peak RSS, but retains 41.94 ms concurrency-64 p99 and higher
-    aggregate CPU, Unix-syscall, and context-switch pressure. The other named
-    workload families and longer sustained profiles remain open.
+    aggregate CPU, Unix-syscall, and context-switch pressure. At that
+    checkpoint, the other named workload families and longer sustained profiles
+    remained open.
+  - 2026-07-17: the sustained eight-worker matrix adds dynamic escaping,
+    finite streaming, actor, and empty in-memory SQLite routes beside the Hono
+    basic control. Five startup samples and three 15-second samples at
+    concurrency 8/64 all pass. TinyTSX reaches 0.40–0.72x Bun at concurrency 64
+    with 6.30–8.06 MiB warm RSS, but p99 remains 9.575–15.622 ms. Route
+    parameters, large responses, file reads, non-empty/disk/transaction SQLite,
+    JSON branch mixes, cancellation, multi-actor contention, and isolated arena
+    pressure remain open, so this broad item stays unchecked.
 - [x] Add CPU, syscall, allocation, peak-RSS, and first-launch instrumentation.
   - 2026-07-17: the macOS harness samples whole-process CPU time, Unix/Mach
     syscalls, context switches, faults, threads, open-file-descriptor
@@ -730,8 +752,15 @@ explicitly promoted into a later goal.
     allocator counters are a benchmark-only opt-in Cargo feature because their
     atomics change the measured path; ordinary comparisons and production
     binaries do not include them, and no Bun allocation ratio is claimed.
-- [ ] Run controlled longer-duration comparisons before publishing performance
+- [x] Run controlled longer-duration comparisons before publishing performance
       claims and optimize only from profiles.
+  - 2026-07-17: the five-workload sustained matrix retains three 15-second
+    samples at concurrency 8 and 64 for both targets, alternates target and
+    concurrency order, disables allocator instrumentation, and preserves all
+    raw response-checked samples. It supports claims only for those exact
+    localhost routes. The elevated TinyTSX CPU, syscall, and context-switch
+    totals select scheduling/owner boundaries for future profiles; no
+    optimization is inferred from aggregate counters alone.
   - 2026-07-17: a symbolized five-second macOS sample during a ten-second,
     concurrency-64 actor run shows the HTTP executors blocked in synchronous
     actor asks while seven of eight actor executors sleep, as expected for one
