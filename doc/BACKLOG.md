@@ -728,6 +728,32 @@ executes on Apple arm64 and compiles as freestanding Linux-arm64 assembly.
 Existing bootstrap coverage still proves Hono path parameters preserve an
 undecodable percent group, so the two parser contracts remain separate.
 
+#### Selected P3/P4 tracer — eight-actor mutation pressure (pinned 2026-07-18)
+
+Add one project-owned `benchmarks/tiny/hono-actor-multi.ts` application with
+eight independently spawned signed counter actors. Each actor has one static
+`/actor/<n>/tell` route that enqueues `+1` and returns the fixed body `queued`,
+plus one `/actor/<n>/read` route that performs a zero-delta ask. Keep actor
+selection compile-time closed; this tracer does not add a runtime registry,
+dynamic actor array, request-derived message, or new actor API.
+
+The Bun/Hono adapter must use eight independent `Worker`-owned counters so the
+comparison retains the existing actor benchmark's ownership model. Extend the
+benchmark harness with a response-equivalent URL-file load contract that
+cycles all eight tell routes. Before sampling, prove each route mutates only its
+own actor; after warm-up and every measured interval, read all actors and require
+positive integer state. Any non-200 overload response fails the sample. Record
+the exact URL set and postcondition in raw schema-v2 evidence.
+
+Require Apple-arm64 native HTTP isolation/mutation coverage, Linux-arm64
+assembly of all eight actor IDs, manifest/package/harness tests, and the normal
+three-by-15-second concurrency-8/64 eight-worker keep-alive comparison with
+startup, RSS, throughput, latency, process counters, descriptor recovery, and
+all-target shutdown. This measures distributed fire-and-forget pressure across
+eight local owners; it does not isolate ask/reply cost, mailbox latency,
+supervision, restart, persistence, remote actors, or Bun Worker creation cost
+from the complete process totals.
+
 Before implementing the next tracer, its selected goal must be copied into the
 active goal with: its exact tracer/source revision; admitted and rejected
 boundaries; Apple execution and Linux-arm64 evidence; failure, saturation, and
