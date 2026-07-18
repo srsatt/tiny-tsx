@@ -2,7 +2,7 @@ import ts from "typescript";
 import type {SourceSpan} from "./hir.js";
 import type {SourceModule} from "./module-graph.js";
 import type {ResolvedCallable} from "./runtime-callable.js";
-import {STAGED_UNDEFINED, type StagedValue} from "./staged-value.js";
+import {STAGED_UNDEFINED, StagedSymbol, type StagedValue} from "./staged-value.js";
 
 export type Value =
   | {kind: "undefined"}
@@ -13,6 +13,7 @@ export type Value =
   | {kind: "string"; value: string}
   | {kind: "html"; value: string}
   | {kind: "regexp"; source: string; flags: string}
+  | {kind: "symbol"; id: number; description?: string}
   | {
       kind: "schema";
       schemaType?: string;
@@ -257,6 +258,13 @@ export function fromStaged(value: StagedValue): Value {
   if (typeof value === "bigint") return {kind: "bigint", value};
   if (typeof value === "boolean") return {kind: "boolean", value};
   if (Array.isArray(value)) return {kind: "array", items: value.map(fromStaged)};
+  if (value instanceof StagedSymbol) {
+    return {
+      kind: "symbol",
+      id: value.id,
+      ...(value.description === undefined ? {} : {description: value.description}),
+    };
+  }
   return {kind: "record", fields: new Map(Object.entries(value).map(([name, field]) => [
     name,
     fromStaged(field),
@@ -293,6 +301,7 @@ export function valuesEqual(left: Value, right: Value): boolean {
     case "number": return right.kind === "number" && left.value === right.value;
     case "bigint": return right.kind === "bigint" && left.value === right.value;
     case "string": return right.kind === "string" && left.value === right.value;
+    case "symbol": return right.kind === "symbol" && left.id === right.id;
     case "reference": return right.kind === "reference"
       && left.name === right.name
       && left.module === right.module;
@@ -313,6 +322,7 @@ export function truthiness(value: Value): boolean | undefined {
     case "record":
     case "contextVariables":
     case "regexp":
+    case "symbol":
     case "schema":
     case "error":
     case "thrown":
@@ -370,6 +380,7 @@ export function typeOf(value: Value): string {
     case "clockNow":
     case "elapsedMilliseconds": return "number";
     case "bigint": return "bigint";
+    case "symbol": return "symbol";
     case "string": return "string";
     case "html": return "string";
     case "routeParameter":

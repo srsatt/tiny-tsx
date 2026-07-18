@@ -1,6 +1,6 @@
 import type {Constant, ConstantValue} from "./hir.js";
 import type {StagedBinding, StagedValue} from "./staging.js";
-import {STAGED_UNDEFINED} from "./staged-value.js";
+import {STAGED_UNDEFINED, StagedSymbol} from "./staged-value.js";
 
 export function lowerStagedConstants(bindings: readonly StagedBinding[]): Constant[] {
   return bindings.map((binding, id) => ({
@@ -23,7 +23,22 @@ function lowerValue(value: StagedValue): ConstantValue {
     return {kind: "boolean", value};
   }
   if (typeof value === "number") {
+    if (Object.is(value, -0)) return {kind: "numberSpecial", value: "negativeZero"};
+    if (Number.isNaN(value)) return {kind: "numberSpecial", value: "nan"};
+    if (value === Number.POSITIVE_INFINITY) {
+      return {kind: "numberSpecial", value: "positiveInfinity"};
+    }
+    if (value === Number.NEGATIVE_INFINITY) {
+      return {kind: "numberSpecial", value: "negativeInfinity"};
+    }
     return {kind: "number", value};
+  }
+  if (value instanceof StagedSymbol) {
+    return {
+      kind: "symbol",
+      id: value.id,
+      ...(value.description === undefined ? {} : {description: value.description}),
+    };
   }
   if (typeof value === "bigint") {
     return {kind: "bigint", value: value.toString()};

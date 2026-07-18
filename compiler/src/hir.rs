@@ -580,12 +580,41 @@ pub struct Constant {
 pub enum ConstantValue {
     Undefined,
     Null,
-    Boolean { value: bool },
-    Number { value: f64 },
-    Bigint { value: String },
-    String { value: String },
-    Array { items: Vec<ConstantValue> },
-    Record { fields: Vec<ConstantField> },
+    Boolean {
+        value: bool,
+    },
+    Number {
+        value: f64,
+    },
+    NumberSpecial {
+        value: SpecialNumber,
+    },
+    Symbol {
+        id: u32,
+        #[serde(default)]
+        description: Option<String>,
+    },
+    Bigint {
+        value: String,
+    },
+    String {
+        value: String,
+    },
+    Array {
+        items: Vec<ConstantValue>,
+    },
+    Record {
+        fields: Vec<ConstantField>,
+    },
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SpecialNumber {
+    NegativeZero,
+    Nan,
+    PositiveInfinity,
+    NegativeInfinity,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -2763,6 +2792,14 @@ fn validate_constant_value(value: &ConstantValue, depth: usize) -> Result<(), St
         ConstantValue::Number { value } if !value.is_finite() => {
             Err("constant number must be finite".to_owned())
         }
+        ConstantValue::Symbol { id, description }
+            if *id >= 65_536
+                || description
+                    .as_ref()
+                    .is_some_and(|description| description.len() > 256) =>
+        {
+            Err("constant symbol exceeds its ID or 256-byte description limit".to_owned())
+        }
         ConstantValue::Bigint { value } if !is_canonical_bigint(value) => {
             Err("constant bigint must use canonical decimal notation".to_owned())
         }
@@ -3036,5 +3073,50 @@ mod sqlite_transaction_tests {
             validate_sqlite_transaction_limits(&[step(0)], &strings(&"x".repeat(65_537))),
             Err("SQLite prepared transaction exceeds the aggregate SQL limit".to_owned())
         );
+    }
+}
+
+#[cfg(test)]
+mod constant_value_tests {
+    use super::*;
+
+    #[test]
+    fn admits_tagged_special_numbers_and_bounds_symbols() {
+        for value in [
+            SpecialNumber::NegativeZero,
+            SpecialNumber::Nan,
+            SpecialNumber::PositiveInfinity,
+            SpecialNumber::NegativeInfinity,
+        ] {
+            assert_eq!(
+                validate_constant_value(&ConstantValue::NumberSpecial { value }, 0),
+                Ok(())
+            );
+        }
+        assert_eq!(
+            validate_constant_value(
+                &ConstantValue::Symbol {
+                    id: 65_535,
+                    description: Some("x".repeat(256)),
+                },
+                0,
+            ),
+            Ok(())
+        );
+        for symbol in [
+            ConstantValue::Symbol {
+                id: 65_536,
+                description: None,
+            },
+            ConstantValue::Symbol {
+                id: 0,
+                description: Some("x".repeat(257)),
+            },
+        ] {
+            assert_eq!(
+                validate_constant_value(&symbol, 0),
+                Err("constant symbol exceeds its ID or 256-byte description limit".to_owned())
+            );
+        }
     }
 }

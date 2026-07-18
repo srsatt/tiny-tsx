@@ -63,6 +63,48 @@ test("stages undefined and bigint without conflating undefined with failure", ()
   );
 });
 
+test("tags special numbers and preserves compile-time symbol identity", () => {
+  const entry = path.join(directory, "special-constants.ts");
+  writeFileSync(entry, `
+    const shared = Symbol("shared");
+    const alias = shared;
+    const other = Symbol("shared");
+    const values = {
+      negativeZero: -0,
+      nan: NaN,
+      positiveInfinity: Infinity,
+      negativeInfinity: -Infinity,
+      shared,
+      alias,
+      other,
+      anonymous: Symbol(),
+    } as const;
+  `);
+
+  const constants = lowerStagedConstants(analyzeStaging(loadModuleGraph(entry)).bindings);
+  const shared = constants.find(constant => constant.name === "shared")?.value;
+  const alias = constants.find(constant => constant.name === "alias")?.value;
+  const other = constants.find(constant => constant.name === "other")?.value;
+  const values = constants.find(constant => constant.name === "values")?.value;
+
+  assert.deepEqual(shared, {kind: "symbol", id: 0, description: "shared"});
+  assert.deepEqual(alias, shared);
+  assert.deepEqual(other, {kind: "symbol", id: 1, description: "shared"});
+  assert.deepEqual(values, {
+    kind: "record",
+    fields: [
+      {name: "negativeZero", value: {kind: "numberSpecial", value: "negativeZero"}},
+      {name: "nan", value: {kind: "numberSpecial", value: "nan"}},
+      {name: "positiveInfinity", value: {kind: "numberSpecial", value: "positiveInfinity"}},
+      {name: "negativeInfinity", value: {kind: "numberSpecial", value: "negativeInfinity"}},
+      {name: "shared", value: shared},
+      {name: "alias", value: shared},
+      {name: "other", value: other},
+      {name: "anonymous", value: {kind: "symbol", id: 2}},
+    ],
+  });
+});
+
 test("folds Hono's method-table spread during process initialization", () => {
   const entry = path.join(repository, "tests/compat/hono/smoke.ts");
   const graph = loadModuleGraph(entry, {

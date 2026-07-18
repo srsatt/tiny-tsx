@@ -2547,6 +2547,28 @@ function evaluateCall(
         ? unknown("String argument is not closed")
         : {kind: "string", value: stringValue(argument)};
     }
+    if (callable.kind === "reference" && callable.name === "Symbol") {
+      const description = arguments_[0];
+      if (
+        arguments_.length > 1
+        || (description !== undefined
+          && description.kind !== "undefined"
+          && description.kind !== "string")
+      ) {
+        return unknown("Symbol requires no argument or one closed string description");
+      }
+      if (
+        description?.kind === "string"
+        && Buffer.byteLength(description.value, "utf8") > 256
+      ) {
+        return unknown("Symbol description exceeds 256 UTF-8 bytes");
+      }
+      return {
+        kind: "symbol",
+        id: evaluator.staged.nextSymbolId++,
+        ...(description?.kind === "string" ? {description: description.value} : {}),
+      };
+    }
     if (callable.kind === "reference" && callable.name === "encodeURIComponent") {
       const input = arguments_[0];
       if (arguments_.length !== 1 || input?.kind !== "string") {

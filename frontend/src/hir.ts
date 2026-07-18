@@ -16,6 +16,11 @@ export type ConstantValue =
   | {kind: "null"}
   | {kind: "boolean"; value: boolean}
   | {kind: "number"; value: number}
+  | {
+      kind: "numberSpecial";
+      value: "negativeZero" | "nan" | "positiveInfinity" | "negativeInfinity";
+    }
+  | {kind: "symbol"; id: number; description?: string}
   | {kind: "bigint"; value: string}
   | {kind: "string"; value: string}
   | {kind: "array"; items: ConstantValue[]}

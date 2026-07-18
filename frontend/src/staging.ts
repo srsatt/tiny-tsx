@@ -3,7 +3,12 @@ import {spanOf} from "./diagnostics.js";
 import type {SourceSpan} from "./hir.js";
 import type {ModuleGraph, SourceModule} from "./module-graph.js";
 import type {EvaluationContext, StagedValue} from "./staged-value.js";
-import {createEvaluationContext, evaluateStagedValue, staticPropertyName} from "./staged-value.js";
+import {
+  createEvaluationContext,
+  evaluateStagedValue,
+  StagedSymbol,
+  staticPropertyName,
+} from "./staged-value.js";
 
 export type {StagedValue} from "./staged-value.js";
 
@@ -47,7 +52,8 @@ export function analyzeStaging(graph: ModuleGraph): StagingReport {
     function visit(node: ts.Node): void {
       if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && isConstDeclaration(node)) {
         if (node.initializer !== undefined) {
-          const value = evaluateStagedValue(node.initializer, module.path, context);
+          const value = evaluateStagedValue(node.name, module.path, context)
+            ?? evaluateStagedValue(node.initializer, module.path, context);
           if (value !== undefined) {
             stagedBindings.push({
               module: module.path,
@@ -109,7 +115,10 @@ function spreadDecision(
 ): SpreadDecision {
   const value = evaluateStagedValue(expression, module.path, context);
   const compatible = container === "object"
-    ? value !== null && !Array.isArray(value) && typeof value === "object"
+    ? value !== null
+      && !Array.isArray(value)
+      && !(value instanceof StagedSymbol)
+      && typeof value === "object"
     : Array.isArray(value);
   return {
     operation,
@@ -159,6 +168,7 @@ function evaluateDestructuring(
     ts.isObjectBindingPattern(declaration.name)
     && source !== null
     && !Array.isArray(source)
+    && !(source instanceof StagedSymbol)
     && typeof source === "object"
   ) {
     const excluded = new Set(declaration.name.elements

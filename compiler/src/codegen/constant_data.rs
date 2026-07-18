@@ -9,6 +9,8 @@ const ARRAY: u8 = 5;
 const RECORD: u8 = 6;
 const UNDEFINED: u8 = 7;
 const BIGINT: u8 = 8;
+const SPECIAL_NUMBER: u8 = 9;
+const SYMBOL: u8 = 10;
 
 pub(super) fn encode(value: &ConstantValue) -> Result<Vec<u8>, String> {
     let mut bytes = Vec::new();
@@ -24,6 +26,23 @@ fn encode_value(value: &ConstantValue, bytes: &mut Vec<u8>) -> Result<(), String
         ConstantValue::Number { value } => {
             bytes.push(NUMBER);
             bytes.extend(value.to_le_bytes());
+        }
+        ConstantValue::NumberSpecial { value } => {
+            bytes.push(SPECIAL_NUMBER);
+            bytes.push(match value {
+                crate::hir::SpecialNumber::NegativeZero => 0,
+                crate::hir::SpecialNumber::Nan => 1,
+                crate::hir::SpecialNumber::PositiveInfinity => 2,
+                crate::hir::SpecialNumber::NegativeInfinity => 3,
+            });
+        }
+        ConstantValue::Symbol { id, description } => {
+            bytes.push(SYMBOL);
+            bytes.extend(id.to_le_bytes());
+            bytes.push(u8::from(description.is_some()));
+            if let Some(description) = description {
+                encode_string(description, bytes)?;
+            }
         }
         ConstantValue::Bigint { value } => {
             bytes.push(BIGINT);

@@ -3,6 +3,13 @@ import type {ModuleGraph} from "./module-graph.js";
 
 export const STAGED_UNDEFINED: unique symbol = Symbol("tinytsx.staged.undefined");
 
+export class StagedSymbol {
+  constructor(
+    readonly id: number,
+    readonly description?: string,
+  ) {}
+}
+
 export type StagedValue =
   | string
   | number
@@ -10,6 +17,7 @@ export type StagedValue =
   | boolean
   | null
   | typeof STAGED_UNDEFINED
+  | StagedSymbol
   | StagedValue[]
   | {[key: string]: StagedValue};
 
@@ -28,6 +36,7 @@ export interface EvaluationContext {
   imports: ReadonlyMap<string, ReadonlyMap<string, ImportedBinding>>;
   cache: Map<string, StagedValue | undefined>;
   active: Set<string>;
+  nextSymbolId: number;
 }
 
 export function createEvaluationContext(graph?: ModuleGraph): EvaluationContext {
@@ -36,6 +45,7 @@ export function createEvaluationContext(graph?: ModuleGraph): EvaluationContext 
     imports: graph === undefined ? new Map() : collectImports(graph),
     cache: new Map(),
     active: new Set(),
+    nextSymbolId: 0,
   };
 }
 
@@ -78,6 +88,18 @@ export function evaluateStagedValue(
   }
   if (ts.isIdentifier(value)) {
     return evaluateIdentifier(value.text, module, context);
+  }
+  if (
+    ts.isCallExpression(value)
+    && ts.isIdentifier(value.expression)
+    && value.expression.text === "Symbol"
+    && value.arguments.length <= 1
+  ) {
+    const description = value.arguments[0] === undefined
+      ? undefined
+      : evaluateStagedValue(value.arguments[0], module, context);
+    if (description !== undefined && typeof description !== "string") return undefined;
+    return new StagedSymbol(context.nextSymbolId++, description);
   }
   if (ts.isArrayLiteralExpression(value)) {
     return evaluateArray(value, module, context);
@@ -130,7 +152,12 @@ function evaluateObject(
   for (const property of expression.properties) {
     if (ts.isSpreadAssignment(property)) {
       const spread = evaluateStagedValue(property.expression, module, context);
-      if (spread === null || Array.isArray(spread) || typeof spread !== "object") {
+      if (
+        spread === null
+        || Array.isArray(spread)
+        || spread instanceof StagedSymbol
+        || typeof spread !== "object"
+      ) {
         return undefined;
       }
       for (const [name, field] of Object.entries(spread)) {
@@ -177,7 +204,11 @@ function evaluateIdentifier(
   }
   const binding = context.bindings.get(key);
   if (binding === undefined) {
-    return imported === undefined && name === "undefined" ? STAGED_UNDEFINED : undefined;
+    if (imported !== undefined) return undefined;
+    if (name === "undefined") return STAGED_UNDEFINED;
+    if (name === "NaN") return Number.NaN;
+    if (name === "Infinity") return Number.POSITIVE_INFINITY;
+    return undefined;
   }
   context.active.add(key);
   const value = evaluateStagedValue(binding.initializer, binding.module, context);
