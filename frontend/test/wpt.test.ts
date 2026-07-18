@@ -10,6 +10,10 @@ function upstream(name: string): string {
   return path.join(repository, "tests/compat/wpt/upstream", name);
 }
 
+function derived(name: string): string {
+  return path.join(repository, "tests/compat/wpt/derived", name);
+}
+
 test("lowers the complete pinned URLSearchParams get WPT as sequential operations", () => {
   const program = compileWptEntry(upstream("urlsearchparams-get.any.js"));
 
@@ -97,4 +101,23 @@ test("lowers the complete pinned URLSearchParams has WPT with mutation and coerc
     expected: true,
     span: program.tests[3]?.operations.at(-1)?.span,
   });
+});
+
+test("lowers the derived invalid UTF-8 form-decoder case", () => {
+  const program = compileWptEntry(derived("urlencoded-parser-invalid-utf8.any.js"));
+
+  assert.equal(program.tests.length, 4);
+  assert.deepEqual(program.tests.map(wptTest => [wptTest.name, wptTest.operations.length]), [
+    ["URLSearchParams replaces two invalid leading bytes", 3],
+    ["URLSearchParams replaces two reversed invalid leading bytes", 3],
+    ["URLSearchParams replaces an incomplete UTF-8 sequence", 3],
+    ["URLSearchParams replaces an interrupted UTF-8 sequence", 3],
+  ]);
+  assert.ok(program.tests.every(wptTest => wptTest.operations[1]?.kind === "urlSearchParamsAssertGet"));
+  assert.deepEqual(program.tests.map(wptTest => wptTest.operations[2]?.kind), [
+    "urlSearchParamsAssertStringified",
+    "urlSearchParamsAssertStringified",
+    "urlSearchParamsAssertStringified",
+    "urlSearchParamsAssertStringified",
+  ]);
 });

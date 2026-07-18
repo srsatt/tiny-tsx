@@ -18,6 +18,10 @@ test("pins selected Web Platform Test sources by revision and digest", () => {
       assert.ok(readFileSync(path.join(repository, selected.nativeEvidence), "utf8").includes(
         selected.evidenceMarker,
       ));
+      if (selected.nativeCase !== undefined) {
+        const source = readFileSync(path.join(repository, selected.nativeCase));
+        assert.equal(createHash("sha256").update(source).digest("hex"), selected.nativeCaseSha256);
+      }
     }
   }
 });

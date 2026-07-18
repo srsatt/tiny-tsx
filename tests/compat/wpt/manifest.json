@@ -51,6 +51,17 @@
       "sha256": "14f7b8871fec6a02dbbe324a5f8943932ecb149285e5cc149fdf34ae769d52c0",
       "status": "native",
       "coverage": "Complete upstream file: form-url serialization, plus and percent handling, UTF-8 and NUL encoding, malformed escapes, and live URL.searchParams linkage"
+    },
+    {
+      "upstreamPath": "url/urlencoded-parser.any.js",
+      "localPath": "tests/compat/wpt/upstream/urlencoded-parser.any.js",
+      "sha256": "9d3514f33a6bce8ab4d0163a77d79f0231ef30239ca237cf75f9e206a8b0c3e8",
+      "status": "native-derived",
+      "coverage": "Four URLSearchParams rows: invalid %FE/%FF bytes and incomplete or interrupted %C2 sequences decode with U+FFFD replacement; Request.formData(), Response.formData(), iteration, and the remaining table rows are not claimed",
+      "nativeEvidence": "compiler/src/wpt_url_runtime.c",
+      "evidenceMarker": "static TINY_UNUSED int tiny_form_decode",
+      "nativeCase": "tests/compat/wpt/derived/urlencoded-parser-invalid-utf8.any.js",
+      "nativeCaseSha256": "070f25ce6b83b2800102cabf9e4540c32c2fb508358e4664bc8b9d9273fb23f6"
     }
   ]
 }

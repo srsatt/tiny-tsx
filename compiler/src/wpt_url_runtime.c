@@ -1,5 +1,4 @@
 #include <stddef.h>
-#include <string.h>
 
 #define TINY_URL_SEARCH_PARAMS_CAPACITY 64
 #define TINY_URL_COMPONENT_CAPACITY 256
@@ -40,7 +39,19 @@ static TINY_UNUSED int tiny_bytes_equal(
     const unsigned char *right,
     size_t right_len
 ) {
-    return left_len == right_len && (left_len == 0 || memcmp(left, right, left_len) == 0);
+    if (left_len != right_len) return 0;
+    for (size_t index = 0; index < left_len; index++) {
+        if (left[index] != right[index]) return 0;
+    }
+    return 1;
+}
+
+static TINY_UNUSED void tiny_copy_bytes(
+    unsigned char *output,
+    const unsigned char *input,
+    size_t length
+) {
+    for (size_t index = 0; index < length; index++) output[index] = input[index];
 }
 
 static TINY_UNUSED int tiny_owned_equal(
@@ -63,7 +74,8 @@ static TINY_UNUSED int tiny_form_decode(
     const unsigned char *input,
     size_t input_len
 ) {
-    output->length = 0;
+    unsigned char decoded[TINY_URL_COMPONENT_CAPACITY];
+    size_t decoded_len = 0;
     for (size_t index = 0; index < input_len;) {
         unsigned char byte = input[index];
         if (byte == '+') {
@@ -81,8 +93,60 @@ static TINY_UNUSED int tiny_form_decode(
         } else {
             index++;
         }
-        if (output->length == TINY_URL_COMPONENT_CAPACITY) return 0;
-        output->bytes[output->length++] = byte;
+        if (decoded_len == sizeof(decoded)) return 0;
+        decoded[decoded_len++] = byte;
+    }
+
+    output->length = 0;
+    for (size_t index = 0; index < decoded_len;) {
+        unsigned char lead = decoded[index];
+        if (lead < 0x80) {
+            if (output->length == TINY_URL_COMPONENT_CAPACITY) return 0;
+            output->bytes[output->length++] = lead;
+            index++;
+            continue;
+        }
+
+        size_t width = 0;
+        unsigned char second_min = 0x80;
+        unsigned char second_max = 0xBF;
+        if (lead >= 0xC2 && lead <= 0xDF) {
+            width = 2;
+        } else if (lead >= 0xE0 && lead <= 0xEF) {
+            width = 3;
+            if (lead == 0xE0) second_min = 0xA0;
+            if (lead == 0xED) second_max = 0x9F;
+        } else if (lead >= 0xF0 && lead <= 0xF4) {
+            width = 4;
+            if (lead == 0xF0) second_min = 0x90;
+            if (lead == 0xF4) second_max = 0x8F;
+        }
+
+        size_t consumed = 1;
+        if (width > 0 && index + 1 < decoded_len
+            && decoded[index + 1] >= second_min
+            && decoded[index + 1] <= second_max) {
+            consumed = 2;
+            while (consumed < width && index + consumed < decoded_len
+                && decoded[index + consumed] >= 0x80
+                && decoded[index + consumed] <= 0xBF) {
+                consumed++;
+            }
+        }
+
+        if (width > 0 && consumed == width) {
+            if (width > TINY_URL_COMPONENT_CAPACITY - output->length) return 0;
+            tiny_copy_bytes(output->bytes + output->length, decoded + index, width);
+            output->length += width;
+            index += width;
+            continue;
+        }
+
+        static const unsigned char replacement[] = {0xEF, 0xBF, 0xBD};
+        if (sizeof(replacement) > TINY_URL_COMPONENT_CAPACITY - output->length) return 0;
+        tiny_copy_bytes(output->bytes + output->length, replacement, sizeof(replacement));
+        output->length += sizeof(replacement);
+        index += consumed;
     }
     return 1;
 }
@@ -93,7 +157,7 @@ static TINY_UNUSED int tiny_copy_component(
     size_t input_len
 ) {
     if (input_len > TINY_URL_COMPONENT_CAPACITY) return 0;
-    if (input_len > 0) memcpy(output->bytes, input, input_len);
+    if (input_len > 0) tiny_copy_bytes(output->bytes, input, input_len);
     output->length = input_len;
     return 1;
 }
@@ -227,7 +291,7 @@ static TINY_UNUSED int tiny_output_bytes(
     size_t bytes_len
 ) {
     if (bytes_len > capacity - *length) return 0;
-    if (bytes_len > 0) memcpy(output + *length, bytes, bytes_len);
+    if (bytes_len > 0) tiny_copy_bytes(output + *length, bytes, bytes_len);
     *length += bytes_len;
     return 1;
 }
