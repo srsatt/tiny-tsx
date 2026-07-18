@@ -538,6 +538,30 @@ evidence is the adjacent
 `benchmarks/results/2026-07-17-m5-max-sustained-15s-hono-file-read-keepalive-w8.*`
 pair; no cold-cache, large-file, or primitive-parity claim is made.
 
+#### Selected next P4 tracer — 22 KiB bounded file response
+
+Add one `hono-large-file` workload that reads the pinned 22,173-byte
+`vendor/hono/src/context.ts` file at Hono commit
+`b2ae3a2204a48ce15a26448fd746d39745eb1837` on every request and returns it as
+one Hono text response. The focused TinyTSX entry must use
+`tinytsx:fs.readTextFile("context.ts", {maxBytes: 32768})` with only
+`vendor/hono/src` granted by `--allow-read`; Bun must use the same pinned bytes
+through `Bun.file(...).text()`. Both targets must return status 200,
+`text/plain; charset=UTF-8`, `x-powered-by: Hono`, content length 22,173, and
+byte-identical content before measurement.
+
+The harness test must pin the source asset, exact byte count, capability root,
+response, and both focused adapters. Apple arm64 must execute the response gate;
+Linux arm64 must assemble the bounded file-read path; and the same
+three-by-15-second, concurrency-8/64, eight-worker keep-alive matrix must retain
+all raw samples and descriptor end-states.
+
+Together with the 21-byte file tracer, this measures an approximately 1,056x
+response-size increase through the same warm-cache file/Hono shape. It does not
+control the OS page cache, isolate disk or network copies, cover responses above
+32 KiB, stream the file, use binary data, exercise range/compression behavior,
+or claim cold-storage performance.
+
 Before implementing the next tracer, its selected goal must be copied into the
 active goal with: its exact tracer/source revision; admitted and rejected
 boundaries; Apple execution and Linux-arm64 evidence; failure, saturation, and
