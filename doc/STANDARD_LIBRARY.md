@@ -68,8 +68,12 @@ collector.
 
 Filesystem and SQLite calls never block an HTTP executor. They are dispatched
 to the fixed application executor. SQLite connections are serialized through a
-logical mailbox and are never shared concurrently across native threads. Actor
-spawn/stop does not create or destroy an operating-system thread.
+logical mailbox and are never shared concurrently across native threads. Two
+static `Database` constructions may target the same permitted path; they remain
+independent owners/connections and therefore contend through SQLite's locking
+and busy-timeout rules. The WAL load tracer proves that bounded two-owner
+shape, but does not imply a dynamic connection pool. Actor spawn/stop does not
+create or destroy an operating-system thread.
 
 All inputs and outputs are bounded. Compiled defaults are published by
 `--list-builtins`; CLI limits may lower them but may not silently exceed the

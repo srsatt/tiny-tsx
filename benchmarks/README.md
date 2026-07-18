@@ -1,6 +1,6 @@
 # TinyTSX benchmarks
 
-The harness has seventeen workloads:
+The harness has eighteen workloads:
 
 - `static-page` compares the current static TinyTSX vertical slice to an
   idiomatic `Bun.serve` server returning the same response;
@@ -40,6 +40,10 @@ The harness has seventeen workloads:
 - `hono-sqlite-transaction` compares a schema check, two fixed-key idempotent
   writes in one callback transaction, and one non-empty prepared row response
   through the same in-memory ownership boundary; and
+- `hono-sqlite-wal` alternates two independent owners of one target-private
+  on-disk WAL file; every request rolls back one savepoint update, commits one
+  progress update, and the harness checks live DB/WAL/SHM files and state after
+  every interval; and
 - `hono-ai-provider` runs the pinned 656-module Hono + AI SDK Core +
   OpenAI-compatible provider graph against one shared zero-delay loopback
   provider. The support process is excluded from both targets' RSS.
@@ -93,6 +97,7 @@ npm run benchmark:hono-actor
 npm run benchmark:hono-actor-multi
 npm run benchmark:hono-sqlite
 npm run benchmark:hono-sqlite-transaction
+npm run benchmark:hono-sqlite-wal
 npm run benchmark:hono-ai-provider
 npm run benchmark:actor-scale
 ```
@@ -152,6 +157,10 @@ must have the same status, headers, framing, and body. The multi-actor workload
 uses this to cycle all eight tell routes. Its raw report also retains each
 actor's integer state after warm-up and after every measured interval; a
 non-positive, malformed, or missing state fails the run.
+The WAL workload uses the same URL-set mechanism for two owners, runs both
+setup routes before correctness/timing, and resets target-private DB/WAL/SHM
+names before every fresh process. Each checkpoint requires committed progress,
+an exactly-zero rollback probe, WAL journal mode, and non-empty live files.
 
 The first Hono smoke preview is persisted as
 `2026-07-15-m5-max-hono-preview.{json,md}`. It uses three one-second samples at
@@ -208,8 +217,8 @@ not as an uninstrumented throughput comparison.
 
 ## Sustained release-stability matrix
 
-The current thirteen-workload comparison is retained in
-`results/2026-07-17-m5-max-sustained-15s-summary.md`, with thirteen adjacent raw
+The current fourteen-workload comparison is retained in
+`results/2026-07-17-m5-max-sustained-15s-summary.md`, with fourteen adjacent raw
 JSON/rendered report pairs. Each workload uses eight TinyTSX HTTP workers,
 keep-alive for both targets, five startup samples, and three 15-second load
 samples at concurrency 8 and 64. Reproduce it with:
@@ -267,12 +276,16 @@ python3 benchmarks/scripts/run_static.py \
   --workload hono-sqlite-transaction --duration 15 --runs 3 --startup-runs 5 \
   --concurrency 8,64 --workers 8 --keep-alive \
   --output-prefix benchmarks/results/local-sustained-hono-sqlite-transaction
+python3 benchmarks/scripts/run_static.py \
+  --workload hono-sqlite-wal --duration 15 --runs 3 --startup-runs 5 \
+  --concurrency 8,64 --workers 8 --keep-alive \
+  --output-prefix benchmarks/results/local-sustained-hono-sqlite-wal
 ```
 
 Allocator instrumentation remains disabled for this comparison. The matrix
 does not cover cold/replaced/binary files, responses above 32 KiB,
-streaming/range/compression behavior, on-disk/WAL SQLite, competing connections,
-rollback load, request-derived database values, competing/catch-all route
+streaming/range/compression behavior, failed full-transaction rollback load,
+cross-process writers, growing or request-derived database values, competing/catch-all route
 shapes, arbitrary query values, dynamic JSON keys/structured values, schema
 validation, mixed request bodies, cancellation, or actor
 supervision/restart/persistence load.

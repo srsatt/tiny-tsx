@@ -767,7 +767,7 @@ not an isolated Worker allocation claim. The adjacent
 `benchmarks/results/2026-07-18-m5-max-sustained-15s-hono-actor-multi-keepalive-w8.*`
 pair retains every response sample and actor-state checkpoint.
 
-#### Selected P3/P4 tracer — on-disk WAL contention and savepoint rollback
+#### Selected P3/P4 tracer — on-disk WAL contention and savepoint rollback (landed 2026-07-18)
 
 Add one project-owned `benchmarks/tiny/hono-sqlite-wal.ts` application against
 pinned Hono commit `b2ae3a2204a48ce15a26448fd746d39745eb1837` and bundled
@@ -812,6 +812,19 @@ more than two connections, growing tables, request-derived values, arbitrary
 transaction callbacks, network filesystems, or cross-process writers. Those
 remain separate functional and performance tracers; the broad P3/P4 items stay
 unchecked until their other named workload families are proved.
+
+The tracer is green. Frontend HIR retains two owner IDs for the same protected
+path; Apple native HTTP proves WAL setup, 32 concurrent alternating writes,
+zero rollback-probe leakage, non-empty DB/WAL/SHM files, restart persistence, a
+bounded external-writer timeout, and later connection reuse. Linux arm64
+assembles both database paths and transaction calls. The two-Worker Bun/Hono
+reference passes the same state invariant. All 12 sustained load samples are
+200-only and all 18 state/file checkpoints pass. TinyTSX reaches 7,850
+requests/second (1.14x Bun) at concurrency 8 and 8,554 (0.58x) at 64, with
+8.06 MiB warm RSS; its concurrency-64 p99 rises to 108.839 ms versus Bun at
+13.504 ms under the two-writer contention. The adjacent
+`benchmarks/results/2026-07-18-m5-max-sustained-15s-hono-sqlite-wal-keepalive-w8.*`
+pair retains every response, state, and live-file sample.
 
 Before implementing the next tracer, its selected goal must be copied into the
 active goal with: its exact tracer/source revision; admitted and rejected
@@ -1149,6 +1162,14 @@ explicitly promoted into a later goal.
     snapshots pass; TinyTSX reaches 0.40x/0.76x Bun at concurrency 8/64 with
     6.64 MiB warm RSS. Supervision/restart/persistence load, cancellation, and
     other workload families remain open, so this broad item stays unchecked.
+  - 2026-07-18: the on-disk WAL tracer alternates two independent database
+    owners, rolls back one savepoint update and commits one progress update per
+    request, and verifies live DB/WAL/SHM files after every interval. All 12
+    samples and 18 state checkpoints pass; TinyTSX reaches 1.14x/0.58x Bun at
+    concurrency 8/64 with 8.06 MiB warm RSS, while concurrency-64 p99 reaches
+    108.839 ms. Failed full-transaction rollback load, cross-process writers,
+    growing/request-derived data, cancellation, and other workload families
+    remain open, so this broad item stays unchecked.
 - [x] Add CPU, syscall, allocation, peak-RSS, and first-launch instrumentation.
   - 2026-07-17: the macOS harness samples whole-process CPU time, Unix/Mach
     syscalls, context switches, faults, threads, open-file-descriptor
@@ -1159,13 +1180,13 @@ explicitly promoted into a later goal.
     binaries do not include them, and no Bun allocation ratio is claimed.
 - [x] Run controlled longer-duration comparisons before publishing performance
       claims and optimize only from profiles.
-  - 2026-07-18: the thirteen-workload sustained matrix retains three 15-second
+  - 2026-07-18: the fourteen-workload sustained matrix retains three 15-second
     samples at concurrency 8 and 64 for both targets, alternates target and
     concurrency order, disables allocator instrumentation, and preserves all
     raw response-checked samples. It supports claims only for those exact
-    localhost routes. The elevated TinyTSX CPU, syscall, and context-switch
-    totals select scheduling/owner boundaries for future profiles; no
-    optimization is inferred from aggregate counters alone.
+    localhost routes. Elevated CPU/syscall/context-switch totals and the
+    two-writer WAL tail select scheduling/owner/lock boundaries for future
+    profiles; no optimization is inferred from aggregate counters alone.
   - 2026-07-17: a symbolized five-second macOS sample during a ten-second,
     concurrency-64 actor run shows the HTTP executors blocked in synchronous
     actor asks while seven of eight actor executors sleep, as expected for one

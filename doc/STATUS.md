@@ -69,7 +69,35 @@ produces and serves a native Mach-O executable from the example TSX source.
   intake 8/8, benchmark harness 34/34, a one-second equivalence smoke, and the
   clean sustained evidence below.
 
-### Sustained thirteen-workload server matrix (2026-07-18)
+### On-disk WAL contention and savepoint rollback (2026-07-18)
+
+- A project-owned Hono tracer constructs two static SQLite owners for the same
+  capability-scoped file. Setup selects WAL, `synchronous=FULL`, a 1,000 ms
+  busy timeout, and the default 1,000-page checkpoint boundary. Each load route
+  rolls back one savepoint update and commits one progress update.
+- Frontend HIR retains two owner IDs for one resolved path. Apple native HTTP
+  proves concurrent alternating progress, a zero rollback probe, non-empty live
+  DB/WAL/SHM files, restart persistence, one bounded external-writer timeout,
+  and successful reuse after release. Linux arm64 assembles both database paths
+  and transaction calls.
+- The Bun/Hono reference uses two dedicated Workers, each owning one
+  `bun:sqlite` connection. The harness creates separate protected target
+  directories, resets DB/WAL/SHM before every process, and checks progress,
+  rollback invariance, journal mode, and file sizes after every interval.
+- All 12 sustained load samples are 200-only and all 18 state/file checkpoints
+  pass. TinyTSX reaches 7,850 requests/second (1.14x Bun) at concurrency 8 and
+  8,554 (0.58x) at 64 with 8.06 MiB warm RSS. Its concurrency-64 p99 reaches
+  108.839 ms versus Bun at 13.504 ms, exposing lock/scheduling tail pressure.
+- This proves successful savepoint rollback and two-connection WAL contention,
+  not failed full-transaction rollback load, cross-process writers,
+  crash/power-loss durability, disabled automatic checkpoints, growing tables,
+  request-derived values, or network filesystems.
+- Verification: 128 frontend tests, SQLite native/assembly 11/11, Bun/Hono WAL
+  reference 1/1, Hono intake 8/8, benchmark harness 37/37, all 12 clean
+  sustained samples plus 18 state/file checkpoints, and workspace Clippy with
+  warnings denied.
+
+### Sustained fourteen-workload server matrix (2026-07-18)
 
 - A clean Apple M5 Max comparison covers Hono basic, dynamic JSX escaping, one
   decoded optional route parameter, bounded warm-cache 21-byte and 22,173-byte
@@ -78,22 +106,26 @@ produces and serves a native Mach-O executable from the example TSX source.
   callback transaction followed by a non-empty row response. The matrix also
   posts one fixed 65-byte primitive JSON object through the bounded request
   field ABI. A mixed-route actor workload also distributes `tell(+1)` across
-  eight independent owners and reads every state after each interval. Each
+  eight independent owners and reads every state after each interval. The new
+  on-disk WAL row also alternates two independent database owners and validates
+  one successful savepoint rollback per request. Each
   target uses one process; TinyTSX uses eight HTTP workers; both targets use
   keep-alive. The matrix retains five startup samples and three 15-second
   samples at concurrency 8 and 64 with alternating order.
-- All 156 load samples pass with success rate 1.0. TinyTSX reaches 0.24–0.54x
-  Bun throughput at concurrency 8 and 0.40–0.79x at concurrency 64 on the twelve
+- All 168 load samples pass with success rate 1.0. TinyTSX reaches 0.24–1.14x
+  Bun throughput at concurrency 8 and 0.40–0.79x at concurrency 64 on the thirteen
   small-response routes. The exact 22,173-byte route reaches 1.30x/1.78x Bun.
-  TinyTSX concurrency-64 p99 is 9.575–22.030 ms versus Bun at 0.736–5.104 ms.
+  TinyTSX concurrency-64 p99 is 9.575–108.839 ms versus Bun at
+  0.736–13.504 ms.
 - TinyTSX warm RSS is 6.30–8.81 MiB versus Bun at 64.50–154.70 MiB. Repeated
-  startup is 19.68–22.86 ms versus 17.30–21.31 ms. Every TinyTSX workload
-  returns to four open descriptors; median peaks are 68 for non-file routes, 71
-  for the 21-byte file, and 73 for the 22 KiB file.
+  startup is 19.68–22.86 ms versus 17.30–21.31 ms on the original rows; WAL
+  setup takes 49.48/26.07 ms. The WAL process returns from 73 to its
+  nine-descriptor TinyTSX baseline; the original routes return to four.
 - Whole-process counters are not normalized across different request totals.
   TinyTSX records greater CPU on twelve workloads; Bun records more on the
-  21-byte file route, while TinyTSX records more Unix syscalls and context
-  switches on all thirteen. Application-executor, filesystem, response-copy,
+  21-byte file and WAL routes. TinyTSX records more Unix syscalls on all
+  fourteen and more context switches on the original thirteen.
+  Application-executor, filesystem, response-copy,
   actor, and SQLite ownership are profiling seams; unmeasured workload families
   remain explicit.
 - The upstream query-present pretty branch expands the same closed array from
@@ -118,8 +150,9 @@ produces and serves a native Mach-O executable from the example TSX source.
 - Evidence: clean commits `7c1a22c`, `04ac58b`, `c16333f`, `097982d`, and
   `a6cc7ae`, plus `c488480` for the first eleven rows; clean commit `b35b608`
   supplies the request-field ABI row, and clean commit `528ecd6` supplies the
-  mixed eight-actor row. The combined summary and thirteen adjacent raw
-  JSON/rendered report pairs retain every sample and actor-state checkpoint.
+  mixed eight-actor row. Clean commit `07efc5d` supplies the two-owner WAL row.
+  The combined summary and fourteen adjacent raw JSON/rendered report pairs
+  retain every sample and actor/database-state checkpoint.
 
 ### Clean post-transaction release rehearsal (2026-07-17)
 

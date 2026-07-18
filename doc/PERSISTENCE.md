@@ -77,9 +77,9 @@ code running as the same effective user. Roots writable through unusual ACLs,
 mount changes, privileged attackers, network filesystems with weaker Unix
 semantics, and out-of-process same-UID mutation are unsupported; deploy those
 cases behind an OS sandbox or dedicated service account. General dynamic
-transaction callbacks remain post-alpha. A sustained HTTP tracer now covers one
-in-memory owner with fixed-key transaction work; it does not cover disk/WAL I/O
-or competing connections. The native SQLite core holds a competing writer
+transaction callbacks remain post-alpha. Sustained HTTP tracers now cover one
+in-memory owner with fixed-key transaction work and two independent owners of a
+protected on-disk WAL file. The native SQLite core holds a competing writer
 through the one-second busy timeout,
 observes a recoverable error, releases the lock, and proves the second
 connection can write successfully afterward.
@@ -118,6 +118,25 @@ TinyTSX/Bun matrix retains startup, RSS, throughput, latency, process counters,
 and descriptor recovery. This is single-owner HTTP pressure, not evidence for
 disk/WAL behavior, competing SQLite connections, rollback frequency, growing
 tables, request-derived values, or primitive-operation parity.
+
+The WAL tracer constructs two static `Database("wal-load.db")` values, which
+become independent logical owners and native connections to the same
+capability-scoped file. Setup selects WAL mode, `synchronous=FULL`, a 1,000 ms
+busy timeout, and a 1,000-page automatic checkpoint. Every successful request
+opens an outer transaction, increments a probe inside a savepoint, rolls that
+increment back, then commits a separate progress increment. Native and benchmark
+checks require the progress counter to advance, the probe to remain exactly
+zero, journal mode to remain `wal`, and the live database, WAL, and SHM files to
+be non-empty. The native gate also proves restart persistence, an externally
+held writer timing out, and successful reuse after the lock is released.
+
+The clean three-by-15-second comparison alternates both owners against two Bun
+Workers owning equivalent `bun:sqlite` connections. TinyTSX reaches 1.14x Bun
+throughput at concurrency 8 and 0.58x at 64, but its concurrency-64 p99 rises to
+108.839 ms versus 13.504 ms. This is evidence for two-connection WAL contention
+and successful savepoint rollback, not failed full-transaction rollback load,
+cross-process writers, crash/power-loss durability, network filesystems,
+disabled automatic checkpoints, growing tables, or request-derived values.
 
 The HTTP transport retains at most 64 KiB of request body. `HonoRequest.json()`
 is not exposed as a general dynamic JavaScript object: the compiler records
