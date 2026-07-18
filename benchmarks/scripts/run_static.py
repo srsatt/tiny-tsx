@@ -20,6 +20,7 @@ from typing import Any
 from oha_metrics import run_oha
 from process_metrics import ProcessSampler
 from reporting import render_markdown, summarize
+from scenario_metrics import probe_stytch_todo_crud, run_stytch_todo_crud
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -391,6 +392,38 @@ WORKLOADS = {
             "--tsconfig-override", "benchmarks/bun/hono-runtime-tsconfig.json",
         ],
     },
+    "hono-stytch-todo": {
+        "body": b'{"todos":[]}',
+        "content_type": "application/json",
+        "headers": {},
+        "numeric_headers": [],
+        "path": "/api/todos",
+        "scenario": "stytch-todo-crud",
+        "scenario_requests_per_cycle": 4,
+        "scenario_steps": [
+            "POST /api/todos creates one request-owned record",
+            "GET /api/todos verifies that exact record",
+            "POST /api/todos/:id/complete verifies the completed record",
+            "DELETE /api/todos/:id verifies empty state",
+        ],
+        "state_postcondition": "every fixed worker user completes create/list/complete/delete with exact response checks, retains at most one TODO, finishes empty, and passes a post-load recovery read",
+        "scope": "unchanged pinned three-module Hono Stytch TODO backend; credential-free cookie sessions; one actor-owned in-memory SQLite KV binding; closed-loop authenticated create/list/complete/delete cycles; HTTP/1.1; localhost",
+        "limitation": "The custom closed-loop client keeps one TODO per fixed worker user and validates every response before continuing. It does not measure live Stytch/JWT/network behavior, growing lists, shared-user write contention, disk persistence, browser assets, or general class/KV compatibility.",
+        "tiny_entry": "examples/hono-stytch-todo/server.ts",
+        "tiny_args": [
+            "--binding", "TODOS=sqlite-kv::memory:",
+            "--alias", "hono=vendor/hono/src/index.ts",
+            "--alias", "hono/cors=vendor/hono/src/middleware/cors/index.ts",
+            "--api", "hono=examples/hono-stytch-todo/hono-api.d.ts",
+            "--api", "hono/cors=examples/hono-stytch-todo/cors-api.d.ts",
+            "--api", "@hono/stytch-auth=examples/hono-stytch-todo/stytch-api.d.ts",
+        ],
+        "tiny_setup": ["npm", "ci", "--prefix", "examples"],
+        "bun_script": "benchmarks/bun/hono-stytch-todo-server.ts",
+        "bun_args": [
+            "--tsconfig-override", "benchmarks/bun/hono-runtime-tsconfig.json",
+        ],
+    },
     "hono-sqlite-wal": {
         "body": b"committed",
         "content_type": "text/plain; charset=UTF-8",
@@ -588,26 +621,30 @@ def main() -> int:
             sampler = None
             try:
                 prepare_server(process, port, workload, name)
-                correctness = wait_for_response(
-                    process,
-                    port,
-                    specs[name]["path"],
-                    workload,
-                )
-                assert_correct(correctness, workload, name)
-                assert_additional_paths(process, port, workload, name, specs[name])
+                if workload.get("scenario") == "stytch-todo-crud":
+                    wait_for_scenario(process, port, arguments.keep_alive, 10_000 + run)
+                else:
+                    correctness = wait_for_response(
+                        process,
+                        port,
+                        specs[name]["path"],
+                        workload,
+                    )
+                    assert_correct(correctness, workload, name)
+                    assert_additional_paths(process, port, workload, name, specs[name])
                 targets[name]["idleRssSamplesBytes"].append(resident_bytes(process.pid))
                 sampler = ProcessSampler(process.pid)
-                run_oha(
+                warmup = run_load_sample(
+                    port,
+                    workload,
                     load_target,
                     max(arguments.concurrency),
                     1,
                     arguments.keep_alive,
                     urls_from_file=urls_from_file,
-                    **oha_request(workload),
                 )
-                record_workload_state(
-                    targets[name], process, port, workload, specs[name], run, "warmup"
+                record_sample_state(
+                    targets[name], process, port, workload, specs[name], run, "warmup", warmup
                 )
                 targets[name]["postWarmupRssSamplesBytes"].append(
                     resident_bytes(process.pid)
@@ -618,17 +655,19 @@ def main() -> int:
                     else list(reversed(arguments.concurrency))
                 )
                 for concurrency in concurrency_order:
-                    sample = run_oha(
+                    sample = run_load_sample(
+                        port,
+                        workload,
                         load_target,
                         concurrency,
                         arguments.duration,
                         arguments.keep_alive,
                         urls_from_file=urls_from_file,
-                        **oha_request(workload),
                     )
                     targets[name]["throughput"][str(concurrency)].append(sample.as_json())
-                    record_workload_state(
-                        targets[name], process, port, workload, specs[name], run, str(concurrency)
+                    record_sample_state(
+                        targets[name], process, port, workload, specs[name], run,
+                        str(concurrency), sample,
                     )
             finally:
                 if sampler is not None:
@@ -667,6 +706,11 @@ def main() -> int:
                 if arguments.allocation_metrics
                 else "disabled"
             ),
+            "loadGenerator": (
+                "bounded response-checked Python CRUD client"
+                if workload.get("scenario") == "stytch-todo-crud"
+                else "oha"
+            ),
         },
         "correctness": {
             "path": workload["path"],
@@ -697,6 +741,8 @@ def main() -> int:
             "bodyUtf8": workload["body"].decode(),
             "headers": workload["headers"],
             "numericHeaders": workload["numeric_headers"],
+            "scenarioSteps": workload.get("scenario_steps", []),
+            "scenarioRequestsPerCycle": workload.get("scenario_requests_per_cycle"),
         },
         "targets": targets,
     }
@@ -778,6 +824,63 @@ def assert_additional_paths(
     for path in workload.get("paths", [workload["path"]])[1:]:
         assert_correct(wait_for_response(process, port, path, workload), workload, target)
     read_workload_state(process, port, workload, spec)
+
+
+def wait_for_scenario(
+    process: subprocess.Popen[bytes],
+    port: int,
+    keep_alive: bool,
+    worker: int,
+) -> None:
+    wait_for_response(process, port, "/api/todos")
+    probe_stytch_todo_crud(port, keep_alive, worker)
+
+
+def run_load_sample(
+    port: int,
+    workload: dict[str, Any],
+    load_target: str,
+    concurrency: int,
+    duration: int,
+    keep_alive: bool,
+    *,
+    urls_from_file: bool,
+) -> Any:
+    if workload.get("scenario") == "stytch-todo-crud":
+        return run_stytch_todo_crud(port, concurrency, duration, keep_alive)
+    return run_oha(
+        load_target,
+        concurrency,
+        duration,
+        keep_alive,
+        urls_from_file=urls_from_file,
+        **oha_request(workload),
+    )
+
+
+def record_sample_state(
+    target: dict[str, Any],
+    process: subprocess.Popen[bytes],
+    port: int,
+    workload: dict[str, Any],
+    spec: dict[str, Any],
+    run: int,
+    phase: str,
+    sample: Any,
+) -> None:
+    if workload.get("scenario") == "stytch-todo-crud":
+        target["stateSamples"].append({
+            "run": run,
+            "phase": phase,
+            "values": {
+                "completedCycles": sample.completed_cycles,
+                "checkedRequests": sum(sample.status_codes.values()),
+                "recoveryChecks": sample.state_checks,
+                "finalState": "empty",
+            },
+        })
+        return
+    record_workload_state(target, process, port, workload, spec, run, phase)
 
 
 def record_workload_state(
@@ -1102,6 +1205,9 @@ def measure_startup(
     process = start_server(spec)
     try:
         prepare_server(process, port, workload, spec["name"])
+        if workload.get("scenario") == "stytch-todo-crud":
+            wait_for_scenario(process, port, False, 20_000)
+            return (time.perf_counter_ns() - started) / 1_000_000
         response = wait_for_response(process, port, spec["path"], workload)
         assert_correct(response, workload, spec["name"])
         return (time.perf_counter_ns() - started) / 1_000_000

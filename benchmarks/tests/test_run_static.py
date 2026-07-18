@@ -304,6 +304,23 @@ class StaticHarnessTest(unittest.TestCase):
             "benchmarks/bun/hono-nested-profile-server.ts",
         )
 
+    def test_stytch_todo_workload_runs_a_bounded_authenticated_crud_scenario(self) -> None:
+        workload = WORKLOADS["hono-stytch-todo"]
+
+        self.assertEqual(workload["scenario"], "stytch-todo-crud")
+        self.assertEqual(
+            workload["tiny_entry"],
+            "examples/hono-stytch-todo/server.ts",
+        )
+        self.assertIn("TODOS=sqlite-kv::memory:", workload["tiny_args"])
+        self.assertEqual(
+            workload["bun_script"],
+            "benchmarks/bun/hono-stytch-todo-server.ts",
+        )
+        self.assertEqual(workload["scenario_requests_per_cycle"], 4)
+        self.assertIn("create/list/complete/delete", workload["scope"])
+        self.assertIn("one TODO per fixed worker user", workload["limitation"])
+
     def test_sqlite_wal_workload_cycles_two_durable_rollback_owners(self) -> None:
         workload = WORKLOADS["hono-sqlite-wal"]
 
