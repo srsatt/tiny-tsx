@@ -302,14 +302,19 @@ fn reactor_loop<J, Descriptor>(
         if state.closed {
             break;
         }
+        let mut newly_ready = 0;
         for index in (1..descriptors.len()).rev() {
             if descriptors[index].revents != 0 && index - 1 < state.waiting.len() {
                 let job = state.waiting.swap_remove(index - 1);
                 state.ready.push_back(job);
+                newly_ready += 1;
             }
         }
-        if !state.ready.is_empty() {
-            shared.ready.notify_all();
+        // Wake at most one executor per descriptor that became ready. A
+        // broadcast creates a thundering herd when one keep-alive socket wakes
+        // while several executor threads are asleep.
+        for _ in 0..newly_ready {
+            shared.ready.notify_one();
         }
     }
 }
