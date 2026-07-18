@@ -26,6 +26,8 @@ after(() => rmSync(project, {recursive: true, force: true}));
 
 test("ships runnable Hono, node-server, tinytsx serve, and Zod examples", async () => {
   statSync(path.join(project, "README.md"));
+  statSync(path.join(resources, "packages", "eslint-plugin-tinytsx", "index.cjs"));
+  statSync(path.join(resources, "packages", "eslint-plugin-tinytsx", "README.md"));
 
   const nodePort = 39_490;
   const nodeBinary = binaryPath(project, "node-server");

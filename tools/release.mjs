@@ -42,7 +42,7 @@ const resources = path.join(staging, "lib", "tinytsx");
 for (const file of ["Cargo.toml", "Cargo.lock", "LICENSE", "CHANGELOG.md", "THIRD_PARTY_NOTICES.md"]) {
   cpSync(path.join(root, file), path.join(resources, file));
 }
-for (const directory of ["compiler", "runtime", "sdk", "doc", "examples"]) {
+for (const directory of ["compiler", "runtime", "sdk", "doc", "examples", "packages"]) {
   cpSync(path.join(root, directory), path.join(resources, directory), {
     recursive: true,
     filter: source => {
