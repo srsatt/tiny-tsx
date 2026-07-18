@@ -49,6 +49,10 @@ enum ApplicationMessage {
         first: bool,
         parameters: Vec<tinytsx_runtime_sqlite::SqlValue>,
     },
+    SqliteTodo {
+        user: String,
+        operation: tinytsx_runtime_sqlite::TodoOperation,
+    },
 }
 
 pub struct OpenAiRequest {
@@ -319,6 +323,16 @@ pub fn initialize(executor_count: usize) -> io::Result<(usize, bool, bool)> {
                     },
                 )
                 .map_err(|_| RENDER_ERROR)
+            }
+            ApplicationMessage::SqliteTodo { user, operation } => {
+                let connection = state
+                    .sqlite
+                    .as_ref()
+                    .ok_or(INTERNAL_ERROR)?
+                    .as_ref()
+                    .map_err(|status| *status)?;
+                tinytsx_runtime_sqlite::todo_operation(connection, &user, &operation)
+                    .map_err(|_| RENDER_ERROR)
             }
         },
     )?;
@@ -631,6 +645,18 @@ pub fn sqlite_query_json(
             first,
             parameters,
         })
+        .map_err(actor_call_status)?
+}
+
+pub fn sqlite_todo_operation(
+    database: usize,
+    user: String,
+    operation: tinytsx_runtime_sqlite::TodoOperation,
+) -> Result<Vec<u8>, u32> {
+    let runtime = APPLICATION.get().ok_or(INTERNAL_ERROR)?;
+    let database = runtime.databases.get(database).ok_or(INTERNAL_ERROR)?;
+    database
+        .call(ApplicationMessage::SqliteTodo { user, operation })
         .map_err(actor_call_status)?
 }
 

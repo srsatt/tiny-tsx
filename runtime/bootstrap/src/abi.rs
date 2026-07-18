@@ -815,6 +815,175 @@ pub unsafe extern "C" fn tinytsx_sqlite_query_json(
 }
 
 #[unsafe(no_mangle)]
+pub unsafe extern "C" fn tinytsx_todo_store_list_json(
+    writer: *mut TinyResponseWriter,
+    request: *const TinyRequest,
+    database: usize,
+    user_kind: u32,
+    user_data: *const u8,
+    user_len: usize,
+) -> u32 {
+    let user = match unsafe { todo_store_user(request, user_kind, user_data, user_len) } {
+        Ok(user) => user,
+        Err(status) => return status,
+    };
+    write_todo_store_result(
+        writer,
+        crate::application::sqlite_todo_operation(
+            database,
+            user,
+            tinytsx_runtime_sqlite::TodoOperation::List,
+        ),
+    )
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tinytsx_todo_store_add_json(
+    writer: *mut TinyResponseWriter,
+    request: *const TinyRequest,
+    database: usize,
+    user_kind: u32,
+    user_data: *const u8,
+    user_len: usize,
+    field: *const u8,
+    field_len: usize,
+) -> u32 {
+    let user = match unsafe { todo_store_user(request, user_kind, user_data, user_len) } {
+        Ok(user) => user,
+        Err(status) => return status,
+    };
+    let text = match unsafe { todo_store_text(request, field, field_len) } {
+        Ok(text) => text,
+        Err(status) => return status,
+    };
+    let operation = tinytsx_runtime_sqlite::TodoOperation::Add {
+        id: tinytsx_date_now_millis().to_string(),
+        text,
+    };
+    write_todo_store_result(
+        writer,
+        crate::application::sqlite_todo_operation(database, user, operation),
+    )
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tinytsx_todo_store_mutation_json(
+    writer: *mut TinyResponseWriter,
+    request: *const TinyRequest,
+    database: usize,
+    user_kind: u32,
+    user_data: *const u8,
+    user_len: usize,
+    operation: u32,
+    segment: usize,
+) -> u32 {
+    let user = match unsafe { todo_store_user(request, user_kind, user_data, user_len) } {
+        Ok(user) => user,
+        Err(status) => return status,
+    };
+    let id = match unsafe { decoded_request_path_segment(request, segment) }
+        .and_then(|id| String::from_utf8(id).map_err(|_| BAD_REQUEST))
+    {
+        Ok(id) if !id.is_empty() && id.len() <= 128 => id,
+        Ok(_) => return BAD_REQUEST,
+        Err(status) => return status,
+    };
+    let operation = match operation {
+        0 => tinytsx_runtime_sqlite::TodoOperation::Complete { id },
+        1 => tinytsx_runtime_sqlite::TodoOperation::Delete { id },
+        _ => return INTERNAL_ERROR,
+    };
+    write_todo_store_result(
+        writer,
+        crate::application::sqlite_todo_operation(database, user, operation),
+    )
+}
+
+fn write_todo_store_result(
+    writer: *mut TinyResponseWriter,
+    result: Result<Vec<u8>, u32>,
+) -> u32 {
+    if writer.is_null() {
+        return INTERNAL_ERROR;
+    }
+    match result {
+        Ok(output) => unsafe { tinytsx_html_write_static(writer, output.as_ptr(), output.len()) },
+        Err(status) => {
+            unsafe { (*writer).status = status };
+            status
+        }
+    }
+}
+
+unsafe fn todo_store_user(
+    request: *const TinyRequest,
+    kind: u32,
+    data: *const u8,
+    len: usize,
+) -> Result<String, u32> {
+    if request.is_null() || data.is_null() || len == 0 || len > 1024 {
+        return Err(INTERNAL_ERROR);
+    }
+    let data = unsafe { slice::from_raw_parts(data, len) };
+    let value = match kind {
+        0 => data.to_vec(),
+        1 => {
+            let request = unsafe { &*request };
+            let encoded = unsafe { request_cookie_value(request, data) }?
+                .filter(|value| !value.is_empty())
+                .ok_or(BAD_REQUEST)?;
+            decode_cookie_bytes(encoded)?
+        }
+        _ => return Err(INTERNAL_ERROR),
+    };
+    let value = String::from_utf8(value).map_err(|_| BAD_REQUEST)?;
+    if value.is_empty() || value.len() > 1024 {
+        return Err(BAD_REQUEST);
+    }
+    Ok(value)
+}
+
+unsafe fn todo_store_text(
+    request: *const TinyRequest,
+    field: *const u8,
+    field_len: usize,
+) -> Result<String, u32> {
+    if request.is_null() || field.is_null() || field_len == 0 || field_len > 512 {
+        return Err(INTERNAL_ERROR);
+    }
+    let field = unsafe { slice::from_raw_parts(field, field_len) };
+    let body = unsafe { &(*request).body };
+    if body.ptr.is_null() && body.len != 0 {
+        return Err(BAD_REQUEST);
+    }
+    let body = unsafe { slice::from_raw_parts(body.ptr, body.len) };
+    let json = serde_json::from_slice::<serde_json::Value>(body).map_err(|_| BAD_REQUEST)?;
+    let text = request_json_path_value(&json, field)?
+        .as_str()
+        .ok_or(BAD_REQUEST)?;
+    if text.len() > 4096 {
+        return Err(BAD_REQUEST);
+    }
+    Ok(text.to_owned())
+}
+
+fn decode_cookie_bytes(value: &[u8]) -> Result<Vec<u8>, u32> {
+    let mut output = Vec::with_capacity(value.len());
+    let mut cursor = 0;
+    while cursor < value.len() {
+        if let Some(byte) = percent_byte(value, cursor) {
+            output.push(byte);
+            cursor += 3;
+        } else {
+            output.push(value[cursor]);
+            cursor += 1;
+        }
+    }
+    std::str::from_utf8(&output).map_err(|_| BAD_REQUEST)?;
+    Ok(output)
+}
+
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn tinytsx_sqlite_query_json_path(
     writer: *mut TinyResponseWriter,
     request: *const TinyRequest,

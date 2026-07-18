@@ -57,6 +57,119 @@ pub enum QueryMode {
     First,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TodoOperation {
+    List,
+    Add { id: String, text: String },
+    Complete { id: String },
+    Delete { id: String },
+}
+
+const TODO_SCHEMA: &str = "CREATE TABLE IF NOT EXISTS _tinytsx_todos (sequence INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT NOT NULL, id TEXT NOT NULL, text TEXT NOT NULL, completed INTEGER NOT NULL CHECK (completed IN (0, 1)))";
+
+pub fn todo_operation(
+    connection: &Connection,
+    user: &str,
+    operation: &TodoOperation,
+) -> Result<Vec<u8>, Error> {
+    if user.is_empty() || user.len() > 1024 {
+        return Err(Error::bounded(ErrorKind::Sql));
+    }
+    let transaction = connection
+        .unchecked_transaction()
+        .map_err(|error| Error::sqlite(ErrorKind::Sql, error))?;
+    transaction
+        .execute_batch(TODO_SCHEMA)
+        .map_err(|error| Error::sqlite(ErrorKind::Sql, error))?;
+    match operation {
+        TodoOperation::List => {}
+        TodoOperation::Add { id, text } => {
+            if id.is_empty() || id.len() > 128 || text.len() > 4096 {
+                return Err(Error::bounded(ErrorKind::Sql));
+            }
+            let count: i64 = transaction
+                .query_row(
+                    "SELECT count(*) FROM _tinytsx_todos WHERE user_id = ?1",
+                    [user],
+                    |row| row.get(0),
+                )
+                .map_err(|error| Error::sqlite(ErrorKind::Sql, error))?;
+            if count >= 16 {
+                return Err(Error::bounded(ErrorKind::TooManyRows));
+            }
+            transaction
+                .execute(
+                    "INSERT INTO _tinytsx_todos (user_id, id, text, completed) VALUES (?1, ?2, ?3, 0)",
+                    (user, id, text),
+                )
+                .map_err(|error| Error::sqlite(ErrorKind::Sql, error))?;
+        }
+        TodoOperation::Complete { id } => {
+            if id.is_empty() || id.len() > 128 {
+                return Err(Error::bounded(ErrorKind::Sql));
+            }
+            transaction
+                .execute(
+                    "UPDATE _tinytsx_todos SET completed = 1 WHERE sequence = (SELECT sequence FROM _tinytsx_todos WHERE user_id = ?1 AND id = ?2 ORDER BY sequence LIMIT 1)",
+                    (user, id),
+                )
+                .map_err(|error| Error::sqlite(ErrorKind::Sql, error))?;
+        }
+        TodoOperation::Delete { id } => {
+            if id.is_empty() || id.len() > 128 {
+                return Err(Error::bounded(ErrorKind::Sql));
+            }
+            transaction
+                .execute(
+                    "DELETE FROM _tinytsx_todos WHERE user_id = ?1 AND id = ?2",
+                    (user, id),
+                )
+                .map_err(|error| Error::sqlite(ErrorKind::Sql, error))?;
+        }
+    }
+
+    let mut statement = transaction
+        .prepare("SELECT id, text, completed FROM _tinytsx_todos WHERE user_id = ?1 ORDER BY completed, id, sequence LIMIT 17")
+        .map_err(|error| Error::sqlite(ErrorKind::Sql, error))?;
+    let mut rows = statement
+        .query([user])
+        .map_err(|error| Error::sqlite(ErrorKind::Sql, error))?;
+    let mut output = vec![b'['];
+    let mut count = 0_usize;
+    while let Some(row) = rows
+        .next()
+        .map_err(|error| Error::sqlite(ErrorKind::Sql, error))?
+    {
+        if count == 16 {
+            return Err(Error::bounded(ErrorKind::TooManyRows));
+        }
+        if count != 0 {
+            output.push(b',');
+        }
+        let id: String = row.get(0).map_err(|error| Error::sqlite(ErrorKind::Sql, error))?;
+        let text: String = row.get(1).map_err(|error| Error::sqlite(ErrorKind::Sql, error))?;
+        let completed: i64 = row.get(2).map_err(|error| Error::sqlite(ErrorKind::Sql, error))?;
+        output.extend_from_slice(b"{\"id\":");
+        write_json_string(&mut output, &id);
+        output.extend_from_slice(b",\"text\":");
+        write_json_string(&mut output, &text);
+        output.extend_from_slice(b",\"completed\":");
+        output.extend_from_slice(if completed == 0 { b"false" } else { b"true" });
+        output.push(b'}');
+        if output.len() > MAX_RESULT_BYTES {
+            return Err(Error::bounded(ErrorKind::ResultTooLarge));
+        }
+        count += 1;
+    }
+    drop(rows);
+    drop(statement);
+    transaction
+        .commit()
+        .map_err(|error| Error::sqlite(ErrorKind::Sql, error))?;
+    output.push(b']');
+    Ok(output)
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ErrorKind {
     Open,
@@ -867,6 +980,58 @@ mod tests {
             )
             .expect("missing row"),
             b"null"
+        );
+    }
+
+    #[test]
+    fn applies_bounded_todo_operations_atomically_and_isolates_users() {
+        let connection = open(":memory:").expect("open TODO database");
+        assert_eq!(
+            todo_operation(&connection, "reader", &TodoOperation::List).expect("empty list"),
+            b"[]"
+        );
+        assert_eq!(
+            todo_operation(
+                &connection,
+                "reader",
+                &TodoOperation::Add {
+                    id: "2".to_owned(),
+                    text: "quote \" and newline\n".to_owned(),
+                },
+            )
+            .expect("add second TODO"),
+            br#"[{"id":"2","text":"quote \" and newline\n","completed":false}]"#
+        );
+        todo_operation(
+            &connection,
+            "reader",
+            &TodoOperation::Add {
+                id: "1".to_owned(),
+                text: "first".to_owned(),
+            },
+        )
+        .expect("add first TODO");
+        assert_eq!(
+            todo_operation(
+                &connection,
+                "reader",
+                &TodoOperation::Complete { id: "1".to_owned() },
+            )
+            .expect("complete TODO"),
+            br#"[{"id":"2","text":"quote \" and newline\n","completed":false},{"id":"1","text":"first","completed":true}]"#
+        );
+        assert_eq!(
+            todo_operation(&connection, "other", &TodoOperation::List).expect("isolated list"),
+            b"[]"
+        );
+        assert_eq!(
+            todo_operation(
+                &connection,
+                "reader",
+                &TodoOperation::Delete { id: "2".to_owned() },
+            )
+            .expect("delete TODO"),
+            br#"[{"id":"1","text":"first","completed":true}]"#
         );
     }
 }
