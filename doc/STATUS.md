@@ -9,27 +9,29 @@ produces and serves a native Mach-O executable from the example TSX source.
 
 ## Alpha implementation evidence
 
-### Sustained six-workload server matrix (2026-07-17)
+### Sustained seven-workload server matrix (2026-07-17)
 
 - A clean Apple M5 Max comparison covers Hono basic, dynamic JSX escaping, one
-  decoded optional route parameter, finite text streaming, one counter actor,
-  and one in-memory empty SQLite query. Each target uses one process; TinyTSX
-  uses eight HTTP workers; both targets use keep-alive. The matrix retains five
-  startup samples and three 15-second samples at concurrency 8 and 64 with
-  alternating order.
-- All 72 load samples pass with success rate 1.0. TinyTSX reaches 0.24–0.46x
+  decoded optional route parameter, one bounded warm-cache file read, finite
+  text streaming, one counter actor, and one in-memory empty SQLite query. Each
+  target uses one process; TinyTSX uses eight HTTP workers; both targets use
+  keep-alive. The matrix retains five startup samples and three 15-second
+  samples at concurrency 8 and 64 with alternating order.
+- All 84 load samples pass with success rate 1.0. TinyTSX reaches 0.24–0.54x
   Bun throughput at concurrency 8 and 0.40–0.72x at concurrency 64. Its
-  concurrency-64 p99 is 9.575–15.622 ms versus Bun at 0.821–1.683 ms.
+  concurrency-64 p99 is 9.575–20.939 ms versus Bun at 0.736–1.698 ms.
 - TinyTSX warm RSS is 6.30–8.06 MiB versus Bun at 70.33–154.70 MiB. Repeated
-  startup is 20.99–22.86 ms versus 17.49–21.31 ms. Every TinyTSX workload
-  returns from 68 peak file descriptors to its baseline of 4.
-- Whole-process counters retain the elevated TinyTSX CPU, Unix-syscall, and
-  context-switch pressure without treating differently sized request totals as
-  normalized costs. Actor and SQLite ownership are the next profiling seams;
-  unmeasured workload families remain explicit in the backlog.
-- Evidence: clean commits `7c1a22c` and `04ac58b`, the combined
-  `benchmarks/results/2026-07-17-m5-max-sustained-15s-summary.md`, and six
-  adjacent raw JSON/rendered report pairs. The two commits have identical
+  startup is 20.00–22.86 ms versus 17.49–21.31 ms. Every TinyTSX workload
+  returns to four open descriptors; median peaks are 68 for non-file routes and
+  71 for file reads.
+- Whole-process counters are not normalized across different request totals.
+  TinyTSX records greater CPU on the six non-file routes; Bun records more CPU
+  on the file route, while TinyTSX still records more Unix syscalls and context
+  switches there. Application-executor, filesystem, actor, and SQLite ownership
+  are profiling seams; unmeasured workload families remain explicit.
+- Evidence: clean commits `7c1a22c`, `04ac58b`, and `c16333f`, the combined
+  `benchmarks/results/2026-07-17-m5-max-sustained-15s-summary.md`, and seven
+  adjacent raw JSON/rendered report pairs. All three commits have identical
   compiler/runtime source.
 
 ### Clean post-transaction release rehearsal (2026-07-17)

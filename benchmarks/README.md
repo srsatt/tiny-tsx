@@ -182,8 +182,8 @@ not as an uninstrumented throughput comparison.
 
 ## Sustained release-stability matrix
 
-The current six-workload comparison is retained in
-`results/2026-07-17-m5-max-sustained-15s-summary.md`, with six adjacent raw
+The current seven-workload comparison is retained in
+`results/2026-07-17-m5-max-sustained-15s-summary.md`, with seven adjacent raw
 JSON/rendered report pairs. Each workload uses eight TinyTSX HTTP workers,
 keep-alive for both targets, five startup samples, and three 15-second load
 samples at concurrency 8 and 64. Reproduce it with:
@@ -202,6 +202,10 @@ python3 benchmarks/scripts/run_static.py \
   --concurrency 8,64 --workers 8 --keep-alive \
   --output-prefix benchmarks/results/local-sustained-hono-route-param
 python3 benchmarks/scripts/run_static.py \
+  --workload hono-file-read --duration 15 --runs 3 --startup-runs 5 \
+  --concurrency 8,64 --workers 8 --keep-alive \
+  --output-prefix benchmarks/results/local-sustained-hono-file-read
+python3 benchmarks/scripts/run_static.py \
   --workload hono-stream-text --duration 15 --runs 3 --startup-runs 5 \
   --concurrency 8,64 --workers 8 --keep-alive \
   --output-prefix benchmarks/results/local-sustained-hono-stream-text
@@ -216,9 +220,9 @@ python3 benchmarks/scripts/run_static.py \
 ```
 
 Allocator instrumentation remains disabled for this comparison. The matrix
-does not cover file access, non-empty or on-disk SQLite, transaction writes,
-large responses, competing/catch-all route shapes, JSON branch mixes,
-cancellation, or multi-actor contention.
+does not cover cold/large/replaced files, non-empty or on-disk SQLite,
+transaction writes, large responses, competing/catch-all route shapes, JSON
+branch mixes, cancellation, or multi-actor contention.
 
 For credible comparative runs, connect the Mac to power, disable Low Power Mode,
 close unnecessary applications, and avoid indexing or builds while measuring.

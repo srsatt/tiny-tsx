@@ -500,7 +500,7 @@ to 4. The raw evidence is the adjacent
 `benchmarks/results/2026-07-17-m5-max-sustained-15s-hono-route-param-keepalive-w8.*`
 pair; no general router-performance claim is made.
 
-#### Selected next P4 tracer — bounded Hono file-read workload
+#### Selected P4 tracer — bounded Hono file-read workload (landed 2026-07-17)
 
 Add one `hono-file-read` workload around the shipped
 `examples/hono-static/server.ts` adapter and the pinned 21-byte
@@ -526,6 +526,17 @@ syscall cost, control the OS page cache, flush caches, measure cold storage,
 large files, concurrent replacement, binary data, writes, directory traversal,
 or Bun/TinyTSX primitive parity. Those boundaries must remain explicit in the
 report and performance conclusions.
+
+The tracer is green. The harness test pins the asset, capability, source, and
+response; the focused filesystem suite passes default denial, Apple execution,
+and Linux-arm64 assembly; and all 12 target/concurrency samples in the
+three-by-15-second keep-alive matrix have success rate 1.0. TinyTSX reaches
+32,015 requests/second (0.54x Bun) at concurrency 8 and 42,969 (0.56x) at
+concurrency 64, with 6.97 MiB warm RSS and 20.939 ms concurrency-64 p99. Every
+TinyTSX run returns to four descriptors after observed peaks of 70–74. The raw
+evidence is the adjacent
+`benchmarks/results/2026-07-17-m5-max-sustained-15s-hono-file-read-keepalive-w8.*`
+pair; no cold-cache, large-file, or primitive-parity claim is made.
 
 Before implementing the next tracer, its selected goal must be copied into the
 active goal with: its exact tracer/source revision; admitted and rejected
@@ -812,6 +823,12 @@ explicitly promoted into a later goal.
     TinyTSX reaches 0.42x/0.57x Bun with 6.38 MiB warm RSS and 9.755 ms
     concurrency-64 p99. Catch-all/competing route shapes and the other named
     workload families remain open, so this broad item stays unchecked.
+  - 2026-07-17: the bounded file tracer adds repeated warm page-cache reads of
+    one pinned 21-byte asset through the TinyTSX application executor and
+    `Bun.file`. All three 15-second samples at concurrency 8/64 pass; TinyTSX
+    reaches 0.54x/0.56x Bun with 6.97 MiB warm RSS and 20.939 ms
+    concurrency-64 p99. Cold/large/replaced files and the other named workload
+    families remain open, so this broad item stays unchecked.
 - [x] Add CPU, syscall, allocation, peak-RSS, and first-launch instrumentation.
   - 2026-07-17: the macOS harness samples whole-process CPU time, Unix/Mach
     syscalls, context switches, faults, threads, open-file-descriptor
@@ -822,7 +839,7 @@ explicitly promoted into a later goal.
     binaries do not include them, and no Bun allocation ratio is claimed.
 - [x] Run controlled longer-duration comparisons before publishing performance
       claims and optimize only from profiles.
-  - 2026-07-17: the six-workload sustained matrix retains three 15-second
+  - 2026-07-17: the seven-workload sustained matrix retains three 15-second
     samples at concurrency 8 and 64 for both targets, alternates target and
     concurrency order, disables allocator instrumentation, and preserves all
     raw response-checked samples. It supports claims only for those exact

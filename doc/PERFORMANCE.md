@@ -7,41 +7,42 @@ Last updated: 2026-07-17
 TinyTSX is compelling for deployment and resident footprint, but the sustained
 eight-worker keep-alive matrix does not show throughput or tail-latency parity
 with Bun. The current comparison covers Hono basic, request-time dynamic JSX,
-one decoded optional route parameter, finite text streaming, one counter actor,
-and one in-memory empty SQLite query. Every one of the 72 load samples passed
-its response contract.
+one decoded optional route parameter, one bounded warm-cache file read, finite
+text streaming, one counter actor, and one in-memory empty SQLite query. Every
+one of the 84 load samples passed its response contract.
 
 Across three 15-second samples at concurrency 8 and 64, TinyTSX reaches
-0.24–0.46x Bun throughput at concurrency 8 and 0.40–0.72x at concurrency 64.
-Its concurrency-64 p99 is 9.575–15.622 ms versus Bun at 0.821–1.683 ms. The
+0.24–0.54x Bun throughput at concurrency 8 and 0.40–0.72x at concurrency 64.
+Its concurrency-64 p99 is 9.575–20.939 ms versus Bun at 0.736–1.698 ms. The
 connection-turn hardening therefore holds over the longer run, but it does not
 close the owner/scheduling tail-latency gap.
 
 The honest current claim is:
 
 - **yes for footprint:** TinyTSX stays at 6.30–8.06 MiB warm RSS; Bun uses
-  8.7x–24.6x as much across the six routes;
-- **repeated startup is close:** TinyTSX takes 20.99–22.86 ms and Bun takes
+  8.7x–24.6x as much across the seven routes;
+- **repeated startup is close:** TinyTSX takes 20.00–22.86 ms and Bun takes
   17.49–21.31 ms, while TinyTSX's separately reported first post-build launch
-  remains a 450.78–547.26 ms outlier;
+  remains a 449.24–547.26 ms outlier;
 - **no throughput-parity claim:** TinyTSX reaches 40–72% of Bun at concurrency
   64 on these exact routes;
 - **tail latency remains open:** TinyTSX's concurrency-64 p99 is 9.3–18.6x
   Bun's despite improving throughput ratios under load;
 - **owner boundaries are visible:** the actor route is 11.5% below TinyTSX's
   basic control at concurrency 64 and the SQLite route is 24.7% below it;
-- **process pressure needs profiling:** TinyTSX records greater aggregate CPU,
-  Unix-syscall, and context-switch counts on every route, with the actor and
-  SQLite owners producing the highest context-switch counts;
-- **bounded resources recover:** every TinyTSX workload returns from 68 peak
-  descriptors to its baseline of 4.
+- **process pressure needs profiling:** TinyTSX records greater aggregate CPU
+  on the six non-file routes; Bun records more CPU on the file route, while
+  TinyTSX still records more Unix syscalls and context switches there;
+- **bounded resources recover:** every TinyTSX workload returns to four open
+  descriptors; median peaks are 68 for non-file routes and 71 for file reads.
 
 The current summary is
 `benchmarks/results/2026-07-17-m5-max-sustained-15s-summary.md`; its adjacent
 JSON files retain every raw sample and each per-workload Markdown report pins
-the response differences and limitations. Files, non-empty or on-disk SQLite,
-transaction writes, large responses, competing/catch-all route shapes, JSON
-branch mixes, cancellation, and multiple actors remain unmeasured.
+the response differences and limitations. Cold/large/replaced files, non-empty
+or on-disk SQLite, transaction writes, large responses, competing/catch-all
+route shapes, JSON branch mixes, cancellation, and multiple actors remain
+unmeasured.
 
 The five-second alpha comparison and earlier connection-close, JSX, streaming,
 Worker, and AI-provider results below are historical evidence. They remain
