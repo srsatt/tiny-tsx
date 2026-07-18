@@ -465,15 +465,58 @@ publish that tradeoff rather than claim a general performance improvement. The
 raw pairs and combined report are retained under
 `benchmarks/results/2026-07-18-m5-max-pressure-aware-15s-*`.
 
-#### Selected P1-P4 tracer — pinned Stytch-auth TODO backend
+#### Next selectable goal — pinned Stytch-auth TODO backend
 
 Use the backend half of the pinned upstream Hono `stytch-auth` example at
 `vendor/hono-examples` commit
 `3b0b62875a0e1265763fea1c6388866d5697ef81`: unchanged `api/index.ts`,
 `api/TodoAPI.ts`, and `api/TodoService.ts`. The React/Vite browser application,
 Cloudflare deployment configuration, and live Stytch credentials are not part
-of this server-runtime tracer. Pin `@hono/stytch-auth` to the exact version
-declared by the upstream example before admitting any of its source behavior.
+of this server-runtime tracer.
+
+The intake is complete. `tests/compat/hono/examples-manifest.json` pins all
+three source digests, `@hono/stytch-auth@0.1.0`, `hono@4.12.30`, and
+`stytch@12.21.0`; the fixture lock retains the published package integrity.
+`test:hono-intake` audits both the unchanged backend and the complete published
+authentication dependency graph. Native compilation and HTTP behavior remain
+explicitly `not-admitted`: the intake proves provenance and requirements, not
+support.
+
+Start the goal at the compiler boundary. Add the narrowest custom declaration
+overlay required for the upstream `Env`, `KVNamespace`, `Fetcher`, and
+`Consumer` types, then run the real frontend/compiler over the unchanged three
+modules. The overlay may describe types and TinyTSX adapter boundaries; it must
+not replace executable service, routing, authentication, or persistence
+behavior. Turn the first stable failure into the first implementation test
+instead of pre-implementing the whole audit report.
+
+Goal checklist, in dependency order:
+
+- [x] Pin the upstream commit, the three unchanged backend files, their source
+      digests, and the browser/deployment/credential exclusions.
+- [x] Pin the published authentication graph with a tracked fixture lock and
+      make its preparation plus intake audit reproducible from a clean checkout.
+- [ ] Add a focused declaration overlay for the named upstream bindings and
+      credential-free authentication seam; keep it free of replacement runtime
+      behavior.
+- [ ] Run the actual frontend/compiler over the unchanged backend and pin a
+      stable diagnostic for the first unsupported executable seam.
+- [ ] Execute the unchanged `TodoService` class shape with request-owned
+      constructor instances, arrow fields, its private method, direct async
+      sequences, and the exact bounded TODO array operations it uses.
+- [ ] Execute the unchanged nested `/api` Hono route graph with deterministic
+      local/remote authentication middleware and exact success/error ordering.
+- [ ] Back the statically named `TODOS` binding with a bounded actor-owned
+      SQLite adapter and prove isolation, atomic read/modify/write, restart,
+      rollback, saturation, denial, disposal, and recovery.
+- [ ] Add Apple-arm64 and native Linux-arm64 HTTP/failure evidence, Bun/Hono
+      reference behavior, package routing, and extracted-archive execution.
+- [ ] Add the response-checked authenticated CRUD workload to P4 and publish
+      TinyTSX/Bun startup, RSS, throughput, latency, CPU, overload, and recovery
+      evidence for this exact tracer.
+- [ ] Synchronize the executable matrix and compatibility, standard-library,
+      persistence, actor, status, and performance documents before selecting a
+      later release candidate.
 
 Implement this as one vertical real-world slice rather than isolated syntax
 demos:
