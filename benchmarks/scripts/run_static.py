@@ -367,6 +367,33 @@ WORKLOADS = {
             "--tsconfig-override", "benchmarks/bun/hono-runtime-tsconfig.json",
         ],
     },
+    "hono-sqlite-wal": {
+        "body": b"committed",
+        "content_type": "text/plain; charset=UTF-8",
+        "headers": {},
+        "numeric_headers": [],
+        "path": "/sqlite-wal/0",
+        "paths": ["/sqlite-wal/0", "/sqlite-wal/1"],
+        "setup_requests": [
+            {"path": "/sqlite-wal/setup/0", "body": b"ready", "content_type": "text/plain; charset=UTF-8"},
+            {"path": "/sqlite-wal/setup/1", "body": b"ready", "content_type": "text/plain; charset=UTF-8"},
+        ],
+        "state_paths": ["/sqlite-wal/state", "/sqlite-wal/journal"],
+        "state_kind": "sqlite-wal",
+        "state_postcondition": "the committed counter strictly progresses within each run, the rolled-back probe remains zero, journal mode is wal, and the live database/WAL/SHM files are non-empty",
+        "database_file": "wal-load.db",
+        "scope": "two independent SQLite owners contending for one capability-scoped on-disk WAL file; every request rolls back one savepoint update, commits one progress update with synchronous FULL, and returns a fixed Hono response; HTTP/1.1; localhost",
+        "limitation": "TinyTSX uses two application-pool database owners while Bun uses two dedicated Workers; this does not measure failed full-transaction rollback, crash or power-loss durability, cold storage, disabled automatic checkpoints, more than two connections, growing tables, request-derived values, network filesystems, or cross-process writers.",
+        "tiny_entry": "benchmarks/tiny/hono-sqlite-wal.ts",
+        "tiny_args": [
+            "--alias", "hono=vendor/hono/src/index.ts",
+            "--api", "hono=tests/compat/hono/api.d.ts",
+        ],
+        "bun_script": "benchmarks/bun/hono-sqlite-wal-server.ts",
+        "bun_args": [
+            "--tsconfig-override", "benchmarks/bun/hono-runtime-tsconfig.json",
+        ],
+    },
     "hono-ai-provider": {
         "body": b"Hello from local provider",
         "content_type": "text/plain; charset=UTF-8",
@@ -389,7 +416,12 @@ WORKLOADS = {
 
 def main() -> int:
     arguments = parse_arguments()
-    workload = WORKLOADS[arguments.workload]
+    workload, state_directory = materialize_workload(
+        arguments.workload,
+        WORKLOADS[arguments.workload],
+    )
+    if state_directory is not None:
+        atexit.register(state_directory.cleanup)
     require_tools("bun", "oha", "cargo", "npm", "ps")
     if platform.system() != "Darwin" or platform.machine() != "arm64":
         raise RuntimeError("the current TinyTSX benchmark requires Apple Silicon macOS")
@@ -420,15 +452,34 @@ def main() -> int:
             "artifact": tiny_binary,
             "runtime": tiny_binary,
             "path": workload["path"],
+            **(
+                {"database_path": workload["target_database_paths"]["tinytsx"]}
+                if "target_database_paths" in workload
+                else {}
+            ),
         },
         "bun": {
             "workload": arguments.workload,
             "name": "bun",
             "command": [str(bun_binary), "run", *workload["bun_args"], str(bun_script)],
-            "environment": {"TINYTSX_BENCH_PORT": str(port)},
+            "environment": {
+                "TINYTSX_BENCH_PORT": str(port),
+                **(
+                    {"TINYTSX_BENCH_SQLITE_PATH": str(
+                        workload["target_database_paths"]["bun"]
+                    )}
+                    if "target_database_paths" in workload
+                    else {}
+                ),
+            },
             "artifact": bun_script,
             "runtime": bun_binary,
             "path": workload["path"],
+            **(
+                {"database_path": workload["target_database_paths"]["bun"]}
+                if "target_database_paths" in workload
+                else {}
+            ),
         },
     }
     support_process = start_support_server(workload, bun_binary)
@@ -472,6 +523,7 @@ def main() -> int:
             process = start_server(specs[name])
             sampler = None
             try:
+                prepare_server(process, port, workload, name)
                 correctness = wait_for_response(
                     process,
                     port,
@@ -479,7 +531,7 @@ def main() -> int:
                     workload,
                 )
                 assert_correct(correctness, workload, name)
-                assert_additional_paths(process, port, workload, name)
+                assert_additional_paths(process, port, workload, name, specs[name])
                 targets[name]["idleRssSamplesBytes"].append(resident_bytes(process.pid))
                 sampler = ProcessSampler(process.pid)
                 run_oha(
@@ -490,8 +542,8 @@ def main() -> int:
                     urls_from_file=urls_from_file,
                     **oha_request(workload),
                 )
-                record_actor_states(
-                    targets[name], process, port, workload, run, "warmup"
+                record_workload_state(
+                    targets[name], process, port, workload, specs[name], run, "warmup"
                 )
                 targets[name]["postWarmupRssSamplesBytes"].append(
                     resident_bytes(process.pid)
@@ -511,8 +563,8 @@ def main() -> int:
                         **oha_request(workload),
                     )
                     targets[name]["throughput"][str(concurrency)].append(sample.as_json())
-                    record_actor_states(
-                        targets[name], process, port, workload, run, str(concurrency)
+                    record_workload_state(
+                        targets[name], process, port, workload, specs[name], run, str(concurrency)
                     )
             finally:
                 if sampler is not None:
@@ -557,9 +609,12 @@ def main() -> int:
             "loadPaths": workload.get("paths", [workload["path"]]),
             "statePaths": workload.get("state_paths", []),
             "statePostcondition": (
-                "every actor state is a positive integer after warm-up and each load interval"
-                if workload.get("state_paths")
-                else None
+                workload.get("state_postcondition")
+                or (
+                    "every actor state is a positive integer after warm-up and each load interval"
+                    if workload.get("state_paths")
+                    else None
+                )
             ),
             "method": workload.get("method", "GET"),
             "requestContentType": workload.get("request_content_type"),
@@ -594,7 +649,39 @@ def main() -> int:
         atexit.unregister(stop_server)
     if load_file is not None:
         load_file.close()
+    if state_directory is not None:
+        state_directory.cleanup()
+        atexit.unregister(state_directory.cleanup)
     return 0
+
+
+def materialize_workload(
+    name: str,
+    definition: dict[str, Any],
+) -> tuple[dict[str, Any], Any | None]:
+    workload = {**definition, "tiny_args": list(definition["tiny_args"])}
+    database_file = workload.get("database_file")
+    if database_file is None:
+        return workload, None
+
+    state_directory = tempfile.TemporaryDirectory(
+        prefix=f"tinytsx-benchmark-{name}-",
+    )
+    roots = {
+        target: Path(state_directory.name) / target
+        for target in ("tinytsx", "bun")
+    }
+    for root in roots.values():
+        root.mkdir(mode=0o700)
+    workload["tiny_args"].extend([
+        "--allow-read", str(roots["tinytsx"]),
+        "--allow-write", str(roots["tinytsx"]),
+    ])
+    workload["target_database_paths"] = {
+        target: root / str(database_file)
+        for target, root in roots.items()
+    }
+    return workload, state_directory
 
 
 def workload_load_target(
@@ -621,23 +708,111 @@ def assert_additional_paths(
     port: int,
     workload: dict[str, Any],
     target: str,
+    spec: dict[str, Any],
 ) -> None:
     for path in workload.get("paths", [workload["path"]])[1:]:
         assert_correct(wait_for_response(process, port, path, workload), workload, target)
-    read_actor_states(process, port, workload)
+    read_workload_state(process, port, workload, spec)
 
 
-def record_actor_states(
+def record_workload_state(
     target: dict[str, Any],
     process: subprocess.Popen[bytes],
     port: int,
     workload: dict[str, Any],
+    spec: dict[str, Any],
     run: int,
     phase: str,
 ) -> None:
+    state = read_workload_state(process, port, workload, spec)
+    if state is None:
+        return
+    if workload.get("state_kind") == "sqlite-wal":
+        previous = next(
+            (
+                sample["values"]["committed"]
+                for sample in reversed(target["stateSamples"])
+                if sample["run"] == run
+            ),
+            None,
+        )
+        if previous is not None and state["committed"] <= previous:
+            raise RuntimeError(
+                f"SQLite WAL committed counter did not progress: {previous} -> {state['committed']}"
+            )
+    target["stateSamples"].append({"run": run, "phase": phase, "values": state})
+
+
+def read_workload_state(
+    process: subprocess.Popen[bytes],
+    port: int,
+    workload: dict[str, Any],
+    spec: dict[str, Any],
+) -> Any | None:
+    if workload.get("state_kind") == "sqlite-wal":
+        state = wait_for_response(process, port, "/sqlite-wal/state")
+        journal = wait_for_response(process, port, "/sqlite-wal/journal")
+        return decode_sqlite_wal_state(
+            state,
+            journal,
+            sample_database_files(Path(spec["database_path"])),
+        )
     states = read_actor_states(process, port, workload)
-    if states:
-        target["stateSamples"].append({"run": run, "phase": phase, "values": states})
+    return states or None
+
+
+def decode_sqlite_wal_state(
+    state_response: dict[str, Any],
+    journal_response: dict[str, Any],
+    files: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    for name, response in (("state", state_response), ("journal", journal_response)):
+        content_type = normalize_content_type(response["headers"].get("content-type"))
+        if response["status"] != 200 or content_type != "application/json":
+            raise RuntimeError(f"invalid SQLite WAL {name} response: {response}")
+    try:
+        state = json.loads(state_response["body"])["state"]
+        journal = json.loads(journal_response["body"])["journal"]
+        committed = state["committed"]
+        rolled_back = state["rolledBack"]
+        journal_mode = journal["journal_mode"]
+    except (KeyError, TypeError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise RuntimeError("malformed SQLite WAL state response") from error
+    if (
+        isinstance(committed, bool)
+        or not isinstance(committed, int)
+        or committed < 1
+        or isinstance(rolled_back, bool)
+        or rolled_back != 0
+        or journal_mode != "wal"
+        or any(not value["exists"] or value["bytes"] < 1 for value in files.values())
+    ):
+        raise RuntimeError(
+            "invalid SQLite WAL postcondition: "
+            f"committed={committed}, rolledBack={rolled_back}, "
+            f"journalMode={journal_mode}, files={files}"
+        )
+    return {
+        "committed": committed,
+        "rolledBack": rolled_back,
+        "journalMode": journal_mode,
+        "files": files,
+    }
+
+
+def sample_database_files(database: Path) -> dict[str, dict[str, Any]]:
+    paths = {
+        "database": database,
+        "wal": Path(f"{database}-wal"),
+        "shm": Path(f"{database}-shm"),
+    }
+    return {
+        name: {
+            "exists": path.is_file(),
+            "bytes": path.stat().st_size if path.is_file() else 0,
+        }
+        for name, path in paths.items()
+    }
 
 
 def read_actor_states(
@@ -736,6 +911,7 @@ def tinytsx_build_command(
 
 
 def start_server(spec: dict[str, Any]) -> subprocess.Popen[bytes]:
+    reset_server_state(spec)
     environment = os.environ.copy()
     environment.update(spec["environment"])
     return subprocess.Popen(
@@ -745,6 +921,34 @@ def start_server(spec: dict[str, Any]) -> subprocess.Popen[bytes]:
         stdout=subprocess.DEVNULL,
         stderr=subprocess.PIPE,
     )
+
+
+def reset_server_state(spec: dict[str, Any]) -> None:
+    database = spec.get("database_path")
+    if database is None:
+        return
+    for path in (Path(database), Path(f"{database}-wal"), Path(f"{database}-shm")):
+        path.unlink(missing_ok=True)
+
+
+def prepare_server(
+    process: subprocess.Popen[bytes],
+    port: int,
+    workload: dict[str, Any],
+    target: str,
+) -> None:
+    for request in workload.get("setup_requests", []):
+        response = wait_for_response(process, port, str(request["path"]))
+        assert_correct(
+            response,
+            {
+                "body": request["body"],
+                "content_type": request["content_type"],
+                "headers": {},
+                "numeric_headers": [],
+            },
+            target,
+        )
 
 
 def start_support_server(
@@ -774,6 +978,7 @@ def measure_startup(
     started = time.perf_counter_ns()
     process = start_server(spec)
     try:
+        prepare_server(process, port, workload, spec["name"])
         response = wait_for_response(process, port, spec["path"], workload)
         assert_correct(response, workload, spec["name"])
         return (time.perf_counter_ns() - started) / 1_000_000
@@ -789,6 +994,7 @@ def capture_reference_body(
     started = time.perf_counter_ns()
     process = start_server(spec)
     try:
+        prepare_server(process, port, workload, spec["name"])
         response = wait_for_response(process, port, spec["path"], workload)
         actual_type = normalize_content_type(response["headers"].get("content-type"))
         expected_type = normalize_content_type(expected_content_type(workload, spec["name"]))

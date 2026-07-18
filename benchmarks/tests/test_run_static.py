@@ -11,8 +11,10 @@ from run_static import (  # noqa: E402
     assert_correct,
     benchmark_limitations,
     benchmark_scope,
+    decode_sqlite_wal_state,
     expected_content_type,
     is_millisecond_header,
+    materialize_workload,
     normalize_content_type,
     parse_allocation_metrics,
     tinytsx_build_command,
@@ -259,6 +261,84 @@ class StaticHarnessTest(unittest.TestCase):
             workload["bun_script"],
             "benchmarks/bun/hono-sqlite-transaction-server.ts",
         )
+
+    def test_sqlite_wal_workload_cycles_two_durable_rollback_owners(self) -> None:
+        workload = WORKLOADS["hono-sqlite-wal"]
+
+        self.assertEqual(workload["paths"], ["/sqlite-wal/0", "/sqlite-wal/1"])
+        self.assertEqual(workload["body"], b"committed")
+        self.assertEqual(workload["database_file"], "wal-load.db")
+        self.assertEqual(len(workload["setup_requests"]), 2)
+        self.assertIn("rolls back one savepoint", workload["scope"])
+        self.assertIn("failed full-transaction rollback", workload["limitation"])
+        self.assertEqual(workload["tiny_entry"], "benchmarks/tiny/hono-sqlite-wal.ts")
+        self.assertEqual(
+            workload["bun_script"],
+            "benchmarks/bun/hono-sqlite-wal-server.ts",
+        )
+
+        target, urls_from_file, file = workload_load_target(39_496, workload)
+        try:
+            self.assertTrue(urls_from_file)
+            self.assertEqual(target, file.name)
+            self.assertEqual(
+                Path(target).read_text().splitlines(),
+                [
+                    "http://127.0.0.1:39496/sqlite-wal/0",
+                    "http://127.0.0.1:39496/sqlite-wal/1",
+                ],
+            )
+        finally:
+            file.close()
+
+    def test_materializes_separate_target_private_sqlite_roots(self) -> None:
+        workload, directory = materialize_workload(
+            "hono-sqlite-wal",
+            WORKLOADS["hono-sqlite-wal"],
+        )
+        self.assertIsNotNone(directory)
+        try:
+            paths = workload["target_database_paths"]
+            self.assertNotEqual(paths["tinytsx"], paths["bun"])
+            self.assertEqual(paths["tinytsx"].name, "wal-load.db")
+            self.assertEqual(paths["bun"].name, "wal-load.db")
+            self.assertTrue(paths["tinytsx"].parent.is_dir())
+            self.assertTrue(paths["bun"].parent.is_dir())
+            self.assertIn(str(paths["tinytsx"].parent), workload["tiny_args"])
+            self.assertNotIn(str(paths["bun"].parent), workload["tiny_args"])
+        finally:
+            directory.cleanup()
+
+    def test_validates_sqlite_wal_progress_and_live_files(self) -> None:
+        response = lambda body: {
+            "status": 200,
+            "headers": {"content-type": "application/json"},
+            "body": body,
+        }
+        files = {
+            name: {"exists": True, "bytes": size}
+            for name, size in (("database", 4096), ("wal", 28_000), ("shm", 32_768))
+        }
+
+        self.assertEqual(
+            decode_sqlite_wal_state(
+                response(b'{"state":{"committed":32,"rolledBack":0}}'),
+                response(b'{"journal":{"journal_mode":"wal"}}'),
+                files,
+            ),
+            {
+                "committed": 32,
+                "rolledBack": 0,
+                "journalMode": "wal",
+                "files": files,
+            },
+        )
+        with self.assertRaises(RuntimeError):
+            decode_sqlite_wal_state(
+                response(b'{"state":{"committed":32,"rolledBack":1}}'),
+                response(b'{"journal":{"journal_mode":"wal"}}'),
+                files,
+            )
 
     def test_ai_provider_workload_uses_the_exact_pinned_graph(self) -> None:
         workload = WORKLOADS["hono-ai-provider"]
