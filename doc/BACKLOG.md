@@ -374,16 +374,21 @@ full-transaction rollback tracer has also landed with its sustained load
 evidence. The Map tracer passes the installed-package gate
 and a clean release verification with checksum-valid Apple- and Linux-arm64
 archives. The current post-Map head has not yet repeated that clean release
-attestation: the 2026-07-18 Apple rerun stopped in the frontend suite at 140/141
-tests because the dynamic SQLite request-header-name rejection unexpectedly
-compiled once instead of raising its stable boundary diagnostic. Focused header,
-native, reference, intake, benchmark, and sustained-load gates remain green, but
-the rejection must be made deterministic and the full Apple/Linux release gates
-must be repeated before this head is called a release candidate. No next tracer
-is selected by this backlog update; the next goal must explicitly choose either
-that release-hygiene blocker or a bounded slice from the remaining actor
-supervision, SQLite value families, or P4 workload families rather than widening
-Map or SQLite headers beyond their recorded ownership boundaries.
+attestation on both native targets. The 2026-07-18 Apple failure was deterministic,
+not flaky: awaited unknown effects were discarded, and invalid static SQLite
+header names reached Rust HIR validation without a frontend issue. Commit
+`9fbc605` now propagates every unsupported awaited effect except the explicit
+Hono middleware `next()` marker and validates the static header token before
+lowering. The complete clean Apple `release:verify` is green at that commit,
+including 141/141 frontend tests, native/reference/workspace suites, installed
+examples and failure paths, archive smoke, source attestation, and checksum.
+The Linux archive still attests an earlier commit, so a native Linux rerun at
+the same current source remains required before this head is called a release
+candidate. No next feature tracer is selected by this backlog update; the next
+goal must explicitly choose either that remaining release-hygiene gate or a
+bounded slice from actor supervision, SQLite value families, or P4 workload
+families rather than widening Map or SQLite headers beyond their recorded
+ownership boundaries.
 
 Do not reopen the completed alpha foundations as broad projects. File reading,
 SQLite, and local actors already have public bounded built-ins. Their next work
@@ -1085,7 +1090,7 @@ example builds and runs from the packaged resources, and a clean
 archives. The parent P1 item is therefore complete within the rejected
 boundaries above.
 
-#### Selected P3/P4 tracer — request-header SQLite idempotency and rollback (landed 2026-07-18; release rerun pending)
+#### Selected P3/P4 tracer — request-header SQLite idempotency and rollback (landed 2026-07-18; Apple release green, Linux rerun pending)
 
 Use a project-owned Hono payment/idempotency application as the next SQLite
 transaction/value-depth tracer. A statically named `Idempotency-Key` request
@@ -1127,11 +1132,14 @@ same ABI; Bun/Hono matches both the in-memory contract and disk/WAL workload.
 All 12 sustained expected-500 samples and 18 recovery/file checkpoints pass
 with zero partial rows. TinyTSX reaches 0.01x/0.06x Bun at concurrency 8/64
 with 8.05 MiB warm RSS, selecting the failed owner/error path for profiling.
-The first clean release rerun after landing this tracer stopped before packaging
-when the frontend dynamic-header-name rejection failed to throw in one full-suite
-execution. Treat the committed focused evidence as tracer evidence, not as a
-current-head release attestation, until that nondeterminism is fixed and both
-native release archives are regenerated from the same clean commit.
+The first clean release rerun after landing this tracer exposed two frontend
+boundary gaps: unsupported awaited effects were silently discarded, and static
+header-token validity was deferred to Rust HIR validation. Both now reject at
+the frontend boundary while preserving Hono's explicit synthetic `await next()`
+marker. A clean Apple release rerun at `9fbc605` passes and produces checksum
+`2e12572fa861d0e9a55b85fd69390ef9b296d142f76e81de5423455f4a2960a4`.
+Treat this as current Apple release evidence only; the Linux archive must still
+be regenerated from the same current source before release-candidate status.
 
 ### P1 — Compatibility and language depth
 
