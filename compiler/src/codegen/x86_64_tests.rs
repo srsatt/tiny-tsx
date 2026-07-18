@@ -1,5 +1,5 @@
 use crate::{
-    codegen::{Options, emit},
+    codegen::{emit, Options},
     hir::Program,
     target::Target,
 };
@@ -104,6 +104,55 @@ fn dynamic_program(target: Target) -> Program {
     .expect("valid dynamic HIR fixture")
 }
 
+fn function_program(target: Target) -> Program {
+    serde_json::from_str(&format!(
+        r#"{{
+          "version": 2,
+          "target": "{}",
+          "entry": "server.ts",
+          "modules": [{{"path": "server.ts"}}],
+          "functions": [{{
+            "id": 0,
+            "module": "server.ts",
+            "name": "select",
+            "parameters": [{{"name":"enabled","type":"boolean","span":{{"file":"server.ts","line":1,"column":1,"endLine":1,"endColumn":2}}}}],
+            "result": "string",
+            "body": {{
+              "kind": "booleanEqualConditional",
+              "left": {{"kind":"parameter","parameter":0,"span":{{"file":"server.ts","line":1,"column":1,"endLine":1,"endColumn":2}}}},
+              "right": {{"kind":"booleanLiteral","value":true,"span":{{"file":"server.ts","line":1,"column":1,"endLine":1,"endColumn":2}}}},
+              "whenEqual": {{"kind":"stringLiteral","string":0,"span":{{"file":"server.ts","line":1,"column":1,"endLine":1,"endColumn":2}}}},
+              "whenNotEqual": {{"kind":"stringLiteral","string":1,"span":{{"file":"server.ts","line":1,"column":1,"endLine":1,"endColumn":2}}}},
+              "span": {{"file":"server.ts","line":1,"column":1,"endLine":1,"endColumn":2}}
+            }},
+            "span": {{"file":"server.ts","line":1,"column":1,"endLine":1,"endColumn":2}}
+          }}],
+          "components": [],
+          "handlers": [{{
+            "method": "GET",
+            "path": "/",
+            "response": {{
+              "kind": "text",
+              "value": {{
+                "kind": "directCall",
+                "function": 0,
+                "arguments": [{{"kind":"booleanLiteral","value":true,"span":{{"file":"server.ts","line":1,"column":1,"endLine":1,"endColumn":2}}}}],
+                "span": {{"file":"server.ts","line":1,"column":1,"endLine":1,"endColumn":2}}
+              }},
+              "status": 200,
+              "contentType": null
+            }},
+            "span": {{"file":"server.ts","line":1,"column":1,"endLine":1,"endColumn":2}}
+          }}],
+          "staticStrings": [{{"id":0,"value":"enabled"}},{{"id":1,"value":"disabled"}}],
+          "constants": [],
+          "statistics": {{"modules":1,"functions":1,"components":0,"constants":0,"staticHtmlBytes":0,"dynamicHtmlExpressions":1}}
+        }}"#,
+        target.triple()
+    ))
+    .expect("valid function HIR fixture")
+}
+
 #[test]
 fn emits_linux_x86_64_static_handler_assembly() {
     let assembly = emit(
@@ -160,17 +209,14 @@ fn declares_components_before_nested_calls() {
         html: Vec::new(),
         span: span(),
     });
-    program.components[0].html.push(crate::hir::HtmlOp::CallComponent {
-        component: 1,
-        span: span(),
-    });
+    program.components[0]
+        .html
+        .push(crate::hir::HtmlOp::CallComponent {
+            component: 1,
+            span: span(),
+        });
 
-    emit(
-        &program,
-        Target::LinuxX86_64,
-        Options::default(),
-    )
-    .expect("emit forward component call");
+    emit(&program, Target::LinuxX86_64, Options::default()).expect("emit forward component call");
 }
 
 #[test]
@@ -219,13 +265,19 @@ fn emits_request_guards_and_headers() {
         },
     });
 
-    let assembly = emit(
-        &program,
-        Target::LinuxX86_64,
-        Options::default(),
-    )
-    .expect("emit handler guards");
+    let assembly =
+        emit(&program, Target::LinuxX86_64, Options::default()).expect("emit handler guards");
     assert!(assembly.contains("tinytsx_request_body_length"));
     assert!(assembly.contains("tinytsx_response_header_request_id"));
     assert!(assembly.contains("tinytsx_response_header_static"));
+}
+
+#[test]
+fn emits_portable_scalar_functions() {
+    for target in [Target::LinuxX86_64, Target::MacosX86_64] {
+        let assembly = emit(&function_program(target), target, Options::default())
+            .expect("emit scalar function");
+        assert!(assembly.contains("tinytsx_handle_get"));
+        assert!(assembly.contains("enabled"));
+    }
 }

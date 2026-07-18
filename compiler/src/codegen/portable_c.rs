@@ -4,6 +4,8 @@ use crate::hir::{HandlerResponse, HtmlOp, Program, ValueExpression};
 
 use super::Options;
 
+mod values;
+
 pub(super) fn emit(program: &Program, options: &Options) -> Result<String, String> {
     program.validate()?;
     let mut source = String::from(
@@ -42,6 +44,7 @@ pub(super) fn emit(program: &Program, options: &Options) -> Result<String, Strin
 
     emit_data(&mut source, program);
     emit_config(&mut source, program, options);
+    values::emit(&mut source, program)?;
     emit_components(&mut source, program);
     emit_handler(&mut source, program)?;
     Ok(source)
@@ -490,7 +493,21 @@ fn emit_text_expression(
                 ),
             );
         }
-        _ => return Err("portable x86 backend does not yet support this text expression".to_owned()),
+        _ if values::is_scalar(expression) => {
+            let value = values::render_handler_expression(expression, program)?;
+            writeln!(source, "{indent}{{").unwrap();
+            writeln!(source, "{indent}  tiny_value scalar_value = {value};").unwrap();
+            writeln!(source, "{indent}  if (scalar_value.thrown) return 6;").unwrap();
+            emit_write_call(
+                source,
+                &format!("{indent}  "),
+                "tinytsx_html_write_static(writer, scalar_value.bytes, scalar_value.length)",
+            );
+            writeln!(source, "{indent}}}").unwrap();
+        }
+        _ => {
+            return Err("portable x86 backend does not yet support this text expression".to_owned())
+        }
     }
     Ok(())
 }
