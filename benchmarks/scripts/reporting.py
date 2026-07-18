@@ -78,6 +78,7 @@ def render_markdown(result: dict[str, Any]) -> str:
         f"- TinyTSX commit: `{result['environment']['commit']}`",
         f"- Bun: {result['environment']['bunVersion']}",
         f"- oha: {result['environment']['ohaVersion']}",
+        f"- Load generator: {result['configuration'].get('loadGenerator', 'oha')}",
         f"- Runs per point: {result['configuration']['runs']}",
         f"- Duration per run: {result['configuration']['durationSeconds']} seconds",
         "",
@@ -142,6 +143,15 @@ def render_markdown(result: dict[str, Any]) -> str:
             "",
             "Medians are computed across all recorded runs; no samples are discarded. "
             "Raw samples are retained in the adjacent JSON report.",
+            *(
+                [
+                    f"Throughput counts individual HTTP requests; "
+                    f"{result['correctness']['scenarioRequestsPerCycle']} checked requests "
+                    "complete one state-bounded CRUD cycle.",
+                ]
+                if result["correctness"].get("scenarioRequestsPerCycle")
+                else []
+            ),
             "",
             "## Limitations",
             "",
@@ -170,6 +180,17 @@ def _response_body_lines(correctness: dict[str, Any]) -> list[str]:
 
 
 def _request_contract_lines(correctness: dict[str, Any]) -> list[str]:
+    if steps := correctness.get("scenarioSteps"):
+        return [
+            "## Scenario contract",
+            "",
+            *[f"{index}. {step}" for index, step in enumerate(steps, start=1)],
+            "",
+            "Every step carries a fixed per-worker credential-free session cookie; "
+            "the client validates status, content type, record identity, text, completion, "
+            "and final empty state before starting the next cycle.",
+            "",
+        ]
     method = str(correctness.get("method", "GET"))
     body = str(correctness.get("requestBodyUtf8", ""))
     content_type = correctness.get("requestContentType")

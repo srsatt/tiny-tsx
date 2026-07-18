@@ -68,6 +68,22 @@ class ReportingTest(unittest.TestCase):
         self.assertIn("- Content-Type: `application/json`", markdown)
         self.assertIn(r'- Body: `"{\"value\":7}"` (11 bytes)', markdown)
 
+    def test_renders_a_checked_multi_request_scenario_contract(self) -> None:
+        raw = self._raw()
+        raw["configuration"]["loadGenerator"] = "bounded CRUD client"
+        raw["correctness"].update({
+            "scenarioSteps": ["create", "list", "complete", "delete"],
+            "scenarioRequestsPerCycle": 4,
+        })
+
+        markdown = render_markdown(summarize(raw))
+
+        self.assertIn("Load generator: bounded CRUD client", markdown)
+        self.assertIn("## Scenario contract", markdown)
+        self.assertIn("1. create", markdown)
+        self.assertIn("4. delete", markdown)
+        self.assertIn("4 checked requests complete one state-bounded CRUD cycle", markdown)
+
     @staticmethod
     def _raw() -> dict:
         sample = {
