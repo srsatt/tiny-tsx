@@ -244,13 +244,19 @@ may be `undefined`, `null`, boolean, finite number, closed string, or an already
 supported bounded request-time string. Repeated `set` replaces the slot and a
 missing `get` yields `undefined`.
 
+Direct `context.var.name` and closed string-literal `context.var["name"]` reads
+resolve the same slots without materializing the source getter's object. A
+missing property is `undefined`. Dynamic computed access, assignment,
+destructuring, spread/rest, enumeration, identity, and method calls remain
+compile-time errors.
+
 The shared tracer stores a closed prefix before `next()` in matched middleware,
 then stores and reads a route parameter in the handler. Apple native HTTP proves
 32 concurrent requests cannot observe each other's values; Linux arm64
 assembles the path-segment ABI and Bun/Hono executes the same source. Dynamic,
 empty, or oversized keys, structured/escaping values, more than 16 slots,
-`Context.var`, general `new Map()`, identity, iteration, deletion, and mutation
-after response escape remain unsupported.
+general `new Map()`, identity, iteration, deletion, and mutation after response
+escape remain unsupported.
 
 The pinned upstream CORS factory now lowers for closed wildcard-origin options.
 Normal responses carry the configured static headers, while compiler-generated

@@ -53,8 +53,10 @@ share their request-local values, replacement is permitted, and missing lookup
 returns `undefined`. The compiler lowers the already-supported bounded scalar
 or request-string value directly into the response graph. No map object,
 membership table, or process-persistent state is emitted. Dynamic keys,
-iteration, `size`, `has`, `delete`, `clear`, identity, and `Context.var` still
-require the future bounded native map representation.
+iteration, `size`, `has`, `delete`, `clear`, and identity still require the
+future bounded native map representation. Direct identifier and closed
+string-literal `Context.var` reads resolve the same fixed slots; assignment,
+destructuring, enumeration, and escape of that view remain rejected.
 
 Borrowed request state is modeled separately from both. For example,
 `c.req.query('pretty')` produces a request-time query predicate, not a record

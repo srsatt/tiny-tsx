@@ -48,8 +48,10 @@ General Context variables have a separate fixed-key AOT slice. A route may use
 1–16 static non-empty UTF-8 keys of at most 128 bytes with bounded primitive or
 supported request-time string values. Pre-`next()` middleware and its handler
 share the request-local slots; repeated `set` replaces and a missing `get`
-returns `undefined`. Dynamic keys, structured/escaping values, `Context.var`,
-and general `Map` identity, iteration, or deletion remain unsupported.
+returns `undefined`. Direct identifier and closed string-literal `Context.var`
+reads resolve those same slots. Dynamic keys, structured/escaping values,
+`Context.var` assignment/destructuring/enumeration, and general `Map` identity,
+iteration, or deletion remain unsupported.
 
 The upstream CORS factory now supplies a bounded native slice for closed
 `origin: "*"` options. Normal responses receive the declared allow-origin,

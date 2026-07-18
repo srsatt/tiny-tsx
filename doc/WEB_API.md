@@ -85,8 +85,9 @@ cannot be replaced by the separate fixed-key Context-variable specialization.
 That specialization admits 1–16 statically named request-local slots shared by
 matched pre-`next()` middleware and the route handler. It reuses bounded
 primitive and request-string expressions and emits no general map object.
-Dynamic membership, `Context.var`, identity, iteration, and deletion remain
-outside the Web/Hono contract.
+Direct identifier and closed string-literal `Context.var` reads resolve the
+same slots. Dynamic membership, assignment/destructuring/enumeration of the
+view, identity, iteration, and deletion remain outside the Web/Hono contract.
 
 Closed ETag middleware uses a second dedicated request predicate. SHA-1 is
 computed by the AOT frontend for immutable response bytes; the native runtime

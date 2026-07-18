@@ -857,7 +857,7 @@ value rather than weakening its generator, length, or route-scope checks.
 
 Reject dynamic keys, more than 16 slots, oversized/empty keys, structured or
 escaping values, map identity, `new Map()` application values, iteration,
-`size`, `has`, `delete`, `clear`, arbitrary `Context.var`, and mutation after a
+`size`, `has`, `delete`, `clear`, and mutation after a
 response escapes. The tracer therefore advances Hono interoperability and the
 record-versus-map design, but does not complete the broad bounded-native-`Map`
 P1 item or imply general middleware/closure/async semantics.
@@ -883,7 +883,7 @@ shared unchanged tracer also passes Bun/Hono, and its native/reference scripts
 are reachable through the Hono manifest and release suite. This closes only the
 fixed-key `Context.set/get` specialization; general `Map` remains open.
 
-#### Selected P1/P2 tracer — bounded Hono `Context.var` reads
+#### Selected P1/P2 tracer — bounded Hono `Context.var` reads (landed 2026-07-18)
 
 Use pinned Hono commit `b2ae3a2204a48ce15a26448fd746d39745eb1837`, the
 `var` getter in unchanged `src/context.ts`, and the adjacent `c.var` case in
@@ -912,6 +912,15 @@ request-derived response ABI; Bun/Hono must execute the unchanged shared source.
 The release suite must reach both native and reference evidence. Capacity and
 disposal remain the already-proved 16-slot compile-time ceiling and request-end
 lifetime, so no new queue or owned-resource saturation test is applicable.
+
+The tracer is green. Direct identifier and closed string-literal `Context.var`
+reads lower to the same request-local values as `get`, including missing
+`undefined` and a route-derived string shared from pre-`next()` middleware.
+Frontend diagnostics retain dynamic access, assignment, enumeration, and
+destructuring boundaries. Apple native HTTP proves 32 concurrent values on both
+access styles and a later recovery request; Linux arm64 assembles the same ABI,
+and Bun/Hono passes the shared source. The existing manifest/native/reference
+release gates cover the expanded API without adding a map object.
 
 ### P1 — Compatibility and language depth
 
@@ -958,8 +967,9 @@ lifetime, so no new queue or owned-resource saturation test is applicable.
       infinities with complete semantics evidence.
   - 2026-07-18: statically named Hono `Context.set/get` values now specialize to
     1–16 request-local AOT slots with replacement and missing-`undefined`
-    behavior. Dynamic membership, identity, construction, iteration, deletion,
-    and general native `Map` remain open.
+    behavior; direct static `Context.var` reads resolve the same slots. Dynamic
+    membership, assignment through the view, identity, construction, iteration,
+    deletion, and general native `Map` remain open.
 - [ ] Replace whole-module forbidden-syntax rejection with request/initialization
       reachability and specialize remaining closed-shape Hono object rest.
   - 2026-07-17: exception syntax is no longer rejected module-wide. Unreachable
