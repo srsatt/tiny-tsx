@@ -1,0 +1,921 @@
+{
+  "schemaVersion": 2,
+  "timestamp": "2026-07-18T03:27:48+00:00",
+  "workload": "hono-sqlite-wal",
+  "scope": "two independent SQLite owners contending for one capability-scoped on-disk WAL file; every request rolls back one savepoint update, commits one progress update with synchronous FULL, and returns a fixed Hono response; HTTP/1.1; localhost",
+  "limitations": [
+    "TinyTSX uses two application-pool database owners while Bun uses two dedicated Workers; this does not measure failed full-transaction rollback, crash or power-loss durability, cold storage, disabled automatic checkpoints, more than two connections, growing tables, request-derived values, network filesystems, or cross-process writers.",
+    "TinyTSX bounds each connection at 100 requests and reconnects; the Bun host may retain a connection longer."
+  ],
+  "responseDifferences": [],
+  "environment": {
+    "machine": "Model Name: MacBook Pro; Model Identifier: Mac17,6; Chip: Apple M5 Max; Total Number of Cores: 18 (6 Super and 12 Performance); Memory: 128 GB",
+    "os": "macOS 26.5.2",
+    "architecture": "arm64",
+    "rustVersion": "rustc 1.96.0 (ac68faa20 2026-05-25)",
+    "bunVersion": "1.3.13",
+    "ohaVersion": "oha 1.15.0",
+    "commit": "07efc5d",
+    "dirty": false,
+    "powerAndBackgroundState": "not controlled"
+  },
+  "configuration": {
+    "runs": 3,
+    "startupRuns": 5,
+    "durationSeconds": 15,
+    "concurrency": [
+      8,
+      64
+    ],
+    "workers": 8,
+    "requestMemoryBytes": 262144,
+    "keepAlive": true,
+    "supportProcess": false,
+    "processSampleIntervalMs": 20,
+    "allocationInstrumentation": "disabled"
+  },
+  "correctness": {
+    "path": "/sqlite-wal/0",
+    "loadPaths": [
+      "/sqlite-wal/0",
+      "/sqlite-wal/1"
+    ],
+    "statePaths": [
+      "/sqlite-wal/state",
+      "/sqlite-wal/journal"
+    ],
+    "statePostcondition": "the committed counter strictly progresses within each run, the rolled-back probe remains zero, journal mode is wal, and the live database/WAL/SHM files are non-empty",
+    "method": "GET",
+    "requestContentType": null,
+    "requestBodyUtf8": "",
+    "status": 200,
+    "contentTypes": {
+      "tinytsx": "text/plain; charset=UTF-8",
+      "bun": "text/plain; charset=UTF-8"
+    },
+    "contentLength": 9,
+    "framings": {
+      "tinytsx": "9",
+      "bun": "9"
+    },
+    "bodyUtf8": "committed",
+    "headers": {},
+    "numericHeaders": []
+  },
+  "targets": {
+    "tinytsx": {
+      "artifactBytes": 2372072,
+      "runtimeExecutableBytes": 2372072,
+      "startupSamplesMs": [
+        475.983375,
+        49.479208,
+        47.738208,
+        53.728625,
+        44.971083
+      ],
+      "idleRssSamplesBytes": [
+        8290304,
+        8306688,
+        8306688
+      ],
+      "postWarmupRssSamplesBytes": [
+        8470528,
+        8454144,
+        8454144
+      ],
+      "resourceSamples": [
+        {
+          "wallSeconds": 31.432211708975956,
+          "userCpuSeconds": 3.824210833333333,
+          "systemCpuSeconds": 13.333856583333333,
+          "cpuSeconds": 17.158067416666665,
+          "cpuUtilizationPercent": 54.58752815592328,
+          "peakRssBytes": 8585216,
+          "pageFaults": 20,
+          "pageIns": 0,
+          "copyOnWriteFaults": 0,
+          "machSyscalls": 512280,
+          "unixSyscalls": 6664061,
+          "contextSwitches": 870637,
+          "peakThreads": 17,
+          "openFileDescriptorsStart": 9,
+          "openFileDescriptorsPeak": 73,
+          "openFileDescriptorsEnd": 9,
+          "diskBytesRead": 0,
+          "diskBytesWritten": 5224210432,
+          "instructions": 95239318103,
+          "cycles": 54326603012
+        },
+        {
+          "wallSeconds": 31.431316458038054,
+          "userCpuSeconds": 3.8591807916666667,
+          "systemCpuSeconds": 13.24233825,
+          "cpuSeconds": 17.101519041666666,
+          "cpuUtilizationPercent": 54.40917202592457,
+          "peakRssBytes": 8519680,
+          "pageFaults": 15,
+          "pageIns": 0,
+          "copyOnWriteFaults": 0,
+          "machSyscalls": 515159,
+          "unixSyscalls": 6702523,
+          "contextSwitches": 867084,
+          "peakThreads": 17,
+          "openFileDescriptorsStart": 9,
+          "openFileDescriptorsPeak": 73,
+          "openFileDescriptorsEnd": 9,
+          "diskBytesRead": 0,
+          "diskBytesWritten": 5253484544,
+          "instructions": 94340791421,
+          "cycles": 53397530424
+        },
+        {
+          "wallSeconds": 31.439865791995544,
+          "userCpuSeconds": 3.957951583333333,
+          "systemCpuSeconds": 13.279262958333332,
+          "cpuSeconds": 17.237214541666667,
+          "cpuUtilizationPercent": 54.82598003346181,
+          "peakRssBytes": 8519680,
+          "pageFaults": 17,
+          "pageIns": 0,
+          "copyOnWriteFaults": 0,
+          "machSyscalls": 507533,
+          "unixSyscalls": 6600029,
+          "contextSwitches": 861788,
+          "peakThreads": 17,
+          "openFileDescriptorsStart": 9,
+          "openFileDescriptorsPeak": 73,
+          "openFileDescriptorsEnd": 9,
+          "diskBytesRead": 0,
+          "diskBytesWritten": 5175685120,
+          "instructions": 94229728329,
+          "cycles": 52404769470
+        }
+      ],
+      "allocationSamples": [],
+      "stateSamples": [
+        {
+          "run": 0,
+          "phase": "warmup",
+          "values": {
+            "committed": 8657,
+            "rolledBack": 0,
+            "journalMode": "wal",
+            "files": {
+              "database": {
+                "exists": true,
+                "bytes": 12288
+              },
+              "wal": {
+                "exists": true,
+                "bytes": 4124152
+              },
+              "shm": {
+                "exists": true,
+                "bytes": 32768
+              }
+            }
+          }
+        },
+        {
+          "run": 0,
+          "phase": "8",
+          "values": {
+            "committed": 126424,
+            "rolledBack": 0,
+            "journalMode": "wal",
+            "files": {
+              "database": {
+                "exists": true,
+                "bytes": 12288
+              },
+              "wal": {
+                "exists": true,
+                "bytes": 4128272
+              },
+              "shm": {
+                "exists": true,
+                "bytes": 32768
+              }
+            }
+          }
+        },
+        {
+          "run": 0,
+          "phase": "64",
+          "values": {
+            "committed": 254826,
+            "rolledBack": 0,
+            "journalMode": "wal",
+            "files": {
+              "database": {
+                "exists": true,
+                "bytes": 12288
+              },
+              "wal": {
+                "exists": true,
+                "bytes": 4128272
+              },
+              "shm": {
+                "exists": true,
+                "bytes": 32768
+              }
+            }
+          }
+        },
+        {
+          "run": 1,
+          "phase": "warmup",
+          "values": {
+            "committed": 8795,
+            "rolledBack": 0,
+            "journalMode": "wal",
+            "files": {
+              "database": {
+                "exists": true,
+                "bytes": 12288
+              },
+              "wal": {
+                "exists": true,
+                "bytes": 4120032
+              },
+              "shm": {
+                "exists": true,
+                "bytes": 32768
+              }
+            }
+          }
+        },
+        {
+          "run": 1,
+          "phase": "64",
+          "values": {
+            "committed": 138385,
+            "rolledBack": 0,
+            "journalMode": "wal",
+            "files": {
+              "database": {
+                "exists": true,
+                "bytes": 12288
+              },
+              "wal": {
+                "exists": true,
+                "bytes": 4128272
+              },
+              "shm": {
+                "exists": true,
+                "bytes": 32768
+              }
+            }
+          }
+        },
+        {
+          "run": 1,
+          "phase": "8",
+          "values": {
+            "committed": 256267,
+            "rolledBack": 0,
+            "journalMode": "wal",
+            "files": {
+              "database": {
+                "exists": true,
+                "bytes": 12288
+              },
+              "wal": {
+                "exists": true,
+                "bytes": 4132392
+              },
+              "shm": {
+                "exists": true,
+                "bytes": 32768
+              }
+            }
+          }
+        },
+        {
+          "run": 2,
+          "phase": "warmup",
+          "values": {
+            "committed": 7310,
+            "rolledBack": 0,
+            "journalMode": "wal",
+            "files": {
+              "database": {
+                "exists": true,
+                "bytes": 12288
+              },
+              "wal": {
+                "exists": true,
+                "bytes": 4128272
+              },
+              "shm": {
+                "exists": true,
+                "bytes": 32768
+              }
+            }
+          }
+        },
+        {
+          "run": 2,
+          "phase": "8",
+          "values": {
+            "committed": 124304,
+            "rolledBack": 0,
+            "journalMode": "wal",
+            "files": {
+              "database": {
+                "exists": true,
+                "bytes": 12288
+              },
+              "wal": {
+                "exists": true,
+                "bytes": 4132392
+              },
+              "shm": {
+                "exists": true,
+                "bytes": 32768
+              }
+            }
+          }
+        },
+        {
+          "run": 2,
+          "phase": "64",
+          "values": {
+            "committed": 252453,
+            "rolledBack": 0,
+            "journalMode": "wal",
+            "files": {
+              "database": {
+                "exists": true,
+                "bytes": 12288
+              },
+              "wal": {
+                "exists": true,
+                "bytes": 4136512
+              },
+              "shm": {
+                "exists": true,
+                "bytes": 32768
+              }
+            }
+          }
+        }
+      ],
+      "throughput": {
+        "8": {
+          "samples": [
+            {
+              "requests_per_second": 7850.038536605536,
+              "success_rate": 1.0,
+              "p50_ms": 0.740792,
+              "p95_ms": 1.868334,
+              "p99_ms": 4.562167,
+              "max_ms": 18.832042,
+              "total_seconds": 15.002091958,
+              "status_codes": {
+                "200": 117767
+              }
+            },
+            {
+              "requests_per_second": 7856.849602559912,
+              "success_rate": 1.0,
+              "p50_ms": 0.701875,
+              "p95_ms": 1.813,
+              "p99_ms": 4.460249999999999,
+              "max_ms": 114.362458,
+              "total_seconds": 15.003723625,
+              "status_codes": {
+                "200": 117882
+              }
+            },
+            {
+              "requests_per_second": 7798.6192154927985,
+              "success_rate": 1.0,
+              "p50_ms": 0.6745,
+              "p95_ms": 1.824375,
+              "p99_ms": 4.482749999999999,
+              "max_ms": 135.334958,
+              "total_seconds": 15.001886458,
+              "status_codes": {
+                "200": 116994
+              }
+            }
+          ],
+          "median": {
+            "requests_per_second": 7850.038536605536,
+            "p50_ms": 0.701875,
+            "p95_ms": 1.824375,
+            "p99_ms": 4.482749999999999,
+            "max_ms": 114.362458
+          }
+        },
+        "64": {
+          "samples": [
+            {
+              "requests_per_second": 8554.27954517321,
+              "success_rate": 1.0,
+              "p50_ms": 1.082459,
+              "p95_ms": 92.275583,
+              "p99_ms": 109.693417,
+              "max_ms": 127.66212499999999,
+              "total_seconds": 15.010264666,
+              "status_codes": {
+                "200": 128402
+              }
+            },
+            {
+              "requests_per_second": 8633.195083858363,
+              "success_rate": 1.0,
+              "p50_ms": 1.074041,
+              "p95_ms": 89.049542,
+              "p99_ms": 107.65070899999999,
+              "max_ms": 129.187666,
+              "total_seconds": 15.010665083,
+              "status_codes": {
+                "200": 129590
+              }
+            },
+            {
+              "requests_per_second": 8537.128945050403,
+              "success_rate": 1.0,
+              "p50_ms": 1.0766250000000002,
+              "p95_ms": 92.144542,
+              "p99_ms": 108.838875,
+              "max_ms": 244.517292,
+              "total_seconds": 15.010784167,
+              "status_codes": {
+                "200": 128149
+              }
+            }
+          ],
+          "median": {
+            "requests_per_second": 8554.27954517321,
+            "p50_ms": 1.0766250000000002,
+            "p95_ms": 92.144542,
+            "p99_ms": 108.838875,
+            "max_ms": 129.187666
+          }
+        }
+      },
+      "firstLaunchMs": 475.983375,
+      "startupMedianMs": 49.479208,
+      "idleRssMedianBytes": 8306688,
+      "postWarmupRssMedianBytes": 8454144,
+      "resourceMedian": {
+        "wallSeconds": 31.432211708975956,
+        "userCpuSeconds": 3.8591807916666667,
+        "systemCpuSeconds": 13.279262958333332,
+        "cpuSeconds": 17.158067416666665,
+        "cpuUtilizationPercent": 54.58752815592328,
+        "peakRssBytes": 8519680.0,
+        "pageFaults": 17.0,
+        "pageIns": 0.0,
+        "copyOnWriteFaults": 0.0,
+        "machSyscalls": 512280.0,
+        "unixSyscalls": 6664061.0,
+        "contextSwitches": 867084.0,
+        "peakThreads": 17.0,
+        "openFileDescriptorsStart": 9.0,
+        "openFileDescriptorsPeak": 73.0,
+        "openFileDescriptorsEnd": 9.0,
+        "diskBytesRead": 0.0,
+        "diskBytesWritten": 5224210432.0,
+        "instructions": 94340791421.0,
+        "cycles": 53397530424.0
+      },
+      "allocationMedian": {}
+    },
+    "bun": {
+      "artifactBytes": 2665,
+      "runtimeExecutableBytes": 63072928,
+      "startupSamplesMs": [
+        42.067459,
+        26.073,
+        24.851292,
+        22.467417,
+        29.776917
+      ],
+      "idleRssSamplesBytes": [
+        52264960,
+        52592640,
+        52019200
+      ],
+      "postWarmupRssSamplesBytes": [
+        90406912,
+        92078080,
+        91750400
+      ],
+      "resourceSamples": [
+        {
+          "wallSeconds": 31.353973583027255,
+          "userCpuSeconds": 8.265186166666666,
+          "systemCpuSeconds": 12.207884541666665,
+          "cpuSeconds": 20.47307070833333,
+          "cpuUtilizationPercent": 65.29657446485811,
+          "peakRssBytes": 132825088,
+          "pageFaults": 4932,
+          "pageIns": 0,
+          "copyOnWriteFaults": 0,
+          "machSyscalls": 1915284,
+          "unixSyscalls": 4442802,
+          "contextSwitches": 955605,
+          "peakThreads": 17,
+          "openFileDescriptorsStart": 12,
+          "openFileDescriptorsPeak": 76,
+          "openFileDescriptorsEnd": 12,
+          "diskBytesRead": 16384,
+          "diskBytesWritten": 6622777344,
+          "instructions": 140657877500,
+          "cycles": 71145087468
+        },
+        {
+          "wallSeconds": 31.342695959028788,
+          "userCpuSeconds": 8.396964833333334,
+          "systemCpuSeconds": 12.13966225,
+          "cpuSeconds": 20.536627083333336,
+          "cpuUtilizationPercent": 65.522848162707,
+          "peakRssBytes": 145080320,
+          "pageFaults": 5662,
+          "pageIns": 0,
+          "copyOnWriteFaults": 0,
+          "machSyscalls": 1950727,
+          "unixSyscalls": 4549257,
+          "contextSwitches": 948618,
+          "peakThreads": 18,
+          "openFileDescriptorsStart": 12,
+          "openFileDescriptorsPeak": 76,
+          "openFileDescriptorsEnd": 12,
+          "diskBytesRead": 0,
+          "diskBytesWritten": 6850211840,
+          "instructions": 145370912559,
+          "cycles": 71517450887
+        },
+        {
+          "wallSeconds": 31.346708209021017,
+          "userCpuSeconds": 8.411297958333334,
+          "systemCpuSeconds": 11.994310916666667,
+          "cpuSeconds": 20.405608875,
+          "cpuUtilizationPercent": 65.09649670049768,
+          "peakRssBytes": 132022272,
+          "pageFaults": 4897,
+          "pageIns": 0,
+          "copyOnWriteFaults": 0,
+          "machSyscalls": 1939601,
+          "unixSyscalls": 4495278,
+          "contextSwitches": 929686,
+          "peakThreads": 17,
+          "openFileDescriptorsStart": 12,
+          "openFileDescriptorsPeak": 76,
+          "openFileDescriptorsEnd": 12,
+          "diskBytesRead": 4096,
+          "diskBytesWritten": 6786076672,
+          "instructions": 142160901458,
+          "cycles": 70702935889
+        }
+      ],
+      "allocationSamples": [],
+      "stateSamples": [
+        {
+          "run": 0,
+          "phase": "warmup",
+          "values": {
+            "committed": 11660,
+            "rolledBack": 0,
+            "journalMode": "wal",
+            "files": {
+              "database": {
+                "exists": true,
+                "bytes": 12288
+              },
+              "wal": {
+                "exists": true,
+                "bytes": 2710992
+              },
+              "shm": {
+                "exists": true,
+                "bytes": 32768
+              }
+            }
+          }
+        },
+        {
+          "run": 0,
+          "phase": "8",
+          "values": {
+            "committed": 114876,
+            "rolledBack": 0,
+            "journalMode": "wal",
+            "files": {
+              "database": {
+                "exists": true,
+                "bytes": 12288
+              },
+              "wal": {
+                "exists": true,
+                "bytes": 1388472
+              },
+              "shm": {
+                "exists": true,
+                "bytes": 32768
+              }
+            }
+          }
+        },
+        {
+          "run": 0,
+          "phase": "64",
+          "values": {
+            "committed": 329865,
+            "rolledBack": 0,
+            "journalMode": "wal",
+            "files": {
+              "database": {
+                "exists": true,
+                "bytes": 12288
+              },
+              "wal": {
+                "exists": true,
+                "bytes": 226632
+              },
+              "shm": {
+                "exists": true,
+                "bytes": 32768
+              }
+            }
+          }
+        },
+        {
+          "run": 1,
+          "phase": "warmup",
+          "values": {
+            "committed": 11563,
+            "rolledBack": 0,
+            "journalMode": "wal",
+            "files": {
+              "database": {
+                "exists": true,
+                "bytes": 12288
+              },
+              "wal": {
+                "exists": true,
+                "bytes": 2327832
+              },
+              "shm": {
+                "exists": true,
+                "bytes": 32768
+              }
+            }
+          }
+        },
+        {
+          "run": 1,
+          "phase": "64",
+          "values": {
+            "committed": 236430,
+            "rolledBack": 0,
+            "journalMode": "wal",
+            "files": {
+              "database": {
+                "exists": true,
+                "bytes": 12288
+              },
+              "wal": {
+                "exists": true,
+                "bytes": 1268992
+              },
+              "shm": {
+                "exists": true,
+                "bytes": 32768
+              }
+            }
+          }
+        },
+        {
+          "run": 1,
+          "phase": "8",
+          "values": {
+            "committed": 341083,
+            "rolledBack": 0,
+            "journalMode": "wal",
+            "files": {
+              "database": {
+                "exists": true,
+                "bytes": 12288
+              },
+              "wal": {
+                "exists": true,
+                "bytes": 1590352
+              },
+              "shm": {
+                "exists": true,
+                "bytes": 32768
+              }
+            }
+          }
+        },
+        {
+          "run": 2,
+          "phase": "warmup",
+          "values": {
+            "committed": 11602,
+            "rolledBack": 0,
+            "journalMode": "wal",
+            "files": {
+              "database": {
+                "exists": true,
+                "bytes": 12288
+              },
+              "wal": {
+                "exists": true,
+                "bytes": 2472032
+              },
+              "shm": {
+                "exists": true,
+                "bytes": 32768
+              }
+            }
+          }
+        },
+        {
+          "run": 2,
+          "phase": "8",
+          "values": {
+            "committed": 114754,
+            "rolledBack": 0,
+            "journalMode": "wal",
+            "files": {
+              "database": {
+                "exists": true,
+                "bytes": 12288
+              },
+              "wal": {
+                "exists": true,
+                "bytes": 774592
+              },
+              "shm": {
+                "exists": true,
+                "bytes": 32768
+              }
+            }
+          }
+        },
+        {
+          "run": 2,
+          "phase": "64",
+          "values": {
+            "committed": 337906,
+            "rolledBack": 0,
+            "journalMode": "wal",
+            "files": {
+              "database": {
+                "exists": true,
+                "bytes": 12288
+              },
+              "wal": {
+                "exists": true,
+                "bytes": 1145392
+              },
+              "shm": {
+                "exists": true,
+                "bytes": 32768
+              }
+            }
+          }
+        }
+      ],
+      "throughput": {
+        "8": {
+          "samples": [
+            {
+              "requests_per_second": 6879.527506308599,
+              "success_rate": 1.0,
+              "p50_ms": 0.786208,
+              "p95_ms": 3.30825,
+              "p99_ms": 4.669458,
+              "max_ms": 12.725167,
+              "total_seconds": 15.003355958,
+              "status_codes": {
+                "200": 103216
+              }
+            },
+            {
+              "requests_per_second": 6974.86995529985,
+              "success_rate": 1.0,
+              "p50_ms": 0.757875,
+              "p95_ms": 3.2265,
+              "p99_ms": 4.547209,
+              "max_ms": 68.434333,
+              "total_seconds": 15.004294083,
+              "status_codes": {
+                "200": 104653
+              }
+            },
+            {
+              "requests_per_second": 6875.101334337818,
+              "success_rate": 1.0,
+              "p50_ms": 0.753291,
+              "p95_ms": 3.291292,
+              "p99_ms": 4.703833,
+              "max_ms": 68.357708,
+              "total_seconds": 15.003706125,
+              "status_codes": {
+                "200": 103152
+              }
+            }
+          ],
+          "median": {
+            "requests_per_second": 6879.527506308599,
+            "p50_ms": 0.757875,
+            "p95_ms": 3.291292,
+            "p99_ms": 4.669458,
+            "max_ms": 68.357708
+          }
+        },
+        "64": {
+          "samples": [
+            {
+              "requests_per_second": 14322.498301844713,
+              "success_rate": 1.0,
+              "p50_ms": 2.633375,
+              "p95_ms": 11.706958,
+              "p99_ms": 14.584541,
+              "max_ms": 95.638875,
+              "total_seconds": 15.010579542,
+              "status_codes": {
+                "200": 214989
+              }
+            },
+            {
+              "requests_per_second": 14982.752272377558,
+              "success_rate": 1.0,
+              "p50_ms": 2.560625,
+              "p95_ms": 11.268125,
+              "p99_ms": 13.503791,
+              "max_ms": 96.150208,
+              "total_seconds": 15.008390709,
+              "status_codes": {
+                "200": 224867
+              }
+            },
+            {
+              "requests_per_second": 14872.315872828376,
+              "success_rate": 1.0,
+              "p50_ms": 2.573042,
+              "p95_ms": 11.139041,
+              "p99_ms": 13.134792,
+              "max_ms": 105.101708,
+              "total_seconds": 15.004522625,
+              "status_codes": {
+                "200": 223152
+              }
+            }
+          ],
+          "median": {
+            "requests_per_second": 14872.315872828376,
+            "p50_ms": 2.573042,
+            "p95_ms": 11.268125,
+            "p99_ms": 13.503791,
+            "max_ms": 96.150208
+          }
+        }
+      },
+      "firstLaunchMs": 42.067459,
+      "startupMedianMs": 26.073,
+      "idleRssMedianBytes": 52264960,
+      "postWarmupRssMedianBytes": 91750400,
+      "resourceMedian": {
+        "wallSeconds": 31.346708209021017,
+        "userCpuSeconds": 8.396964833333334,
+        "systemCpuSeconds": 12.13966225,
+        "cpuSeconds": 20.47307070833333,
+        "cpuUtilizationPercent": 65.29657446485811,
+        "peakRssBytes": 132825088.0,
+        "pageFaults": 4932.0,
+        "pageIns": 0.0,
+        "copyOnWriteFaults": 0.0,
+        "machSyscalls": 1939601.0,
+        "unixSyscalls": 4495278.0,
+        "contextSwitches": 948618.0,
+        "peakThreads": 17.0,
+        "openFileDescriptorsStart": 12.0,
+        "openFileDescriptorsPeak": 76.0,
+        "openFileDescriptorsEnd": 12.0,
+        "diskBytesRead": 4096.0,
+        "diskBytesWritten": 6786076672.0,
+        "instructions": 142160901458.0,
+        "cycles": 71145087468.0
+      },
+      "allocationMedian": {}
+    }
+  },
+  "comparisons": {
+    "8": {
+      "tinytsxToBunRps": 1.1410723380939995,
+      "tinytsxToBunP99": 0.9600150595636581
+    },
+    "64": {
+      "tinytsxToBunRps": 0.5751814053924059,
+      "tinytsxToBunP99": 8.05987555642708
+    }
+  }
+}
