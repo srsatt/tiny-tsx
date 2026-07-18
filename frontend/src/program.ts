@@ -52,6 +52,7 @@ export interface CompileOptions {
   allowedEnvironment?: ReadonlySet<string>;
   allowedReadRoots?: readonly string[];
   allowedWriteRoots?: readonly string[];
+  sqliteKvBindings?: Readonly<Record<string, string>>;
 }
 
 export function compileEntry(entryPath: string, options: CompileOptions): HirProgram {
@@ -140,7 +141,11 @@ export function compileEntry(entryPath: string, options: CompileOptions): HirPro
       const chain = classPlan === undefined
         ? application.constructorName
         : displayRuntimeClassPlan(classPlan, process.cwd());
-      const initialization = evaluateApplicationInitialization(graph, application);
+      const initialization = evaluateApplicationInitialization(
+        graph,
+        application,
+        options.sqliteKvBindings,
+      );
       if (initialization !== undefined && initialization.issues.length === 0) {
         const lowered = lowerApplicationInitialization(
           graph,
@@ -897,6 +902,32 @@ function lowerRuntimeString(
           span,
         };
       }
+      if (part.kind === "todoOperation") {
+        return {
+          kind: "todoStore" as const,
+          database: part.database.id,
+          operation: part.operation,
+          user: part.user.kind === "staticString"
+            ? {kind: "staticString" as const, string: strings.intern(part.user.value)}
+            : {kind: "requestCookie" as const, cookie: strings.intern(part.user.name)},
+          ...(part.argument === undefined
+            ? {}
+            : part.argument.kind === "requestJsonField"
+              ? {
+                  argument: {
+                    kind: "requestJsonField" as const,
+                    field: strings.intern(encodeRequestJsonPath(part.argument.path)),
+                  },
+                }
+              : {
+                  argument: {
+                    kind: "routeParameter" as const,
+                    segment: routeParameterSegment(routePath, part.argument.name),
+                  },
+                }),
+          span,
+        };
+      }
       if (part.kind === "fetchStatus") {
         return {kind: "fetchStatus" as const, url: strings.intern(part.url), span};
       }
@@ -956,6 +987,7 @@ function dynamicResponseExpressions(body: ResponseBody): number {
       || part.kind === "fileText"
       || part.kind === "actorCall"
       || part.kind === "sqliteQuery"
+      || part.kind === "todoOperation"
       || part.kind === "fetchStatus"
       || part.kind === "queryParameter"
       || part.kind === "workerCall"

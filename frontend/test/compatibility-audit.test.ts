@@ -1276,6 +1276,41 @@ test("executes the unchanged TodoService find and record mutation", () => {
   ]})));
 });
 
+test("binds unchanged TodoService get to an explicit SQLite KV adapter", () => {
+  const entry = write("stytch-todo-service-bound-get.ts", `
+    import type {} from "@hono/stytch-auth";
+    import {Hono} from "hono";
+    import {todoService} from "stytch-todo-service";
+
+    const app = new Hono<{Bindings: Env}>();
+    app.get("/todos", async context => {
+      const todos = await todoService(context.env, "user-1").get();
+      return context.json({todos});
+    });
+    export default app;
+  `);
+
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    aliases: {
+      hono: path.join(repository, "vendor/hono/src/index.ts"),
+      "stytch-todo-service": path.join(
+        repository,
+        "vendor/hono-examples/stytch-auth/api/TodoService.ts",
+      ),
+    },
+    apiAliases: {
+      hono: path.join(repository, "tests/compat/hono/api.d.ts"),
+      "@hono/stytch-auth": path.join(repository, "tests/compat/stytch-auth/api.d.ts"),
+    },
+    sqliteKvBindings: {TODOS: ":memory:"},
+  });
+
+  assert.deepEqual(hir.sqliteDatabases, [{id: 0, path: ":memory:"}]);
+  assert.equal(hir.handlers[0]?.path, "/todos");
+  assert.match(JSON.stringify(hir.handlers[0]?.response), /todoStore/);
+});
+
 test("lowers the pinned Stytch local-session middleware as a credential-free guard", () => {
   const entry = path.join(repository, "tests/compat/hono/stytch-session-smoke.ts");
 

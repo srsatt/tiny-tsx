@@ -57,6 +57,13 @@ export type Value =
   | {kind: "sqliteRunChanges"; result: number}
   | {kind: "sqliteRunLastInsertRowId"; result: number}
   | {kind: "sqlitePredicate"; query: Value & {kind: "sqliteQuery"}; test: "missing" | "present"}
+  | {
+      kind: "todoOperation";
+      database: DatabaseState;
+      operation: "list" | "add" | "complete" | "delete";
+      user: {kind: "staticString"; value: string} | {kind: "requestCookie"; name: string};
+      argument?: {kind: "requestJsonField"; path: string[]} | {kind: "routeParameter"; name: string};
+    }
   | {kind: "queryParameter"; name: string; fallback?: string}
   | {kind: "queryPredicate"; name: string; test: "truthy" | "empty" | "present"}
   | {kind: "runtimeString"; parts: RuntimeStringPart[]}
@@ -104,6 +111,13 @@ export type RuntimeStringPart =
   | {kind: "sqliteQuery"; statement: StatementState; mode: "all" | "first"; parameters: SqliteParameter[]}
   | {kind: "sqliteRunChanges"; result: number}
   | {kind: "sqliteRunLastInsertRowId"; result: number; json: boolean}
+  | {
+      kind: "todoOperation";
+      database: DatabaseState;
+      operation: "list" | "add" | "complete" | "delete";
+      user: {kind: "staticString"; value: string} | {kind: "requestCookie"; name: string};
+      argument?: {kind: "requestJsonField"; path: string[]} | {kind: "routeParameter"; name: string};
+    }
   | {kind: "queryParameter"; name: string; fallback: string | undefined; escapeHtml: boolean}
   | {kind: "fetchStatus"; url: string}
   | {kind: "elapsedMilliseconds"}
@@ -378,6 +392,7 @@ export function truthiness(value: Value): boolean | undefined {
     case "actor": return true;
     case "database": return true;
     case "statement": return true;
+    case "todoOperation": return true;
     case "workerCall": return undefined;
     case "actorCall": return undefined;
     case "sqliteQuery": return undefined;
@@ -446,6 +461,7 @@ export function typeOf(value: Value): string {
     case "sqliteRunChanges": return "number";
     case "sqliteRunLastInsertRowId": return "string";
     case "sqlitePredicate": return "boolean";
+    case "todoOperation": return "object";
     case "openAiProvider": return "function";
     case "openAiModel": return "object";
     case "openAiChatText": return "string";

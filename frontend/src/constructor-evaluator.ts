@@ -194,6 +194,7 @@ interface Evaluator {
     missing: Value & {kind: "response"};
   }>;
   databases: Map<string, DatabaseState>;
+  sqliteKvBindings: Readonly<Record<string, string>>;
 }
 
 interface MemorySiteState {
@@ -231,12 +232,13 @@ export function evaluateApplicationConstructor(
 export function evaluateApplicationInitialization(
   graph: ModuleGraph,
   application: ApplicationEntry,
+  sqliteKvBindings: Readonly<Record<string, string>> = {},
 ): ApplicationInitializationEvaluation | undefined {
   const resolved = resolveApplicationRuntimeClass(graph, application);
   if (resolved === undefined) {
     return undefined;
   }
-  const {evaluator, instance} = initializeConstructor(graph, application, resolved);
+  const {evaluator, instance} = initializeConstructor(graph, application, resolved, sqliteKvBindings);
   executeApplicationCalls(evaluator, application, instance);
   const installedErrorHandler = application.calls.some(call => call.method === "onError")
     ? instance.fields.get("errorHandler")
@@ -293,6 +295,7 @@ function initializeConstructor(
   graph: ModuleGraph,
   application: ApplicationEntry,
   resolved: ResolvedRuntimeClass,
+  sqliteKvBindings: Readonly<Record<string, string>> = {},
 ): {evaluator: Evaluator; instance: Value & {kind: "instance"}} {
   const evaluator: Evaluator = {
     graph,
@@ -312,6 +315,7 @@ function initializeConstructor(
     databaseActions: new WeakMap(),
     sqliteExistence: new WeakMap(),
     databases: new Map(),
+    sqliteKvBindings,
   };
   const instance: Value & {kind: "instance"} = {kind: "instance", fields: new Map()};
   evaluator.instanceClasses.set(instance, resolved);
@@ -2119,6 +2123,13 @@ function sameResponseHeaderValue(left: ResponseHeaderValue, right: ResponseHeade
         && candidate.path.length === part.path.length
         && candidate.path.every((segment, index) => segment === part.path[index]);
     }
+    if (part.kind === "todoOperation") {
+      return candidate?.kind === "todoOperation"
+        && candidate.database === part.database
+        && candidate.operation === part.operation
+        && JSON.stringify(candidate.user) === JSON.stringify(part.user)
+        && JSON.stringify(candidate.argument) === JSON.stringify(part.argument);
+    }
     return candidate?.kind === part.kind && candidate.name === part.name;
   });
 }
@@ -3757,6 +3768,10 @@ function evaluateCall(
       return failure ?? receiver;
     }
     if (receiver.kind === "instance" || receiver.kind === "record") {
+      if (receiver.kind === "instance") {
+        const todo = evaluatePinnedTodoServiceCall(evaluator, receiver, name, arguments_);
+        if (todo !== undefined) return todo;
+      }
       const callable = receiver.fields.get(name);
       if (callable?.kind === "closure") {
         return invokeClosure(
@@ -4095,6 +4110,60 @@ function appendDatabaseAction(
   actions.push(action);
   evaluator.databaseActions.set(instance, actions);
   return result;
+}
+
+function evaluatePinnedTodoServiceCall(
+  evaluator: Evaluator,
+  receiver: Value & {kind: "instance"},
+  name: string,
+  arguments_: Value[],
+): Value | undefined {
+  const runtimeClass = evaluator.instanceClasses.get(receiver);
+  if (
+    runtimeClass?.declaration.name?.text !== "TodoService"
+    || !runtimeClass.module.path.replaceAll("\\", "/")
+      .endsWith("/hono-examples/stytch-auth/api/TodoService.ts")
+  ) return undefined;
+  const environment = receiver.fields.get("env");
+  const user = receiver.fields.get("userID");
+  const databasePath = environment?.kind === "environmentBindings"
+    ? evaluator.sqliteKvBindings.TODOS
+    : undefined;
+  const todoUser = user?.kind === "string"
+    ? {kind: "staticString" as const, value: user.value}
+    : user?.kind === "requestCookie"
+      ? {kind: "requestCookie" as const, name: user.name}
+      : undefined;
+  if (databasePath === undefined || todoUser === undefined) return undefined;
+
+  const operation = name === "get"
+    ? "list"
+    : name === "add" || name === "markCompleted" || name === "delete" ? name : undefined;
+  const normalized = operation === "markCompleted" ? "complete" : operation;
+  const argument = arguments_[0];
+  if (
+    normalized === undefined
+    || (normalized === "list" && arguments_.length !== 0)
+    || (normalized === "add" && (arguments_.length !== 1 || argument?.kind !== "requestJsonField"))
+    || ((normalized === "complete" || normalized === "delete")
+      && (arguments_.length !== 1 || argument?.kind !== "routeParameter"))
+  ) return undefined;
+
+  const key = `sqlite-kv:TODOS:${databasePath}`;
+  let database = evaluator.databases.get(key);
+  if (database === undefined) {
+    database = {id: evaluator.databases.size, key, path: databasePath};
+    evaluator.databases.set(key, database);
+  }
+  return {
+    kind: "todoOperation",
+    database,
+    operation: normalized,
+    user: todoUser,
+    ...(argument?.kind === "requestJsonField" || argument?.kind === "routeParameter"
+      ? {argument}
+      : {}),
+  };
 }
 
 function sqliteParameters(
@@ -5702,6 +5771,10 @@ function appendRuntimeJsonValue(
   value: Value,
   arrayElement: boolean,
 ): boolean {
+  if (value.kind === "todoOperation") {
+    appendRuntimePart(parts, {...value});
+    return true;
+  }
   if (value.kind === "sqliteQuery") {
     appendRuntimePart(parts, {
       kind: "sqliteQuery",

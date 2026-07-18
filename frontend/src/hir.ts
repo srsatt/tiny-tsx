@@ -265,6 +265,14 @@ export type ValueExpression =
       span: SourceSpan;
     }
   | {
+      kind: "todoStore";
+      database: number;
+      operation: "list" | "add" | "complete" | "delete";
+      user: {kind: "staticString"; string: number} | {kind: "requestCookie"; cookie: number};
+      argument?: {kind: "requestJsonField"; field: number} | {kind: "routeParameter"; segment: number};
+      span: SourceSpan;
+    }
+  | {
       kind: "fetchStatus";
       url: number;
       span: SourceSpan;
