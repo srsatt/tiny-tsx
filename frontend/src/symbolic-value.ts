@@ -144,6 +144,7 @@ export interface StatementState {
 export type SqliteParameter =
   | {kind: "routeParameter"; name: string}
   | {kind: "requestJsonField"; name: string}
+  | {kind: "requestHeader"; name: string}
   | {kind: "randomUuid"}
   | {kind: "staticString"; value: string}
   | {kind: "staticInteger"; value: number}

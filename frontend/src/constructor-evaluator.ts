@@ -3875,6 +3875,8 @@ function sqliteParameters(arguments_: Value[]): SqliteParameter[] | undefined {
       output.push({kind: "routeParameter", name: parameter.name});
     } else if (parameter.kind === "requestJsonField") {
       output.push({kind: "requestJsonField", name: parameter.name});
+    } else if (parameter.kind === "requestHeader") {
+      output.push({kind: "requestHeader", name: parameter.name});
     } else if (parameter.kind === "randomUuid") {
       output.push({kind: "randomUuid"});
     } else if (parameter.kind === "string" && Buffer.byteLength(parameter.value, "utf8") <= 65_536) {
@@ -3904,6 +3906,7 @@ function sameSqliteParameters(left: SqliteParameter[], right: SqliteParameter[])
         return true;
       case "routeParameter":
       case "requestJsonField":
+      case "requestHeader":
         return candidate.kind === parameter.kind && candidate.name === parameter.name;
       case "staticString":
       case "staticInteger":

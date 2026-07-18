@@ -347,6 +347,32 @@ test("lowers a bounded prepared transaction callback into one owner action", () 
   assert.deepEqual(action.steps[1]!.parameters, [{kind: "routeParameter", segment: 1}]);
 });
 
+test("lowers a required request header into bounded SQLite transaction parameters", () => {
+  const entry = path.join(repository, "tests/compat/sqlite/idempotency-smoke.ts");
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+    apiAliases: {hono: path.join(repository, "tests/compat/hono/api.d.ts")},
+  });
+
+  const success = hir.handlers.find(handler => handler.path === "/idempotency/succeed/:account");
+  assert.equal(success?.sqliteActions?.[0]?.kind, "transactionSteps");
+  const steps = success?.sqliteActions?.[0]?.kind === "transactionSteps"
+    ? success.sqliteActions[0].steps
+    : [];
+  assert.deepEqual(steps[0]?.parameters.map(parameter => parameter.kind), [
+    "requestHeader",
+    "routeParameter",
+    "requestJsonField",
+  ]);
+  assert.deepEqual(steps[1]?.parameters.map(parameter => parameter.kind), ["requestHeader"]);
+  const header = steps[0]?.parameters[0];
+  assert.equal(
+    header?.kind === "requestHeader" ? hir.staticStrings[header.header]?.value : undefined,
+    "Idempotency-Key",
+  );
+});
+
 test("lowers selected request JSON primitives into a dynamic JSON response", () => {
   const entry = write("hono-json-body.ts", `
     import {serve} from "tinytsx:serve";

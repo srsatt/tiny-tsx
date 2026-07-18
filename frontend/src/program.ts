@@ -621,6 +621,8 @@ function lowerSqliteParameters(
         return {kind: "routeParameter" as const, segment: routeParameterSegment(routePath, parameter.name)};
       case "requestJsonField":
         return {kind: "requestJsonField" as const, field: strings.intern(parameter.name)};
+      case "requestHeader":
+        return {kind: "requestHeader" as const, header: strings.intern(parameter.name)};
       case "randomUuid":
         return {kind: "randomUuid" as const};
       case "staticString":
