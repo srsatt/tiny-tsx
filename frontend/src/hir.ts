@@ -204,6 +204,11 @@ export type ValueExpression =
       span: SourceSpan;
     }
   | {
+      kind: "requestJsonField";
+      field: number;
+      span: SourceSpan;
+    }
+  | {
       kind: "requestId";
       header: number;
       span: SourceSpan;

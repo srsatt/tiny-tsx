@@ -59,6 +59,19 @@
       "firstUnsupportedBoundary": "One matched policy per route accepts the default generator with a closed non-empty token header name and closed 1-1024 byte limit; custom generators, empty/dynamic options, conflicting policies, and general Context variables are unsupported."
     },
     {
+      "id": "tinytsx-json-body",
+      "provenance": "tinytsx-local",
+      "entry": "tests/compat/hono/json-body-smoke.ts",
+      "imports": ["hono"],
+      "apis": ["Hono", "post", "Context.req.json", "Context.json"],
+      "intake": {"status": "pass", "evidence": "frontend/test/compatibility-audit.test.ts"},
+      "nativeCompile": {"appleArm64": "pass", "linuxArm64Assembly": "pass", "evidence": "tests/compat/hono/json-body-native.test.mjs"},
+      "httpBehavior": {"status": "pass", "evidence": "tests/compat/hono/json-body-native.test.mjs"},
+      "referenceBehavior": {"runtime": "Bun/Hono", "status": "pass", "evidence": "tests/compat/hono/json-body-reference.test.ts"},
+      "releaseGates": {"native": ["test:hono-json-body-native"], "reference": ["test:hono-json-body-reference"]},
+      "firstUnsupportedBoundary": "A closed response may select non-empty named primitive fields from one bounded JSON object; dynamic keys, arrays, nested objects, whole-object identity, mutation, coercion/defaults, streaming JSON, and general JavaScript object semantics are unsupported."
+    },
+    {
       "id": "published-zod-openapi",
       "provenance": "official-doc-derived-published-packages",
       "entry": "tests/compat/zod-openapi/server.ts",

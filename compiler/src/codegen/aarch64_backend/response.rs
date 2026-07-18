@@ -140,6 +140,17 @@ fn emit_handler_text_expression(
             );
             assembly.call(format_args!("tinytsx_html_write_request_header"));
         }
+        ValueExpression::RequestJsonField { field, .. } => {
+            asm_line!(assembly, "    ldr x0, [sp, #16]");
+            asm_line!(assembly, "    ldr x1, [sp, #24]");
+            assembly.address("x2", format_args!("Ltinytsx_string_{field}"));
+            emit_immediate(
+                assembly,
+                "x3",
+                program.static_strings[*field].value.len() as u64,
+            );
+            assembly.call(format_args!("tinytsx_html_write_request_json_field"));
+        }
         ValueExpression::RequestId { header, .. } => {
             asm_line!(assembly, "    ldr x0, [sp, #16]");
             assembly.address("x1", format_args!("Ltinytsx_string_{header}"));

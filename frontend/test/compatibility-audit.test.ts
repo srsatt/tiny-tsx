@@ -347,6 +347,53 @@ test("lowers a bounded prepared transaction callback into one owner action", () 
   assert.deepEqual(action.steps[1]!.parameters, [{kind: "routeParameter", segment: 1}]);
 });
 
+test("lowers selected request JSON primitives into a dynamic JSON response", () => {
+  const entry = write("hono-json-body.ts", `
+    import {serve} from "tinytsx:serve";
+    import {Hono} from "hono";
+    const app = new Hono();
+    app.post("/json-body", async context => {
+      const input = await context.req.json() as {
+        name: string;
+        count: number;
+        enabled: boolean;
+        note: null;
+      };
+      return context.json({
+        name: input.name,
+        count: input.count,
+        enabled: input.enabled,
+        note: input.note,
+      });
+    });
+    serve({fetch: app.fetch});
+  `);
+
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+    apiAliases: {hono: path.join(repository, "tests/compat/hono/api.d.ts")},
+  });
+  const response = hir.handlers[0]?.response;
+  assert.equal(response?.kind, "text");
+  if (response?.kind !== "text" || response.value.kind !== "concat") return;
+  assert.deepEqual(response.value.values.map(value => {
+    if (value.kind === "stringLiteral") return hir.staticStrings[value.string]?.value;
+    if (value.kind === "requestJsonField") return hir.staticStrings[value.field]?.value;
+    return value.kind;
+  }), [
+    '{"name":',
+    "name",
+    ',"count":',
+    "count",
+    ',"enabled":',
+    "enabled",
+    ',"note":',
+    "note",
+    "}",
+  ]);
+});
+
 test("requires matching read/write capabilities for an on-disk SQLite owner", () => {
   const entry = write("sqlite-disk.ts", `
     import {Database} from "tinytsx:sqlite";

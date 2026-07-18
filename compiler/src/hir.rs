@@ -475,6 +475,10 @@ pub enum ValueExpression {
         header: usize,
         span: SourceSpan,
     },
+    RequestJsonField {
+        field: usize,
+        span: SourceSpan,
+    },
     RequestId {
         header: usize,
         span: SourceSpan,
@@ -1269,6 +1273,7 @@ impl Program {
             ValueExpression::Concat { .. }
             | ValueExpression::RouteParameter { .. }
             | ValueExpression::RequestHeader { .. }
+            | ValueExpression::RequestJsonField { .. }
             | ValueExpression::RequestId { .. }
             | ValueExpression::SqliteRunChanges { .. }
             | ValueExpression::SqliteRunLastInsertRowId { .. }
@@ -1411,6 +1416,7 @@ impl Program {
             }
             ValueExpression::RouteParameter { .. }
             | ValueExpression::RequestHeader { .. }
+            | ValueExpression::RequestJsonField { .. }
             | ValueExpression::RequestId { .. }
             | ValueExpression::SqliteRunChanges { .. }
             | ValueExpression::SqliteRunLastInsertRowId { .. }
@@ -1664,6 +1670,15 @@ impl Program {
                 };
                 if header.value.is_empty() {
                     return Err("request header name must not be empty".to_owned());
+                }
+                Ok(())
+            }
+            ValueExpression::RequestJsonField { field, .. } => {
+                let Some(field) = self.static_strings.get(*field) else {
+                    return Err("request JSON field references a missing static string".to_owned());
+                };
+                if field.value.is_empty() || field.value.len() > 128 {
+                    return Err("request JSON field name is outside the native limit".to_owned());
                 }
                 Ok(())
             }

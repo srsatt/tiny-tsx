@@ -5181,6 +5181,10 @@ function appendRuntimeJsonValue(
     appendRuntimePart(parts, {kind: "literal", value: "\""});
     return true;
   }
+  if (value.kind === "requestJsonField") {
+    appendRuntimePart(parts, {kind: "requestJsonField", name: value.name});
+    return true;
+  }
   if (value.kind === "undefined") {
     if (!arrayElement) return false;
     appendRuntimePart(parts, {kind: "literal", value: "null"});

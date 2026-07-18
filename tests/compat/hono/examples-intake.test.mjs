@@ -29,6 +29,7 @@ test("records the example matrix with executable evidence and boundaries", () =>
     "upstream-jsx-ssr",
     "upstream-body-limit",
     "upstream-request-id",
+    "tinytsx-json-body",
     "published-zod-openapi",
     "hono-node-server-entry",
     "tinytsx-serve-entry",

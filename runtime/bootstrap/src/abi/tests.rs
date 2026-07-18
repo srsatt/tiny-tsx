@@ -6,15 +6,15 @@ use super::{
     decode_sqlite_parameters, render, request, request_with_body, request_with_headers,
     tinytsx_html_write_fetch_status, tinytsx_html_write_path_segment, tinytsx_html_write_path_tail,
     tinytsx_html_write_query_parameter, tinytsx_html_write_request_header,
-    tinytsx_html_write_response_header, tinytsx_html_write_sqlite_changes,
-    tinytsx_html_write_sqlite_last_insert_row_id, tinytsx_html_write_static,
-    tinytsx_request_basic_auth_equals, tinytsx_request_body_length, tinytsx_request_if_none_match,
-    tinytsx_request_method_equals, tinytsx_request_path_equals, tinytsx_request_path_matches,
-    tinytsx_request_path_segment_min_length, tinytsx_request_query_has, tinytsx_response_begin,
-    tinytsx_response_header_elapsed_millis, tinytsx_response_header_request_id,
-    tinytsx_response_header_static, tinytsx_response_stream_begin,
-    tinytsx_response_stream_chunk_begin, tinytsx_response_stream_chunk_end,
-    tinytsx_response_stream_chunk_static, write_console_error,
+    tinytsx_html_write_request_json_field, tinytsx_html_write_response_header,
+    tinytsx_html_write_sqlite_changes, tinytsx_html_write_sqlite_last_insert_row_id,
+    tinytsx_html_write_static, tinytsx_request_basic_auth_equals, tinytsx_request_body_length,
+    tinytsx_request_if_none_match, tinytsx_request_method_equals, tinytsx_request_path_equals,
+    tinytsx_request_path_matches, tinytsx_request_path_segment_min_length,
+    tinytsx_request_query_has, tinytsx_response_begin, tinytsx_response_header_elapsed_millis,
+    tinytsx_response_header_request_id, tinytsx_response_header_static,
+    tinytsx_response_stream_begin, tinytsx_response_stream_chunk_begin,
+    tinytsx_response_stream_chunk_end, tinytsx_response_stream_chunk_static, write_console_error,
 };
 use std::{
     io::{Read, Write},
@@ -623,6 +623,50 @@ fn response_writer_formats_a_missing_request_header_as_undefined() {
 
     assert_eq!(status, OK);
     assert_eq!(&output, b"undefined");
+}
+
+#[test]
+fn response_writer_serializes_selected_request_json_primitives() {
+    let body = br#"{"name":"TinyTSX & \"Bun\"","count":7,"enabled":true,"note":null}"#;
+    let request = request_with_body(b"POST", b"/json-body", &[], body);
+    let mut output = [0_u8; 128];
+    let mut writer = writer(&mut output);
+
+    for field in [b"name".as_slice(), b"count", b"enabled", b"note"] {
+        let status = unsafe {
+            tinytsx_html_write_request_json_field(
+                &mut writer,
+                &request,
+                field.as_ptr(),
+                field.len(),
+            )
+        };
+        assert_eq!(status, OK);
+    }
+
+    let written = writer.cursor as usize - writer.start as usize;
+    assert_eq!(&output[..written], br#""TinyTSX & \"Bun\""7truenull"#);
+}
+
+#[test]
+fn response_writer_rejects_invalid_request_json_fields() {
+    for body in [
+        b"{".as_slice(),
+        br#"{}"#,
+        br#"{"value":[]}"#,
+        br#"{"value":{}}"#,
+    ] {
+        let request = request_with_body(b"POST", b"/json-body", &[], body);
+        let mut output = [0_u8; 32];
+        let mut writer = writer(&mut output);
+        assert_eq!(
+            unsafe {
+                tinytsx_html_write_request_json_field(&mut writer, &request, b"value".as_ptr(), 5)
+            },
+            BAD_REQUEST,
+        );
+        assert_eq!(writer.cursor, writer.start);
+    }
 }
 
 #[test]

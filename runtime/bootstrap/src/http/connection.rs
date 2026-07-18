@@ -157,17 +157,14 @@ impl Connection {
                     directive,
                 )
             }
-            BAD_REQUEST => {
-                directive = ConnectionDirective::Close;
-                write_response(
-                    stream,
-                    400,
-                    CONTENT_TYPE_TEXT,
-                    b"bad request",
-                    &[],
-                    directive,
-                )
-            }
+            BAD_REQUEST => write_response(
+                stream,
+                400,
+                CONTENT_TYPE_TEXT,
+                b"bad request",
+                &[],
+                directive,
+            ),
             NOT_FOUND => write_response(
                 stream,
                 404,

@@ -90,6 +90,7 @@ export type Value =
 export type RuntimeStringPart =
   | {kind: "literal"; value: string}
   | {kind: "routeParameter"; name: string}
+  | {kind: "requestJsonField"; name: string}
   | {kind: "requestHeader"; name: string}
   | {kind: "requestId"; headerName: string}
   | {kind: "requestCookie"; name: string; fallback: string | undefined}

@@ -1636,6 +1636,48 @@ pub unsafe extern "C" fn tinytsx_html_write_request_header(
 }
 
 #[unsafe(no_mangle)]
+pub unsafe extern "C" fn tinytsx_html_write_request_json_field(
+    writer: *mut TinyResponseWriter,
+    request: *const TinyRequest,
+    field: *const u8,
+    field_len: usize,
+) -> u32 {
+    if writer.is_null() || request.is_null() || field.is_null() || field_len == 0 || field_len > 128
+    {
+        return INTERNAL_ERROR;
+    }
+    // SAFETY: Generated static data and the request body remain valid during dispatch.
+    let field = unsafe { slice::from_raw_parts(field, field_len) };
+    let Ok(field) = std::str::from_utf8(field) else {
+        return INTERNAL_ERROR;
+    };
+    // SAFETY: Generated code passes the request supplied by this runtime.
+    let body = unsafe { &(*request).body };
+    if body.ptr.is_null() && body.len != 0 {
+        return BAD_REQUEST;
+    }
+    // SAFETY: The body view is borrowed from connection-owned request bytes.
+    let body = unsafe { slice::from_raw_parts(body.ptr, body.len) };
+    let Ok(json) = serde_json::from_slice::<serde_json::Value>(body) else {
+        return BAD_REQUEST;
+    };
+    let Some(value) = json.as_object().and_then(|object| object.get(field)) else {
+        return BAD_REQUEST;
+    };
+    if matches!(
+        value,
+        serde_json::Value::Array(_) | serde_json::Value::Object(_)
+    ) {
+        return BAD_REQUEST;
+    }
+    let Ok(encoded) = serde_json::to_vec(value) else {
+        return INTERNAL_ERROR;
+    };
+    // SAFETY: The encoded primitive remains alive for this synchronous copy.
+    unsafe { tinytsx_html_write_static(writer, encoded.as_ptr(), encoded.len()) }
+}
+
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn tinytsx_html_write_request_cookie(
     writer: *mut TinyResponseWriter,
     request: *const TinyRequest,

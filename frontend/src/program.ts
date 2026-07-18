@@ -792,6 +792,9 @@ function lowerRuntimeString(
       if (part.kind === "requestHeader") {
         return {kind: "requestHeader" as const, header: strings.intern(part.name), span};
       }
+      if (part.kind === "requestJsonField") {
+        return {kind: "requestJsonField" as const, field: strings.intern(part.name), span};
+      }
       if (part.kind === "requestId") {
         return {kind: "requestId" as const, header: strings.intern(part.headerName), span};
       }
@@ -904,6 +907,7 @@ function dynamicResponseExpressions(body: ResponseBody): number {
   if (Array.isArray(body)) {
     return body.filter(part =>
       part.kind === "routeParameter"
+      || part.kind === "requestJsonField"
       || part.kind === "requestHeader"
       || part.kind === "requestCookie"
       || part.kind === "environmentVariable"
