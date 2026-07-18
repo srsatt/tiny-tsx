@@ -797,7 +797,7 @@ produces and serves a native Mach-O executable from the example TSX source.
   route-path test proves the overlay participates in TypeScript checking.
 - Relative ESM components now compile through multi-module HIR into the native
   server; a second real HTTP E2E test verifies the imported component output.
-- Test262 intake validates the pin, provenance metadata, and parsing of fourteen
+- Test262 intake validates the pin, provenance metadata, and parsing of eighteen
   allowlisted class, loop, RegExp, async, array-spread, primitive, function,
   throw, Error, `Date.now`, subtraction, record-membership, and array-unshift
   cases. Evidence mode is explicit per case. The exact `typeof undefined` case
@@ -826,9 +826,11 @@ produces and serves a native Mach-O executable from the example TSX source.
   searches for `test` and `exec` presence. The complete module-function case
   proves hoisted initialization, direct call, non-global ownership, mutable
   reassignment, and declaration no-op behavior. The complete async-function case
-  creates and verifies its native Promise brand. All fourteen allowlisted cases
-  now execute their complete assertions natively; none relies on syntax-only
-  evidence.
+  creates and verifies its native Promise brand. Four additional unchanged
+  programs execute `NaN` SameValue, signed-zero distinction, positive-infinity
+  type/finiteness/NaN checks, and unique direct `Symbol()` identities. All
+  eighteen allowlisted cases now execute their complete assertions natively;
+  none relies on syntax-only evidence.
 - The dedicated native API suite currently covers Request method/path/query
   views, allocation-free form-decoded query-name presence, elapsed-header
   formatting, and exact-fit, OOM, and invalid response-writer behavior. Query
@@ -848,7 +850,7 @@ produces and serves a native Mach-O executable from the example TSX source.
   records, folds constant spread, and materializes rest values when their source
   is compile-time closed. The compatibility audit exposes constant versus
   runtime decisions for every reachable Hono spread/rest site.
-- On pinned Hono, staging finds 19 constant bindings and folds the method array
+- On pinned Hono, staging finds 20 constant bindings and folds the method array
   at `hono-base.ts:128` to the six HTTP methods plus `all`. The remaining 17
   spread/rest sites are explicitly retained as runtime or later type-layout
   specialization work.

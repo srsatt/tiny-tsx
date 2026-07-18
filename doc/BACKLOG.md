@@ -962,6 +962,15 @@ malformed/out-of-range symbol tags; the compile-time source-size ceiling is the
 applicable saturation boundary, while disposal is not applicable to immutable
 read-only constants.
 
+The tracer is green. HIR and the read-only constant-data format retain all four
+special-number tags plus bounded symbol identity and descriptions. The staged
+example preserves one shared ID across aliases and assigns distinct IDs to
+separate calls; it serves through the Apple native HTTP test and assembles for
+Linux. All four unchanged Test262 programs compile, link, and execute natively,
+bringing the allowlist to eighteen complete native cases. Oversized symbol IDs
+and descriptions are rejected. General application symbol operations,
+non-finite arithmetic, and bounded native `Map` remain open.
+
 ### P1 — Compatibility and language depth
 
 - [x] Promote remaining syntax-only Test262 cases only when their complete
@@ -973,7 +982,7 @@ read-only constants.
     copied arguments, numeric slots, runtime field-name bytes, native abrupt
     completion, the portable host clock, bounded class/error identities, and a
     dependency-free native matcher, a hoisted mutable module-function binding,
-    and an async-function Promise brand. All fourteen allowlisted cases now run
+    and an async-function Promise brand. All eighteen allowlisted cases now run
     complete native assertion programs; none remains syntax-only.
 - [ ] Expand ordinary functions to locals, branches, closures, additional native
       types, and general typed expressions/statements.
@@ -1010,6 +1019,12 @@ read-only constants.
     behavior; direct static `Context.var` reads resolve the same slots. Dynamic
     membership, assignment through the view, identity, construction, iteration,
     deletion, and general native `Map` remain open.
+  - 2026-07-18: explicit constant tags now preserve negative zero, `NaN`, both
+    infinities, and bounded compile-time symbol identities/descriptions. Four
+    pinned Test262 programs prove `SameValue`, finiteness/classification, and
+    symbol uniqueness in native code; the staged-constant example reaches
+    read-only Apple data and Linux assembly. Runtime symbol operations,
+    non-finite arithmetic, and the general bounded `Map` keep this item open.
 - [ ] Replace whole-module forbidden-syntax rejection with request/initialization
       reachability and specialize remaining closed-shape Hono object rest.
   - 2026-07-17: exception syntax is no longer rejected module-wide. Unreachable

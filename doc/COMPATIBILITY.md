@@ -520,19 +520,19 @@ the program rather than silently treating it as static.
 
 ### Implemented staging boundary
 
-The frontend now has a conservative closed-value evaluator for strings,
-finite numbers, bigint, booleans, undefined, null, arrays, and records. It resolves
-imported top-level constants, folds constant array/object spread, and
-materializes object/array rest when the source is a compile-time closed value.
-Each spread or rest site is classified as `constant` or `runtime` in the Hono
-compatibility report.
+The frontend now has a conservative closed-value evaluator for strings, finite
+and explicitly tagged special numbers, bigint, compile-time symbols, booleans,
+undefined, null, arrays, and records. It resolves imported top-level constants,
+folds constant array/object spread, and materializes object/array rest when the
+source is a compile-time closed value. Each spread or rest site is classified
+as `constant` or `runtime` in the Hono compatibility report.
 
-These constants cover every ECMAScript primitive category except `symbol`, but
-number constants still exclude signed-zero identity, `NaN`, and infinities.
-Those cases need explicit HIR encodings and Test262 evidence rather than being
-silently normalized by JSON.
+Negative zero, `NaN`, both infinities, and symbol identities are never silently
+normalized through JSON. Symbol aliases retain one compile-time ID and distinct
+direct calls receive distinct IDs. Runtime symbol operations and non-finite
+application arithmetic remain outside this staging boundary.
 
-For pinned Hono `v4.12.30`, the current audit finds 19 constant bindings. It
+For pinned Hono `v4.12.30`, the current audit finds 20 constant bindings. It
 folds the array spread at `src/hono-base.ts:128` into:
 
 ```text
@@ -641,6 +641,15 @@ function has no settlement value or reactions to run, so this evidence does not
 claim fulfillment/rejection queues, `.then`, error propagation, cancellation,
 ordinary async functions, or `await` scheduling.
 
+Four special-primitive programs from the same pin now execute natively.
+Generated tagged comparisons implement the complete assertions for `NaN`
+SameValue, positive versus negative zero, positive-infinity type/finiteness/NaN
+classification, and four pairs of unique direct `Symbol(description?)` calls.
+The Linux backend assembles the same primitive-identity program. This is bounded
+standalone-runner and compile-time-constant evidence; it does not expose symbol
+boxing, registries, property keys, runtime descriptions, general coercion, or
+non-finite arithmetic to applications.
+
 The allowlisted `language/expressions/typeof/undefined.js` case is the first
 `mode: native` Test262 entry. `tinytsx test262 <case> --output <binary>` parses
 the untouched upstream source and lowers its two top-level
@@ -683,18 +692,19 @@ sparse elements, arbitrary values, other mutators, or runtime spread.
 ### Typed constant materialization
 
 Closed staged bindings now enter HIR v2 as source-located, tagged constants.
-Undefined, null, boolean, finite number, bigint, string, array, and record values
-retain their type and recursive structure. The Rust compiler validates the pool
-and emits each constant as a deterministic, eight-byte-aligned blob in the
-Mach-O read-only data section. The encoding is recorded in
-`doc/CONSTANT_DATA.md`.
+Undefined, null, boolean, finite and special number, bigint, string,
+compile-time symbol, array, and record values retain their type and recursive
+structure. The Rust compiler validates the pool and emits each constant as a
+deterministic, eight-byte-aligned blob in the target read-only data section. The
+encoding is recorded in `doc/CONSTANT_DATA.md`.
 
 The pinned Hono staging test now proves that `allMethods` reaches this final HIR
 shape as an array of seven typed strings. This happens below the whole-program
 compile boundary. The exact-source Hono probe now continues through route HIR,
 native assembly/linking, and a real HTTP E2E for its first static route.
 A separate compilable staged-constants example passes frontend lowering, Rust
-HIR parsing, native assembly/linking, and a real HTTP test.
+HIR parsing, native assembly/linking, and a real HTTP test while retaining all
+four special-number tags and shared/distinct symbol identities.
 
 Generated scalar expressions now use statically typed string, finite-number, or
 boolean values. Reachable named functions can accept up to four required scalar

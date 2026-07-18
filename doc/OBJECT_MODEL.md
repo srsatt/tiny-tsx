@@ -14,10 +14,13 @@ Records do not permit adding or deleting fields at runtime. A computed access is
 valid only when the key can be reduced to a known field. Prototype mutation and
 property descriptors are outside this representation.
 
-The constant pool currently represents `undefined`, `null`, booleans, finite
-numbers, bigint, strings, arrays, and records. `symbol`, signed-zero identity,
-`NaN`, and infinities need explicit encodings before they can be admitted as
-constants; they must not be approximated through JSON numbers or strings.
+The constant pool represents `undefined`, `null`, booleans, finite numbers,
+explicit negative zero/`NaN`/positive and negative infinity, bigint, strings,
+compile-time symbols, arrays, and records. A symbol has a bounded canonical ID
+and optional description; aliases retain the same ID while distinct `Symbol()`
+calls receive different IDs. This is immutable AOT data and Test262 identity
+evidence, not a runtime symbol object, property-key model, registry, or general
+non-finite arithmetic implementation.
 
 ## Arrays
 
