@@ -728,7 +728,7 @@ executes on Apple arm64 and compiles as freestanding Linux-arm64 assembly.
 Existing bootstrap coverage still proves Hono path parameters preserve an
 undecodable percent group, so the two parser contracts remain separate.
 
-#### Selected P3/P4 tracer — eight-actor mutation pressure (pinned 2026-07-18)
+#### Selected P3/P4 tracer — eight-actor mutation pressure (landed 2026-07-18)
 
 Add one project-owned `benchmarks/tiny/hono-actor-multi.ts` application with
 eight independently spawned signed counter actors. Each actor has one static
@@ -753,6 +753,19 @@ all-target shutdown. This measures distributed fire-and-forget pressure across
 eight local owners; it does not isolate ask/reply cost, mailbox latency,
 supervision, restart, persistence, remote actors, or Bun Worker creation cost
 from the complete process totals.
+
+The tracer is green. Apple native HTTP proves eight isolated counters and
+concurrent mutation; Linux arm64 assembles all eight tell/ask route ABIs; the
+Bun/Hono reference proves the same ownership and response contract. All 12
+target/concurrency samples in the clean three-by-15-second run are 200-only,
+and all 18 warm-up/load state snapshots show progress on every owner. TinyTSX
+reaches 38,366 requests/second (0.40x Bun) at concurrency 8 and 76,825 (0.76x)
+at 64, with 6.64 MiB warm RSS and 11.806 ms concurrency-64 p99. It returns from
+68 peak descriptors to 4. The eight-Worker Bun process uses 120.77 MiB warm RSS
+and records a 703.77 MiB median peak under load; this is a whole-process result,
+not an isolated Worker allocation claim. The adjacent
+`benchmarks/results/2026-07-18-m5-max-sustained-15s-hono-actor-multi-keepalive-w8.*`
+pair retains every response sample and actor-state checkpoint.
 
 Before implementing the next tracer, its selected goal must be copied into the
 active goal with: its exact tracer/source revision; admitted and rejected
@@ -1084,6 +1097,12 @@ explicitly promoted into a later goal.
     with 7.34 MiB warm RSS and 9.937 ms concurrency-64 p99. Dynamic keys,
     structured values, schema validation, mixed bodies, and other workload
     families remain open, so this broad item stays unchecked.
+  - 2026-07-18: the eight-actor URL-set tracer distributes fixed `tell(+1)`
+    mutations across eight local TinyTSX actors or Bun Workers, then reads every
+    owner after warm-up and each load interval. All 12 load samples and 18 state
+    snapshots pass; TinyTSX reaches 0.40x/0.76x Bun at concurrency 8/64 with
+    6.64 MiB warm RSS. Supervision/restart/persistence load, cancellation, and
+    other workload families remain open, so this broad item stays unchecked.
 - [x] Add CPU, syscall, allocation, peak-RSS, and first-launch instrumentation.
   - 2026-07-17: the macOS harness samples whole-process CPU time, Unix/Mach
     syscalls, context switches, faults, threads, open-file-descriptor
@@ -1094,7 +1113,7 @@ explicitly promoted into a later goal.
     binaries do not include them, and no Bun allocation ratio is claimed.
 - [x] Run controlled longer-duration comparisons before publishing performance
       claims and optimize only from profiles.
-  - 2026-07-18: the twelve-workload sustained matrix retains three 15-second
+  - 2026-07-18: the thirteen-workload sustained matrix retains three 15-second
     samples at concurrency 8 and 64 for both targets, alternates target and
     concurrency order, disables allocator instrumentation, and preserves all
     raw response-checked samples. It supports claims only for those exact

@@ -8,16 +8,18 @@ TinyTSX is compelling for deployment and resident footprint, but the sustained
 eight-worker keep-alive matrix does not show throughput or tail-latency parity
 with Bun. The current comparison covers Hono basic, request-time dynamic JSX,
 one decoded optional route parameter, bounded warm-cache 21-byte and 22,173-byte
-file responses, finite text streaming, one counter actor, and one in-memory
-empty SQLite query. The matrix also pairs compact and query-present pretty JSON
+file responses, one and eight counter-actor workloads, finite text streaming,
+and one in-memory empty SQLite query. The matrix also pairs compact and
+query-present pretty JSON
 from the complete pinned basic app, plus two idempotent prepared writes and a
 non-empty row response in one in-memory callback transaction. A shared POST
 route also selects string, number, boolean, and null fields from a fixed bounded
-JSON body. Every one of the 144 load samples passed its response contract.
+JSON body. Every one of the 156 load samples passed its response contract; all
+18 multi-actor state snapshots also proved progress on every owner.
 
 Across three 15-second samples at concurrency 8 and 64, TinyTSX reaches
 0.24–0.54x Bun throughput at concurrency 8 and 0.40–0.79x at concurrency 64 on
-the eleven small-response routes. The exact 22,173-byte warm-cache response is
+the twelve small-response routes. The exact 22,173-byte warm-cache response is
 the exception: TinyTSX reaches 1.30x Bun at concurrency 8 and 1.78x at 64.
 TinyTSX's concurrency-64 p99 remains higher on every route at 9.575–22.030 ms
 versus Bun at 0.736–5.104 ms.
@@ -25,7 +27,7 @@ versus Bun at 0.736–5.104 ms.
 The honest current claim is:
 
 - **yes for footprint:** TinyTSX stays at 6.30–8.81 MiB warm RSS; Bun uses
-  7.3x–24.6x as much across the twelve routes;
+  7.3x–24.6x as much across the thirteen workloads;
 - **repeated startup is close:** TinyTSX takes 19.68–22.86 ms and Bun takes
   17.30–21.31 ms, while TinyTSX's separately reported first post-build launch
   remains a 437.66–547.26 ms outlier;
@@ -44,9 +46,13 @@ The honest current claim is:
 - **bounded request JSON is now measured:** the fixed 65-byte primitive POST
   reaches 0.45x/0.64x Bun at concurrency 8/64 with 7.34 MiB warm RSS; it is not
   evidence for dynamic keys, structured values, validation, or mixed bodies;
+- **multi-actor progress is now measured:** the eight-owner mutation workload
+  reaches 0.40x/0.76x Bun at concurrency 8/64, retains positive balanced state
+  for every owner, and uses 6.64 MiB warm RSS; the eight-Worker Bun process uses
+  120.77 MiB warm RSS and records a 703.77 MiB median peak under load;
 - **process pressure needs profiling:** TinyTSX records greater aggregate CPU
-  on eleven routes; Bun records more on the 21-byte file route, while TinyTSX
-  records more Unix syscalls and context switches on all twelve;
+  on twelve workloads; Bun records more on the 21-byte file route, while TinyTSX
+  records more Unix syscalls and context switches on all thirteen;
 - **bounded resources recover:** every TinyTSX workload returns to four open
   descriptors; median peaks are 68 for non-file routes, 71 for the 21-byte file,
   and 73 for the 22 KiB file.
@@ -58,7 +64,8 @@ the response differences and limitations. Cold/replaced/binary files, responses
 above 32 KiB, streaming/range/compression behavior, on-disk/WAL SQLite,
 competing connections and rollback load, competing/catch-all route shapes,
 arbitrary query values, dynamic JSON keys/structured values, schema validation,
-mixed request bodies, cancellation, and multiple actors remain unmeasured.
+mixed request bodies, cancellation, and actor supervision/restart/persistence
+load remain unmeasured.
 
 The five-second alpha comparison and earlier connection-close, JSX, streaming,
 Worker, and AI-provider results below are historical evidence. They remain

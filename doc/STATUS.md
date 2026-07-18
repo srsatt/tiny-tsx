@@ -51,7 +51,25 @@ produces and serves a native Mach-O executable from the example TSX source.
   tests, 184 Rust workspace tests, native/reference 2/2 each, Hono intake 8/8,
   benchmark harness 32/32, and workspace Clippy with warnings denied.
 
-### Sustained twelve-workload server matrix (2026-07-18)
+### Eight-actor mutation pressure (2026-07-18)
+
+- A project-owned Hono tracer spawns eight independent bounded counter actors.
+  Eight fixed tell routes enqueue `+1` and return the response-equivalent body
+  `queued`; eight read routes use zero-delta asks to observe each owner without
+  a registry, runtime actor array, or request-derived message.
+- Apple native HTTP proves initial isolation, targeted mutation, and concurrent
+  progress, and the build report contains eight actors. Linux arm64 assembles
+  at least eight tell and eight ask call sites. The release manifest reaches the
+  native gate and a Bun/Hono reference backed by eight independent Workers.
+- The benchmark harness now supports a temporary URL-file contract for
+  response-equivalent routes and records state snapshots after warm-up and
+  every load interval. Any non-200 response or non-positive/malformed actor
+  state rejects the run.
+- Verification: actor native/assembly 10/10, Bun/Hono reference 1/1, Hono
+  intake 8/8, benchmark harness 34/34, a one-second equivalence smoke, and the
+  clean sustained evidence below.
+
+### Sustained thirteen-workload server matrix (2026-07-18)
 
 - A clean Apple M5 Max comparison covers Hono basic, dynamic JSX escaping, one
   decoded optional route parameter, bounded warm-cache 21-byte and 22,173-byte
@@ -59,12 +77,13 @@ produces and serves a native Mach-O executable from the example TSX source.
   counter actor, one in-memory empty SQLite query, and an idempotent two-write
   callback transaction followed by a non-empty row response. The matrix also
   posts one fixed 65-byte primitive JSON object through the bounded request
-  field ABI. Each target uses one process; TinyTSX uses eight HTTP workers; both
-  targets use keep-alive. The
-  matrix retains five startup samples and three 15-second samples at concurrency
-  8 and 64 with alternating order.
-- All 144 load samples pass with success rate 1.0. TinyTSX reaches 0.24–0.54x
-  Bun throughput at concurrency 8 and 0.40–0.79x at concurrency 64 on the eleven
+  field ABI. A mixed-route actor workload also distributes `tell(+1)` across
+  eight independent owners and reads every state after each interval. Each
+  target uses one process; TinyTSX uses eight HTTP workers; both targets use
+  keep-alive. The matrix retains five startup samples and three 15-second
+  samples at concurrency 8 and 64 with alternating order.
+- All 156 load samples pass with success rate 1.0. TinyTSX reaches 0.24–0.54x
+  Bun throughput at concurrency 8 and 0.40–0.79x at concurrency 64 on the twelve
   small-response routes. The exact 22,173-byte route reaches 1.30x/1.78x Bun.
   TinyTSX concurrency-64 p99 is 9.575–22.030 ms versus Bun at 0.736–5.104 ms.
 - TinyTSX warm RSS is 6.30–8.81 MiB versus Bun at 64.50–154.70 MiB. Repeated
@@ -72,10 +91,11 @@ produces and serves a native Mach-O executable from the example TSX source.
   returns to four open descriptors; median peaks are 68 for non-file routes, 71
   for the 21-byte file, and 73 for the 22 KiB file.
 - Whole-process counters are not normalized across different request totals.
-  TinyTSX records greater CPU on eleven routes; Bun records more on the 21-byte
-  file route, while TinyTSX records more Unix syscalls and context switches on
-  all twelve. Application-executor, filesystem, response-copy, actor, and SQLite
-  ownership are profiling seams; unmeasured workload families remain explicit.
+  TinyTSX records greater CPU on twelve workloads; Bun records more on the
+  21-byte file route, while TinyTSX records more Unix syscalls and context
+  switches on all thirteen. Application-executor, filesystem, response-copy,
+  actor, and SQLite ownership are profiling seams; unmeasured workload families
+  remain explicit.
 - The upstream query-present pretty branch expands the same closed array from
   129 to 202 bytes. It reduces TinyTSX concurrency-64 throughput by 0.3% versus
   compact JSON and Bun throughput by 23.2%; this is not a dynamic-JSON claim.
@@ -88,10 +108,18 @@ produces and serves a native Mach-O executable from the example TSX source.
   with 7.34 MiB warm RSS and 9.937 ms concurrency-64 p99. It is the only row on
   the new request-field runtime ABI, so it is not used as a same-runtime delta
   against earlier controls.
+- The eight-actor route reaches 0.40x/0.76x Bun at concurrency 8/64 with 6.64
+  MiB TinyTSX warm RSS versus 120.77 MiB for Bun. All 18 state snapshots are
+  positive; the final TinyTSX actors span 225,345–226,787. TinyTSX peaks at
+  6.75 MiB and returns to four descriptors. The Bun eight-Worker process has a
+  703.77 MiB median peak across three consistent runs and returns to its
+  13-descriptor process baseline; complete-process totals do not isolate Worker
+  creation or GC.
 - Evidence: clean commits `7c1a22c`, `04ac58b`, `c16333f`, `097982d`, and
   `a6cc7ae`, plus `c488480` for the first eleven rows; clean commit `b35b608`
-  supplies the request-field ABI row. The combined summary and twelve adjacent
-  raw JSON/rendered report pairs retain every sample.
+  supplies the request-field ABI row, and clean commit `528ecd6` supplies the
+  mixed eight-actor row. The combined summary and thirteen adjacent raw
+  JSON/rendered report pairs retain every sample and actor-state checkpoint.
 
 ### Clean post-transaction release rehearsal (2026-07-17)
 

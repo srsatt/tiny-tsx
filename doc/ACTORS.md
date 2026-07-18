@@ -99,6 +99,17 @@ proves the cold actor runs by the first quantum boundary while hot work remains.
 Separate barrier evidence proves distinct actors execute in parallel when two
 executors are configured.
 
+The sustained eight-owner HTTP tracer cycles response-equivalent `tell(+1)`
+routes across eight compile-time-known counters and reads every state after
+warm-up and each concurrency interval. All 18 TinyTSX/Bun checkpoints show
+progress on every owner; the final TinyTSX states span 225,345–226,787. At
+concurrency 8/64 TinyTSX reaches 38,366/76,825 requests per second, uses 6.64
+MiB warm RSS, peaks at 6.75 MiB, and returns from 68 descriptors to 4. The Bun
+reference uses eight OS Workers and records 120.77 MiB warm RSS plus a 703.77
+MiB median peak. Those are complete-process implementation comparisons, not
+isolated per-actor allocation or scheduling costs. The tracer does not add a
+runtime actor registry, dynamic identity, supervision, or persistence.
+
 ## Bounded restart policy
 
 One exact non-persistent counter form may declare a closed failure sentinel and

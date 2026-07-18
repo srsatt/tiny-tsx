@@ -1,6 +1,6 @@
 # TinyTSX benchmarks
 
-The harness has sixteen workloads:
+The harness has seventeen workloads:
 
 - `static-page` compares the current static TinyTSX vertical slice to an
   idiomatic `Bun.serve` server returning the same response;
@@ -32,6 +32,9 @@ The harness has sixteen workloads:
   including copied request/reply messages through an async Hono route; and
 - `hono-actor` compares a zero-delta read through one persistent TinyTSX
   counter actor with a Bun Worker-owned counter; and
+- `hono-actor-multi` cycles response-equivalent mutations across eight
+  independent TinyTSX actors or Bun Workers and reads every owner after each
+  load interval; and
 - `hono-sqlite` compares one schema-check plus empty prepared query through the
   bounded TinyTSX SQLite owner with synchronous `bun:sqlite`; and
 - `hono-sqlite-transaction` compares a schema check, two fixed-key idempotent
@@ -87,6 +90,7 @@ npm run benchmark:hono-large-file
 npm run benchmark:hono-stream-text
 npm run benchmark:hono-worker
 npm run benchmark:hono-actor
+npm run benchmark:hono-actor-multi
 npm run benchmark:hono-sqlite
 npm run benchmark:hono-sqlite-transaction
 npm run benchmark:hono-ai-provider
@@ -143,6 +147,12 @@ The harness builds a stripped release TinyTSX executable, alternates target orde
 between runs, warms each process, and retains every sample. It writes adjacent
 JSON and Markdown reports under `benchmarks/results/`.
 
+Workloads with a `paths` contract give `oha` a temporary URL file whose routes
+must have the same status, headers, framing, and body. The multi-actor workload
+uses this to cycle all eight tell routes. Its raw report also retains each
+actor's integer state after warm-up and after every measured interval; a
+non-positive, malformed, or missing state fails the run.
+
 The first Hono smoke preview is persisted as
 `2026-07-15-m5-max-hono-preview.{json,md}`. It uses three one-second samples at
 concurrency 1 and 8 against the earlier single-route tracer. Treat it as
@@ -198,8 +208,8 @@ not as an uninstrumented throughput comparison.
 
 ## Sustained release-stability matrix
 
-The current twelve-workload comparison is retained in
-`results/2026-07-17-m5-max-sustained-15s-summary.md`, with twelve adjacent raw
+The current thirteen-workload comparison is retained in
+`results/2026-07-17-m5-max-sustained-15s-summary.md`, with thirteen adjacent raw
 JSON/rendered report pairs. Each workload uses eight TinyTSX HTTP workers,
 keep-alive for both targets, five startup samples, and three 15-second load
 samples at concurrency 8 and 64. Reproduce it with:
@@ -246,6 +256,10 @@ python3 benchmarks/scripts/run_static.py \
   --concurrency 8,64 --workers 8 --keep-alive \
   --output-prefix benchmarks/results/local-sustained-hono-actor
 python3 benchmarks/scripts/run_static.py \
+  --workload hono-actor-multi --duration 15 --runs 3 --startup-runs 5 \
+  --concurrency 8,64 --workers 8 --keep-alive \
+  --output-prefix benchmarks/results/local-sustained-hono-actor-multi
+python3 benchmarks/scripts/run_static.py \
   --workload hono-sqlite --duration 15 --runs 3 --startup-runs 5 \
   --concurrency 8,64 --workers 8 --keep-alive \
   --output-prefix benchmarks/results/local-sustained-hono-sqlite
@@ -260,7 +274,8 @@ does not cover cold/replaced/binary files, responses above 32 KiB,
 streaming/range/compression behavior, on-disk/WAL SQLite, competing connections,
 rollback load, request-derived database values, competing/catch-all route
 shapes, arbitrary query values, dynamic JSON keys/structured values, schema
-validation, mixed request bodies, cancellation, or multi-actor contention.
+validation, mixed request bodies, cancellation, or actor
+supervision/restart/persistence load.
 
 For credible comparative runs, connect the Mac to power, disable Low Power Mode,
 close unnecessary applications, and avoid indexing or builds while measuring.

@@ -239,13 +239,14 @@ npm run benchmark:hono-file-read
 npm run benchmark:hono-large-file
 npm run benchmark:hono-stream-text
 npm run benchmark:hono-actor
+npm run benchmark:hono-actor-multi
 npm run benchmark:hono-sqlite
 npm run benchmark:hono-sqlite-transaction
 ```
 
 The harness verifies equivalent status, content type, content length, and body,
 then records repeated startup-to-first-response, RSS, throughput, and latency
-samples through `oha`. The current twelve-workload sustained comparison is
+samples through `oha`. The current thirteen-workload sustained comparison is
 `benchmarks/results/2026-07-17-m5-max-sustained-15s-summary.md`. See
 `benchmarks/README.md` for the exact protocol, reproduction commands, and
 limitations.
