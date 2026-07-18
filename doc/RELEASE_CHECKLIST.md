@@ -2,10 +2,11 @@
 
 Release: `0.1.0-alpha.1`
 
-Current decision: **HOLD pending exact-source native Linux verification.** The
-pressure-aware candidate behavior has completed an Apple rehearsal, but Apple
-and Linux must still produce schema-v2 manifests from one final exact commit
-before the separate tag-and-publish action.
+Current decision: **READY for a separate tag-and-publish action.** Native Apple
+arm64 and native Linux arm64 both attest clean commit
+`f56d8a26a79368ce84cfa54defe71f25e41b0fd5`. Both extracted archives pass the
+installed example, capability failure, request-memory recovery, and worker
+saturation groups. The tag has not been created.
 
 This checklist prepares a release candidate; it does not create or push a tag.
 Run it from the exact commit intended for `v0.1.0-alpha.1`.
@@ -40,11 +41,11 @@ npm ci --prefix frontend
 npm run release:verify
 ```
 
-- [ ] Apple arm64 has completed the clean `release:verify` contract at the
+- [x] Apple arm64 has completed the clean `release:verify` contract at the
       final exact-source candidate commit.
-- [ ] Linux arm64 has completed the clean `release:verify` contract on a native
+- [x] Linux arm64 has completed the clean `release:verify` contract on a native
       `ubuntu-24.04-arm` or equivalent host.
-- [ ] The exact release-candidate commit has completed both native jobs without
+- [x] The exact release-candidate commit has completed both native jobs without
       generated tracked changes.
 
 ## Artifact inspection
@@ -76,11 +77,11 @@ tar -tzf "$base.tar.gz" | grep '/bin/tinytsx$'
 tar -tzf "$base.tar.gz" | grep '/lib/tinytsx/examples/README.md$'
 ```
 
-- [ ] Apple archive checksum, manifest, version output, installed layout, and
+- [x] Apple archive checksum, manifest, version output, installed layout, and
       outside-checkout HTTP smoke have been verified.
-- [ ] Linux archive checksum, manifest, version output, installed layout, and
+- [x] Linux archive checksum, manifest, version output, installed layout, and
       outside-checkout HTTP smoke have been verified.
-- [ ] Both artifact manifests identify the same source contract, HIR 2, runtime
+- [x] Both artifact manifests identify the same source contract, HIR 2, runtime
       ABI 1, built-in schema 1, and pinned compatibility revisions.
 
 The generated archive checksums belong in the uploaded `.sha256` files and
@@ -91,14 +92,14 @@ document would change the archive being attested.
 
 Before tagging, confirm all of the following:
 
-- [ ] Every exact-source alpha exit gate in `doc/BACKLOG.md` is checked.
-- [ ] Both native archives are collected together with their `.sha256` and
+- [x] Every exact-source alpha exit gate in `doc/BACKLOG.md` is checked.
+- [x] Both native archives are collected together with their `.sha256` and
       manifest files.
 - [x] The limitations in `doc/ALPHA.md` match the shipped compiler diagnostics
       and executable tests.
 - [x] No release note claims general TypeScript, ECMAScript, Node, Bun, Deno,
       Web API, Hono, actor, SQLite, AI SDK, or GC compatibility.
-- [ ] The release commit is clean and is the commit verified by both native
+- [x] The release commit is clean and is the commit verified by both native
       jobs.
 
 Only after this section is green may a separate release action create

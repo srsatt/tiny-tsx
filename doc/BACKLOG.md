@@ -52,12 +52,12 @@ The bounded `0.1.0-alpha.1` implementation contract is complete, and the
 nested-profile P1-P4 stabilization slice below is functionally green. The
 executable example/failure gates, repeated TinyTSX/Bun comparisons, portable
 Test262/WPT allowlists, package installation, and schema-v2 source attestation
-machinery are in place. The current source is not yet a taggable two-target
-release candidate: the Apple and Linux archives must be regenerated and run
-from clean native checkouts at the same post-backlog commit. Tagging remains a
-separate release action. New language, Hono, actor, SQLite, Web API, or GC work
-belongs to the ordered post-alpha backlog unless it fixes a regression in this
-published contract.
+machinery are in place. Clean native Apple- and Linux-arm64 release gates now
+attest commit `f56d8a26a79368ce84cfa54defe71f25e41b0fd5`; both extracted
+archives pass the installed example and bounded-failure suite. That frozen
+commit is taggable by a separate release action. Later backlog or
+implementation commits are post-candidate work and do not replace its
+artifacts without repeating both native gates.
 
 Acceptance criteria are, in order:
 
@@ -106,12 +106,12 @@ boundaries remain open.
 
 ### Release handoff
 
-Publishing `0.1.0-alpha.1` remains a separate release action. After the
-exact-source goal below passes, attach its matching Apple/Linux archives,
-checksums, and schema-v2 manifests, then create `v0.1.0-alpha.1` from that
-attested commit. Do not reuse artifacts from an earlier source state or mix the
-release action with later implementation work; any source change creates a new
-candidate that must repeat both native gates.
+Publishing `0.1.0-alpha.1` remains a separate release action. Attach the
+matching Apple/Linux archives, checksums, and schema-v2 manifests for commit
+`f56d8a26a79368ce84cfa54defe71f25e41b0fd5`, then create
+`v0.1.0-alpha.1` from that exact attested commit. Do not reuse artifacts from
+an earlier source state or move the tag to later implementation work; any new
+candidate must repeat both native gates.
 
 The goal is complete only when:
 
@@ -417,16 +417,16 @@ and restart both native gates from its new clean commit.
 - [x] Remove the clean-checkout dependency on a previously installed ignored
       published-Hono fixture; `test:frontend` now prepares the pinned
       `tests/compat/node-server` dependencies before executing its intake.
-- [ ] Run `npm run release:verify` from a clean native Apple-arm64 checkout of
+- [x] Run `npm run release:verify` from a clean native Apple-arm64 checkout of
       the frozen candidate commit.
-- [ ] Run the same command on a native Linux-arm64 checkout of the exact same
+- [x] Run the same command on a native Linux-arm64 checkout of the exact same
       commit; cross-assembled ELF inspection is not a substitute.
-- [ ] Require both schema-v2 manifests to record the same source commit with
+- [x] Require both schema-v2 manifests to record the same source commit with
       `dirty: false`, and verify each archive against its retained SHA-256.
-- [ ] Install each archive outside the source checkout and execute the packaged
+- [x] Install each archive outside the source checkout and execute the packaged
       hello, Hono, file, actor, SQLite, user-auth, and nested-profile gates,
       including their bounded failure paths.
-- [ ] Retain the native Linux HTTP-contract evidence and update the tag-ready
+- [x] Retain the native Linux HTTP-contract evidence and update the tag-ready
       checklist without changing compiler/runtime/API sources between the two
       attestations.
 - [x] Repeat the controlled control, actor, SQLite, and nested-profile
@@ -443,6 +443,15 @@ and restart both native gates from its new clean commit.
 Completion produces two attachable archives and a tag-ready checklist. It does
 not create or publish `v0.1.0-alpha.1`; publication remains an explicit later
 action.
+
+The goal completed at clean commit
+`f56d8a26a79368ce84cfa54defe71f25e41b0fd5`. Native Apple arm64 and native
+Linux arm64 both passed `npm run release:verify`. The Linux checkout, build,
+package, and extracted-install runs used the VM's native ext filesystem rather
+than the macOS VirtioFS source mount. Both schema-v2 manifests record the same
+clean source and compatibility pins; their retained checksums pass; and both
+extracted archives pass all four installed-release groups. The tag remains
+deliberately uncreated.
 
 The pressure-aware rerun is complete at clean source commit `932743e`. It uses
 eight workers, keep-alive, five startup runs, and three 15-second load samples

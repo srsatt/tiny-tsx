@@ -475,6 +475,24 @@ produces and serves a native Mach-O executable from the example TSX source.
 - Verification: workspace Clippy with warnings denied, the repeated benchmark
   artifacts, and `npm run release:verify` on both native targets.
 
+### Pressure-aware exact-source candidate (2026-07-18)
+
+- Clean commit `f56d8a26a79368ce84cfa54defe71f25e41b0fd5` completed the full
+  `npm run release:verify` contract on native Apple arm64 and native Linux
+  arm64. The Linux checkout, build, packaging, and extracted install used the
+  Colima VM's native ext filesystem; a preliminary macOS VirtioFS bind-mount
+  run was discarded after Node's recursive copy left a destination file
+  write-only.
+- Both schema-v2 manifests record the same clean source, HIR 2, runtime ABI 1,
+  built-in schema 1, Hono `v4.12.30` at `b2ae3a22`, Hono examples
+  `3b0b6287`, and Test262 `f2d14356`. Both generated SHA-256 files validate and
+  both archives contain `bin/tinytsx` plus the packaged examples index.
+- Each tarball was extracted outside its source checkout and passed all four
+  installed-release groups: runnable Hono, node-server, `tinytsx:serve`, and
+  Zod examples; capability, malformed-input, and disposal failures; request
+  memory exhaustion recovery; and HTTP worker saturation recovery. The two
+  artifacts are collected together under `dist/release/`; no tag was created.
+
 ### Native Linux release and portable allowlists (2026-07-17)
 
 - A clean `aarch64` Linux VM running kernel 6.8 under Apple Virtualization
