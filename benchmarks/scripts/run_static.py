@@ -304,6 +304,24 @@ WORKLOADS = {
             "--tsconfig-override", "benchmarks/bun/hono-runtime-tsconfig.json",
         ],
     },
+    "hono-sqlite-transaction": {
+        "body": b'{"value":{"id":"stable","value":"ready"}}',
+        "content_type": "application/json",
+        "headers": {},
+        "numeric_headers": [],
+        "path": "/sqlite-transaction",
+        "scope": "one in-memory SQLite owner behind a pinned Hono route; schema check, two idempotent prepared writes in one callback transaction, one non-empty prepared row copy, and JSON encoding per request; HTTP/1.1; localhost",
+        "limitation": "This does not measure disk or WAL I/O, competing connections, rollback frequency, request-derived values, growing tables, arbitrary callback shapes, or SQLite primitive parity.",
+        "tiny_entry": "benchmarks/tiny/hono-sqlite-transaction.ts",
+        "tiny_args": [
+            "--alias", "hono=vendor/hono/src/index.ts",
+            "--api", "hono=tests/compat/hono/api.d.ts",
+        ],
+        "bun_script": "benchmarks/bun/hono-sqlite-transaction-server.ts",
+        "bun_args": [
+            "--tsconfig-override", "benchmarks/bun/hono-runtime-tsconfig.json",
+        ],
+    },
     "hono-ai-provider": {
         "body": b"Hello from local provider",
         "content_type": "text/plain; charset=UTF-8",

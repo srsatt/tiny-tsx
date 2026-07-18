@@ -198,6 +198,26 @@ class StaticHarnessTest(unittest.TestCase):
         self.assertEqual(workload["tiny_entry"], "benchmarks/tiny/hono-sqlite.ts")
         self.assertEqual(workload["bun_script"], "benchmarks/bun/hono-sqlite-server.ts")
 
+    def test_sqlite_transaction_workload_pins_writes_and_non_empty_read(self) -> None:
+        workload = WORKLOADS["hono-sqlite-transaction"]
+
+        self.assertEqual(workload["path"], "/sqlite-transaction")
+        self.assertEqual(
+            workload["body"],
+            b'{"value":{"id":"stable","value":"ready"}}',
+        )
+        self.assertIn("two idempotent prepared writes", workload["scope"])
+        self.assertIn("non-empty prepared row", workload["scope"])
+        self.assertIn("does not measure disk", workload["limitation"])
+        self.assertEqual(
+            workload["tiny_entry"],
+            "benchmarks/tiny/hono-sqlite-transaction.ts",
+        )
+        self.assertEqual(
+            workload["bun_script"],
+            "benchmarks/bun/hono-sqlite-transaction-server.ts",
+        )
+
     def test_ai_provider_workload_uses_the_exact_pinned_graph(self) -> None:
         workload = WORKLOADS["hono-ai-provider"]
 

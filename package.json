@@ -29,6 +29,7 @@
     "benchmark:hono-worker": "python3 benchmarks/scripts/run_static.py --workload hono-worker --keep-alive",
     "benchmark:hono-actor": "python3 benchmarks/scripts/run_static.py --workload hono-actor --keep-alive",
     "benchmark:hono-sqlite": "python3 benchmarks/scripts/run_static.py --workload hono-sqlite --keep-alive",
+    "benchmark:hono-sqlite-transaction": "python3 benchmarks/scripts/run_static.py --workload hono-sqlite-transaction --keep-alive",
     "benchmark:hono-ai-provider": "python3 benchmarks/scripts/run_static.py --workload hono-ai-provider --keep-alive",
     "benchmark:actor-scale": "python3 benchmarks/scripts/run_actor_scale.py --output-prefix benchmarks/results/local-actor-scale",
     "test:benchmarks": "python3 -m unittest discover -s benchmarks/tests -p 'test_*.py'",

@@ -10,6 +10,10 @@ const repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".
 const entry = path.join(repository, "examples/hono-sqlite/server.ts");
 const persistentEntry = path.join(repository, "examples/hono-sqlite/persistent.ts");
 const callbackTransactionEntry = path.join(repository, "examples/hono-sqlite/callback-transaction.ts");
+const benchmarkTransactionEntry = path.join(
+  repository,
+  "benchmarks/tiny/hono-sqlite-transaction.ts",
+);
 
 test("serializes an in-memory SQLite owner and recovers from SQL errors", async context => {
   const directory = mkdtempSync(path.join(tmpdir(), "tinytsx-sqlite-native-"));
@@ -163,6 +167,43 @@ test("assembles the prepared transaction callback ABI for Linux arm64", () => {
   assert.equal(assembled.status, 0, assembled.stderr);
 });
 
+test("repeats the idempotent transaction benchmark with a non-empty row", async context => {
+  const directory = mkdtempSync(path.join(tmpdir(), "tinytsx-sqlite-benchmark-"));
+  const binary = path.join(directory, "server");
+  const port = 39_494;
+  context.after(() => rmSync(directory, {recursive: true, force: true}));
+
+  const result = buildBenchmarkTransaction(binary, port);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const server = spawn(binary, [], {stdio: ["ignore", "pipe", "pipe"]});
+  context.after(() => server.kill("SIGTERM"));
+  await waitForServer(port, server);
+
+  for (let request = 0; request < 16; request++) {
+    await assertGet(
+      port,
+      "/sqlite-transaction",
+      200,
+      '{"value":{"id":"stable","value":"ready"}}',
+    );
+  }
+});
+
+test("assembles the transaction benchmark ABI for Linux arm64", () => {
+  const result = spawnSync("cargo", [
+    "run", "-q", "-p", "tinytsx", "--", "check", benchmarkTransactionEntry,
+    "--emit-asm", "--target", "aarch64-unknown-linux-gnu",
+    "--alias", "hono=vendor/hono/src/index.ts",
+    "--api", "hono=tests/compat/hono/api.d.ts",
+  ], {cwd: repository, encoding: "utf8"});
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /tinytsx_sqlite_transaction_params/);
+  const assembled = spawnSync("clang", [
+    "--target=aarch64-unknown-linux-gnu", "-x", "assembler", "-c", "-o", "/dev/null", "-",
+  ], {cwd: repository, input: result.stdout, encoding: "utf8"});
+  assert.equal(assembled.status, 0, assembled.stderr);
+});
+
 test("retains an on-disk SQLite row across process restart", async context => {
   const directory = mkdtempSync(path.join(tmpdir(), "tinytsx-sqlite-persistent-"));
   const binary = path.join(directory, "server");
@@ -244,6 +285,16 @@ function buildPersistent(binary, port, directory) {
 function buildCallbackTransaction(binary, port) {
   return spawnSync("cargo", [
     "run", "-q", "-p", "tinytsx", "--", "build", callbackTransactionEntry,
+    "--output", binary,
+    "--port", String(port),
+    "--alias", "hono=vendor/hono/src/index.ts",
+    "--api", "hono=tests/compat/hono/api.d.ts",
+  ], {cwd: repository, encoding: "utf8"});
+}
+
+function buildBenchmarkTransaction(binary, port) {
+  return spawnSync("cargo", [
+    "run", "-q", "-p", "tinytsx", "--", "build", benchmarkTransactionEntry,
     "--output", binary,
     "--port", String(port),
     "--alias", "hono=vendor/hono/src/index.ts",

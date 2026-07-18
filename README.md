@@ -239,6 +239,7 @@ npm run benchmark:hono-large-file
 npm run benchmark:hono-stream-text
 npm run benchmark:hono-actor
 npm run benchmark:hono-sqlite
+npm run benchmark:hono-sqlite-transaction
 ```
 
 The harness verifies equivalent status, content type, content length, and body,
