@@ -26,10 +26,25 @@ test("pins the next real-world Hono backend without widening its boundary", () =
   assert.equal(tracer.packagedExample.status, "pass");
   assert.equal(tracer.performanceEvidence.status, "pass");
   assert.equal(tracer.performanceEvidence.workload, "hono-stytch-todo");
-  assert.ok(readFileSync(
+  const performance = JSON.parse(readFileSync(
     path.join(repository, tracer.performanceEvidence.evidence),
     "utf8",
-  ).includes('"success_rate": 1.0'));
+  ));
+  assert.equal(performance.environment.commit, tracer.performanceEvidence.sourceCommit);
+  assert.deepEqual(performance.configuration.concurrency, [8, 64]);
+  assert.equal(performance.configuration.runs, 3);
+  assert.equal(performance.configuration.durationSeconds, 15);
+  for (const target of Object.values(performance.targets)) {
+    const samples = Object.values(target.throughput).flatMap(point => point.samples);
+    assert.equal(samples.length, 6);
+    assert.ok(samples.every(sample => sample.success_rate === 1));
+    assert.equal(target.stateSamples.length, 9);
+    assert.ok(target.stateSamples.every(sample => (
+      sample.values.completedCycles > 0
+      && sample.values.recoveryChecks > 0
+      && sample.values.finalState === "empty"
+    )));
+  }
   assert.ok(tracer.releaseGates.native.includes("test:release-installed"));
   assert.match(tracer.firstUnsupportedBoundary, /React\/Vite/);
   assert.match(tracer.firstUnsupportedBoundary, /live Stytch/);
