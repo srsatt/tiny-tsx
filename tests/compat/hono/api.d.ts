@@ -12,6 +12,8 @@ export interface HonoContextApi<Bindings = Record<string, never>> {
   readonly res: Response;
   readonly env: Bindings;
   header(name: string, value: string): void;
+  set(name: string, value: unknown): void;
+  get<Value = unknown>(name: string): Value | undefined;
   text(body: string, status?: number): Response;
   html(body: string | JSX.Element, status?: number): Response;
   json(value: unknown, status?: number): Response;

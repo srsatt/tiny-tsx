@@ -1559,6 +1559,83 @@ test("retains upstream requestId as one reusable request-local value", () => {
   );
 });
 
+test("lowers bounded Hono context variables across middleware and route handling", () => {
+  const entry = path.join(repository, "tests/compat/hono/context-variables-smoke.ts");
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+    apiAliases: {hono: path.join(repository, "tests/compat/hono/api.d.ts")},
+  });
+
+  const handler = hir.handlers.find(candidate => candidate.path === "/context/:value");
+  assert.equal(handler?.response.kind, "text");
+  const response = handler?.response.kind === "text" ? handler.response.value : undefined;
+  assert.equal(response?.kind, "concat");
+  assert.match(JSON.stringify(response), /routeParameter/);
+  assert.ok(hir.staticStrings.some(value => value.value.includes("ctx:")));
+  assert.ok(hir.staticStrings.some(value => value.value.includes(":absent")));
+});
+
+test("rejects context variables outside the bounded static slot contract", () => {
+  const cases = [
+    {
+      name: "dynamic key",
+      effect: 'context.set(context.req.param("key"), "value");',
+      message: "requires one static string key",
+    },
+    {
+      name: "empty key",
+      effect: 'context.set("", "value");',
+      message: "non-empty UTF-8 string",
+    },
+    {
+      name: "oversized key",
+      effect: `context.set("${"x".repeat(129)}", "value");`,
+      message: "at most 128 bytes",
+    },
+    {
+      name: "reserved key",
+      effect: 'context.set("requestId", "value");',
+      message: "reserved requestId",
+    },
+    {
+      name: "structured value",
+      effect: 'context.set("value", {nested: true});',
+      message: "bounded primitive",
+    },
+    {
+      name: "slot limit",
+      effect: Array.from({length: 17}, (_, index) =>
+        `context.set("slot${index}", "value");`
+      ).join("\n"),
+      message: "at most 16 static slots",
+    },
+  ];
+  for (const candidate of cases) {
+    const entry = write(`context-variables-${candidate.name.replaceAll(" ", "-")}.ts`, `
+      import {Hono} from "hono";
+      const app = new Hono();
+      app.get("/:key", context => {
+        ${candidate.effect}
+        return context.text("ok");
+      });
+      export default app;
+    `);
+    assert.throws(
+      () => compileEntry(entry, {
+        sdkPath: path.join(repository, "sdk/index.d.ts"),
+        aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+        apiAliases: {hono: path.join(repository, "tests/compat/hono/api.d.ts")},
+      }),
+      error => error instanceof CompileFailure
+        && error.diagnostics.some(diagnostic =>
+          diagnostic.code === "TINY1403" && diagnostic.message.includes(candidate.message)
+        ),
+      candidate.name,
+    );
+  }
+});
+
 test("binds closed requestId options to the same route-local value", () => {
   const entry = path.join(repository, "tests/compat/hono/request-id-options-smoke.ts");
   const hir = compileEntry(entry, {

@@ -588,6 +588,9 @@ function evaluateRouteHandler(
   );
   context.fields.set("env", {kind: "environmentBindings"});
   context.fields.set("req", {kind: "request", routePattern, method: requestMethod});
+  for (const middlewareHandler of middleware) {
+    applyContextVariableMiddlewarePrelude(evaluator, middlewareHandler, context);
+  }
   let response = invokeClosure(evaluator, handler, [context], context);
   let middlewareFailed = false;
   if (response.kind === "thrown" && errorHandler !== undefined) {
@@ -1338,6 +1341,85 @@ function isHonoContextInstance(
   return resolved !== undefined && /(?:^|\/)hono\/(?:src|dist)\/context\.(?:ts|js)$/.test(
     resolved.module.path.replaceAll("\\", "/"),
   );
+}
+
+function contextVariables(instance: Value & {kind: "instance"}): Map<string, Value> {
+  const existing = instance.fields.get("#tinytsxContextVariables");
+  if (existing?.kind === "record") return existing.fields;
+  const fields = new Map<string, Value>();
+  instance.fields.set("#tinytsxContextVariables", {kind: "record", fields});
+  return fields;
+}
+
+function isBoundedContextVariable(value: Value): boolean {
+  return value.kind === "undefined"
+    || value.kind === "null"
+    || value.kind === "boolean"
+    || (value.kind === "number" && Number.isFinite(value.value))
+    || value.kind === "string"
+    || value.kind === "routeParameter"
+    || value.kind === "requestHeader"
+    || value.kind === "requestCookie"
+    || value.kind === "environmentVariable"
+    || value.kind === "fileText"
+    || value.kind === "runtimeString";
+}
+
+function applyContextVariableMiddlewarePrelude(
+  evaluator: Evaluator,
+  middleware: Value & {kind: "closure"},
+  context: Value & {kind: "instance"},
+): void {
+  if (isRequestIdMiddleware(middleware)) return;
+  const declaration = middleware.expression;
+  const body = declaration.body;
+  if (body === undefined || !ts.isBlock(body)) return;
+  const contextParameter = declaration.parameters[0]?.name;
+  const nextParameter = declaration.parameters[1]?.name;
+  if (
+    contextParameter === undefined
+    || nextParameter === undefined
+    || !ts.isIdentifier(contextParameter)
+    || !ts.isIdentifier(nextParameter)
+  ) return;
+
+  const prelude: ts.ExpressionStatement[] = [];
+  let reachesNext = false;
+  for (const statement of body.statements) {
+    if (
+      ts.isExpressionStatement(statement)
+      && ts.isAwaitExpression(statement.expression)
+      && ts.isCallExpression(statement.expression.expression)
+      && ts.isIdentifier(statement.expression.expression.expression)
+      && statement.expression.expression.expression.text === nextParameter.text
+    ) {
+      reachesNext = true;
+      break;
+    }
+    if (
+      !ts.isExpressionStatement(statement)
+      || !ts.isCallExpression(statement.expression)
+      || !ts.isPropertyAccessExpression(statement.expression.expression)
+      || !ts.isIdentifier(statement.expression.expression.expression)
+      || statement.expression.expression.expression.text !== contextParameter.text
+      || statement.expression.expression.name.text !== "set"
+    ) {
+      return;
+    }
+    prelude.push(statement);
+  }
+  if (!reachesNext || prelude.length === 0) return;
+
+  const environment = new Map(middleware.environment);
+  environment.set(contextParameter.text, context);
+  environment.set(nextParameter.text, {
+    kind: "reference",
+    name: "next",
+    module: middleware.module.path,
+  });
+  for (const statement of prelude) {
+    executeStatement(evaluator, statement, middleware.module, environment, context);
+  }
 }
 
 function executeClass(
@@ -2200,6 +2282,39 @@ function executeEffectCall(
   const receiver = evaluate(evaluator, call.expression.expression, module, environment, instance);
   const name = memberName(call.expression.name);
   const arguments_ = evaluateCallArguments(evaluator, call, module, environment, instance);
+  if (receiver.kind === "instance" && isHonoContextInstance(evaluator, receiver) && name === "set") {
+    const key = arguments_[0];
+    const value = arguments_[1];
+    if (arguments_.length !== 2 || key?.kind !== "string") {
+      issue(evaluator, call, module, "Context.set requires one static string key and one value");
+      return true;
+    }
+    const keyBytes = Buffer.byteLength(key.value, "utf8");
+    if (key.value.length === 0 || keyBytes > 128) {
+      issue(evaluator, call, module, "Context.set key must be a non-empty UTF-8 string of at most 128 bytes");
+      return true;
+    }
+    if (key.value === "requestId") {
+      issue(evaluator, call, module, "Context.set cannot replace the reserved requestId value");
+      return true;
+    }
+    if (value === undefined || !isBoundedContextVariable(value)) {
+      issue(
+        evaluator,
+        call,
+        module,
+        "Context.set value must be a bounded primitive or supported request-time string",
+      );
+      return true;
+    }
+    const variables = contextVariables(receiver);
+    if (!variables.has(key.value) && variables.size >= 16) {
+      issue(evaluator, call, module, "Context.set supports at most 16 static slots per route");
+      return true;
+    }
+    variables.set(key.value, value);
+    return true;
+  }
   if (receiver.kind === "array" && name === "push") {
     receiver.items.push(...arguments_);
     return true;
@@ -3059,9 +3174,16 @@ function evaluateCall(
       && isHonoContextInstance(evaluator, receiver)
     ) {
       const key = arguments_[0];
-      return arguments_.length === 1 && key?.kind === "string" && key.value === "requestId"
-        ? {kind: "requestId", headerName: "X-Request-Id"}
-        : unknown("Context.get requires the supported requestId key");
+      if (arguments_.length !== 1 || key?.kind !== "string") {
+        return unknown("Context.get requires one static string key");
+      }
+      if (key.value.length === 0 || Buffer.byteLength(key.value, "utf8") > 128) {
+        return unknown("Context.get key must be a non-empty UTF-8 string of at most 128 bytes");
+      }
+      if (key.value === "requestId") {
+        return {kind: "requestId", headerName: "X-Request-Id"};
+      }
+      return contextVariables(receiver).get(key.value) ?? UNDEFINED;
     }
     if (receiver.kind === "response" && name === "json") {
       if (typeof receiver.body !== "string") {
