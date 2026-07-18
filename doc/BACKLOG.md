@@ -883,6 +883,36 @@ shared unchanged tracer also passes Bun/Hono, and its native/reference scripts
 are reachable through the Hono manifest and release suite. This closes only the
 fixed-key `Context.set/get` specialization; general `Map` remains open.
 
+#### Selected P1/P2 tracer — bounded Hono `Context.var` reads
+
+Use pinned Hono commit `b2ae3a2204a48ce15a26448fd746d39745eb1837`, the
+`var` getter in unchanged `src/context.ts`, and the adjacent `c.var` case in
+`src/context.test.ts` as semantic provenance. Extend the shared context-variable
+tracer with a second route that reads middleware and handler values through
+static `context.var.<name>` property access, including one missing property with
+a closed fallback and one request-derived string.
+
+Reuse the existing 1–16 request-local slot ownership, key, value, replacement,
+and reserved-`requestId` bounds. Admit only direct identifier property access
+and a closed string-literal element access that resolves to an existing or
+missing slot; both must lower to the same AOT value as `Context.get`. Do not
+materialize Hono's source proxy object or expose it to native code.
+
+Reject dynamic computed keys, assignment through `Context.var`, destructuring,
+spread/rest, enumeration, `Object.keys/values/entries`, identity comparison,
+method calls, nested access through structured values, and escape into a
+closure, actor, worker, SQLite value, or process state. This tracer does not add
+a general record, proxy, index signature, or `Map` implementation and cannot
+close the broad P1 collection item.
+
+Require frontend success/failure coverage plus the shared declaration and Hono
+manifest boundary. Apple arm64 must run repeated concurrent `/context-var/:id`
+requests without cross-request leakage; Linux arm64 must assemble the same
+request-derived response ABI; Bun/Hono must execute the unchanged shared source.
+The release suite must reach both native and reference evidence. Capacity and
+disposal remain the already-proved 16-slot compile-time ceiling and request-end
+lifetime, so no new queue or owned-resource saturation test is applicable.
+
 ### P1 — Compatibility and language depth
 
 - [x] Promote remaining syntax-only Test262 cases only when their complete
