@@ -30,6 +30,14 @@ fn emit_components(source: &mut String, program: &Program) {
     for component in &program.components {
         writeln!(
             source,
+            "static tiny_u32 tinytsx_component_{}(const void *request, void *writer);",
+            component.id,
+        )
+        .unwrap();
+    }
+    for component in &program.components {
+        writeln!(
+            source,
             "static tiny_u32 tinytsx_component_{}(const void *request, void *writer) {{",
             component.id,
         )

@@ -107,3 +107,32 @@ fn emits_x86_64_html_components() {
         assert!(assembly.contains("<h1>hello</h1>"));
     }
 }
+
+#[test]
+fn declares_components_before_nested_calls() {
+    let mut program = html_program(Target::LinuxX86_64);
+    let span = || crate::hir::SourceSpan {
+        file: "server.tsx".to_owned(),
+        line: 1,
+        column: 1,
+        end_line: 1,
+        end_column: 2,
+    };
+    program.components.push(crate::hir::Component {
+        id: 1,
+        name: "Nested".to_owned(),
+        html: Vec::new(),
+        span: span(),
+    });
+    program.components[0].html.push(crate::hir::HtmlOp::CallComponent {
+        component: 1,
+        span: span(),
+    });
+
+    emit(
+        &program,
+        Target::LinuxX86_64,
+        Options::default(),
+    )
+    .expect("emit forward component call");
+}
