@@ -609,6 +609,34 @@ evidence is the adjacent
 `benchmarks/results/2026-07-18-m5-max-sustained-15s-hono-json-{compact,pretty}-keepalive-w8.*`
 pairs; no dynamic-collection or arbitrary-query claim is made.
 
+#### Selected P4 tracer — idempotent prepared transaction and non-empty result
+
+Add one `hono-sqlite-transaction` workload around a project-owned focused Hono
+route using pinned Hono commit `b2ae3a2204a48ce15a26448fd746d39745eb1837`
+and the shipped `tinytsx:sqlite` callback-transaction surface backed by bundled
+SQLite 3.53.2. Every request must perform two fixed-key idempotent prepared
+writes in one zero-argument callback transaction, then execute a prepared
+`get()` and return the same non-empty closed row. The Bun adapter must use the
+same SQL, transaction boundary, Hono route, response bytes, and in-memory
+single-connection ownership through `bun:sqlite`.
+
+The harness test must pin the exact entry/adapter, path, two-write transaction,
+non-empty body, scope, and limitations. Apple arm64 must execute the response
+gate repeatedly and Linux arm64 must assemble the transaction-step ABI. A
+short equivalence smoke must precede the standard three-by-15-second,
+concurrency-8/64, eight-worker keep-alive run; all response-checked raw samples,
+process counters, and descriptor end-states must be retained. The existing
+SQLite core and native callback suite remain the failure/disposal evidence for
+atomic rollback, connection reuse, ownership, and bounded transaction shape.
+
+This tracer measures one in-memory owner, two idempotent prepared writes in one
+atomic owner message, a non-empty prepared row copy, and JSON encoding. It does
+not measure disk or WAL I/O, competing connections, rollback frequency,
+request-derived values, growing tables, arbitrary transaction callbacks,
+visible step results, or SQLite primitive parity. Those remain separate
+functional or performance tracers, and this workload cannot close them by
+inference.
+
 Before implementing the next tracer, its selected goal must be copied into the
 active goal with: its exact tracer/source revision; admitted and rejected
 boundaries; Apple execution and Linux-arm64 evidence; failure, saturation, and
