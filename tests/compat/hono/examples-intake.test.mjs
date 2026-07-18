@@ -31,6 +31,7 @@ test("records the example matrix with executable evidence and boundaries", () =>
     "upstream-request-id",
     "upstream-secure-headers",
     "tinytsx-context-variables",
+    "tinytsx-bounded-map",
     "tinytsx-json-body",
     "published-zod-openapi",
     "hono-node-server-entry",
@@ -49,7 +50,7 @@ test("records the example matrix with executable evidence and boundaries", () =>
   ];
   assert.deepEqual(manifest.matrix.map(row => row.id), required);
   for (const row of manifest.matrix) {
-    assert.ok(["unchanged-upstream", "official-doc-derived-published-packages", "official-doc-derived-local-tracer", "tinytsx-local", "unchanged-upstream-tracer", "upstream-contract-with-tinytsx-adapter"].includes(row.provenance));
+    assert.ok(["unchanged-upstream", "official-doc-derived-published-packages", "official-doc-derived-local-tracer", "tinytsx-local", "tinytsx-local-with-pinned-test262", "unchanged-upstream-tracer", "upstream-contract-with-tinytsx-adapter"].includes(row.provenance));
     assert.ok(row.entry.length > 0);
     assert.ok(row.imports.length > 0);
     assert.ok(row.apis.length > 0);

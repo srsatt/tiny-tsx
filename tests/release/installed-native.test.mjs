@@ -98,6 +98,20 @@ test("ships runnable Hono, node-server, tinytsx serve, and Zod examples", async 
     );
   });
 
+  const mapPort = 39_501;
+  const mapBinary = binaryPath(project, "map");
+  assertBuilt(build(
+    compiler,
+    project,
+    "hono-map/server.ts",
+    mapBinary,
+    mapPort,
+  ), "bounded map");
+  await withServer(mapBinary, mapPort, async () => {
+    await assertText(mapPort, "/map/first", 200, "first");
+    await assertText(mapPort, "/map/second", 200, "second");
+  }, {waitPath: "/map/ready"});
+
   const neutralPort = 39_491;
   const neutralBinary = binaryPath(project, "tiny-serve");
   assertBuilt(build(compiler, project, "tiny-serve/server.ts", neutralBinary, neutralPort), "tinytsx:serve");

@@ -85,6 +85,19 @@
       "firstUnsupportedBoundary": "From 1 through 16 static request-local slots admit bounded primitives and supported request-time strings through set/get or direct Context.var reads; dynamic or oversized keys, structured values, Context.var assignment/destructuring/enumeration, general Map identity/iteration/deletion, and values escaping the response are unsupported."
     },
     {
+      "id": "tinytsx-bounded-map",
+      "provenance": "tinytsx-local-with-pinned-test262",
+      "entry": "tests/compat/hono/map-smoke.ts",
+      "imports": ["hono"],
+      "apis": ["Hono", "get", "Context.req.param", "Context.text", "Map", "Map.set", "Map.get", "Map.has", "Map.delete", "Map.clear", "Map.size"],
+      "intake": {"status": "pass", "evidence": "frontend/test/compatibility-audit.test.ts"},
+      "nativeCompile": {"appleArm64": "pass", "linuxArm64Assembly": "pass", "evidence": "tests/compat/hono/map-native.test.mjs"},
+      "httpBehavior": {"status": "pass", "evidence": "tests/compat/hono/map-native.test.mjs"},
+      "referenceBehavior": {"runtime": "Bun/Hono", "status": "pass", "evidence": "tests/compat/hono/map-reference.test.ts"},
+      "releaseGates": {"native": ["test:hono-map-native", "test:release-installed"], "reference": ["test:hono-map-reference"]},
+      "firstUnsupportedBoundary": "Non-escaping request-local empty Maps admit at most sixteen closed primitive keys and bounded primitive or request-time string values; constructor iterables, object/collection values, iteration, capture/return, module persistence, and transport through JSON, SQLite, actors, or constants are unsupported."
+    },
+    {
       "id": "tinytsx-json-body",
       "provenance": "tinytsx-local",
       "entry": "tests/compat/hono/json-body-smoke.ts",
