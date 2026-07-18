@@ -1706,6 +1706,24 @@ test("lowers a bounded request-local Map separately from closed records", () => 
 });
 
 test("rejects Map capacity and ownership forms outside the bounded local subset", () => {
+  const exactSetters = Array.from({length: 16}, (_, index) => `values.set("key-${index}", "value");`).join("\n");
+  const exact = write("map-exact-capacity.ts", `
+    import {Hono} from "hono";
+    const app = new Hono();
+    app.get("/", context => {
+      const values = new Map<string, string>();
+      ${exactSetters}
+      return context.text(String(values.size));
+    });
+    export default app;
+  `);
+  const exactHir = compileEntry(exact, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+    apiAliases: {hono: path.join(repository, "tests/compat/hono/api.d.ts")},
+  });
+  assert.ok(exactHir.staticStrings.some(value => value.value === "16"));
+
   const setters = Array.from({length: 17}, (_, index) => `values.set("key-${index}", "value");`).join("\n");
   const capacity = write("map-capacity.ts", `
     import {Hono} from "hono";

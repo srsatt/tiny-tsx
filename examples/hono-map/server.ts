@@ -3,16 +3,17 @@ import {Hono} from "hono";
 
 const app = new Hono();
 
-app.get("/map/:value", context => {
+function selectValue(value: string): string {
   const values = new Map<string, string>();
-  values.set("value", "stale");
-  values.set("discard", "discarded");
-  values.set("value", context.req.param("value"));
+  values.set("value", "stale").set("discard", "discarded");
+  values.set("value", value);
   const deleted = values.delete("discard");
   if (!deleted || values.has("discard") || values.size !== 1) {
-    return context.text("invalid map", 500);
+    return "invalid map";
   }
-  return context.text(values.get("value")!);
-});
+  return values.get("value")!;
+}
+
+app.get("/map/:value", context => context.text(selectValue(context.req.param("value"))));
 
 serve({fetch: app.fetch});
