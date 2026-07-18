@@ -34,7 +34,7 @@ export type Value =
   | {kind: "headers"; entries: Map<string, {name: string; value: ResponseHeaderValue}>}
   | {kind: "request"; routePattern: string; method: string}
   | {kind: "requestJson"}
-  | {kind: "requestJsonField"; name: string}
+  | {kind: "requestJsonField"; path: string[]}
   | {kind: "fetchResponse"; url: string}
   | {kind: "fetchStatus"; url: string}
   | {kind: "clockNow"}
@@ -94,7 +94,7 @@ export type Value =
 export type RuntimeStringPart =
   | {kind: "literal"; value: string}
   | {kind: "routeParameter"; name: string}
-  | {kind: "requestJsonField"; name: string}
+  | {kind: "requestJsonField"; path: string[]}
   | {kind: "requestHeader"; name: string}
   | {kind: "requestId"; headerName: string}
   | {kind: "requestCookie"; name: string; fallback: string | undefined}
@@ -154,7 +154,7 @@ export interface StatementState {
 
 export type SqliteParameter =
   | {kind: "routeParameter"; name: string}
-  | {kind: "requestJsonField"; name: string}
+  | {kind: "requestJsonField"; path: string[]}
   | {kind: "requestHeader"; name: string}
   | {kind: "randomUuid"}
   | {kind: "staticString"; value: string}
@@ -215,7 +215,10 @@ export function readProperty(value: Value, name: string): Value {
     return {kind: "string", value: value.method};
   }
   if (value.kind === "requestJson") {
-    return {kind: "requestJsonField", name};
+    return requestJsonField([name]);
+  }
+  if (value.kind === "requestJsonField") {
+    return requestJsonField([...value.path, name]);
   }
   if (value.kind === "environmentBindings") {
     return {kind: "environmentVariable", name, required: true};
@@ -264,6 +267,18 @@ export function readProperty(value: Value, name: string): Value {
     return {kind: "number", value: value.value.length};
   }
   return UNDEFINED;
+}
+
+function requestJsonField(path: string[]): Value {
+  if (
+    path.length === 0
+    || path.length > 4
+    || path.some(segment => segment.length === 0
+      || segment.includes("\0")
+      || Buffer.byteLength(segment, "utf8") > 128)
+    || Buffer.byteLength(path.join("\0"), "utf8") > 512
+  ) return unknown("request JSON path is outside the bounded native contract");
+  return {kind: "requestJsonField", path};
 }
 
 export function fromStaged(value: StagedValue): Value {

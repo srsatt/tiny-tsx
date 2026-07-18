@@ -460,6 +460,156 @@ test("lowers selected request JSON primitives into a dynamic JSON response", () 
   ]);
 });
 
+test("lowers bounded nested request JSON paths into one canonical representation", () => {
+  const entry = write("hono-nested-json.ts", `
+    import {serve} from "tinytsx:serve";
+    import {Hono} from "hono";
+    const app = new Hono();
+    app.post("/profiles/:id", async context => {
+      const input = await context.req.json() as {
+        profile: {
+          name: string;
+          preferences: {theme: string; alerts: boolean};
+        };
+        score: number | null;
+      };
+      return context.json({
+        profile: {
+          name: input.profile.name,
+          preferences: {
+            theme: input.profile.preferences.theme,
+            alerts: input.profile.preferences.alerts,
+          },
+        },
+        score: input.score,
+      });
+    });
+    serve({fetch: app.fetch});
+  `);
+
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+    apiAliases: {hono: path.join(repository, "tests/compat/hono/api.d.ts")},
+  });
+  const response = hir.handlers[0]?.response;
+  assert.equal(response?.kind, "text");
+  if (response?.kind !== "text" || response.value.kind !== "concat") return;
+  assert.deepEqual(response.value.values
+    .filter(value => value.kind === "requestJsonField")
+    .map(value => value.kind === "requestJsonField"
+      ? hir.staticStrings[value.field]?.value
+      : undefined), [
+    "profile\0name",
+    "profile\0preferences\0theme",
+    "profile\0preferences\0alerts",
+    "score",
+  ]);
+});
+
+test("uses the canonical nested request JSON path for SQLite parameters", () => {
+  const entry = write("hono-nested-json-sqlite.ts", `
+    import {Database} from "tinytsx:sqlite";
+    import {serve} from "tinytsx:serve";
+    import {Hono} from "hono";
+    const database = new Database(":memory:");
+    const insert = database.prepare(
+      "INSERT INTO profiles (id, name, theme, alerts, score) VALUES (?1, ?2, ?3, ?4, ?5)",
+    );
+    const app = new Hono();
+    app.post("/profiles/:id", async context => {
+      const input = await context.req.json() as {
+        profile: {
+          name: string;
+          preferences: {theme: string; alerts: boolean};
+        };
+        score: number | null;
+      };
+      await insert.run([
+        context.req.param("id"),
+        input.profile.name,
+        input.profile.preferences.theme,
+        input.profile.preferences.alerts,
+        input.score,
+      ]);
+      return context.json({name: input.profile.name});
+    });
+    serve({fetch: app.fetch});
+  `);
+
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+    apiAliases: {hono: path.join(repository, "tests/compat/hono/api.d.ts")},
+  });
+  const action = hir.handlers[0]?.sqliteActions?.[0];
+  assert.equal(action?.kind, "exec");
+  assert.deepEqual(action?.kind === "exec"
+    ? action.parameters?.map(parameter => parameter.kind === "requestJsonField"
+      ? hir.staticStrings[parameter.field]?.value
+      : parameter.kind)
+    : undefined, [
+    "routeParameter",
+    "profile\0name",
+    "profile\0preferences\0theme",
+    "profile\0preferences\0alerts",
+    "score",
+  ]);
+});
+
+test("rejects request JSON paths beyond the bounded depth", () => {
+  const entry = write("hono-nested-json-depth.ts", `
+    import {serve} from "tinytsx:serve";
+    import {Hono} from "hono";
+    const app = new Hono();
+    app.post("/json", async context => {
+      const input = await context.req.json() as {a: {b: {c: {d: {e: string}}}}};
+      return context.json({value: input.a.b.c.d.e});
+    });
+    serve({fetch: app.fetch});
+  `);
+
+  assert.throws(
+    () => compileEntry(entry, {
+      sdkPath: path.join(repository, "sdk/index.d.ts"),
+      aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+      apiAliases: {hono: path.join(repository, "tests/compat/hono/api.d.ts")},
+    }),
+    (error: unknown) => error instanceof CompileFailure
+      && error.diagnostics.some(diagnostic => diagnostic.code === "TINY1403"
+        && diagnostic.message.includes("request JSON path is outside the bounded native contract")),
+  );
+});
+
+test("rejects more than sixteen selected request JSON leaf paths per handler", () => {
+  const fields = Array.from({length: 17}, (_, index) => `field${index}`);
+  const entry = write("hono-json-leaf-count.ts", `
+    import {serve} from "tinytsx:serve";
+    import {Hono} from "hono";
+    const app = new Hono();
+    app.post("/json", async context => {
+      const input = await context.req.json() as {
+        ${fields.map(field => `${field}: string`).join(";\n")}
+      };
+      return context.json({
+        ${fields.map(field => `${field}: input.${field}`).join(",\n")}
+      });
+    });
+    serve({fetch: app.fetch});
+  `);
+
+  assert.throws(
+    () => compileEntry(entry, {
+      sdkPath: path.join(repository, "sdk/index.d.ts"),
+      aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+      apiAliases: {hono: path.join(repository, "tests/compat/hono/api.d.ts")},
+    }),
+    (error: unknown) => error instanceof CompileFailure
+      && error.diagnostics.some(diagnostic => diagnostic.code === "TINY1403"
+        && diagnostic.message.includes("more than sixteen request JSON leaf paths")),
+  );
+});
+
 test("requires matching read/write capabilities for an on-disk SQLite owner", () => {
   const entry = write("sqlite-disk.ts", `
     import {Database} from "tinytsx:sqlite";

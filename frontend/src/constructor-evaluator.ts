@@ -2000,6 +2000,11 @@ function sameResponseHeaderValue(left: ResponseHeaderValue, right: ResponseHeade
         && candidate.result === part.result
         && candidate.json === part.json;
     }
+    if (part.kind === "requestJsonField") {
+      return candidate?.kind === "requestJsonField"
+        && candidate.path.length === part.path.length
+        && candidate.path.every((segment, index) => segment === part.path[index]);
+    }
     return candidate?.kind === part.kind && candidate.name === part.name;
   });
 }
@@ -3356,6 +3361,8 @@ function evaluateCall(
     if (receiver.kind === "reference" && receiver.name === "JSON" && name === "stringify") {
       const value = arguments_[0] ?? UNDEFINED;
       const space = arguments_[2];
+      const unsupported = firstUnknownJsonValue(value);
+      if (unsupported !== undefined) return unsupported;
       const serialized = stringifyJson(value, space?.kind === "number" ? space.value : undefined);
       if (serialized !== undefined) return {kind: "string", value: serialized};
       if (space !== undefined && space.kind !== "undefined") return UNDEFINED;
@@ -3960,7 +3967,7 @@ function sqliteParameters(
     if (parameter.kind === "routeParameter") {
       output.push({kind: "routeParameter", name: parameter.name});
     } else if (parameter.kind === "requestJsonField") {
-      output.push({kind: "requestJsonField", name: parameter.name});
+      output.push({kind: "requestJsonField", path: parameter.path});
     } else if (parameter.kind === "requestHeader" && (
       parameter.name.length === 0
       || Buffer.byteLength(parameter.name, "utf8") > 128
@@ -3999,7 +4006,11 @@ function sameSqliteParameters(left: SqliteParameter[], right: SqliteParameter[])
       case "routeParameter":
       case "requestJsonField":
       case "requestHeader":
-        return candidate.kind === parameter.kind && candidate.name === parameter.name;
+        return candidate.kind === parameter.kind && (parameter.kind === "requestJsonField"
+          ? candidate.kind === "requestJsonField"
+            && candidate.path.length === parameter.path.length
+            && candidate.path.every((segment, index) => segment === parameter.path[index])
+          : candidate.kind !== "requestJsonField" && candidate.name === parameter.name);
       case "staticString":
       case "staticInteger":
       case "staticReal":
@@ -5389,6 +5400,23 @@ function specializeRoutePath(pattern: string, name: string, value: string): stri
 
 const UNSUPPORTED_JSON = Symbol("unsupported JSON value");
 
+function firstUnknownJsonValue(value: Value): Extract<Value, {kind: "unknown"}> | undefined {
+  if (value.kind === "unknown") return value;
+  if (value.kind === "array") {
+    for (const item of value.items) {
+      const unknown = firstUnknownJsonValue(item);
+      if (unknown !== undefined) return unknown;
+    }
+  }
+  if (value.kind === "record") {
+    for (const field of value.fields.values()) {
+      const unknown = firstUnknownJsonValue(field);
+      if (unknown !== undefined) return unknown;
+    }
+  }
+  return undefined;
+}
+
 function stringifyJson(value: Value, space?: number): string | undefined {
   const converted = jsonValue(value, false);
   return converted === UNSUPPORTED_JSON || converted === undefined
@@ -5547,7 +5575,7 @@ function appendRuntimeJsonValue(
     return true;
   }
   if (value.kind === "requestJsonField") {
-    appendRuntimePart(parts, {kind: "requestJsonField", name: value.name});
+    appendRuntimePart(parts, {kind: "requestJsonField", path: value.path});
     return true;
   }
   if (value.kind === "undefined") {

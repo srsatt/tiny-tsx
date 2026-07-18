@@ -147,6 +147,7 @@ export function compileEntry(entryPath: string, options: CompileOptions): HirPro
           application.server,
         );
         if (lowered !== undefined) {
+          validateLoweredRequestJsonPaths(lowered, sourceFile);
           validateLoweredEnvironmentCapabilities(
             lowered,
             options.allowedEnvironment ?? new Set(),
@@ -628,7 +629,7 @@ function lowerSqliteParameters(
       case "routeParameter":
         return {kind: "routeParameter" as const, segment: routeParameterSegment(routePath, parameter.name)};
       case "requestJsonField":
-        return {kind: "requestJsonField" as const, field: strings.intern(parameter.name)};
+        return {kind: "requestJsonField" as const, field: strings.intern(encodeRequestJsonPath(parameter.path))};
       case "requestHeader":
         return {kind: "requestHeader" as const, header: strings.intern(parameter.name)};
       case "randomUuid":
@@ -803,7 +804,11 @@ function lowerRuntimeString(
         return {kind: "requestHeader" as const, header: strings.intern(part.name), span};
       }
       if (part.kind === "requestJsonField") {
-        return {kind: "requestJsonField" as const, field: strings.intern(part.name), span};
+        return {
+          kind: "requestJsonField" as const,
+          field: strings.intern(encodeRequestJsonPath(part.path)),
+          span,
+        };
       }
       if (part.kind === "requestId") {
         return {kind: "requestId" as const, header: strings.intern(part.headerName), span};
@@ -864,7 +869,10 @@ function lowerRuntimeString(
           parameters: part.parameters.map(parameter => parameter.kind === "routeParameter"
             ? {kind: "routeParameter" as const, segment: routeParameterSegment(routePath, parameter.name)}
             : parameter.kind === "requestJsonField"
-              ? {kind: "requestJsonField" as const, field: strings.intern(parameter.name)}
+              ? {
+                  kind: "requestJsonField" as const,
+                  field: strings.intern(encodeRequestJsonPath(parameter.path)),
+                }
               : {kind: "randomUuid" as const}),
           span,
         };
@@ -912,6 +920,10 @@ function lowerRuntimeString(
   };
 }
 
+function encodeRequestJsonPath(path: readonly string[]): string {
+  return path.join("\0");
+}
+
 function dynamicResponseExpressions(body: ResponseBody): number {
   if (typeof body === "string") return 0;
   if (Array.isArray(body)) {
@@ -937,6 +949,38 @@ function dynamicResponseExpressions(body: ResponseBody): number {
   return 1
     + dynamicResponseExpressions(body.whenPresent)
     + dynamicResponseExpressions(body.whenAbsent);
+}
+
+function validateLoweredRequestJsonPaths(program: HirProgram, sourceFile: ts.SourceFile): void {
+  for (const handler of program.handlers) {
+    const fields = new Set<number>();
+    collectRequestJsonFieldIds(handler, fields);
+    const paths = new Set([...fields].flatMap(field => {
+      const path = program.staticStrings[field]?.value;
+      return path === undefined ? [] : [path];
+    }));
+    if (paths.size > 16) {
+      throw tinyError(
+        "TINY1403",
+        `handler ${handler.method} ${handler.path} selects more than sixteen request JSON leaf paths`,
+        sourceFile,
+        "select at most sixteen distinct primitive request JSON leaves in one handler",
+      );
+    }
+  }
+}
+
+function collectRequestJsonFieldIds(value: unknown, output: Set<number>): void {
+  if (Array.isArray(value)) {
+    for (const item of value) collectRequestJsonFieldIds(item, output);
+    return;
+  }
+  if (typeof value !== "object" || value === null) return;
+  const record = value as Record<string, unknown>;
+  if (record.kind === "requestJsonField" && typeof record.field === "number") {
+    output.add(record.field);
+  }
+  for (const field of Object.values(record)) collectRequestJsonFieldIds(field, output);
 }
 
 function validateLoweredEnvironmentCapabilities(

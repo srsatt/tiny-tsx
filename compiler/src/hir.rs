@@ -933,6 +933,7 @@ impl Program {
                 self.validate_stderr(&validation.rejected.stderr)?;
                 self.validate_handler_response(&validation.rejected.response, &handler.path)?;
             }
+            self.validate_handler_request_json_paths(handler)?;
         }
         for (index, component) in self.components.iter().enumerate() {
             if component.id != index {
@@ -1584,9 +1585,9 @@ impl Program {
                     if self
                         .static_strings
                         .get(*field)
-                        .is_none_or(|field| field.value.is_empty() || field.value.len() > 128) =>
+                        .is_none_or(|field| !valid_request_json_path(&field.value)) =>
                 {
-                    return Err("SQLite JSON parameter has an invalid field name".to_owned());
+                    return Err("SQLite JSON parameter has an invalid field path".to_owned());
                 }
                 SqliteParameter::RequestHeader { header }
                     if self.static_strings.get(*header).is_none_or(|header| {
@@ -1645,6 +1646,30 @@ impl Program {
             }
         }
         Ok(())
+    }
+
+    fn validate_handler_request_json_paths(&self, handler: &Handler) -> Result<(), String> {
+        let mut fields = HashSet::new();
+        for response in handler_responses(handler) {
+            collect_request_json_response_fields(response, &mut fields);
+        }
+        if let Some(existence) = &handler.sqlite_existence {
+            collect_request_json_parameter_fields(&existence.parameters, &mut fields);
+        }
+        for action in &handler.sqlite_actions {
+            match action {
+                SqliteAction::Exec { parameters, .. } => {
+                    collect_request_json_parameter_fields(parameters, &mut fields);
+                }
+                SqliteAction::TransactionSteps { steps, .. } => {
+                    for step in steps {
+                        collect_request_json_parameter_fields(&step.parameters, &mut fields);
+                    }
+                }
+                SqliteAction::Transaction { .. } | SqliteAction::Close { .. } => {}
+            }
+        }
+        validate_request_json_path_fields(&fields, &self.static_strings)
     }
 
     fn validate_handler_response(
@@ -1763,8 +1788,8 @@ impl Program {
                 let Some(field) = self.static_strings.get(*field) else {
                     return Err("request JSON field references a missing static string".to_owned());
                 };
-                if field.value.is_empty() || field.value.len() > 128 {
-                    return Err("request JSON field name is outside the native limit".to_owned());
+                if !valid_request_json_path(&field.value) {
+                    return Err("request JSON field path is outside the native limit".to_owned());
                 }
                 Ok(())
             }
@@ -2241,6 +2266,125 @@ fn handler_responses(handler: &Handler) -> Vec<&HandlerResponse> {
             .map(|validation| &validation.rejected.response),
     );
     responses
+}
+
+fn collect_request_json_response_fields(response: &HandlerResponse, output: &mut HashSet<usize>) {
+    match response {
+        HandlerResponse::Html { .. } => {}
+        HandlerResponse::Text { value, .. } => {
+            collect_request_json_expression_fields(value, output);
+        }
+        HandlerResponse::Stream { chunks, .. } => {
+            for chunk in chunks {
+                collect_request_json_expression_fields(chunk, output);
+            }
+        }
+    }
+}
+
+fn collect_request_json_expression_fields(
+    expression: &ValueExpression,
+    output: &mut HashSet<usize>,
+) {
+    match expression {
+        ValueExpression::RequestJsonField { field, .. } => {
+            output.insert(*field);
+        }
+        ValueExpression::DirectCall { arguments, .. }
+        | ValueExpression::Concat {
+            values: arguments, ..
+        } => {
+            for argument in arguments {
+                collect_request_json_expression_fields(argument, output);
+            }
+        }
+        ValueExpression::StringEqualConditional {
+            left,
+            right,
+            when_equal,
+            when_not_equal,
+            ..
+        }
+        | ValueExpression::NumericEqualConditional {
+            left,
+            right,
+            when_equal,
+            when_not_equal,
+            ..
+        }
+        | ValueExpression::BooleanEqualConditional {
+            left,
+            right,
+            when_equal,
+            when_not_equal,
+            ..
+        } => {
+            for value in [left, right, when_equal, when_not_equal] {
+                collect_request_json_expression_fields(value, output);
+            }
+        }
+        ValueExpression::NumericBinary { left, right, .. } => {
+            collect_request_json_expression_fields(left, output);
+            collect_request_json_expression_fields(right, output);
+        }
+        ValueExpression::ThrowValue { value, .. } => {
+            collect_request_json_expression_fields(value, output);
+        }
+        ValueExpression::TryCatch {
+            try_value,
+            catch_value,
+            ..
+        } => {
+            collect_request_json_expression_fields(try_value, output);
+            collect_request_json_expression_fields(catch_value, output);
+        }
+        ValueExpression::SqliteQuery { parameters, .. } => {
+            collect_request_json_parameter_fields(parameters, output);
+        }
+        ValueExpression::QueryConditional {
+            when_present,
+            when_absent,
+            ..
+        } => {
+            collect_request_json_expression_fields(when_present, output);
+            collect_request_json_expression_fields(when_absent, output);
+        }
+        ValueExpression::WorkerCall { input, .. } => {
+            collect_request_json_expression_fields(input, output);
+        }
+        _ => {}
+    }
+}
+
+fn collect_request_json_parameter_fields(
+    parameters: &[SqliteParameter],
+    output: &mut HashSet<usize>,
+) {
+    for parameter in parameters {
+        if let SqliteParameter::RequestJsonField { field } = parameter {
+            output.insert(*field);
+        }
+    }
+}
+
+fn validate_request_json_path_fields(
+    fields: &HashSet<usize>,
+    static_strings: &[StaticString],
+) -> Result<(), String> {
+    let mut paths = HashSet::new();
+    for field in fields {
+        let Some(path) = static_strings.get(*field) else {
+            return Err("request JSON field references a missing static string".to_owned());
+        };
+        if !valid_request_json_path(&path.value) {
+            return Err("request JSON field path is outside the native limit".to_owned());
+        }
+        paths.insert(path.value.as_str());
+    }
+    if paths.len() > 16 {
+        return Err("handler selects more than sixteen request JSON leaf paths".to_owned());
+    }
+    Ok(())
 }
 
 fn validate_request_id_response(
@@ -2881,6 +3025,15 @@ fn validate_constant_value(value: &ConstantValue, depth: usize) -> Result<(), St
     }
 }
 
+fn valid_request_json_path(path: &str) -> bool {
+    !path.is_empty()
+        && path.len() <= 512
+        && path.split('\0').count() <= 4
+        && path
+            .split('\0')
+            .all(|segment| !segment.is_empty() && segment.len() <= 128)
+}
+
 fn validate_actor_supervision(
     supervisors: &[SupervisorModule],
     actors: &[ActorModule],
@@ -3195,6 +3348,53 @@ mod request_id_tests {
         assert_eq!(
             validate_request_id_expression(&expression, Some(4)),
             Err("request ID value does not match its middleware header".to_owned()),
+        );
+    }
+}
+
+#[cfg(test)]
+mod request_json_path_tests {
+    use super::*;
+
+    fn strings(count: usize) -> Vec<StaticString> {
+        (0..count)
+            .map(|id| StaticString {
+                id,
+                value: format!("field{id}"),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn validates_depth_segment_and_encoded_path_bounds() {
+        assert!(valid_request_json_path("profile\0preferences\0theme"));
+        assert!(!valid_request_json_path(""));
+        assert!(!valid_request_json_path("a\0b\0c\0d\0e"));
+        assert!(!valid_request_json_path(&"x".repeat(129)));
+        assert!(!valid_request_json_path(
+            &[
+                "a".repeat(128),
+                "b".repeat(128),
+                "c".repeat(128),
+                "d".repeat(128)
+            ]
+            .join("\0")
+        ));
+    }
+
+    #[test]
+    fn admits_sixteen_distinct_leaf_paths_and_rejects_seventeen() {
+        let static_strings = strings(17);
+        let sixteen = (0..16).collect::<HashSet<_>>();
+        let seventeen = (0..17).collect::<HashSet<_>>();
+
+        assert_eq!(
+            validate_request_json_path_fields(&sixteen, &static_strings),
+            Ok(())
+        );
+        assert_eq!(
+            validate_request_json_path_fields(&seventeen, &static_strings),
+            Err("handler selects more than sixteen request JSON leaf paths".to_owned())
         );
     }
 }
