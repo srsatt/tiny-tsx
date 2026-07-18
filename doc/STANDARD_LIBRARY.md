@@ -141,9 +141,11 @@ decimal string so every signed SQLite `i64` remains exact outside JavaScript's
 safe-integer range. A run with zero changed rows reports `null`; otherwise the
 field contains SQLite's connection-local last-insert row ID.
 
-Prepared calls bind at most 16 compile-time-selected route, bounded JSON-body,
-UUID, or closed primitive values (string, safe integer, finite real, boolean,
-and null). SQL is capped at 65,536 bytes; results at 1,024 rows and 1 MiB;
+Prepared calls bind at most 16 compile-time-selected route, bounded static
+JSON-body primitive-path, UUID, or closed primitive values (string, safe
+integer, finite real, boolean, and null). JSON paths have one through four
+segments and share their 16-distinct-leaf handler ceiling with response
+lowering. SQL is capped at 65,536 bytes; results at 1,024 rows and 1 MiB;
 and the vendored runtime is described in `doc/PERSISTENCE.md`. One handler may
 contain at most 16 SQLite actions/result slots; the generated writer owns fixed
 result storage, so returning these fields does not introduce a general object

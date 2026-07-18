@@ -34,14 +34,16 @@ untrusted same-UID code cannot mutate; see `doc/PERSISTENCE.md`.
 The source language is an explicit AOT allowlist, not JavaScript with fallback.
 It includes the pinned closed Hono initialization graphs, relative/bare ESM
 resolution, typed server JSX, closed records/arrays used by those graphs,
-request-selected strings, bounded JSON fields, selected async middleware, and
+request-selected strings, bounded static JSON primitive paths, selected async
+middleware, and
 the exact Test262 cases listed in `doc/COMPATIBILITY.md`. Unsupported reachable
 syntax fails compilation; the produced server never interprets JavaScript.
 
 The executable Hono matrix consists of the pinned complete `basic` and
 `jsx-ssr` examples plus the published-package `@hono/zod-openapi`, static-file,
 blog/SQLite, prepared callback-transaction, environment, bounded Body Limit,
-bounded Request ID, bounded fixed-key Context variables, and
+bounded Request ID, bounded fixed-key Context variables, nested-profile
+persistence, and
 local/persistent-counter tracers recorded in
 `tests/compat/hono/examples-manifest.json`.
 `@hono/node-server` and `tinytsx:serve` share one AOT entry contract. This does
@@ -50,7 +52,7 @@ behavior.
 
 The Web API allowlist covers the Request/Response/Headers behavior exercised by
 that matrix, selected route/query/header reads, bounded JSON input and selected
-primitive fields in a closed JSON response, plus a closed
+one-to-four-segment primitive paths in a closed JSON response, plus a closed
 `Content-Length` body guard, `crypto.randomUUID()`, one bounded request-local ID
 policy, one closed
 fetch-status path on Apple, finite text streaming, and the WPT-derived behavior

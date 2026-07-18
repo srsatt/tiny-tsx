@@ -32,8 +32,9 @@ preserves the complete signed SQLite `i64` domain rather than rounding through
 a JavaScript number. A run with zero changed rows reports `null`; otherwise the
 field contains SQLite's connection-local last-insert row ID. A prepared call
 accepts at most 16 selected values from named route parameters, UUID generation,
-a closed request JSON object, a required statically named request header, or
-compile-time string, safe-integer, finite-real, boolean, and null literals.
+a bounded static primitive path in a closed request JSON object, a required
+statically named request header, or compile-time string, safe-integer,
+finite-real, boolean, and null literals.
 Parameters use SQLite binding rather than SQL interpolation.
 
 Each handler is limited to 16 SQLite actions and therefore 16 stable result
@@ -167,10 +168,25 @@ crash durability, or network filesystems.
 
 The HTTP transport retains at most 64 KiB of request body. `HonoRequest.json()`
 is not exposed as a general dynamic JavaScript object: the compiler records
-only statically selected fields and the bootstrap parses those fields at the
-SQLite ABI boundary. JSON null, signed integer, finite number, and string map to
-SQLite values. A missing field, malformed JSON, boolean, array, nested object,
-or unsupported value returns HTTP 400; an oversized body returns HTTP 413.
+only statically selected primitive paths and the bootstrap traverses them at
+the response or SQLite ABI boundary. One canonical encoded path is shared by
+both lowerings. It contains one through four non-empty UTF-8 segments, each at
+most 128 bytes, uses at most 512 bytes, and participates in a 16-distinct-leaf
+handler limit. JSON null, signed integer, finite number, string, and boolean map
+to SQLite values; booleans bind as integers. Selected strings are capped at 4
+KiB. A missing leaf, malformed JSON, non-object intermediate, selected
+array/object, or exceeded bound returns HTTP 400; an oversized body returns
+HTTP 413.
+
+The packaged nested-profile tracer uses one in-memory owner with `users` and
+`preferences` tables. Its callback transaction inserts the route ID plus
+nested name/score and theme/alerts leaves as one non-interleaving owner message.
+A duplicate unique theme fails the second step and leaves no user row; a later
+distinct request commits, and `GET /profiles/:id` proves committed and missing
+state. Apple native HTTP, Linux-arm64 assembly, Bun/Hono with `bun:sqlite`, the
+Hono manifest, and the installed archive gate the same external contract. This
+promotes nested primitive bindings, not JSON columns, structured SQLite values,
+arbitrary transaction callbacks, or a dynamic object heap.
 
 Each connection is owned by one logical application worker on the fixed
 executor. The Hono owner tracer now proves schema creation, create/list/get/

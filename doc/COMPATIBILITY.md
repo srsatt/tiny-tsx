@@ -205,18 +205,25 @@ Bun/Hono `bun:sqlite` reference gate the contract. This does not admit optional
 headers, fallbacks, query/cookie/environment parameters, structured values, or
 arbitrary request expressions.
 
-The first request-body slice retains at most 64 KiB and recognizes
-`await c.req.json()` when statically selected fields flow into a prepared SQLite
-call or one closed `Context.json()` response. The SQLite ABI binds up to 16
-route/body string, finite-number, or null values without interpolation and
-continues to reject boolean or structured parameters. The response ABI selects
-non-empty field names up to 128 UTF-8 bytes and preserves JSON string escaping,
-finite numbers, booleans, and null. Malformed input, a missing selected field,
-or a selected array/object returns 400; a fully framed application-level 400
-keeps HTTP/1.1 reusable, while an oversized transport body returns terminal
-413. This does not construct a general runtime record, implement dynamic keys,
-arrays/nested objects, mutation, coercion/defaults, or expose whole-object
-identity.
+The bounded request-body slice retains at most 64 KiB and recognizes
+`await c.req.json()` when statically selected primitive leaves flow into a
+prepared SQLite call or one closed `Context.json()` response. One canonical
+NUL-separated HIR/static-string path represents both uses. Paths contain one
+through four non-empty UTF-8 segments, each at most 128 bytes, use at most 512
+encoded bytes, and contribute to one shared limit of 16 distinct selected
+leaves per handler. Selected strings are capped at 4 KiB.
+
+The SQLite ABI binds selected string, signed-integer, finite-number, boolean,
+or null leaves without interpolation; booleans map to SQLite integers. The
+response ABI preserves JSON string escaping and primitive types. Malformed
+input, a missing leaf, a non-object intermediate, a selected array/object, or
+an exceeded selected-string bound returns 400; a fully framed application-level
+400 keeps HTTP/1.1 reusable, while an oversized transport body returns terminal
+413. The packaged nested-profile tracer writes name/score and theme/alerts to
+two tables in one owner-serialized callback transaction, proves second-step
+unique-theme rollback, then reuses the owner successfully. This does not
+construct a general runtime record, implement dynamic/computed paths, arrays,
+mutation, defaults, rest/spread, JSON columns, or expose whole-object identity.
 
 The pinned upstream Hono `bodyLimit()` factory now compiles unchanged from both
 its TypeScript source and the published `hono@4.12.30` JavaScript package. One

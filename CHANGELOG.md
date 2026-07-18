@@ -14,6 +14,9 @@ First developer preview of TinyTSX's zero-JavaScript native server compiler.
   changes/row-id results and admits one atomic prepared-write callback
   transaction; actors include bounded deadlines, hard-reset waiter detachment,
   and one explicit restart-intensity form.
+- Bounded one-to-four-segment request JSON primitive paths share one response
+  and SQLite lowering, including boolean bindings, atomic two-table profile
+  persistence, rollback/recovery evidence, and a packaged Hono example.
 - Native Apple-arm64 and Linux-arm64 builds, allowlist execution, installed
   archive examples, checksums, and source-commit manifests.
 

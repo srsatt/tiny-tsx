@@ -410,12 +410,11 @@ The groomed candidates, in recommended dependency order, are:
    is green. A new release candidate remains a separate explicitly selected
    goal.
 
-#### Next-goal handoff — nested profile release slice
+#### Goal execution checkpoint — nested profile release slice
 
-This is the selected next implementation goal, but this backlog checkpoint is
-planning only. Do not treat uncommitted experiments as landed evidence and do
-not start or resume implementation until the goal is explicitly set. Once
-selected, execute the slice in this order:
+This selected implementation goal is green through its functional, target,
+package, installed-archive, and P4 evidence. The following execution order is
+retained as the audit trail:
 
 1. **P1/P2 — canonical nested request values:** prove the bounded path model in
    frontend, HIR, response, and SQLite-parameter tests before widening the
@@ -1218,7 +1217,7 @@ executes the packaged example. Clean Apple release verification passes at
 `66cec3f`; native Linux verification at the same commit remains required before
 naming a two-target release candidate.
 
-#### Selected P1/P2/P3 tracer — bounded nested profile JSON
+#### Selected P1/P2/P3/P4 tracer — bounded nested profile JSON (landed 2026-07-18)
 
 Use pinned Hono commit `b2ae3a2204a48ce15a26448fd746d39745eb1837`
 and a project-owned packaged `examples/hono-nested-json/server.ts` application.
@@ -1271,22 +1270,31 @@ property access.
 
 Acceptance checklist:
 
-- [ ] One canonical bounded path representation is shared by response and
+- [x] One canonical bounded path representation is shared by response and
       SQLite lowering, with stable diagnostics for depth, segment, encoded-size,
       selected-leaf-count, and unsupported-shape failures.
-- [ ] Bootstrap/runtime tests prove nested primitive traversal, exact JSON
+- [x] Bootstrap/runtime tests prove nested primitive traversal, exact JSON
       encoding, SQLite parameter conversion, bounded failures, and request
       recovery without regressing top-level fields.
-- [ ] The packaged Hono profile application proves commit, missing lookup,
+- [x] The packaged Hono profile application proves commit, missing lookup,
       second-step rollback, keep-alive recovery, and later successful reuse.
-- [ ] Apple native HTTP, Linux-arm64 assembly, unchanged Bun/Hono reference,
+- [x] Apple native HTTP, Linux-arm64 assembly, Bun/Hono reference,
       Hono manifest, package, and installed-archive gates all exercise the same
       source-level contract.
-- [ ] A response-checked TinyTSX/Bun workload records startup, RSS, throughput,
+- [x] A response-checked TinyTSX/Bun workload records startup, RSS, throughput,
       median/p99 latency, CPU/process counters, success rate, and resource
       recovery with the tracer limitations stated beside the result.
-- [ ] `doc/COMPATIBILITY.md`, `doc/PERSISTENCE.md`, `doc/STATUS.md`, and this
-      backlog agree on the landed surface and remaining exclusions.
+- [x] `doc/COMPATIBILITY.md`, `doc/PERSISTENCE.md`, `doc/PERFORMANCE.md`,
+      `doc/STATUS.md`, and this backlog agree on the landed surface and
+      remaining exclusions.
+
+The retained P4 row passes all 12 response-checked samples. At concurrency
+8/64 TinyTSX reaches 32,176/57,928 requests per second versus Bun at
+94,229/96,757 (0.34x/0.60x), with 8.86/72.03 MiB warm RSS and p99 of
+3.255/15.645 ms versus 0.152/1.262 ms. TinyTSX returns from 68 descriptors to
+four. This is evidence for the fixed idempotent in-memory profile workload, not
+growing data, rollback frequency, arbitrary nested schemas, disk I/O, or a
+general AOT/JIT claim.
 
 ### P1 — Compatibility and language depth
 
@@ -1396,8 +1404,10 @@ Acceptance checklist:
     fields from `await Context.req.json()`. String escaping, finite numbers,
     booleans, null, malformed/missing/structured rejection, the transport limit,
     safe application-400 keep-alive recovery, and Apple/Linux native paths are
-    release-gated. Dynamic keys, whole-object identity, arrays/nested objects,
-    mutation, coercion/defaults, and streaming JSON remain open.
+    release-gated. Static object-only paths now extend this to four segments and
+    16 distinct primitive leaves per handler, sharing one canonical path with
+    SQLite parameters. Dynamic keys, whole-object identity, arrays, mutation,
+    coercion/defaults, and streaming JSON remain open.
 - [x] Compile the pinned upstream Hono `bodyLimit` middleware unchanged for a
       closed literal `maxSize` and its default error response.
   - Admit `Content-Length` request bodies within the existing 64 KiB transport
@@ -1586,6 +1596,11 @@ Acceptance checklist:
     Bun/Hono. Optional/fallback headers, query/cookie/environment values,
     structured values, and arbitrary expressions remain open, so this broad
     item stays unchecked.
+  - 2026-07-18: nested request string/finite-number/boolean/null leaves now flow
+    through the same callback-transaction owner message; booleans bind as
+    SQLite integers. The profile tracer proves two-table commit, second-step
+    unique-theme rollback, and later reuse. JSON columns, structured bindings,
+    arbitrary callbacks, and dynamic expressions remain open.
 - [ ] Add actor supervision trees, restart intensity, monitors/links, registries,
       persistence snapshots, and remote/distributed actors only from separate
       evidence-driven proposals.
@@ -1668,6 +1683,12 @@ Acceptance checklist:
     Bun at concurrency 8/64 with 8.05 MiB warm RSS. Application conflict
     handling, growing data, competing/cross-process writers, cancellation, and
     other workload families remain open, so this broad item stays unchecked.
+  - 2026-07-18: the nested-profile row posts an 87-byte fixed body, selects four
+    nested primitive leaves, performs two idempotent prepared writes in one
+    callback transaction, and returns the 104-byte nested response. All 12
+    samples pass; TinyTSX reaches 0.34x/0.60x Bun at concurrency 8/64 with 8.86
+    MiB warm RSS and 15.645 ms concurrency-64 p99. Growing data, rollback
+    frequency, arbitrary schemas, arrays, and disk I/O remain open.
 - [x] Add CPU, syscall, allocation, peak-RSS, and first-launch instrumentation.
   - 2026-07-17: the macOS harness samples whole-process CPU time, Unix/Mach
     syscalls, context switches, faults, threads, open-file-descriptor

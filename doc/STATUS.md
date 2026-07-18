@@ -9,6 +9,34 @@ produces and serves a native Mach-O executable from the example TSX source.
 
 ## Alpha implementation evidence
 
+### Bounded nested profile JSON and persistence (2026-07-18)
+
+- Static request JSON paths now use one canonical representation across
+  response and SQLite HIR. Frontend and Rust validators enforce one through
+  four non-empty UTF-8 segments, 128 bytes per segment, 512 encoded bytes, 16
+  distinct leaves per handler, primitive leaves, and 4 KiB selected strings.
+- Bootstrap traversal preserves response string/number/boolean/null encoding
+  and maps nested SQLite booleans to integer 1/0. Malformed, missing,
+  wrong-shaped, structured, and oversized selected values return bounded 400s;
+  invalid generated path descriptors fail internally before traversal.
+- `examples/hono-nested-json/server.ts` persists route ID, nested name/score,
+  and nested theme/alerts to separate tables in one callback transaction.
+  Apple native HTTP proves commit and lookup, missing state, second-step
+  unique-theme rollback, malformed/missing/wrong-shape rejection, pipelined
+  keep-alive recovery, and later owner reuse. Linux-arm64 assembly and a
+  Bun/Hono `bun:sqlite` reference pass.
+- The Hono manifest reaches dedicated native/reference scripts and the installed
+  archive builds and executes the packaged example. Dirty-tree archive
+  packaging also passed the complete installed HTTP suite; a clean two-target
+  release attestation remains a separate candidate gate.
+- The retained eight-worker P4 report contains 12 successful 15-second samples.
+  TinyTSX reaches 32,176/57,928 requests per second at concurrency 8/64 versus
+  Bun at 94,229/96,757 (0.34x/0.60x), with 8.86/72.03 MiB warm RSS and
+  concurrency-64 p99 of 15.645/1.262 ms. TinyTSX returns from 68 descriptors to
+  four. Evidence is the adjacent
+  `benchmarks/results/2026-07-18-m5-max-sustained-15s-hono-nested-profile-keepalive-w8.*`
+  pair.
+
 ### Current-head Apple release verification (2026-07-18)
 
 - The first post-idempotency clean release attempt exposed a deterministic
