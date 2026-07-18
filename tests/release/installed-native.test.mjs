@@ -79,6 +79,25 @@ test("ships runnable Hono, node-server, tinytsx serve, and Zod examples", async 
     assert.equal(accepted.headers.get("x-request-id"), "release-request");
   });
 
+  const secureHeadersPort = 39_500;
+  const secureHeadersBinary = binaryPath(project, "secure-headers");
+  assertBuilt(build(
+    compiler,
+    project,
+    "hono-secure-headers/server.ts",
+    secureHeadersBinary,
+    secureHeadersPort,
+  ), "secure headers");
+  await withServer(secureHeadersBinary, secureHeadersPort, async () => {
+    const response = await request(secureHeadersPort, "/");
+    assert.equal(await response.text(), "secure");
+    assert.equal(response.headers.get("x-frame-options"), "SAMEORIGIN");
+    assert.equal(
+      response.headers.get("strict-transport-security"),
+      "max-age=15552000; includeSubDomains",
+    );
+  });
+
   const neutralPort = 39_491;
   const neutralBinary = binaryPath(project, "tiny-serve");
   assertBuilt(build(compiler, project, "tiny-serve/server.ts", neutralBinary, neutralPort), "tinytsx:serve");

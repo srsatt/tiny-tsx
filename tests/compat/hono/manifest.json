@@ -8,12 +8,14 @@
   "packageAliases": {
     "hono": "vendor/hono/src/index.ts",
     "hono/tiny": "vendor/hono/src/preset/tiny.ts",
-    "hono/pretty-json": "vendor/hono/src/middleware/pretty-json/index.ts"
+    "hono/pretty-json": "vendor/hono/src/middleware/pretty-json/index.ts",
+    "hono/secure-headers": "vendor/hono/src/middleware/secure-headers/index.ts"
   },
   "apiAliases": {
     "hono": "tests/compat/hono/api.d.ts",
     "hono/tiny": "tests/compat/hono/api.d.ts",
-    "hono/pretty-json": "tests/compat/hono/pretty-json-api.d.ts"
+    "hono/pretty-json": "tests/compat/hono/pretty-json-api.d.ts",
+    "hono/secure-headers": "tests/compat/hono/secure-headers-api.d.ts"
   },
   "smokeEntry": "tests/compat/hono/smoke.ts",
   "basicSmokeEntry": "tests/compat/hono/basic-smoke.ts",
@@ -21,6 +23,7 @@
   "responseHeadersSmokeEntry": "tests/compat/hono/response-headers-smoke.ts",
   "poweredBySmokeEntry": "tests/compat/hono/powered-by-smoke.ts",
   "prettyJsonSmokeEntry": "tests/compat/hono/pretty-json-smoke.ts",
+  "secureHeadersSmokeEntry": "tests/compat/hono/secure-headers-smoke.ts",
   "redirectSmokeEntry": "tests/compat/hono/redirect-smoke.ts",
   "requestHeaderSmokeEntry": "tests/compat/hono/request-header-smoke.ts",
   "fetchStatusSmokeEntry": "tests/compat/hono/fetch-status-smoke.ts",

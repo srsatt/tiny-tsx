@@ -44,6 +44,13 @@ const requestId = [
   "--alias", "hono/request-id=vendor/hono/src/middleware/request-id/index.ts",
   "--api", "hono/request-id=tests/compat/hono/request-id-api.d.ts",
 ];
+const secureHeaders = [
+  ...hono,
+  "--alias", "hono/powered-by=vendor/hono/src/middleware/powered-by/index.ts",
+  "--alias", "hono/secure-headers=vendor/hono/src/middleware/secure-headers/index.ts",
+  "--api", "hono/powered-by=tests/compat/hono/powered-by-api.d.ts",
+  "--api", "hono/secure-headers=tests/compat/hono/secure-headers-api.d.ts",
+];
 const uuidV4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 test("assembles both supported serve entry contracts for Linux arm64", () => {
@@ -365,6 +372,53 @@ test("assembles the pinned Hono requestId middleware for Linux arm64", () => {
     ], {cwd: repository, input: checked.stdout, encoding: "utf8"});
     assert.equal(assembled.status, 0, `${entry}: ${assembled.stderr}`);
   }
+});
+
+test("executes pinned Hono secureHeaders behavior natively", async context => {
+  await withServer(
+    context,
+    "tests/compat/hono/secure-headers-smoke.ts",
+    39_494,
+    secureHeaders,
+    async port => {
+      const defaults = await request(port, "/default");
+      assert.equal(await defaults.text(), "default");
+      assert.equal(defaults.headers.get("x-frame-options"), "SAMEORIGIN");
+      assert.equal(
+        defaults.headers.get("strict-transport-security"),
+        "max-age=15552000; includeSubDomains",
+      );
+      assert.equal(defaults.headers.get("x-powered-by"), "Hono");
+
+      const ordered = await request(port, "/ordered");
+      assert.equal(await ordered.text(), "ordered");
+      assert.equal(ordered.headers.get("x-powered-by"), null);
+
+      const custom = await request(port, "/custom");
+      assert.equal(await custom.text(), "custom");
+      assert.equal(custom.headers.get("x-frame-options"), "DENY");
+      assert.equal(custom.headers.get("x-xss-protection"), null);
+      assert.equal(
+        custom.headers.get("strict-transport-security"),
+        "max-age=31536000; includeSubDomains; preload;",
+      );
+    },
+  );
+});
+
+test("assembles pinned Hono secureHeaders behavior for Linux arm64", () => {
+  const checked = spawnSync("cargo", [
+    "run", "-q", "-p", "tinytsx", "--", "check",
+    "tests/compat/hono/secure-headers-smoke.ts",
+    "--emit-asm", "--target", "aarch64-unknown-linux-gnu",
+    ...secureHeaders,
+  ], {cwd: repository, encoding: "utf8"});
+  assert.equal(checked.status, 0, checked.stderr || checked.stdout);
+  assert.match(checked.stdout, /Ltinytsx_handler_0_header_11_name/);
+  const assembled = spawnSync("clang", [
+    "--target=aarch64-unknown-linux-gnu", "-x", "assembler", "-c", "-o", "/dev/null", "-",
+  ], {cwd: repository, input: checked.stdout, encoding: "utf8"});
+  assert.equal(assembled.status, 0, assembled.stderr);
 });
 
 async function withServer(context, entry, port, options, verify) {

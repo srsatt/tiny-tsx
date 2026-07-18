@@ -1370,6 +1370,109 @@ test("applies the upstream poweredBy middleware after the root handler", () => {
   assert.deepEqual(hir.handlers[0]?.headers, [{name: "X-Powered-By", value: "Hono"}]);
 });
 
+test("executes upstream secureHeaders defaults, overrides, and middleware order", () => {
+  const entry = path.join(repository, "tests/compat/hono/secure-headers-smoke.ts");
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    aliases: {
+      hono: path.join(repository, "vendor/hono/src/index.ts"),
+      "hono/powered-by": path.join(repository, "vendor/hono/src/middleware/powered-by/index.ts"),
+      "hono/secure-headers": path.join(
+        repository,
+        "vendor/hono/src/middleware/secure-headers/index.ts",
+      ),
+    },
+    apiAliases: {
+      hono: path.join(repository, "tests/compat/hono/api.d.ts"),
+      "hono/powered-by": path.join(repository, "tests/compat/hono/powered-by-api.d.ts"),
+      "hono/secure-headers": path.join(
+        repository,
+        "tests/compat/hono/secure-headers-api.d.ts",
+      ),
+    },
+  });
+
+  const byPath = new Map(hir.handlers.map(handler => [handler.path, handler]));
+  const defaults = byPath.get("/default")?.headers ?? [];
+  assert.equal(defaults.length, 12);
+  assert.ok(defaults.some(header =>
+    header.name === "Strict-Transport-Security"
+      && header.value === "max-age=15552000; includeSubDomains"
+  ));
+  assert.ok(defaults.some(header => header.name === "X-Powered-By"));
+  assert.equal(
+    byPath.get("/ordered")?.headers?.some(header => header.name === "X-Powered-By"),
+    false,
+  );
+  const custom = byPath.get("/custom")?.headers ?? [];
+  assert.ok(custom.some(header => header.name === "X-Frame-Options" && header.value === "DENY"));
+  assert.ok(custom.some(header =>
+    header.name === "Strict-Transport-Security"
+      && header.value === "max-age=31536000; includeSubDomains; preload;"
+  ));
+  assert.equal(custom.some(header => header.name === "X-XSS-Protection"), false);
+});
+
+test("lowers the pinned published Hono secureHeaders JavaScript shape", () => {
+  const entry = path.join(repository, "tests/compat/hono/secure-headers-smoke.ts");
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    aliases: {
+      hono: path.join(repository, "vendor/hono/src/index.ts"),
+      "hono/powered-by": path.join(repository, "vendor/hono/src/middleware/powered-by/index.ts"),
+      "hono/secure-headers": path.join(
+        repository,
+        "tests/compat/node-server/node_modules/hono/dist/middleware/secure-headers/index.js",
+      ),
+    },
+    apiAliases: {
+      hono: path.join(repository, "tests/compat/hono/api.d.ts"),
+      "hono/powered-by": path.join(repository, "tests/compat/hono/powered-by-api.d.ts"),
+      "hono/secure-headers": path.join(
+        repository,
+        "tests/compat/hono/secure-headers-api.d.ts",
+      ),
+    },
+  });
+
+  const ordered = hir.handlers.find(handler => handler.path === "/ordered");
+  assert.equal(ordered?.headers?.some(header => header.name === "X-Powered-By"), false);
+  const custom = hir.handlers.find(handler => handler.path === "/custom")?.headers ?? [];
+  assert.ok(custom.some(header => header.name === "X-Frame-Options" && header.value === "DENY"));
+});
+
+test("rejects secureHeaders policies outside the closed header subset", () => {
+  const entry = write("secure-headers-csp.ts", `
+    import {Hono} from "hono";
+    import {secureHeaders} from "hono/secure-headers";
+    const app = new Hono();
+    app.use("*", secureHeaders({contentSecurityPolicy: {defaultSrc: ["'self'"]}}));
+    app.get("/", context => context.text("unreachable"));
+    export default app;
+  `);
+  assert.throws(
+    () => compileEntry(entry, {
+      sdkPath: path.join(repository, "sdk/index.d.ts"),
+      aliases: {
+        hono: path.join(repository, "vendor/hono/src/index.ts"),
+        "hono/secure-headers": path.join(
+          repository,
+          "vendor/hono/src/middleware/secure-headers/index.ts",
+        ),
+      },
+      apiAliases: {
+        hono: path.join(repository, "tests/compat/hono/api.d.ts"),
+        "hono/secure-headers": path.join(
+          repository,
+          "tests/compat/hono/secure-headers-api.d.ts",
+        ),
+      },
+    }),
+    error => error instanceof CompileFailure
+      && error.diagnostics.some(diagnostic => diagnostic.message.includes("contentSecurityPolicy")),
+  );
+});
+
 test("lowers bounded upstream CORS headers and preflight", () => {
   const entry = path.join(repository, "tests/compat/hono/cors-smoke.ts");
   const hir = compileEntry(entry, {
