@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import {mkdtempSync, rmSync} from "node:fs";
+import {mkdirSync, mkdtempSync, rmSync} from "node:fs";
 import {tmpdir} from "node:os";
 import path from "node:path";
 import {spawn, spawnSync} from "node:child_process";
@@ -76,6 +76,90 @@ test("assembles the unchanged Stytch TODO backend for Linux arm64", () => {
   assert.equal(assembled.status, 0, assembled.stderr);
 });
 
+test("persists, rolls back saturation, and recovers through the SQLite owner", async context => {
+  const directory = mkdtempSync(path.join(tmpdir(), "tinytsx-stytch-todo-disk-"));
+  const state = path.join(directory, "state");
+  const binary = path.join(directory, "server");
+  const port = 39_493;
+  mkdirSync(state, {mode: 0o700});
+  context.after(() => rmSync(directory, {recursive: true, force: true}));
+
+  const built = spawnSync("cargo", [
+    "run", "-q", "-p", "tinytsx", "--", "build", entry,
+    "--output", binary, "--port", String(port),
+    "--binding", "TODOS=sqlite-kv:state/todos.db",
+    "--allow-read", directory,
+    "--allow-write", directory,
+    ...compilerOptions(),
+  ], {cwd: repository, encoding: "utf8"});
+  assert.equal(built.status, 0, built.stderr || built.stdout);
+
+  let server = spawn(binary, [], {cwd: directory, stdio: "ignore"});
+  context.after(() => server.kill("SIGTERM"));
+  await waitForServer(port, server);
+  const first = await json(port, "/api/todos", "persistent", {
+    method: "POST",
+    body: JSON.stringify({todoText: "before restart"}),
+  });
+  server.kill("SIGTERM");
+  await waitForExit(server);
+
+  server = spawn(binary, [], {cwd: directory, stdio: "ignore"});
+  await waitForServer(port, server);
+  assert.deepEqual(await json(port, "/api/todos", "persistent"), first);
+
+  for (let index = 1; index < 16; index++) {
+    await new Promise(resolve => setTimeout(resolve, 2));
+    const created = await request(port, "/api/todos", "persistent", {
+      method: "POST",
+      body: JSON.stringify({todoText: `todo-${index}`}),
+    });
+    assert.equal(created.status, 200, `create ${index}`);
+    await created.body?.cancel();
+  }
+  const beforeFailure = await json(port, "/api/todos", "persistent");
+  assert.equal(beforeFailure.todos.length, 16);
+
+  const saturated = await request(port, "/api/todos", "persistent", {
+    method: "POST",
+    body: JSON.stringify({todoText: "must roll back"}),
+  });
+  assert.equal(saturated.status, 500);
+  await saturated.body?.cancel();
+  assert.deepEqual(await json(port, "/api/todos", "persistent"), beforeFailure);
+
+  const malformed = await request(port, "/api/todos", "persistent", {
+    method: "POST",
+    body: JSON.stringify({wrong: "shape"}),
+  });
+  assert.equal(malformed.status, 400);
+  await malformed.body?.cancel();
+  assert.deepEqual(await json(port, "/api/todos", "persistent"), beforeFailure);
+
+  const removed = beforeFailure.todos[0];
+  const afterDelete = await json(port, `/api/todos/${removed.id}`, "persistent", {
+    method: "DELETE",
+  });
+  assert.ok(afterDelete.todos.length < 16);
+  await new Promise(resolve => setTimeout(resolve, 2));
+  const recovered = await json(port, "/api/todos", "persistent", {
+    method: "POST",
+    body: JSON.stringify({todoText: "after recovery"}),
+  });
+  assert.ok(recovered.todos.length <= 16);
+  assert.ok(recovered.todos.some(todo => todo.text === "after recovery"));
+});
+
+test("denies an on-disk TODO binding without matching capabilities", () => {
+  const checked = spawnSync("cargo", [
+    "run", "-q", "-p", "tinytsx", "--", "check", entry,
+    "--binding", "TODOS=sqlite-kv:state/todos.db",
+    ...compilerOptions(),
+  ], {cwd: repository, encoding: "utf8"});
+  assert.equal(checked.status, 1, checked.stdout);
+  assert.match(checked.stderr, /TINY1511/);
+});
+
 function compilerOptions() {
   return [
     "--alias", "hono=vendor/hono/src/index.ts",
@@ -122,4 +206,15 @@ async function waitForServer(port, server) {
     }
   }
   throw new Error("native Stytch TODO server did not start");
+}
+
+async function waitForExit(server) {
+  if (server.exitCode !== null) return;
+  await new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error("native server did not exit")), 2000);
+    server.once("exit", () => {
+      clearTimeout(timeout);
+      resolve();
+    });
+  });
 }
