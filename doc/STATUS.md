@@ -9,31 +9,35 @@ produces and serves a native Mach-O executable from the example TSX source.
 
 ## Alpha implementation evidence
 
-### Parked idle keep-alive scheduling (2026-07-18)
+### Pressure-aware idle keep-alive scheduling (2026-07-18)
 
 - Clean release verification exposed a deterministic single-worker stall in
   the SQLite idempotency gate. The database owner remained healthy: the same
   32-request transaction burst passed with eight HTTP workers, while one
   worker completed only one connection per five-second idle read and then
   delayed follow-up lookups behind completed keep-alive sockets.
-- The reusable worker scheduler now distinguishes ready, resumable, and parked
-  jobs. Ready external work is always selected before a parked job; parked jobs
-  are readiness-polled at a bounded one-millisecond interval without occupying
-  an executor, remain counted against bounded admission, and are discarded at
-  pool shutdown.
-- HTTP continues through at most sixteen requests only while a complete next
-  head is already buffered. Otherwise it parks the owned socket, parser bytes,
-  request count, and idle deadline. New socket bytes resume the same connection;
-  no input for five seconds still closes it under the existing lifetime bound.
+- The reusable worker scheduler now tells resumable handlers whether other work
+  is ready. HTTP retains the owned socket, parser bytes, and request count for
+  at most sixteen hot requests per turn. When no complete next head is buffered,
+  one POSIX readiness poll waits at most one millisecond under queue pressure or
+  100 milliseconds without pressure; a pressured connection may rotate at most
+  sixteen empty probes before it closes.
+- Ready input continues on the same executor without another queue rotation.
+  Idle sockets yield behind accepted work, while partial/pipelined parser bytes,
+  the 100-request lifetime cap, and the five-second active I/O bound remain
+  unchanged. A paused client beyond the 100-millisecond idle reuse window
+  reconnects rather than holding a native executor.
 - The minimized runtime regression proves a queued connection completes before
   an idle keep-alive timeout with one executor. The original default-worker
   SQLite test now completes in about 6.9 seconds and its 32 concurrent writes
   complete in 12 milliseconds in the diagnostic run, followed by all 32
   successful lookups.
-- Verification: worker 23/23, bootstrap 70/70, SQLite native 15/15, actor native
-  12/12, Hono native 17/17, Rust workspace 206/206, and strict Clippy for both
-  affected crates. A fresh controlled P4 comparison remains required because
-  executor scheduling changed after the retained benchmark artifacts.
+- The minimized runtime regression is green, the original default-worker
+  SQLite test completes in about 9.5 seconds, and worker/bootstrap unit tests
+  pass 22/22 and 70/70 under strict Clippy. A response-checked two-second
+  preview returns descriptors to 4/68/4 and reaches 72.5k requests/second at
+  concurrency 64 without response failures. Full native/release and controlled
+  P4 reruns remain required at the final committed source.
 
 ### Bounded nested profile JSON and persistence (2026-07-18)
 
@@ -545,8 +549,8 @@ produces and serves a native Mach-O executable from the example TSX source.
   takes the queue head, preserving the configured queue bound even when it is
   full. Pool close prevents another resubmission after the active turn.
 - HTTP connections now retain their socket, bounded parser buffer, and
-  completed-request count across sixteen-request turns. They still close after
-  100 requests or five idle seconds. A bootstrap regression test sends
+  completed-request count across sixteen-request turns. At this historical
+  checkpoint they closed after 100 requests or five idle seconds. A bootstrap regression test sends
   seventeen pipelined requests in one write and proves the seventeenth survives
   resubmission with the correct sixteen keep-alive responses and final close.
 - The acceptance comparison uses three five-second concurrency-64 runs, eight
@@ -1296,8 +1300,9 @@ produces and serves a native Mach-O executable from the example TSX source.
   compile-time, 13 static, 10 request-lifetime, 34 with aliases, 23 response
   escapes, and no managed sites; GC remains disabled.
 - HTTP/1.1 connections retain their owned socket and parser buffer for up to
-  100 requests or five idle seconds, but now rotate behind queued work after
-  each sixteen-request executor turn. A 16 KiB parser preserves pipelined bytes,
+  100 requests. Hot connections consume at most sixteen requests per executor
+  turn; pressure-aware readiness waits rotate idle sockets behind queued work.
+  A 16 KiB parser preserves pipelined bytes,
   consumes validated bodies up to 64 KiB, rejects duplicate Content-Length or
   transfer encoding, and closes deterministically on framing or application
   failures.
