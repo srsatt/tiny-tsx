@@ -309,7 +309,7 @@ fn check(arguments: &[String]) -> Result<(), String> {
     Ok(())
 }
 
-fn validate_bindings(bindings: &mut Vec<String>) -> Result<(), String> {
+fn validate_bindings(bindings: &mut [String]) -> Result<(), String> {
     bindings.sort();
     if bindings.len() > 16 {
         return Err("at most 16 resource bindings may be configured".to_owned());
