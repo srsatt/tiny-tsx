@@ -338,6 +338,22 @@ function executeApplicationCalls(
     return;
   }
   const environment = new Map<string, Value>([[application.binding, instance]]);
+  if (application.initializationCalls !== undefined) {
+    for (const statement of entry.sourceFile.statements) {
+      if (!ts.isVariableStatement(statement)) continue;
+      for (const declaration of statement.declarationList.declarations) {
+        if (!ts.isIdentifier(declaration.name) || declaration.initializer === undefined) continue;
+        environment.set(
+          declaration.name.text,
+          evaluate(evaluator, declaration.initializer, entry, environment, instance),
+        );
+      }
+    }
+    for (const call of application.initializationCalls) {
+      executeApplicationCall(evaluator, call, entry, environment, instance);
+    }
+    return;
+  }
   for (const statement of entry.sourceFile.statements) {
     if (ts.isVariableStatement(statement)) {
       for (const declaration of statement.declarationList.declarations) {
@@ -369,31 +385,43 @@ function executeApplicationCalls(
     if (receiver?.kind !== "instance") {
       continue;
     }
-    const callable = receiver.fields.get(call.expression.name.text);
-    const arguments_ = call.arguments.map(argument =>
-      evaluate(evaluator, argument, entry, environment, receiver)
-    );
-    if (call.expression.name.text === "openapi") {
-      recordOpenApiParameterValidations(evaluator, arguments_[0]);
-    }
-    if (callable?.kind === "closure") {
-      invokeClosure(evaluator, callable, arguments_, receiver);
-      continue;
-    }
-    const method = findInstanceMethod(evaluator, call.expression.name.text, receiver);
-    if (method !== undefined) {
-      invokeFunctionLike(
-        evaluator,
-        method.declaration,
-        method.module,
-        new Map(),
-        arguments_,
-        receiver,
-      );
-      continue;
-    }
-    issue(evaluator, call.expression, entry, "application method is not an installed closure");
+    executeApplicationCall(evaluator, call, entry, environment, receiver);
   }
+}
+
+function executeApplicationCall(
+  evaluator: Evaluator,
+  call: ts.CallExpression,
+  entry: SourceModule,
+  environment: Map<string, Value>,
+  receiver: Value & {kind: "instance"},
+): void {
+  if (!ts.isPropertyAccessExpression(call.expression)) return;
+  const name = call.expression.name.text;
+  const callable = receiver.fields.get(name);
+  const arguments_ = call.arguments.map(argument =>
+    evaluate(evaluator, argument, entry, environment, receiver)
+  );
+  if (name === "openapi") {
+    recordOpenApiParameterValidations(evaluator, arguments_[0]);
+  }
+  if (callable?.kind === "closure") {
+    invokeClosure(evaluator, callable, arguments_, receiver);
+    return;
+  }
+  const method = findInstanceMethod(evaluator, name, receiver);
+  if (method !== undefined) {
+    invokeFunctionLike(
+      evaluator,
+      method.declaration,
+      method.module,
+      new Map(),
+      arguments_,
+      receiver,
+    );
+    return;
+  }
+  issue(evaluator, call.expression, entry, "application method is not an installed closure");
 }
 
 function summarizeRoutes(

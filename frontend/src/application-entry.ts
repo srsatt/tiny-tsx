@@ -19,6 +19,7 @@ export interface ApplicationEntry {
   constructorName: string;
   constructorArguments: ApplicationArgument[];
   calls: ApplicationCall[];
+  initializationCalls?: readonly ts.CallExpression[];
   server?: {
     port?: number;
   };
@@ -29,12 +30,30 @@ export function analyzeApplicationEntry(sourceFile: ts.SourceFile): ApplicationE
   const exported = sourceFile.statements.find((statement): statement is ts.ExportAssignment =>
     ts.isExportAssignment(statement)
     && !statement.isExportEquals
-    && ts.isIdentifier(statement.expression)
   );
   const served = analyzeServeCall(sourceFile);
   const exportedBinding = exported !== undefined && ts.isIdentifier(exported.expression)
     ? exported.expression.text
     : undefined;
+  const fluent = exported === undefined || exportedBinding !== undefined
+    ? undefined
+    : analyzeFluentConstruction(exported.expression);
+  if (fluent !== undefined) {
+    return {
+      binding: "<default>",
+      constructorName: fluent.creation.expression.text,
+      constructorArguments: (fluent.creation.arguments ?? []).map(argument =>
+        applicationArgument(argument, sourceFile)
+      ),
+      calls: fluent.calls.map(call => ({
+        method: (call.expression as ts.PropertyAccessExpression).name.text,
+        arguments: call.arguments.map(argument => applicationArgument(argument, sourceFile)),
+        span: spanOf(call, sourceFile),
+      })),
+      initializationCalls: fluent.calls,
+      span: spanOf(exported!, sourceFile),
+    };
+  }
   const binding = exportedBinding ?? served?.binding;
   if (binding === undefined) return undefined;
   const declaration = sourceFile.statements
@@ -82,6 +101,37 @@ export function analyzeApplicationEntry(sourceFile: ts.SourceFile): ApplicationE
     ...(served?.server === undefined ? {} : {server: served.server}),
     span: spanOf(exported ?? served!.call, sourceFile),
   };
+}
+
+function analyzeFluentConstruction(expression: ts.Expression): {
+  creation: ts.NewExpression & {expression: ts.Identifier};
+  calls: ts.CallExpression[];
+} | undefined {
+  const calls: ts.CallExpression[] = [];
+  let current = unwrap(expression);
+  while (
+    ts.isCallExpression(current)
+    && ts.isPropertyAccessExpression(current.expression)
+  ) {
+    calls.unshift(current);
+    current = unwrap(current.expression.expression);
+  }
+  return ts.isNewExpression(current) && ts.isIdentifier(current.expression)
+    ? {creation: current as ts.NewExpression & {expression: ts.Identifier}, calls}
+    : undefined;
+}
+
+function unwrap(expression: ts.Expression): ts.Expression {
+  let current = expression;
+  while (
+    ts.isParenthesizedExpression(current)
+    || ts.isAsExpression(current)
+    || ts.isSatisfiesExpression(current)
+    || ts.isNonNullExpression(current)
+  ) {
+    current = current.expression;
+  }
+  return current;
 }
 
 function analyzeServeCall(sourceFile: ts.SourceFile): {

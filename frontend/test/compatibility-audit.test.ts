@@ -1066,6 +1066,54 @@ test("traces the pinned Hono basic application initialization root", () => {
   })), [{method: "get", arguments: [["string", "/"], ["function"]]}]);
 });
 
+test("traces an unchanged fluent constructed default application", () => {
+  const file = write("fluent-default.ts", `
+    export default new Hono<{}>()
+      .use(cors())
+      .route("/api", TodoAPI)
+      .mount("/", (request, environment) => environment.ASSETS.fetch(request));
+  `);
+  const sourceFile = ts.createSourceFile(
+    file,
+    readFileSync(file, "utf8"),
+    ts.ScriptTarget.ESNext,
+    true,
+    ts.ScriptKind.TS,
+  );
+
+  const application = analyzeApplicationEntry(sourceFile);
+
+  assert.equal(application?.binding, "<default>");
+  assert.equal(application?.constructorName, "Hono");
+  assert.deepEqual(application?.constructorArguments, []);
+  assert.deepEqual(application?.calls.map(call => ({
+    method: call.method,
+    arguments: call.arguments.map(argument =>
+      argument.kind === "string" ? [argument.kind, argument.value] : [argument.kind]
+    ),
+  })), [
+    {method: "use", arguments: [["other"]]},
+    {method: "route", arguments: [["string", "/api"], ["other"]]},
+    {method: "mount", arguments: [["string", "/"], ["function"]]},
+  ]);
+});
+
+test("lowers an unchanged fluent constructed default application", () => {
+  const entry = write("fluent-default-route.ts", `
+    import {Hono} from "hono";
+    export default new Hono().get("/fluent", context => context.text("fluent route"));
+  `);
+
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+    apiAliases: {hono: path.join(repository, "tests/compat/hono/api.d.ts")},
+  });
+
+  assert.equal(hir.handlers[0]?.path, "/fluent");
+  assert.ok(hir.staticStrings.some(value => value.value === "fluent route"));
+});
+
 test("traces a TinyTSX serve call as the application root and source port", () => {
   const file = write("served-application.ts", `
     import {serve as start} from "tinytsx:serve";

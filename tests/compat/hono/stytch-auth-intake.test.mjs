@@ -138,10 +138,7 @@ test("reaches the unchanged fluent backend entry through type-only overlays", ()
   assert.equal(result.status, 1, result.stderr || result.stdout);
   assert.doesNotMatch(result.stderr, /\bTS\d{4}\b/);
   assert.match(result.stderr, new RegExp(boundary.diagnostic));
-  assert.match(
-    result.stderr,
-    /entry module must export exactly one GET handler or one constructed default application/,
-  );
+  assert.ok(result.stderr.includes(boundary.messageFragment), result.stderr);
 });
 
 function runAudit(entry, extra = []) {
