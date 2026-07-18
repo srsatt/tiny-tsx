@@ -58,6 +58,11 @@ import {
   lowerPrimitiveIdentityProgram,
   type PrimitiveIdentityProgramAssertion,
 } from "./test262-primitives.js";
+import {
+  isMapProgram,
+  lowerMapProgram,
+  type MapProgramAssertion,
+} from "./test262-map.js";
 
 export interface Test262Program {
   version: 3;
@@ -80,7 +85,8 @@ export type Test262Assertion =
   | RegExpTestProgramAssertion
   | ModuleFunctionBindingProgramAssertion
   | AsyncPromiseBrandProgramAssertion
-  | PrimitiveIdentityProgramAssertion;
+  | PrimitiveIdentityProgramAssertion
+  | MapProgramAssertion;
 
 export interface SameValueStringAssertion {
   kind: "sameValueString";
@@ -155,6 +161,8 @@ export function compileTest262Entry(entryPath: string): Test262Program {
       ? [lowerDateNowTypeProgram(sourceFile)]
     : isPrimitiveIdentityProgram(sourceFile)
       ? [lowerPrimitiveIdentityProgram(sourceFile)]
+    : isMapProgram(sourceFile)
+      ? [lowerMapProgram(sourceFile)]
     : sourceFile.statements.every(isSameValueStatement)
     ? sourceFile.statements.map(statement => lowerSameValueAssertion(statement, sourceFile))
     : isArraySpreadApplyProgram(sourceFile)

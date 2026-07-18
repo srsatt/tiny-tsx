@@ -262,3 +262,57 @@ test("lowers complete special-number and symbol-identity Test262 programs", () =
   for (let id = 0; id < 8; id++) assert.match(serialized, new RegExp(`"id":${id}`));
   assert.match(serialized, /"description":"null"/);
 });
+
+test("lowers complete bounded Map Test262 programs", () => {
+  const cases = [
+    "vendor/test262/test/built-ins/Map/prototype/size/returns-count-of-present-values-by-insertion.js",
+    "vendor/test262/test/built-ins/Map/prototype/set/append-new-values-normalizes-zero-key.js",
+    "vendor/test262/test/built-ins/Map/prototype/size/returns-count-of-present-values-before-after-set-delete.js",
+    "vendor/test262/test/built-ins/Map/prototype/get/returns-undefined.js",
+  ];
+
+  for (const file of cases) {
+    const program = compileTest262Entry(path.join(repository, file));
+    const assertion = program.assertions[0];
+    assert.equal(assertion?.kind, "mapProgram", file);
+    if (assertion?.kind !== "mapProgram") continue;
+    assert.equal(assertion.capacity, 16, file);
+    assert.equal(assertion.maps, 1, file);
+    assert.ok(assertion.operations.some(operation => operation.kind.startsWith("assert")), file);
+  }
+
+  const signedZero = compileTest262Entry(path.join(
+    repository,
+    cases[1]!,
+  )).assertions[0];
+  assert.equal(signedZero?.kind, "mapProgram");
+  if (signedZero?.kind !== "mapProgram") return;
+  assert.deepEqual(signedZero.operations.map(({span: _span, ...operation}) => operation), [
+    {kind: "reset", map: 0},
+    {
+      kind: "set",
+      map: 0,
+      key: {kind: "numberSpecial", value: "negativeZero"},
+      value: {kind: "number", value: 42},
+    },
+    {
+      kind: "assertGet",
+      map: 0,
+      key: {kind: "number", value: 0},
+      expected: {kind: "number", value: 42},
+    },
+    {kind: "reset", map: 0},
+    {
+      kind: "set",
+      map: 0,
+      key: {kind: "number", value: 0},
+      value: {kind: "number", value: 43},
+    },
+    {
+      kind: "assertGet",
+      map: 0,
+      key: {kind: "number", value: 0},
+      expected: {kind: "number", value: 43},
+    },
+  ]);
+});
