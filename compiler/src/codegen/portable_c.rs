@@ -42,7 +42,7 @@ pub(super) fn emit(program: &Program, options: &Options) -> Result<String, Strin
          extern tiny_u32 tinytsx_response_header_request_id(void *, const void *, const tiny_u8 *, tiny_usize, tiny_usize);\n",
     );
 
-    emit_data(&mut source, program);
+    emit_data(&mut source, program, options);
     emit_config(&mut source, program, options);
     values::emit(&mut source, program)?;
     emit_components(&mut source, program);
@@ -91,7 +91,7 @@ fn emit_components(source: &mut String, program: &Program) {
     }
 }
 
-fn emit_data(source: &mut String, program: &Program) {
+fn emit_data(source: &mut String, program: &Program, options: &Options) {
     for string in &program.static_strings {
         emit_bytes(
             source,
@@ -122,6 +122,22 @@ fn emit_data(source: &mut String, program: &Program) {
                 header.value.as_bytes(),
             );
         }
+    }
+    if program.uses_filesystem() {
+        for (index, root) in options.read_roots.iter().enumerate() {
+            emit_bytes(
+                source,
+                &format!("tinytsx_read_root_{index}"),
+                root.as_bytes(),
+            );
+        }
+    }
+    for (index, database) in program.sqlite_databases.iter().enumerate() {
+        emit_bytes(
+            source,
+            &format!("tinytsx_sqlite_path_{index}"),
+            database.path.as_bytes(),
+        );
     }
 }
 
@@ -156,11 +172,41 @@ fn emit_config(source: &mut String, program: &Program, options: &Options) {
         usize::from(program.uses_openai_transport())
     )
     .unwrap();
-    source.push_str(
-        "tiny_usize tinytsx_config_environment_variables(void) { return 0; }\n\
-         tiny_u32 tinytsx_config_environment_variable(tiny_usize index, const tiny_u8 **pointer, tiny_usize *length) { (void)index; (void)pointer; (void)length; return 4; }\n\
-         tiny_usize tinytsx_config_read_roots(void) { return 0; }\n\
-         tiny_u32 tinytsx_config_read_root(tiny_usize index, const tiny_u8 **pointer, tiny_usize *length) { (void)index; (void)pointer; (void)length; return 4; }\n",
+    let environment = program.environment_variable_ids();
+    writeln!(
+        source,
+        "tiny_usize tinytsx_config_environment_variables(void) {{ return {}; }}",
+        environment.len()
+    )
+    .unwrap();
+    emit_view_function(
+        source,
+        "tinytsx_config_environment_variable",
+        environment.iter().map(|string| {
+            (
+                format!("tinytsx_string_{string}"),
+                program.static_strings[*string].value.len(),
+            )
+        }),
+    );
+    let read_roots = if program.uses_filesystem() {
+        options.read_roots.as_slice()
+    } else {
+        &[]
+    };
+    writeln!(
+        source,
+        "tiny_usize tinytsx_config_read_roots(void) {{ return {}; }}",
+        read_roots.len()
+    )
+    .unwrap();
+    emit_view_function(
+        source,
+        "tinytsx_config_read_root",
+        read_roots
+            .iter()
+            .enumerate()
+            .map(|(index, root)| (format!("tinytsx_read_root_{index}"), root.len())),
     );
     writeln!(
         source,
@@ -183,7 +229,6 @@ fn emit_config(source: &mut String, program: &Program, options: &Options) {
     source.push_str(
         "tiny_usize tinytsx_supervisor_restart_max(tiny_usize value) { (void)value; return 0; }\n\
          tiny_u64 tinytsx_supervisor_restart_within_ms(tiny_usize value) { (void)value; return 0; }\n\
-         tiny_u32 tinytsx_config_sqlite_database_path(tiny_usize index, const tiny_u8 **pointer, tiny_usize *length) { (void)index; (void)pointer; (void)length; return 4; }\n\
          tiny_u32 tinytsx_actor_operation(tiny_usize actor) { (void)actor; return 0; }\n\
          tiny_i64 tinytsx_actor_initial_state(tiny_usize actor) { (void)actor; return 0; }\n\
          tiny_i64 tinytsx_actor_failure_message(tiny_usize actor) { (void)actor; return 0; }\n\
@@ -196,6 +241,38 @@ fn emit_config(source: &mut String, program: &Program, options: &Options) {
          tiny_u32 tinytsx_actor_persistence_key(tiny_usize actor, const tiny_u8 **pointer, tiny_usize *length) { (void)actor; (void)pointer; (void)length; return 4; }\n\
          tiny_u32 tinytsx_worker_operation(tiny_usize worker) { (void)worker; return 0; }\n",
     );
+    emit_view_function(
+        source,
+        "tinytsx_config_sqlite_database_path",
+        program
+            .sqlite_databases
+            .iter()
+            .enumerate()
+            .map(|(index, database)| (format!("tinytsx_sqlite_path_{index}"), database.path.len())),
+    );
+}
+
+fn emit_view_function(
+    source: &mut String,
+    name: &str,
+    entries: impl IntoIterator<Item = (String, usize)>,
+) {
+    writeln!(
+        source,
+        "tiny_u32 {name}(tiny_usize index, const tiny_u8 **pointer, tiny_usize *length) {{"
+    )
+    .unwrap();
+    source
+        .push_str("  if (pointer == (const tiny_u8 **)0 || length == (tiny_usize *)0) return 4;\n");
+    source.push_str("  switch (index) {\n");
+    for (index, (label, length)) in entries.into_iter().enumerate() {
+        writeln!(
+            source,
+            "    case {index}: *pointer = {label}; *length = {length}; return 0;"
+        )
+        .unwrap();
+    }
+    source.push_str("    default: return 4;\n  }\n}\n");
 }
 
 fn emit_handler(source: &mut String, program: &Program) -> Result<(), String> {

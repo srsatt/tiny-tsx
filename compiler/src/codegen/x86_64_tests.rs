@@ -281,3 +281,36 @@ fn emits_portable_scalar_functions() {
         assert!(assembly.contains("enabled"));
     }
 }
+
+#[test]
+fn emits_filesystem_capability_configuration() {
+    let mut program = dynamic_program(Target::LinuxX86_64);
+    program.static_strings.push(crate::hir::StaticString {
+        id: 1,
+        value: "asset.txt".to_owned(),
+    });
+    program.handlers[0].response = crate::hir::HandlerResponse::Text {
+        value: crate::hir::ValueExpression::FileText {
+            path: 1,
+            max_bytes: 1024,
+            span: crate::hir::SourceSpan {
+                file: "server.ts".to_owned(),
+                line: 1,
+                column: 1,
+                end_line: 1,
+                end_column: 2,
+            },
+        },
+        status: 200,
+        content_type: None,
+    };
+    let options = Options {
+        read_roots: vec!["/tmp/assets".to_owned()],
+        ..Options::default()
+    };
+
+    let assembly = emit(&program, Target::LinuxX86_64, options)
+        .expect("emit filesystem capability configuration");
+    assert!(assembly.contains("/tmp/assets"));
+    assert!(assembly.contains("tinytsx_config_read_root"));
+}
