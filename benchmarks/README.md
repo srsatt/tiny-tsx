@@ -1,6 +1,6 @@
 # TinyTSX benchmarks
 
-The harness has eighteen workloads:
+The harness has nineteen workloads:
 
 - `static-page` compares the current static TinyTSX vertical slice to an
   idiomatic `Bun.serve` server returning the same response;
@@ -44,6 +44,10 @@ The harness has eighteen workloads:
   on-disk WAL file; every request rolls back one savepoint update, commits one
   progress update, and the harness checks live DB/WAL/SHM files and state after
   every interval; and
+- `hono-sqlite-rollback` posts a fixed required idempotency header plus
+  route/JSON values to one protected WAL owner, requires a declared 500 from a
+  second-step uniqueness failure, and proves zero partial rows plus a successful
+  recovery commit after every interval; and
 - `hono-ai-provider` runs the pinned 656-module Hono + AI SDK Core +
   OpenAI-compatible provider graph against one shared zero-delay loopback
   provider. The support process is excluded from both targets' RSS.
@@ -217,8 +221,8 @@ not as an uninstrumented throughput comparison.
 
 ## Sustained release-stability matrix
 
-The current fourteen-workload comparison is retained in
-`results/2026-07-17-m5-max-sustained-15s-summary.md`, with fourteen adjacent raw
+The current fifteen-workload comparison is retained in
+`results/2026-07-17-m5-max-sustained-15s-summary.md`, with fifteen adjacent raw
 JSON/rendered report pairs. Each workload uses eight TinyTSX HTTP workers,
 keep-alive for both targets, five startup samples, and three 15-second load
 samples at concurrency 8 and 64. Reproduce it with:
@@ -280,12 +284,16 @@ python3 benchmarks/scripts/run_static.py \
   --workload hono-sqlite-wal --duration 15 --runs 3 --startup-runs 5 \
   --concurrency 8,64 --workers 8 --keep-alive \
   --output-prefix benchmarks/results/local-sustained-hono-sqlite-wal
+python3 benchmarks/scripts/run_static.py \
+  --workload hono-sqlite-rollback --duration 15 --runs 3 --startup-runs 5 \
+  --concurrency 8,64 --workers 8 --keep-alive \
+  --output-prefix benchmarks/results/local-sustained-hono-sqlite-rollback
 ```
 
 Allocator instrumentation remains disabled for this comparison. The matrix
 does not cover cold/replaced/binary files, responses above 32 KiB,
-streaming/range/compression behavior, failed full-transaction rollback load,
-cross-process writers, growing or request-derived database values, competing/catch-all route
+streaming/range/compression behavior, cross-process writers, growing or broader
+request-derived database values, competing/catch-all route
 shapes, arbitrary query values, dynamic JSON keys/structured values, schema
 validation, mixed request bodies, cancellation, or actor
 supervision/restart/persistence load.

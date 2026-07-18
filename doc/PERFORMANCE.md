@@ -13,14 +13,19 @@ and one in-memory empty SQLite query. The matrix also pairs compact and
 query-present pretty JSON from the complete pinned basic app, two idempotent
 prepared writes plus a non-empty in-memory row, one bounded primitive JSON POST,
 and two independent owners contending for one on-disk WAL file while rolling
-back a savepoint probe on every request. Every one of the 168 load samples
-passed its response contract. All 18 multi-actor state snapshots proved progress
-on every actor, and all 18 WAL checkpoints proved committed progress, a zero
-rollback probe, WAL mode, and non-empty live DB/WAL/SHM files.
+back a savepoint probe on every request. A fifteenth row repeatedly fails the
+second step of a request-header/route/JSON transaction on one WAL owner, then
+proves zero partial rows and successful recovery. Every one of the 180 load
+samples passed its declared response contract. All 18 multi-actor state
+snapshots proved progress on every actor, all 18 two-owner WAL checkpoints
+proved committed progress and a zero rollback probe, and all 18 full-rollback
+checkpoints proved zero partial rows plus later recovery. Both disk workloads
+retained WAL mode and non-empty live DB/WAL/SHM files.
 
-Across three 15-second samples at concurrency 8 and 64, TinyTSX reaches
+Across the original thirteen small-response rows, TinyTSX reaches
 0.24–1.14x Bun throughput at concurrency 8 and 0.40–0.79x at concurrency 64 on
-the thirteen small-response routes. The exact 22,173-byte warm-cache response is
+three 15-second samples. The expected-500 full-rollback row reaches 0.01x/0.06x.
+The exact 22,173-byte warm-cache response is
 the exception: TinyTSX reaches 1.30x Bun at concurrency 8 and 1.78x at 64.
 TinyTSX's concurrency-64 p99 remains higher on every route at 9.575–108.839 ms
 versus Bun at 0.736–13.504 ms; the WAL contention route sets both maxima.
@@ -28,15 +33,15 @@ versus Bun at 0.736–13.504 ms; the WAL contention route sets both maxima.
 The honest current claim is:
 
 - **yes for footprint:** TinyTSX stays at 6.30–8.81 MiB warm RSS; Bun uses
-  7.3x–24.6x as much across the fourteen workloads;
+  7.3x–24.6x as much across the fifteen workloads;
 - **repeated startup is close on the original thirteen routes:** TinyTSX takes
   19.68–22.86 ms and Bun 17.30–21.31 ms; the WAL route includes two connection
   setups and takes 49.48/26.07 ms, while TinyTSX's separately reported first
   post-build launch remains a 437.66–547.26 ms outlier;
 - **no general throughput-parity claim:** TinyTSX reaches 40–79% of Bun at
-  concurrency 64 on the small-response routes, while the exact 22 KiB route
-  reaches 178%;
-- **tail latency remains open:** TinyTSX's concurrency-64 p99 is 4.3–18.6x
+  concurrency 64 on the original small-response routes and only 6% on the
+  expected-500 rollback row, while the exact 22 KiB route reaches 178%;
+- **tail latency remains open:** TinyTSX's concurrency-64 p99 is 4.3–20.6x
   Bun's despite the large-response throughput result;
 - **owner boundaries are visible:** the actor route is 11.5% below TinyTSX's
   basic control at concurrency 64 and the empty SQLite route is 24.7% below it;
@@ -57,20 +62,27 @@ The honest current claim is:
   reaches 1.14x Bun at concurrency 8 but 0.58x at 64; its p99 grows from 4.483
   to 108.839 ms, making writer scheduling and lock handoff a concrete profiling
   target rather than an inferred SQLite concern;
+- **failed full rollback is now measured:** every declared 500 leaves zero
+  partial rows and a later recovery commit progresses. TinyTSX reaches
+  605/4,545 requests per second at concurrency 8/64 versus Bun at
+  71,849/73,923, with 8.05/75.81 MiB warm RSS; the owner/error path needs
+  profiling before this can be considered a practical high-rate failure path;
 - **process pressure needs profiling:** TinyTSX records greater aggregate CPU
-  on twelve workloads; Bun records more on the 21-byte file and WAL routes.
-  TinyTSX records more Unix syscalls on all fourteen and more context switches
-  on the original thirteen;
+  on twelve workloads; Bun records more on the 21-byte file, WAL contention,
+  and full-rollback rows. TinyTSX records more Unix syscalls on the original
+  fourteen but Bun records more on full rollback; TinyTSX records more context
+  switches on the original thirteen and full rollback;
 - **bounded resources recover:** the original workloads return to four TinyTSX
   descriptors; the live two-connection WAL route returns from 73 to its
-  nine-descriptor database baseline. Bun returns from 76 to 12 on that route.
+  nine-descriptor database baseline. The full-rollback row returns from 59 to
+  seven for TinyTSX and 72 to eight for Bun.
 
 The current summary is
 `benchmarks/results/2026-07-17-m5-max-sustained-15s-summary.md`; its adjacent
 JSON files retain every raw sample and each per-workload Markdown report pins
 the response differences and limitations. Cold/replaced/binary files, responses
-above 32 KiB, streaming/range/compression behavior, failed full-transaction
-rollback load, cross-process writers, growing/request-derived database state,
+above 32 KiB, streaming/range/compression behavior, cross-process writers,
+growing or broader request-derived database state,
 competing/catch-all route shapes, arbitrary query values, dynamic JSON
 keys/structured values, schema validation, mixed request bodies, cancellation,
 and actor supervision/restart/persistence load remain unmeasured.

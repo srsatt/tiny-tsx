@@ -1,8 +1,8 @@
-# Sustained fourteen-workload comparison
+# Sustained fifteen-workload comparison
 
 Collected on 2026-07-17 and 2026-07-18 local time.
 
-This matrix compares fourteen exact Hono workloads. The original five use clean
+This matrix compares fifteen exact Hono workloads. The original five use clean
 commit `7c1a22c`; the route-parameter tracer uses clean commit `04ac58b`; the 21-byte
 file tracer uses clean commit `c16333f`; and the 22,173-byte file/response tracer
 uses clean commit `097982d`. The compact/pretty JSON pair uses clean commit
@@ -17,6 +17,9 @@ AOT/JIT or JavaScript-runtime claim.
 The two-owner WAL tracer uses clean commit `07efc5d`; it adds isolated
 target-private disk state, setup routes, live file/state checkpoints, and a
 two-Worker Bun adapter without changing the earlier compiler/runtime rows.
+The required-header full-transaction rollback tracer uses clean commit
+`794ba22`; it adds copied request-header SQLite values, an expected-500 load
+contract, and recovery/partial-row checkpoints.
 
 ## Protocol
 
@@ -31,12 +34,14 @@ two-Worker Bun adapter without changing the earlier compiler/runtime rows.
 - status, body, headers, and framing checked before measurement, with declared
   target-specific differences retained in each workload report.
 
-All 168 load samples completed with success rate 1.0. No samples were discarded.
+All 180 load samples completed with success rate 1.0. No samples were discarded.
 The multi-actor workload additionally retained 18 warm-up/load state snapshots;
 every actor state was positive at every checkpoint. The WAL workload retained
 18 more checkpoints; every committed counter progressed within its run, every
 rollback probe stayed zero, journal mode stayed `wal`, and every live DB/WAL/SHM
-file was non-empty.
+file was non-empty. The full-rollback workload retained 18 more checkpoints;
+every failed transaction left zero partial rows, every recovery counter
+progressed within its run, and every WAL file remained live and non-empty.
 
 ## Throughput and latency
 
@@ -58,10 +63,12 @@ Values are medians of the three retained load samples.
 | Empty SQLite query | 32,430 / 132,946 (0.24x) | 2.161 / 0.112 ms | 59,545 / 148,474 (0.40x) | 15.282 / 0.821 ms |
 | Prepared SQLite transaction | 32,292 / 98,111 (0.33x) | 3.375 / 0.138 ms | 52,193 / 100,896 (0.52x) | 17.293 / 1.214 ms |
 | On-disk WAL rollback/commit | 7,850 / 6,880 (1.14x) | 4.483 / 4.669 ms | 8,554 / 14,872 (0.58x) | 108.839 / 13.504 ms |
+| Failed full transaction rollback | 605 / 71,849 (0.01x) | 16.541 / 0.209 ms | 4,545 / 73,923 (0.06x) | 34.160 / 1.656 ms |
 
 TinyTSX does not reach general Bun throughput parity in this matrix. Across the
-thirteen small-response routes it reaches 0.24x–1.14x Bun at concurrency 8 and
-0.40x–0.79x at concurrency 64. On the exact 22,173-byte warm-cache response it
+original thirteen small-response routes it reaches 0.24x–1.14x Bun at
+concurrency 8 and 0.40x–0.79x at concurrency 64. The expected-500 rollback row
+reaches 0.01x/0.06x. On the exact 22,173-byte warm-cache response it
 reaches 1.30x Bun at concurrency 8 and 1.78x at concurrency 64. Concurrency-64
 p99 remains higher for every route: TinyTSX records 9.575–108.839 ms versus Bun
 at 0.736–13.504 ms. The two-writer WAL row sets both maxima.
@@ -105,6 +112,15 @@ its p99 expands from 4.483 to 108.839 ms. This is direct contention evidence,
 not a failed full-transaction rollback, crash-durability, cross-process, or
 storage-device benchmark.
 
+The full-rollback row uses one WAL owner and copies a fixed required
+`Idempotency-Key`, route parameter, and JSON integer into a two-step callback
+transaction. The second step hits a pinned uniqueness conflict and the harness
+requires the whole request to return 500 with no partial payment. A successful
+recovery transaction follows every interval. TinyTSX reaches only 0.01x/0.06x
+Bun at concurrency 8/64, even though warm RSS is 8.05 MiB versus 75.81 MiB.
+This selects failed owner/error-path execution for profiling; it is not evidence
+for application conflict handling or arbitrary request values.
+
 The dynamic JSX route is not a direct cost delta against `hono-basic`: the
 control includes `poweredBy` and response-time middleware that the escaping
 tracer does not. The stream also differs on the wire: TinyTSX emits three
@@ -128,14 +144,15 @@ chunks, while Bun emits the same decoded 19-byte body with a content length.
 | Empty SQLite query | 22.86 / 17.49 ms | 451.07 / 27.60 ms | 8.06 / 70.33 MiB | 8.19 / 71.84 MiB |
 | Prepared SQLite transaction | 22.60 / 19.67 ms | 510.45 / 29.51 ms | 8.81 / 64.50 MiB | 8.94 / 64.88 MiB |
 | On-disk WAL rollback/commit | 49.48 / 26.07 ms | 475.98 / 42.07 ms | 8.06 / 87.50 MiB | 8.12 / 126.67 MiB |
+| Failed full transaction rollback | 33.46 / 25.70 ms | 469.52 / 39.23 ms | 8.05 / 75.81 MiB | 8.16 / 77.25 MiB |
 
 Repeated startup is close on the original thirteen routes: TinyTSX is
 19.68–22.86 ms and Bun is 17.30–21.31 ms. WAL startup includes two setup routes
-and records 49.48/26.07 ms. TinyTSX's first post-build launch remains a separate
+and records 49.48/26.07 ms; full rollback records 33.46/25.70 ms. TinyTSX's first post-build launch remains a separate
 437.66–547.26 ms outlier and must not be folded into repeated-startup claims.
 
 TinyTSX warm RSS stays at 6.30–8.81 MiB. Bun uses 7.3x–24.6x as much warm RSS
-across the fourteen workloads. The footprint advantage remains the clearest
+across the fifteen workloads. The footprint advantage remains the clearest
 result in this matrix.
 
 The eight-Worker Bun adapter records 696.75–708.52 MiB peak RSS across its three
@@ -180,11 +197,14 @@ must not be interpreted as normalized per-request costs.
 |  | Bun | 31.26 s / 99.2% | 6,642,170 / 423,673 | 61,501 | 1,627 | 15 | 5/69/5 |
 | On-disk WAL rollback/commit | TinyTSX | 17.16 s / 54.6% | 6,664,061 / 512,280 | 867,084 | 17 | 17 | 9/73/9 |
 |  | Bun | 20.47 s / 65.3% | 4,495,278 / 1,939,601 | 948,618 | 4,932 | 17 | 12/76/12 |
+| Failed full transaction rollback | TinyTSX | 8.98 s / 28.5% | 2,448,676 / 166,041 | 149,795 | 25 | 15 | 7/59/7 |
+|  | Bun | 31.30 s / 99.5% | 18,428,891 / 4,956,239 | 61,484 | 2,404 | 16 | 8/72/8 |
 
 TinyTSX records greater aggregate CPU on twelve workloads; Bun records more on
-the 21-byte file and WAL routes. TinyTSX records more Unix syscalls on all
-fourteen and more context switches on the original thirteen; Bun records more
-context switches on WAL. The two file routes have the highest CPU totals, while SQLite has
+the 21-byte file, WAL, and full-rollback routes. TinyTSX records more Unix
+syscalls on the original fourteen while Bun records more on full rollback.
+TinyTSX records more context switches on the original thirteen and full
+rollback; Bun records more on WAL. The two file routes have the highest CPU totals, while SQLite has
 TinyTSX's highest context-switch count. This is evidence to profile
 application-executor, filesystem, response-copy, and owner-message boundaries;
 it is not enough by itself to choose an optimization.
@@ -194,7 +214,8 @@ workloads return to their baseline of 4. The non-file routes have a median peak 
 21-byte file route has a median peak of 71 and observed run peaks of 70–74; the
 22 KiB route has a median and per-run peak of 73. The WAL route returns from 73
 to its live-database baseline of 9; Bun returns from 76 to 12. Bun also returns
-to its workload baseline on every row.
+to its workload baseline on every row. Full rollback returns from 59 to 7 for
+TinyTSX and 72 to 8 for Bun.
 
 ## Boundaries and next evidence
 
@@ -204,9 +225,11 @@ does not measure rows, result copying, disk access, writes, or transactions. The
 prepared transaction route adds two fixed-key idempotent writes in one callback
 transaction and copies one non-empty row. The WAL route adds two independent
 connections, disk/WAL I/O, writer contention, and successful savepoint rollback
-with live file/state verification. Neither measures growing tables or
-request-derived values; the WAL route also does not measure failed
-full-transaction rollback, cross-process writers, or crash durability.
+with live file/state verification. The full-rollback row adds one required
+header plus route/JSON values, a second-step uniqueness failure, and successful
+connection reuse with live file/state verification. None measures growing
+tables, broad request-derived value families, cross-process writers, or crash
+durability.
 
 The original actor route uses one persistent zero-delta counter ask. The
 eight-actor route adds distributed `tell(+1)` mutation and read-back progress
@@ -217,8 +240,8 @@ Still unmeasured in this sustained matrix:
 
 - cold-cache, files/responses above 32 KiB, replacement, binary, range,
   compression, and filesystem-denial load;
-- failed full-transaction rollback load, cross-process writers, crash/power-loss
-  durability, and growing or request-derived SQLite values;
+- cross-process writers, crash/power-loss durability, and growing or broader
+  request-derived SQLite values;
 - streamed/very-large responses and competing/catch-all route shapes;
 - arbitrary query-value comparisons and randomized query/branch mixes;
 - dynamic JSON keys or structured values, schema validation, and mixed request
