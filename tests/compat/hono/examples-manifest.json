@@ -242,6 +242,19 @@
       "firstUnsupportedBoundary": "A required statically named request header contributes a copied 1-256-byte UTF-8 TEXT value to prepared writes and bounded callback transactions; missing, empty, oversized, invalid-UTF-8, dynamic-name, fallback, structured, escaping, query/cookie/environment, and arbitrary expression values are unsupported."
     },
     {
+      "id": "tinytsx-sqlite-rollback-load",
+      "provenance": "tinytsx-local",
+      "entry": "benchmarks/tiny/hono-sqlite-rollback.ts",
+      "imports": ["hono", "tinytsx:sqlite"],
+      "apis": ["Hono", "onError", "get", "post", "Context.req.header", "Context.req.json", "Context.req.param", "Context.text", "Context.json", "Database", "Database.exec", "Database.prepare", "Database.transaction(callback)", "Statement.run", "Statement.get"],
+      "intake": {"status": "pass", "evidence": "benchmarks/tests/test_run_static.py"},
+      "nativeCompile": {"appleArm64": "pass", "linuxArm64Assembly": "pass", "evidence": "tests/compat/sqlite/native.test.mjs"},
+      "httpBehavior": {"status": "pass", "evidence": "tests/compat/sqlite/native.test.mjs"},
+      "referenceBehavior": {"runtime": "Bun/Hono with bun:sqlite", "status": "pass", "evidence": "tests/compat/sqlite/rollback-reference.test.ts"},
+      "releaseGates": {"native": ["test:sqlite-native"], "reference": ["test:hono-sqlite-rollback-reference"]},
+      "firstUnsupportedBoundary": "One capability-scoped WAL owner repeatedly fails the second step of a bounded request-header/route/JSON callback transaction and proves whole-transaction rollback plus later reuse; application conflict recovery, growing data, competing or cross-process writers, cancellation, arbitrary callbacks, and crash durability remain unsupported or unmeasured."
+    },
+    {
       "id": "upstream-blog",
       "provenance": "upstream-contract-with-tinytsx-adapter",
       "entry": "vendor/hono-examples/blog/src/index.ts",
