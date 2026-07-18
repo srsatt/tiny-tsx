@@ -4,12 +4,13 @@ Last updated: 2026-07-18
 
 ## Current state
 
-The alpha contract and its exact-source two-target candidate are complete at
-the frozen commit recorded in `doc/BACKLOG.md`. Post-candidate P1-P4 work now
-adds the pinned Stytch-auth TODO backend as a real-world class, Hono/auth,
-actor-owned SQLite, packaging, and measured-load tracer. Apple functional and
-installed-archive evidence plus Linux-arm64 assembly are green. Native Linux
-execution and a fresh same-commit two-target release attestation remain open.
+The alpha contract and pinned Stytch-auth TODO P1-P4 slice are functionally
+complete, including native Apple/Linux, installed-archive, bounded-failure, and
+measured-load evidence. The repository's author-history rewrite preserved the
+verified trees but changed every commit hash, so the old schema-v2 artifact
+manifests no longer identify a reachable release source. Fresh clean Apple and
+Linux release verification at one rewritten-history commit remains open before
+tagging.
 
 ## Alpha implementation evidence
 
@@ -502,20 +503,21 @@ execution and a fresh same-commit two-target release attestation remain open.
   bootstrap tests, Hono intake 8/8, SQLite native 5/5, user-auth native 2/2,
   and installed release 4/4. Workspace Clippy passes with warnings denied.
 
-### Tag-ready two-target candidate (2026-07-17)
+### Historical tag-ready two-target candidate (2026-07-17)
 
-- The final clean source commit completed `npm run release:verify` on native
+- Before the author-history rewrite, the final clean source commit completed
+  `npm run release:verify` on native
   Apple arm64 and native Linux arm64. Both schema-v2 manifests record the same
   source commit with `source.dirty == false`; their generated `.sha256` files
   remain the authoritative artifact digests.
 - Both archives build and execute outside the checkout and package the focused
   Hono, `@hono/node-server`, `tinytsx:serve`, Zod/OpenAPI, file, SQLite, and
-  actor sources. The release candidate is ready for a separate tag-and-publish
-  action; no tag was created here.
+  actor sources. No tag was created; the later identity rewrite invalidated
+  these artifacts for publication because their source commit is unreachable.
 - Verification: workspace Clippy with warnings denied, the repeated benchmark
   artifacts, and `npm run release:verify` on both native targets.
 
-### Pressure-aware exact-source candidate (2026-07-18)
+### Historical pressure-aware exact-source candidate (2026-07-18)
 
 - Clean commit `f56d8a26a79368ce84cfa54defe71f25e41b0fd5` completed the full
   `npm run release:verify` contract on native Apple arm64 and native Linux

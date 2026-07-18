@@ -59,10 +59,12 @@ engine.
 
 ## Project status
 
-The current version is `0.1.0-alpha.1`. Clean Apple ARM64 and native Linux
-ARM64 release verification passes for the frozen candidate recorded in
-[`doc/BACKLOG.md`](doc/BACKLOG.md). Publishing the Git tag and release assets is
-a separate action and has not been performed yet.
+The current source version is `0.1.0-alpha.1`. Clean Apple ARM64 and native
+Linux ARM64 release verification has passed for the implemented alpha
+contract. The repository history was subsequently rewritten to replace the
+author identity, so fresh same-commit archives and manifests must be generated
+before publishing a Git tag or release assets. No release has been published
+yet; [`doc/RELEASE_CHECKLIST.md`](doc/RELEASE_CHECKLIST.md) tracks that gate.
 
 The executable compatibility matrix currently includes:
 

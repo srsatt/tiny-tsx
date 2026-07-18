@@ -52,13 +52,12 @@ The bounded `0.1.0-alpha.1` implementation contract is complete, and the
 nested-profile P1-P4 stabilization slice below is functionally green. The
 executable example/failure gates, repeated TinyTSX/Bun comparisons, portable
 Test262/WPT allowlists, package installation, and schema-v2 source attestation
-machinery are in place. Clean native Apple- and Linux-arm64 release gates now
-attest the later Stytch-TODO candidate commit
-`814329eaad7acbf141d25169aa149b837fce6d82`; both extracted archives pass the
-installed example and bounded-failure suite. That frozen commit is taggable by
-a separate release action. Later backlog or implementation commits are
-post-candidate work and do not replace its artifacts without repeating both
-native gates.
+machinery are in place. Clean native Apple- and Linux-arm64 release gates passed
+for the later Stytch-TODO source before the author-history rewrite, and both
+extracted archives passed the installed example and bounded-failure suite. The
+rewrite changed every commit hash, so those manifests and checksums are now
+historical evidence rather than taggable artifacts. A new candidate must repeat
+both native gates from one clean rewritten-history commit.
 
 Acceptance criteria are, in order:
 
@@ -107,12 +106,11 @@ boundaries remain open.
 
 ### Release handoff
 
-Publishing `0.1.0-alpha.1` remains a separate release action. Attach the
-matching Apple/Linux archives, checksums, and schema-v2 manifests for commit
-`814329eaad7acbf141d25169aa149b837fce6d82`, then create
-`v0.1.0-alpha.1` from that exact attested commit. Do not reuse artifacts from
-an earlier source state or move the tag to later implementation work; any new
-candidate must repeat both native gates.
+Publishing `0.1.0-alpha.1` remains a separate release action. First produce
+matching Apple/Linux archives, checksums, and schema-v2 manifests from one new
+clean commit after the author-history rewrite; then create `v0.1.0-alpha.1`
+from that exact attested commit. Do not reuse the pre-rewrite artifacts or move
+the tag to later implementation work.
 
 The goal is complete only when:
 
@@ -326,10 +324,11 @@ Do not tag `0.1.0-alpha.1` until all of these are true:
 
 ### Next development milestone — real-world server stability
 
-This milestone is complete for the bounded pinned Stytch-auth TODO application
-at clean candidate `814329e`. The release/tag action above remains separate;
-unchecked P1-P4 items are broader post-alpha proposals and are not implied by
-this tracer-driven completion.
+This implementation milestone is complete for the bounded pinned Stytch-auth
+TODO application. Its clean two-target release evidence predates the
+author-history rewrite; the release/tag action and fresh source attestation
+remain separate. Unchecked P1-P4 items are broader post-alpha proposals and are
+not implied by this tracer-driven completion.
 
 The objective is to move from the narrow alpha contract to a dependable
 server-side subset that can run a broader Hono application under sustained
@@ -381,10 +380,11 @@ The nested-profile tracer and the later pinned Stytch-auth TODO tracer are green
 through frontend/HIR/runtime tests, Apple/Linux native HTTP, Linux-arm64
 assembly, Bun/Hono reference behavior, package and installed-archive routing,
 and sustained response-checked benchmarks. A native Linux clean-checkout
-rehearsal exposed an implicit dependency on ignored fixture state; commit
-`814329e` prepares both pinned published-Hono fixtures explicitly. Fresh native
-Apple and Linux release gates now attest that same clean source, so the
-different-source archive warning is closed.
+rehearsal exposed an implicit dependency on ignored fixture state, which is now
+fixed by explicit preparation of both pinned published-Hono fixtures. Fresh
+native Apple and Linux release gates then attested the same clean source. The
+later author-history rewrite preserved the source tree but changed that source
+identity, so a final two-target re-attestation is open again.
 
 Do not reopen the completed alpha foundations as broad projects. File reading,
 SQLite, and local actors already have public bounded built-ins. Their next work
@@ -394,9 +394,10 @@ named upstream tracer.
 
 The groomed next choices, in recommended dependency order, are:
 
-1. **Publish or defer alpha.1:** if publishing now, attach the two artifacts for
-   `814329e` and create `v0.1.0-alpha.1` at that exact commit; this is an
-   explicit release action, not backlog implementation work.
+1. **Regenerate and publish or defer alpha.1:** rerun the two native release
+   gates at one clean rewritten-history commit. If publishing, attach only
+   those new artifacts and create `v0.1.0-alpha.1` at that exact commit; this
+   is an explicit release action, not API implementation work.
 2. **Next Hono application selection:** choose one pinned application before
    adding APIs, record its unchanged upstream boundary, and turn each required
    behavior into a named native/reference/release test.
@@ -406,11 +407,13 @@ The groomed next choices, in recommended dependency order, are:
 4. **Measured release stability:** extend P4 only for the selected application,
    then repeat sustained TinyTSX/Bun evidence before naming a later candidate.
 
-#### Completed goal — exact-source two-target release candidate
+#### Historical goal — exact-source two-target release candidate
 
-This verification-and-packaging goal is complete. It did not expand the public
-API surface; the tracked clean-checkout fixture fix became the replacement
-source, and both native gates restarted from that clean commit.
+This verification-and-packaging goal completed before the author-history
+rewrite. It did not expand the public API surface; the tracked clean-checkout
+fixture fix became the replacement source, and both native gates restarted
+from that clean commit. Its artifacts remain functional evidence, but their
+source hashes are no longer reachable and they must not be published.
 
 - [x] Remove the clean-checkout dependency on a previously installed ignored
       published-Hono fixture; `test:frontend` now prepares the pinned
@@ -480,11 +483,12 @@ authentication dependency graph. The functional P1-P3 implementation is now
 green on Apple arm64 and as Linux-arm64 assembly, including the bounded
 actor-owned SQLite binding. Release packaging, the measured workload, and
 synchronized documentation are now green. Native Linux archive execution and
-the fresh same-commit two-target attestation are also green.
+the pre-rewrite same-commit two-target attestation are also green; only fresh
+release-source attestation after the identity rewrite is open.
 
-The compiler, package, installed Apple/Linux, benchmark, and attestation
-tranches are complete. Do not widen this completed tracer into a general
-language, KV, authentication, or JavaScript-engine compatibility claim.
+The compiler, package, installed Apple/Linux, and benchmark tranches are
+complete. Do not widen this completed tracer into a general language, KV,
+authentication, or JavaScript-engine compatibility claim.
 
 Goal checklist, in dependency order:
 
@@ -518,7 +522,8 @@ Goal checklist, in dependency order:
       evidence for this exact tracer.
 - [x] Synchronize the executable matrix and compatibility, standard-library,
       persistence, actor, status, performance, and release-handoff documents.
-- [x] Repeat clean Apple/Linux release verification at one source commit before
+- [ ] Repeat clean Apple/Linux release verification at one rewritten-history
+      source commit before
       selecting a later release candidate.
 
 2026-07-18 checkpoint: the unchanged three-module backend lowers through the
@@ -545,7 +550,7 @@ worker user finishes empty, and TinyTSX descriptors return from 68 to four.
 This is evidence for the exact credential-free adapter workload, not live
 Stytch, growing lists, shared-user contention, or a general AOT/JIT claim.
 
-The release attestation completed at clean source
+The pre-rewrite release attestation completed at clean source
 `814329eaad7acbf141d25169aa149b837fce6d82`. Native Apple arm64 produced
 SHA-256 `f8e0977383e4a9213d2824c0721c744e8fd691bda192bf2a332efd50b5b5db3c`;
 native Linux arm64 produced
@@ -553,8 +558,9 @@ native Linux arm64 produced
 Both schema-v2 manifests record `dirty: false`, the same compatibility pins,
 and the exact source commit. Both `npm run release:verify` runs passed the
 source, optimized-runtime, archive-install, HTTP failure/recovery, and packaged
-Stytch TODO gates. This backlog update is post-candidate documentation and does
-not change the frozen artifact source.
+Stytch TODO gates. The author-history rewrite subsequently made that commit
+unreachable without changing its tree. These checksums remain historical test
+evidence and must not be attached to a release from the rewritten history.
 
 Completed execution order:
 
@@ -573,9 +579,10 @@ Completed execution order:
    to the existing TinyTSX/Bun harness. Include fixed users, deterministic
    cleanup, overload recovery, startup, warm/peak RSS, throughput, median/p99,
    CPU, process/allocation counters where comparable, and retained raw samples.
-5. **Synchronize and attest (complete):** the named documents reflect the
-   executable evidence, and the clean two-target release suite passed at one
-   source commit. Tagging remains a separate action.
+5. **Synchronize and attest (pre-rewrite complete):** the named documents
+   reflect the executable evidence, and the clean two-target release suite
+   passed at one source commit. The author rewrite requires a fresh final
+   attestation before the separate tagging action.
 
 Implement this as one vertical real-world slice rather than isolated syntax
 demos:

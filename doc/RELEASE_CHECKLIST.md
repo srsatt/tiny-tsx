@@ -2,21 +2,20 @@
 
 Release: `0.1.0-alpha.1`
 
-Current decision: **READY for a separate tag-and-publish action.** Native Apple
-arm64 and native Linux arm64 both attest clean commit
-`f56d8a26a79368ce84cfa54defe71f25e41b0fd5`. Both extracted archives pass the
-installed example, capability failure, request-memory recovery, and worker
-saturation groups. The tag has not been created.
+Current decision: **NOT READY after the author-history rewrite.** Native Apple
+arm64 and native Linux arm64 both passed this contract before the rewrite, but
+all commit hashes changed and the retained schema-v2 manifests identify the
+now-unreachable pre-rewrite source. Regenerate both archives from one new clean
+commit before tagging. No tag has been created.
 
 This checklist prepares a release candidate; it does not create or push a tag.
 Run it from the exact commit intended for `v0.1.0-alpha.1`.
 
-Post-candidate work now packages and executes the pinned Stytch TODO backend on
-Apple arm64, assembles it for Linux arm64, and retains its response-checked
-TinyTSX/Bun CRUD benchmark. That later source does not replace the attested
-`f56d8a26` artifacts above. Promoting it to another candidate requires native
-Linux extracted-archive execution and fresh clean Apple/Linux archives from the
-same new commit; the open gates are tracked in `doc/BACKLOG.md`.
+The complete Stytch TODO slice has native Apple/Linux, installed-package, and
+response-checked benchmark evidence. That functional evidence remains valid,
+but the release source identity does not: promoting the rewritten history
+requires fresh clean Apple/Linux archives from the same new commit. The open
+gates are tracked in `doc/BACKLOG.md`.
 
 ## Contract and source
 
@@ -48,11 +47,11 @@ npm ci --prefix frontend
 npm run release:verify
 ```
 
-- [x] Apple arm64 has completed the clean `release:verify` contract at the
+- [ ] Apple arm64 has completed the clean `release:verify` contract at the
       final exact-source candidate commit.
-- [x] Linux arm64 has completed the clean `release:verify` contract on a native
+- [ ] Linux arm64 has completed the clean `release:verify` contract on a native
       `ubuntu-24.04-arm` or equivalent host.
-- [x] The exact release-candidate commit has completed both native jobs without
+- [ ] The exact release-candidate commit has completed both native jobs without
       generated tracked changes.
 
 ## Artifact inspection
@@ -84,11 +83,11 @@ tar -tzf "$base.tar.gz" | grep '/bin/tinytsx$'
 tar -tzf "$base.tar.gz" | grep '/lib/tinytsx/examples/README.md$'
 ```
 
-- [x] Apple archive checksum, manifest, version output, installed layout, and
+- [ ] Apple archive checksum, manifest, version output, installed layout, and
       outside-checkout HTTP smoke have been verified.
-- [x] Linux archive checksum, manifest, version output, installed layout, and
+- [ ] Linux archive checksum, manifest, version output, installed layout, and
       outside-checkout HTTP smoke have been verified.
-- [x] Both artifact manifests identify the same source contract, HIR 2, runtime
+- [ ] Both artifact manifests identify the same source contract, HIR 2, runtime
       ABI 1, built-in schema 1, and pinned compatibility revisions.
 
 The generated archive checksums belong in the uploaded `.sha256` files and
@@ -99,14 +98,14 @@ document would change the archive being attested.
 
 Before tagging, confirm all of the following:
 
-- [x] Every exact-source alpha exit gate in `doc/BACKLOG.md` is checked.
-- [x] Both native archives are collected together with their `.sha256` and
+- [ ] Every exact-source alpha exit gate in `doc/BACKLOG.md` is checked.
+- [ ] Both native archives are collected together with their `.sha256` and
       manifest files.
 - [x] The limitations in `doc/ALPHA.md` match the shipped compiler diagnostics
       and executable tests.
 - [x] No release note claims general TypeScript, ECMAScript, Node, Bun, Deno,
       Web API, Hono, actor, SQLite, AI SDK, or GC compatibility.
-- [x] The release commit is clean and is the commit verified by both native
+- [ ] The release commit is clean and is the commit verified by both native
       jobs.
 
 Only after this section is green may a separate release action create
