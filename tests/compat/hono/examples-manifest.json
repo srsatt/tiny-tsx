@@ -56,7 +56,20 @@
       "httpBehavior": {"status": "pass", "evidence": "tests/compat/hono/alpha-native.test.mjs"},
       "referenceBehavior": {"runtime": "Bun/Hono", "status": "pass", "evidence": "tests/compat/hono/request-id.behavior.test.ts"},
       "releaseGates": {"native": ["test:hono-alpha-native", "test:release-installed"], "reference": ["test:hono-request-id-reference"]},
-      "firstUnsupportedBoundary": "One matched policy per route accepts the default generator with a closed non-empty token header name and closed 1-1024 byte limit; custom generators, empty/dynamic options, conflicting policies, and general Context variables are unsupported."
+      "firstUnsupportedBoundary": "One matched policy per route accepts the default generator with a closed non-empty token header name and closed 1-1024 byte limit; custom generators, empty/dynamic options, conflicting policies, and replacement of the reserved requestId slot are unsupported."
+    },
+    {
+      "id": "tinytsx-context-variables",
+      "provenance": "tinytsx-local",
+      "entry": "tests/compat/hono/context-variables-smoke.ts",
+      "imports": ["hono"],
+      "apis": ["Hono", "use", "get", "Context.set", "Context.get", "Context.req.param", "Context.text"],
+      "intake": {"status": "pass", "evidence": "frontend/test/compatibility-audit.test.ts"},
+      "nativeCompile": {"appleArm64": "pass", "linuxArm64Assembly": "pass", "evidence": "tests/compat/hono/context-variables-native.test.mjs"},
+      "httpBehavior": {"status": "pass", "evidence": "tests/compat/hono/context-variables-native.test.mjs"},
+      "referenceBehavior": {"runtime": "Bun/Hono", "status": "pass", "evidence": "tests/compat/hono/context-variables-reference.test.ts"},
+      "releaseGates": {"native": ["test:hono-context-variables-native"], "reference": ["test:hono-context-variables-reference"]},
+      "firstUnsupportedBoundary": "From 1 through 16 static request-local slots admit bounded primitives and supported request-time strings; dynamic or oversized keys, structured values, Context.var, general Map identity/iteration/deletion, and values escaping the response are unsupported."
     },
     {
       "id": "tinytsx-json-body",
