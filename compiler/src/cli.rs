@@ -6,7 +6,7 @@ const USAGE: &str = "\
 TinyTSX native TSX compiler
 
 Usage:
-  tinytsx check <entry.tsx> [--emit-hir | --emit-asm] [--target triple] [--alias specifier=path] [--api specifier=path] [--allow-env name]... [--allow-read root]... [--allow-write root]...
+  tinytsx check <entry.tsx> [--emit-hir | --emit-asm] [--target triple] [--alias specifier=path] [--api specifier=path] [--binding name=sqlite-kv:path] [--allow-env name]... [--allow-read root]... [--allow-write root]...
   tinytsx build <entry.tsx> [options]
   tinytsx run <entry.tsx> [options]
   tinytsx test262 <case.js> [--output path]
@@ -123,6 +123,7 @@ fn parse_build_options(
         keep_temps: false,
         aliases: Vec::new(),
         api_aliases: Vec::new(),
+        bindings: Vec::new(),
         allowed_environment: Vec::new(),
         allowed_read_roots: Vec::new(),
         allowed_write_roots: Vec::new(),
@@ -154,6 +155,9 @@ fn parse_build_options(
                 .push(option_value(arguments, &mut index)?.to_owned()),
             "--api" => options
                 .api_aliases
+                .push(option_value(arguments, &mut index)?.to_owned()),
+            "--binding" => options
+                .bindings
                 .push(option_value(arguments, &mut index)?.to_owned()),
             "--allow-env" => options
                 .allowed_environment
@@ -203,6 +207,7 @@ fn parse_build_options(
         return Err("request memory must be greater than zero".to_owned());
     }
     validate_environment_capabilities(&mut options.allowed_environment)?;
+    validate_bindings(&mut options.bindings)?;
     validate_read_capabilities(&mut options.allowed_read_roots)?;
     validate_write_capabilities(&mut options.allowed_write_roots)?;
     Ok(options)
@@ -231,6 +236,7 @@ fn check(arguments: &[String]) -> Result<(), String> {
     let mut emit_asm = false;
     let mut aliases = Vec::new();
     let mut api_aliases = Vec::new();
+    let mut bindings = Vec::new();
     let mut allowed_environment = Vec::new();
     let mut allowed_read_roots = Vec::new();
     let mut allowed_write_roots = Vec::new();
@@ -243,6 +249,7 @@ fn check(arguments: &[String]) -> Result<(), String> {
             "--emit-asm" => emit_asm = true,
             "--alias" => aliases.push(option_value(arguments, &mut index)?.to_owned()),
             "--api" => api_aliases.push(option_value(arguments, &mut index)?.to_owned()),
+            "--binding" => bindings.push(option_value(arguments, &mut index)?.to_owned()),
             "--allow-env" => {
                 allowed_environment.push(option_value(arguments, &mut index)?.to_owned())
             }
@@ -267,12 +274,14 @@ fn check(arguments: &[String]) -> Result<(), String> {
     }
     let entry = entry.ok_or_else(|| format!("check requires an entry module\n\n{USAGE}"))?;
     validate_environment_capabilities(&mut allowed_environment)?;
+    validate_bindings(&mut bindings)?;
     validate_read_capabilities(&mut allowed_read_roots)?;
     validate_write_capabilities(&mut allowed_write_roots)?;
     let mut compilation = frontend::compile(
         entry,
         &aliases,
         &api_aliases,
+        &bindings,
         &allowed_environment,
         &allowed_read_roots,
         &allowed_write_roots,
@@ -296,6 +305,37 @@ fn check(arguments: &[String]) -> Result<(), String> {
             compilation.program.statistics.components,
             compilation.program.statistics.static_html_bytes,
         );
+    }
+    Ok(())
+}
+
+fn validate_bindings(bindings: &mut Vec<String>) -> Result<(), String> {
+    bindings.sort();
+    if bindings.len() > 16 {
+        return Err("at most 16 resource bindings may be configured".to_owned());
+    }
+    let mut previous = None;
+    for binding in bindings.iter() {
+        let (name, adapter) = binding
+            .split_once('=')
+            .ok_or_else(|| "--binding requires <name>=sqlite-kv:<path>".to_owned())?;
+        let path = adapter.strip_prefix("sqlite-kv:").unwrap_or_default();
+        let valid_name = !name.is_empty()
+            && name.len() <= 128
+            && name.is_ascii()
+            && !name.as_bytes()[0].is_ascii_digit()
+            && name
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_');
+        if !valid_name || path.is_empty() || path.len() > 4096 || path.contains('\0') {
+            return Err(format!(
+                "invalid binding `{binding}`; expected <name>=sqlite-kv:<path>"
+            ));
+        }
+        if previous == Some(name) {
+            return Err(format!("duplicate resource binding `{name}`"));
+        }
+        previous = Some(name);
     }
     Ok(())
 }

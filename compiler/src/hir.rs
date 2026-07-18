@@ -404,6 +404,29 @@ pub enum NumericOperator {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum TodoOperation {
+    List,
+    Add,
+    Complete,
+    Delete,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum TodoUser {
+    StaticString { string: usize },
+    RequestCookie { cookie: usize },
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum TodoArgument {
+    RequestJsonField { field: usize },
+    RouteParameter { segment: usize },
+}
+
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum ValueExpression {
     StringLiteral {
@@ -555,6 +578,14 @@ pub enum ValueExpression {
         mode: SqliteQueryMode,
         #[serde(default)]
         parameters: Vec<SqliteParameter>,
+        span: SourceSpan,
+    },
+    TodoStore {
+        database: usize,
+        operation: TodoOperation,
+        user: TodoUser,
+        #[serde(default)]
+        argument: Option<TodoArgument>,
         span: SourceSpan,
     },
     FetchStatus {
@@ -1397,6 +1428,7 @@ impl Program {
             | ValueExpression::FileText { .. }
             | ValueExpression::ActorCall { .. }
             | ValueExpression::SqliteQuery { .. }
+            | ValueExpression::TodoStore { .. }
             | ValueExpression::FetchStatus { .. }
             | ValueExpression::QueryParameter { .. }
             | ValueExpression::QueryConditional { .. }
@@ -1540,6 +1572,7 @@ impl Program {
             | ValueExpression::FileText { .. }
             | ValueExpression::ActorCall { .. }
             | ValueExpression::SqliteQuery { .. }
+            | ValueExpression::TodoStore { .. }
             | ValueExpression::FetchStatus { .. }
             | ValueExpression::QueryParameter { .. }
             | ValueExpression::OpenAiChatText { .. } => Ok("string".to_owned()),
@@ -1982,6 +2015,60 @@ impl Program {
                     return Err("SQLite query exceeds the native SQL limit".to_owned());
                 }
                 self.validate_sqlite_parameters(parameters, route_pattern)?;
+                Ok(())
+            }
+            ValueExpression::TodoStore {
+                database,
+                operation,
+                user,
+                argument,
+                ..
+            } => {
+                if *database >= self.sqlite_databases.len() {
+                    return Err("TODO store references a missing SQLite database".to_owned());
+                }
+                match user {
+                    TodoUser::StaticString { string } => {
+                        let Some(user) = self.static_strings.get(*string) else {
+                            return Err("TODO store user references a missing string".to_owned());
+                        };
+                        if user.value.is_empty() || user.value.len() > 1024 {
+                            return Err("TODO store user is outside the bounded contract".to_owned());
+                        }
+                    }
+                    TodoUser::RequestCookie { cookie } => {
+                        let Some(cookie) = self.static_strings.get(*cookie) else {
+                            return Err("TODO store cookie references a missing string".to_owned());
+                        };
+                        if cookie.value.is_empty() || cookie.value.len() > 128 {
+                            return Err("TODO store cookie is outside the bounded contract".to_owned());
+                        }
+                    }
+                }
+                match (operation, argument) {
+                    (TodoOperation::List, None) => {}
+                    (TodoOperation::Add, Some(TodoArgument::RequestJsonField { field })) => {
+                        let Some(field) = self.static_strings.get(*field) else {
+                            return Err("TODO add references a missing JSON field".to_owned());
+                        };
+                        if !valid_request_json_path(&field.value) {
+                            return Err("TODO add JSON field is outside the native limit".to_owned());
+                        }
+                    }
+                    (
+                        TodoOperation::Complete | TodoOperation::Delete,
+                        Some(TodoArgument::RouteParameter { segment }),
+                    ) => {
+                        let segments = route_pattern
+                            .split('/')
+                            .filter(|part| !part.is_empty())
+                            .collect::<Vec<_>>();
+                        if segments.get(*segment).and_then(|part| route_parameter_name(part)).is_none() {
+                            return Err("TODO mutation route parameter is missing".to_owned());
+                        }
+                    }
+                    _ => return Err("TODO store operation has an incompatible argument".to_owned()),
+                }
                 Ok(())
             }
             ValueExpression::FetchStatus { url, .. } => {

@@ -65,7 +65,7 @@ function compile(args: string[]): void {
   const entry = args[0]!;
   const defaultSdk = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../sdk/index.d.ts");
   const options = parseOptions(args.slice(1), new Set([
-    "--sdk", "--alias", "--api", "--allow-env", "--allow-read", "--allow-write",
+    "--sdk", "--alias", "--api", "--allow-env", "--allow-read", "--allow-write", "--binding",
   ]));
   if (options === undefined) {
     return;
@@ -73,7 +73,8 @@ function compile(args: string[]): void {
   const sdkPath = options.values.get("--sdk")?.[0] ?? defaultSdk;
   const aliases = parseAliases(options.values.get("--alias") ?? []);
   const apiAliases = parseAliases(options.values.get("--api") ?? []);
-  if (aliases === undefined || apiAliases === undefined) {
+  const sqliteKvBindings = parseSqliteKvBindings(options.values.get("--binding") ?? []);
+  if (aliases === undefined || apiAliases === undefined || sqliteKvBindings === undefined) {
     return;
   }
   if ((options.values.get("--sdk")?.length ?? 0) > 1) {
@@ -88,6 +89,7 @@ function compile(args: string[]): void {
         allowedEnvironment: new Set(options.values.get("--allow-env") ?? []),
         allowedReadRoots: options.values.get("--allow-read") ?? [],
         allowedWriteRoots: options.values.get("--allow-write") ?? [],
+        sqliteKvBindings,
       });
       process.stdout.write(`${JSON.stringify(hir, null, 2)}\n`);
     } catch (error) {
@@ -99,6 +101,31 @@ function compile(args: string[]): void {
       }
     }
   }
+}
+
+function parseSqliteKvBindings(values: string[]): Record<string, string> | undefined {
+  const bindings: Record<string, string> = {};
+  for (const value of values) {
+    const separator = value.indexOf("=");
+    const name = value.slice(0, separator);
+    const adapter = value.slice(separator + 1);
+    const path = adapter.startsWith("sqlite-kv:") ? adapter.slice("sqlite-kv:".length) : "";
+    if (
+      separator <= 0
+      || !/^[A-Za-z_][A-Za-z0-9_]{0,127}$/.test(name)
+      || path.length === 0
+      || Buffer.byteLength(path, "utf8") > 4096
+      || bindings[name] !== undefined
+    ) {
+      process.stderr.write(
+        "error: --binding requires one unique <name>=sqlite-kv:<path> value\n",
+      );
+      process.exitCode = 2;
+      return undefined;
+    }
+    bindings[name] = path;
+  }
+  return bindings;
 }
 
 function audit(args: string[]): void {
@@ -163,6 +190,7 @@ function usage(): void {
   process.stderr.write(
     "usage: tinytsx-frontend <entry.tsx> [--sdk <index.d.ts>] [--alias <specifier>=<path>]..."
     + " [--api <specifier>=<api.d.ts>]... [--allow-env <name>]... [--allow-read <root>]... [--allow-write <root>]...\n"
+    + "       bindings: [--binding <name>=sqlite-kv:<path>]...\n"
     + "       tinytsx-frontend --audit-compat <entry> [--alias <specifier>=<path>]...\n"
     + "       tinytsx-frontend --test262 <entry.js>\n"
     + "       tinytsx-frontend --wpt <entry.js>\n",

@@ -412,6 +412,7 @@ pub(super) fn emit_value_expression(
         | ValueExpression::FileText { .. }
         | ValueExpression::ActorCall { .. }
         | ValueExpression::SqliteQuery { .. }
+        | ValueExpression::TodoStore { .. }
         | ValueExpression::FetchStatus { .. }
         | ValueExpression::QueryParameter { .. }
         | ValueExpression::QueryConditional { .. }

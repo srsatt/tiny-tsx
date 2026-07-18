@@ -1,4 +1,7 @@
-use crate::hir::{ActorOperation, HandlerResponse, Program, SqliteQueryMode, ValueExpression};
+use crate::hir::{
+    ActorOperation, HandlerResponse, Program, SqliteQueryMode, TodoArgument, TodoOperation,
+    TodoUser, ValueExpression,
+};
 
 use super::super::{
     aarch64::{Emitter, HANDLER_SCRATCH_BASE, emit_immediate},
@@ -309,6 +312,55 @@ fn emit_handler_text_expression(
                 address_parameters(assembly, "x6");
                 emit_immediate(assembly, "x7", parameters.len() as u64);
                 assembly.call(format_args!("tinytsx_sqlite_query_json_params"));
+            }
+        }
+        ValueExpression::TodoStore {
+            database,
+            operation,
+            user,
+            argument,
+            ..
+        } => {
+            asm_line!(assembly, "    ldr x0, [sp, #16]");
+            asm_line!(assembly, "    ldr x1, [sp, #24]");
+            emit_immediate(assembly, "x2", *database as u64);
+            let (user_kind, user_string) = match user {
+                TodoUser::StaticString { string } => (0, *string),
+                TodoUser::RequestCookie { cookie } => (1, *cookie),
+            };
+            emit_immediate(assembly, "x3", user_kind);
+            assembly.address("x4", format_args!("Ltinytsx_string_{user_string}"));
+            emit_immediate(
+                assembly,
+                "x5",
+                program.static_strings[user_string].value.len() as u64,
+            );
+            match (operation, argument) {
+                (TodoOperation::List, None) => {
+                    assembly.call(format_args!("tinytsx_todo_store_list_json"));
+                }
+                (TodoOperation::Add, Some(TodoArgument::RequestJsonField { field })) => {
+                    assembly.address("x6", format_args!("Ltinytsx_string_{field}"));
+                    emit_immediate(
+                        assembly,
+                        "x7",
+                        program.static_strings[*field].value.len() as u64,
+                    );
+                    assembly.call(format_args!("tinytsx_todo_store_add_json"));
+                }
+                (
+                    TodoOperation::Complete | TodoOperation::Delete,
+                    Some(TodoArgument::RouteParameter { segment }),
+                ) => {
+                    emit_immediate(
+                        assembly,
+                        "x6",
+                        u64::from(matches!(operation, TodoOperation::Delete)),
+                    );
+                    emit_immediate(assembly, "x7", *segment as u64);
+                    assembly.call(format_args!("tinytsx_todo_store_mutation_json"));
+                }
+                _ => return Err("invalid TODO store operation".to_owned()),
             }
         }
         ValueExpression::FetchStatus { url, .. } => {

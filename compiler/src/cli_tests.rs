@@ -36,6 +36,31 @@ fn rejects_non_portable_environment_capabilities_before_compilation() {
 }
 
 #[test]
+fn rejects_invalid_resource_bindings_before_compilation() {
+    let error = run(["build", "app.tsx", "--binding", "TODOS=cloudflare:ambient"]
+        .into_iter()
+        .map(Into::into))
+    .unwrap_err();
+    assert!(error.contains("expected <name>=sqlite-kv:<path>"));
+}
+
+#[test]
+fn rejects_duplicate_resource_bindings_before_compilation() {
+    let error = run([
+        "build",
+        "app.tsx",
+        "--binding",
+        "TODOS=sqlite-kv:first.db",
+        "--binding",
+        "TODOS=sqlite-kv:second.db",
+    ]
+    .into_iter()
+    .map(Into::into))
+    .unwrap_err();
+    assert!(error.contains("duplicate resource binding `TODOS`"));
+}
+
+#[test]
 fn rejects_missing_filesystem_roots_before_compilation() {
     let error = run(["build", "app.tsx", "--allow-read", "/tinytsx/not-present"]
         .into_iter()

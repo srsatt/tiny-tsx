@@ -35,6 +35,7 @@ pub fn compile(
     entry: &str,
     aliases: &[String],
     api_aliases: &[String],
+    bindings: &[String],
     allowed_environment: &[String],
     allowed_read_roots: &[String],
     allowed_write_roots: &[String],
@@ -59,6 +60,9 @@ pub fn compile(
     }
     for alias in api_aliases {
         command.arg("--api").arg(alias);
+    }
+    for binding in bindings {
+        command.arg("--binding").arg(binding);
     }
     for name in allowed_environment {
         command.arg("--allow-env").arg(name);
