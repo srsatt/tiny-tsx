@@ -500,6 +500,33 @@ to 4. The raw evidence is the adjacent
 `benchmarks/results/2026-07-17-m5-max-sustained-15s-hono-route-param-keepalive-w8.*`
 pair; no general router-performance claim is made.
 
+#### Selected next P4 tracer — bounded Hono file-read workload
+
+Add one `hono-file-read` workload around the shipped
+`examples/hono-static/server.ts` adapter and the pinned 21-byte
+`vendor/hono-examples/serve-static/assets/my-file.txt` asset from
+`vendor/hono-examples` commit
+`3b0b62875a0e1265763fea1c6388866d5697ef81`. TinyTSX must read the file through
+`tinytsx:fs.readTextFile` with the exact asset directory granted by
+`--allow-read`. Bun must use the same pinned Hono revision and asset bytes with
+one request-time `Bun.file(...).text()` route. Both targets must return status
+200, `text/plain; charset=UTF-8`, `x-powered-by: Hono`, and the exact 21-byte
+body before measurement.
+
+The harness test must pin the source, asset, capability root, response, and Bun
+adapter. Existing filesystem gates continue to prove default denial, missing
+files, maximum-size failure, Apple execution, Linux-arm64 assembly, and release
+packaging. A short equivalence smoke precedes the same three-by-15-second,
+concurrency-8/64, eight-worker keep-alive matrix used by the current P4
+baseline; all raw samples and descriptor end-states must be retained.
+
+This tracer measures repeated warm page-cache reads of one tiny immutable text
+file plus Hono/application-executor overhead. It does not isolate filesystem
+syscall cost, control the OS page cache, flush caches, measure cold storage,
+large files, concurrent replacement, binary data, writes, directory traversal,
+or Bun/TinyTSX primitive parity. Those boundaries must remain explicit in the
+report and performance conclusions.
+
 Before implementing the next tracer, its selected goal must be copied into the
 active goal with: its exact tracer/source revision; admitted and rejected
 boundaries; Apple execution and Linux-arm64 evidence; failure, saturation, and
