@@ -427,6 +427,32 @@ connection reuse; Linux arm64 assembles the descriptor ABI; and the SDK,
 manifest, examples, persistence contract, and release matrix expose the same
 boundary. The next selected work is the P4 release-stability evidence pass.
 
+#### Selected P4 tracer — sustained five-workload comparison
+
+Run the committed benchmark harness on Apple arm64 for `hono-basic`,
+`hono-dynamic-jsx`, `hono-stream-text`, `hono-actor`, and `hono-sqlite`. Each
+workload uses eight TinyTSX HTTP workers, keep-alive for both targets, five
+fresh-process startup samples, and three 15-second load samples at concurrency
+8 and 64. Target and concurrency order continue to alternate. Allocator
+instrumentation remains disabled so its atomic counters do not perturb the
+comparative path.
+
+Retain adjacent JSON and Markdown reports under `benchmarks/results/` with a
+`2026-07-17-m5-max-sustained-15s-*-keepalive-w8` prefix. Every sample must keep
+success rate 1.0 and pass the existing response/status/header/framing gates.
+Report startup, idle/warm/peak RSS, throughput, median/p99 latency, CPU,
+syscalls, context switches, faults, threads, and descriptor start/peak/end.
+Compare the basic control with request-time escaping, streaming, actor, and
+SQLite route costs. Profile only a reproduced regression; do not optimize from
+aggregate counters alone.
+
+This matrix is longer controlled evidence for these exact localhost routes,
+not a general AOT/JIT claim. It does not close the still-unmeasured file,
+non-empty SQLite result, disk I/O, transaction-write, large-response, route-
+parameter, JSON-branch, cancellation, or multi-actor workload families. Those
+require separate equivalence-checked harness entries before the broad P4 item
+can be marked complete.
+
 Before implementation, the selected goal must be copied into the active goal
 with: its exact tracer/source revision; admitted and rejected boundaries; Apple
 execution and Linux-arm64 evidence; failure, saturation, and disposal tests as
