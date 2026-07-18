@@ -369,9 +369,12 @@ actor messages, protected SQLite ownership, eight-actor and two-owner WAL
 pressure evidence, invalid UTF-8 form decoding, bounded Hono context variables,
 tagged special-number/symbol constants, and the pinned upstream secure-headers
 factory plus the bounded local-`Map` tracer. Their implementation and evidence
-are recorded under P1-P4. The next bounded slice must be selected from the
-remaining actor supervision, SQLite value depth, or P4 workload families rather
-than widening Map beyond its recorded ownership boundary.
+are recorded under P1-P4. The Map tracer also passes the installed-package gate
+and a clean release verification with checksum-valid Apple- and Linux-arm64
+archives. No next tracer is selected by this backlog update; the next goal must
+choose a bounded slice from the remaining actor supervision, SQLite value
+depth, or P4 workload families rather than widening Map beyond its recorded
+ownership boundary.
 
 Do not reopen the completed alpha foundations as broad projects. File reading,
 SQLite, and local actors already have public bounded built-ins. Their next work
@@ -1067,9 +1070,11 @@ map to chain and replace `set`, observe `has`/`delete`/`size`, clear a second
 map, and return 32 concurrent isolated route values plus a recovery value on
 Apple native HTTP; Bun/Hono matches it. Exactly sixteen application entries
 compile, constructor iterables reject, the build report records
-`request/none`, and no managed heap is required. The installed example and
-clean release verification remain the final release gates before checking the
-parent P1 item.
+`request/none`, and no managed heap is required. The installed `hono-map`
+example builds and runs from the packaged resources, and a clean
+`npm run release:verify` produced checksum-valid Apple- and Linux-arm64 alpha
+archives. The parent P1 item is therefore complete within the rejected
+boundaries above.
 
 ### P1 — Compatibility and language depth
 
@@ -1112,7 +1117,7 @@ parent P1 item.
     a local accumulator, postfix index increment, static exclusive bound, and
     fixed additive step. The compiler caps it at 4,096 iterations; dynamic
     bounds, `break`/`continue`, nested loops, and arbitrary bodies remain open.
-- [ ] Implement bounded native `Map`, constant `symbol`, signed zero, `NaN`, and
+- [x] Implement bounded native `Map`, constant `symbol`, signed zero, `NaN`, and
       infinities with complete semantics evidence.
   - 2026-07-18: statically named Hono `Context.set/get` values now specialize to
     1–16 request-local AOT slots with replacement and missing-`undefined`
