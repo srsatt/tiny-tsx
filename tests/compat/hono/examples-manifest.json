@@ -63,13 +63,13 @@
       "provenance": "tinytsx-local",
       "entry": "tests/compat/hono/context-variables-smoke.ts",
       "imports": ["hono"],
-      "apis": ["Hono", "use", "get", "Context.set", "Context.get", "Context.req.param", "Context.text"],
+      "apis": ["Hono", "use", "get", "Context.set", "Context.get", "Context.var", "Context.req.param", "Context.text"],
       "intake": {"status": "pass", "evidence": "frontend/test/compatibility-audit.test.ts"},
       "nativeCompile": {"appleArm64": "pass", "linuxArm64Assembly": "pass", "evidence": "tests/compat/hono/context-variables-native.test.mjs"},
       "httpBehavior": {"status": "pass", "evidence": "tests/compat/hono/context-variables-native.test.mjs"},
       "referenceBehavior": {"runtime": "Bun/Hono", "status": "pass", "evidence": "tests/compat/hono/context-variables-reference.test.ts"},
       "releaseGates": {"native": ["test:hono-context-variables-native"], "reference": ["test:hono-context-variables-reference"]},
-      "firstUnsupportedBoundary": "From 1 through 16 static request-local slots admit bounded primitives and supported request-time strings; dynamic or oversized keys, structured values, Context.var, general Map identity/iteration/deletion, and values escaping the response are unsupported."
+      "firstUnsupportedBoundary": "From 1 through 16 static request-local slots admit bounded primitives and supported request-time strings through set/get or direct Context.var reads; dynamic or oversized keys, structured values, Context.var assignment/destructuring/enumeration, general Map identity/iteration/deletion, and values escaping the response are unsupported."
     },
     {
       "id": "tinytsx-json-body",
