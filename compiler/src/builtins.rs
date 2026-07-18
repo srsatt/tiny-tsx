@@ -40,7 +40,12 @@ pub fn json() -> Result<String, String> {
 }
 
 fn manifest() -> Manifest {
-    const TARGETS: &[&str] = &["aarch64-apple-darwin", "aarch64-unknown-linux-gnu"];
+    const TARGETS: &[&str] = &[
+        "aarch64-apple-darwin",
+        "aarch64-unknown-linux-gnu",
+        "x86_64-apple-darwin",
+        "x86_64-unknown-linux-gnu",
+    ];
     Manifest {
         schema_version: 1,
         compiler_version: env!("CARGO_PKG_VERSION"),

@@ -6,17 +6,18 @@ import {fileURLToPath} from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const version = "0.1.0-alpha.1";
-const target = process.platform === "darwin" && process.arch === "arm64"
-  ? "aarch64-apple-darwin"
-  : process.platform === "linux" && process.arch === "arm64"
-    ? "aarch64-unknown-linux-gnu"
-    : undefined;
+const target = new Map([
+  ["darwin/arm64", "aarch64-apple-darwin"],
+  ["darwin/x64", "x86_64-apple-darwin"],
+  ["linux/arm64", "aarch64-unknown-linux-gnu"],
+  ["linux/x64", "x86_64-unknown-linux-gnu"],
+]).get(`${process.platform}/${process.arch}`);
 const allowDirty = process.argv.includes("--allow-dirty");
 const sourceCommit = run("git", ["rev-parse", "HEAD"], {encoding: "utf8"}).stdout.trim();
 const sourceStatus = run("git", ["status", "--porcelain"], {encoding: "utf8"}).stdout.trim();
 const sourceDirty = sourceStatus !== "";
 
-if (target === undefined) fail(`release archives require native AArch64, got ${process.platform}/${process.arch}`);
+if (target === undefined) fail(`release archives require a supported native host, got ${process.platform}/${process.arch}`);
 if (!allowDirty) {
   if (sourceDirty) fail(`release verification requires a clean tree:\n${sourceStatus}`);
   run("npm", ["test"]);
