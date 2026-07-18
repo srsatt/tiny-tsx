@@ -408,15 +408,31 @@
       "boundary": "The credential-free adapter treats one non-empty bounded session cookie as the user_id. It does not validate JWTs, contact Stytch, or claim live @hono/stytch-auth compatibility."
     },
     "nativeCompile": {
-      "status": "not-admitted"
+      "appleArm64": "pass",
+      "linuxArm64Assembly": "pass",
+      "evidence": "tests/compat/hono/stytch-todo-native.test.mjs"
     },
     "httpBehavior": {
-      "status": "not-admitted"
+      "status": "pass",
+      "evidence": "tests/compat/hono/stytch-todo-native.test.mjs"
     },
     "referenceBehavior": {
-      "status": "not-admitted"
+      "runtime": "Bun/Hono with credential-free auth and in-memory KV",
+      "status": "pass",
+      "evidence": "tests/compat/hono/stytch-todo-reference.test.ts"
     },
-    "firstUnsupportedBoundary": "The pinned backend intake does not yet admit its request-local TodoService class, private async method, runtime Todo arrays, Stytch authentication package, Cloudflare KV/ASSETS bindings, React/Vite frontend, or live Stytch credentials; each requires the selected bounded adapter and native evidence before this tracer can move into the supported matrix."
+    "persistenceAdapter": {
+      "status": "pass",
+      "binding": "--binding TODOS=sqlite-kv:<path>",
+      "capacityPerUser": 16,
+      "evidence": "tests/compat/hono/stytch-todo-native.test.mjs",
+      "boundaries": "One explicit binding owns one SQLite connection through the bounded application-worker pool. Tests prove user isolation, owner-serialized mutation and response, restart persistence, saturation rollback, capability denial, process disposal, and later recovery."
+    },
+    "releaseGates": {
+      "native": ["test:hono-stytch-todo"],
+      "reference": ["test:hono-stytch-todo-reference"]
+    },
+    "firstUnsupportedBoundary": "The admitted tracer is limited to the three pinned backend modules, the deterministic non-empty session-cookie boundary, one explicitly configured SQLite KV binding, sixteen TODO records per user, and 4 KiB text. JWT validation, live Stytch calls, ambient Cloudflare bindings, arbitrary KV values, the ASSETS mount, React/Vite, distributed actors, and general JavaScript class or dynamic-array compatibility remain unsupported."
   },
   "behaviorAllowlist": [
     {"source":"vendor/hono-examples/basic/src/index.test.ts","selectors":["expect(res.status).toBe(200)","expect(res.headers.get('x-powered-by')).toBe('Hono')"],"evidenceMode":"native-derived","nativeEvidence":"compiler/tests/e2e.rs"},

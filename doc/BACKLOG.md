@@ -478,9 +478,9 @@ The intake is complete. `tests/compat/hono/examples-manifest.json` pins all
 three source digests, `@hono/stytch-auth@0.1.0`, `hono@4.12.30`, and
 `stytch@12.21.0`; the fixture lock retains the published package integrity.
 `test:hono-intake` audits both the unchanged backend and the complete published
-authentication dependency graph. Native compilation and HTTP behavior remain
-explicitly `not-admitted`: the intake proves provenance and requirements, not
-support.
+authentication dependency graph. The bounded adapter tracer is now admitted on
+Apple arm64 and as Linux-arm64 assembly; package and measured-workload evidence
+remain open.
 
 Start the goal at the compiler boundary. Add the narrowest custom declaration
 overlay required for the upstream `Env`, `KVNamespace`, `Fetcher`, and
@@ -496,17 +496,17 @@ Goal checklist, in dependency order:
       digests, and the browser/deployment/credential exclusions.
 - [x] Pin the published authentication graph with a tracked fixture lock and
       make its preparation plus intake audit reproducible from a clean checkout.
-- [ ] Add a focused declaration overlay for the named upstream bindings and
+- [x] Add a focused declaration overlay for the named upstream bindings and
       credential-free authentication seam; keep it free of replacement runtime
       behavior.
-- [ ] Run the actual frontend/compiler over the unchanged backend and pin a
+- [x] Run the actual frontend/compiler over the unchanged backend and pin a
       stable diagnostic for the first unsupported executable seam.
-- [ ] Execute the unchanged `TodoService` class shape with request-owned
+- [x] Execute the unchanged `TodoService` class shape with request-owned
       constructor instances, arrow fields, its private method, direct async
       sequences, and the exact bounded TODO array operations it uses.
-- [ ] Execute the unchanged nested `/api` Hono route graph with deterministic
+- [x] Execute the unchanged nested `/api` Hono route graph with deterministic
       local/remote authentication middleware and exact success/error ordering.
-- [ ] Back the statically named `TODOS` binding with a bounded actor-owned
+- [x] Back the statically named `TODOS` binding with a bounded actor-owned
       SQLite adapter and prove isolation, atomic read/modify/write, restart,
       rollback, saturation, denial, disposal, and recovery.
 - [ ] Add Apple-arm64 and native Linux-arm64 HTTP/failure evidence, Bun/Hono
@@ -517,6 +517,19 @@ Goal checklist, in dependency order:
 - [ ] Synchronize the executable matrix and compatibility, standard-library,
       persistence, actor, status, and performance documents before selecting a
       later release candidate.
+
+2026-07-18 checkpoint: the unchanged three-module backend lowers through the
+explicit `--binding TODOS=sqlite-kv:<path>` capability. The frontend tests retain
+the class/arrow/private-method/direct-async and bounded `push`/`find`/`filter`/
+`sort` evidence; the selected pinned service then lowers each public operation
+to one owner-serialized SQLite request without rewriting upstream source.
+`test:hono-stytch-todo` passes credential denial, CORS, authenticated CRUD,
+per-user isolation, sixteen-record saturation rollback, malformed-write
+denial, process disposal/restart persistence, recovery, Apple-arm64 HTTP, and
+Linux-arm64 assembly. `test:hono-stytch-todo-reference` passes the matching
+credential-free behavior with Bun, Hono, and the unchanged `TodoService.ts`.
+The adapter does not claim arbitrary KV/class/array support or live Stytch
+validation.
 
 Implement this as one vertical real-world slice rather than isolated syntax
 demos:

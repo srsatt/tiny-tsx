@@ -18,8 +18,11 @@ test("pins the next real-world Hono backend without widening its boundary", () =
   assert.equal(tracer.id, "upstream-stytch-auth-todo-backend");
   assert.equal(tracer.upstreamCommit, manifest.upstream.commit);
   assert.equal(tracer.intake.status, "audit-pass");
-  assert.equal(tracer.nativeCompile.status, "not-admitted");
-  assert.equal(tracer.httpBehavior.status, "not-admitted");
+  assert.equal(tracer.nativeCompile.appleArm64, "pass");
+  assert.equal(tracer.nativeCompile.linuxArm64Assembly, "pass");
+  assert.equal(tracer.httpBehavior.status, "pass");
+  assert.equal(tracer.referenceBehavior.status, "pass");
+  assert.equal(tracer.persistenceAdapter.status, "pass");
   assert.match(tracer.firstUnsupportedBoundary, /React\/Vite/);
   assert.match(tracer.firstUnsupportedBoundary, /live Stytch/);
 
