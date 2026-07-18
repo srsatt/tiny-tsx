@@ -649,6 +649,33 @@ returns from 68 peak descriptors to 4. The raw evidence is the adjacent
 pair; disk/WAL I/O, competing connections, rollback load, and request-derived
 values remain open.
 
+#### Selected P2/P4 tracer — bounded request JSON response values
+
+Add one shared project-owned `tests/compat/hono/json-body-smoke.ts` application
+against pinned Hono commit `b2ae3a2204a48ce15a26448fd746d39745eb1837`.
+Its `POST /json-body` route must read a closed request record through
+`context.req.json()` and return selected string, finite-number, boolean, and
+null fields through `context.json()` with their JSON types and escaping
+preserved. Field names are compile-time non-empty UTF-8 strings bounded to 128
+bytes; the existing 64 KiB transport ceiling bounds the complete body.
+
+The runtime must reject malformed JSON, a missing selected field, and a selected
+array or object with HTTP 400, reject an oversized body with HTTP 413, and serve
+a later valid request on the same keep-alive connection. Frontend/HIR and
+bootstrap ABI tests must pin the closed response expression and bounded parser
+behavior. Apple arm64 must execute success/failure/recovery paths; Linux arm64
+must assemble the exact response ABI; the Hono manifest and Bun reference must
+cover the same shared source.
+
+Extend the benchmark harness with explicit method, content type, and fixed body
+support, then add `hono-json-body` using one equivalence-checked primitive body.
+After a short smoke, retain the standard three-by-15-second concurrency-8/64,
+eight-worker keep-alive report with startup, RSS, latency, process counters, and
+descriptor recovery. This tracer does not admit dynamic keys, whole-object
+identity, arrays/nested objects, body mutation, schema coercion/defaults,
+streaming JSON, arbitrary content types, or a general JavaScript object model.
+Those require separate tracers.
+
 Before implementing the next tracer, its selected goal must be copied into the
 active goal with: its exact tracer/source revision; admitted and rejected
 boundaries; Apple execution and Linux-arm64 evidence; failure, saturation, and
