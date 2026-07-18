@@ -971,6 +971,38 @@ bringing the allowlist to eighteen complete native cases. Oversized symbol IDs
 and descriptions are rejected. General application symbol operations,
 non-finite arithmetic, and bounded native `Map` remain open.
 
+#### Selected P2 tracer — upstream secure headers
+
+Pin the next Hono behavior slice to commit
+`b2ae3a2204a48ce15a26448fd746d39745eb1837`, unchanged
+`src/middleware/secure-headers/secure-headers.ts`, its public index, and these
+named upstream behaviors from `src/middleware/secure-headers/index.test.ts`:
+`default middleware`, `specific headers disabled`, `should remove x-powered-by
+header`, and `should use custom value when overridden`.
+
+Admit `secureHeaders()` and one closed options record containing only the
+twelve boolean/string headers in upstream `HEADERS_MAP` plus
+`removePoweredBy`. Preserve after-`next()` replacement and case-insensitive
+`X-Powered-By` deletion, including the upstream middleware-order difference.
+Raise the bounded response-header capacity from eight to sixteen so the ten
+default security headers fit with content framing and selected adjacent
+middleware; keep names/values closed and retain the existing validation rules.
+
+Reject Content Security Policy, report-only policy, permissions policy,
+reporting endpoints, Report-To, `NONCE`, callbacks, dynamic options, and more
+than sixteen emitted application headers with stable diagnostics. Those forms
+require additional collection/string/callback or request-local semantics and
+must not be approximated by a compiler-owned replacement middleware.
+
+Require frontend success/failure and middleware-order coverage, unchanged
+upstream TypeScript plus published-package JavaScript intake, Bun/Hono reference
+behavior, Apple-arm64 native HTTP execution, Linux-arm64 assembly, Hono manifest
+and documentation-matrix routing, installed-release reachability, runtime
+exact-fit/overflow header-capacity tests, and synchronized compatibility,
+Web-API, status, and backlog documentation. Header storage remains a fixed
+per-response value disposed with the request; no queue saturation or GC test is
+applicable.
+
 ### P1 — Compatibility and language depth
 
 - [x] Promote remaining syntax-only Test262 cases only when their complete
