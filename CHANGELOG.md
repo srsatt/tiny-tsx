@@ -17,6 +17,9 @@ First developer preview of TinyTSX's zero-JavaScript native server compiler.
 - Bounded one-to-four-segment request JSON primitive paths share one response
   and SQLite lowering, including boolean bindings, atomic two-table profile
   persistence, rollback/recovery evidence, and a packaged Hono example.
+- Idle HTTP/1.1 keep-alive connections park outside native executors and yield
+  to ready work, while already-buffered pipelined requests retain the bounded
+  sixteen-request fast path and five-second idle lifetime.
 - Native Apple-arm64 and Linux-arm64 builds, allowlist execution, installed
   archive examples, checksums, and source-commit manifests.
 

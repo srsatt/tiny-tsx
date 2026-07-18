@@ -183,10 +183,12 @@ requests improved p99 but lost too much throughput to reconnect churn, so those
 experiments were rejected.
 
 The accepted design retains each socket, bounded parser buffer, and lifetime
-request count while atomically rotating the live connection behind queued work
-after sixteen requests. The worker-pool operation keeps the external queue bound
-and cannot reject a resubmission merely because that queue is full. Shutdown
-stops the connection at its next turn boundary.
+request count. It consumes at most sixteen already-buffered pipelined requests
+per executor turn. When no complete next head is buffered, the connection parks
+outside the native executor; ready accepted work runs first, and bounded
+readiness polling resumes the same socket without losing parser bytes. The
+external queue remains bounded, parked jobs remain bounded by admitted live
+work, and shutdown discards them at a scheduler boundary.
 
 The clean commit `eed2a92` comparison uses three five-second samples at
 concurrency 64 with eight workers and keep-alive:
@@ -201,6 +203,11 @@ TinyTSX open descriptors are 4/68/4 start/peak/end for all three workloads.
 The raw samples are retained in the adjacent
 `benchmarks/results/2026-07-17-m5-max-{basic,actor,sqlite}-fair-keepalive-w8.*`
 reports.
+
+Those results predate parked idle-connection scheduling. They remain historical
+evidence for the sixteen-request buffered fast path, but a current control,
+actor, SQLite, and nested-profile rerun is required before release comparison
+claims are attached to the post-fix candidate.
 
 ## Earlier connection-close and compatibility evidence
 

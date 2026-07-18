@@ -420,6 +420,9 @@ an API-expansion slice:
 - [ ] Retain the native Linux HTTP-contract evidence and update the tag-ready
       checklist without changing compiler/runtime/API sources between the two
       attestations.
+- [ ] Repeat the controlled control, actor, SQLite, and nested-profile
+      keep-alive workloads after parked idle-connection scheduling; retain the
+      response-checked raw samples and update claims only from that evidence.
 - [ ] If either target exposes a functional regression, stop this release goal
       and groom the smallest failing seam as a separate implementation goal.
 

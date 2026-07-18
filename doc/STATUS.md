@@ -9,6 +9,32 @@ produces and serves a native Mach-O executable from the example TSX source.
 
 ## Alpha implementation evidence
 
+### Parked idle keep-alive scheduling (2026-07-18)
+
+- Clean release verification exposed a deterministic single-worker stall in
+  the SQLite idempotency gate. The database owner remained healthy: the same
+  32-request transaction burst passed with eight HTTP workers, while one
+  worker completed only one connection per five-second idle read and then
+  delayed follow-up lookups behind completed keep-alive sockets.
+- The reusable worker scheduler now distinguishes ready, resumable, and parked
+  jobs. Ready external work is always selected before a parked job; parked jobs
+  are readiness-polled at a bounded one-millisecond interval without occupying
+  an executor, remain counted against bounded admission, and are discarded at
+  pool shutdown.
+- HTTP continues through at most sixteen requests only while a complete next
+  head is already buffered. Otherwise it parks the owned socket, parser bytes,
+  request count, and idle deadline. New socket bytes resume the same connection;
+  no input for five seconds still closes it under the existing lifetime bound.
+- The minimized runtime regression proves a queued connection completes before
+  an idle keep-alive timeout with one executor. The original default-worker
+  SQLite test now completes in about 6.9 seconds and its 32 concurrent writes
+  complete in 12 milliseconds in the diagnostic run, followed by all 32
+  successful lookups.
+- Verification: worker 23/23, bootstrap 70/70, SQLite native 15/15, actor native
+  12/12, Hono native 17/17, Rust workspace 206/206, and strict Clippy for both
+  affected crates. A fresh controlled P4 comparison remains required because
+  executor scheduling changed after the retained benchmark artifacts.
+
 ### Bounded nested profile JSON and persistence (2026-07-18)
 
 - Static request JSON paths now use one canonical representation across
