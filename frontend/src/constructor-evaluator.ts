@@ -1821,6 +1821,9 @@ function executeStatement(
   if (ts.isAwaitExpression(expression)) {
     const value = evaluate(evaluator, expression.expression, module, environment, instance);
     if (value.kind === "thrown") return {returned: true, value};
+    if (value.kind === "unknown" && !isSyntheticMiddlewareNext(expression.expression, environment)) {
+      issue(evaluator, expression.expression, module, value.reason);
+    }
     return continued();
   }
   if (ts.isCallExpression(expression)) {
@@ -1851,6 +1854,16 @@ function executeStatement(
     `expression effect is not supported: ${expression.getText(module.sourceFile)}`,
   );
   return continued();
+}
+
+function isSyntheticMiddlewareNext(
+  expression: ts.Expression,
+  environment: Map<string, Value>,
+): boolean {
+  const call = unwrap(expression);
+  if (!ts.isCallExpression(call) || !ts.isIdentifier(call.expression)) return false;
+  const callable = environment.get(call.expression.text);
+  return callable?.kind === "reference" && callable.name === "next";
 }
 
 function executeQueryConditionalStatement(
@@ -2946,20 +2959,23 @@ function evaluateCall(
     }
     if (receiver.kind === "statement" && (name === "all" || name === "get")) {
       const parameters = sqliteParameters(arguments_);
-      return parameters !== undefined
-        ? {
-          kind: "sqliteQuery",
-          statement: receiver.state,
-          mode: name === "all" ? "all" : "first",
-          parameters,
-        }
-        : unknown(`Statement.${name} accepts up to 16 route or JSON-field values`);
+      if (parameters === undefined) {
+        return unknown(`Statement.${name} accepts up to 16 route or JSON-field values`);
+      }
+      if (!Array.isArray(parameters)) return unknown(parameters.reason);
+      return {
+        kind: "sqliteQuery",
+        statement: receiver.state,
+        mode: name === "all" ? "all" : "first",
+        parameters,
+      };
     }
     if (receiver.kind === "statement" && name === "run") {
       const parameters = sqliteParameters(arguments_);
       if (parameters === undefined) {
         return unknown("Statement.run accepts up to 16 bounded SQLite values");
       }
+      if (!Array.isArray(parameters)) return unknown(parameters.reason);
       const action: EvaluatedDatabaseAction = {
         kind: "exec",
         database: receiver.state.database,
@@ -3865,7 +3881,9 @@ function appendDatabaseAction(
   return result;
 }
 
-function sqliteParameters(arguments_: Value[]): SqliteParameter[] | undefined {
+function sqliteParameters(
+  arguments_: Value[],
+): SqliteParameter[] | {reason: string} | undefined {
   if (arguments_.length === 0) return [];
   const parameters = arguments_[0];
   if (arguments_.length !== 1 || parameters?.kind !== "array" || parameters.items.length > 16) {
@@ -3877,6 +3895,12 @@ function sqliteParameters(arguments_: Value[]): SqliteParameter[] | undefined {
       output.push({kind: "routeParameter", name: parameter.name});
     } else if (parameter.kind === "requestJsonField") {
       output.push({kind: "requestJsonField", name: parameter.name});
+    } else if (parameter.kind === "requestHeader" && (
+      parameter.name.length === 0
+      || Buffer.byteLength(parameter.name, "utf8") > 128
+      || !/^[\w!#$%&'*.^`|~+-]+$/.test(parameter.name)
+    )) {
+      return {reason: "SQLite request-header parameter has an invalid name"};
     } else if (parameter.kind === "requestHeader") {
       output.push({kind: "requestHeader", name: parameter.name});
     } else if (parameter.kind === "randomUuid") {
