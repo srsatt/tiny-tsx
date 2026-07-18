@@ -37,6 +37,24 @@ Every new language or API feature should enable at least one focused unit test,
 one allowlisted standards case when available, and one Hono case when Hono uses
 that behavior.
 
+## ESLint preflight boundary
+
+`packages/eslint-plugin-tinytsx` exposes
+`tinytsx/no-unsupported-syntax` for compiler-free editor feedback. It rejects
+unsupported shapes that are visible in one ESLint AST, including runtime code
+generation, generators, dynamic imports, dynamic computed access, selected
+TypeScript runtime syntax, and unsupported intrinsic JSX
+attributes. The rule intentionally does not reject language families such as
+async/await, classes, loops, arrays, records, closures, or spread when TinyTSX
+admits bounded forms of them.
+Ambient `.d.ts` declarations are type-only and therefore excluded from the
+runtime-syntax diagnostics.
+
+An ESLint success is not compatibility evidence. Only compiler intake can
+prove compile-time closure, select a Hono/Web specialization, validate resource
+and lifetime bounds, resolve pinned imports, and enforce capabilities. The
+authoritative pre-build gate remains `tinytsx check`.
+
 ## Pinned Stytch-auth TODO backend
 
 The real-world server tracer is the unchanged backend half of the Hono examples

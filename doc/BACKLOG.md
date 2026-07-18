@@ -1992,3 +1992,6 @@ general AOT/JIT claim.
       JSX, Hono, and provider benchmark evidence with stated limitations.
 - [x] Define memory-lifetime/GC decision gates and a separate bounded no-WASI
       interpreter profile without adding either to the default runtime.
+- [x] Add a zero-runtime-dependency ESLint plugin for compiler-free application
+      syntax preflight, with typed flat/legacy configs and an explicit boundary
+      that keeps `tinytsx check` authoritative.

@@ -195,6 +195,48 @@ Common build options include:
 `tinytsx run` combines compilation and execution for development. Every build
 also writes a machine-readable `<output>.build.json` report.
 
+## ESLint syntax preflight
+
+The repository includes `eslint-plugin-tinytsx` for fast editor feedback
+without invoking the compiler. From a source checkout, install it into an
+application together with ESLint's TypeScript parser:
+
+```sh
+npm install --save-dev eslint typescript-eslint \
+  ./packages/eslint-plugin-tinytsx
+```
+
+Configure the rule for TypeScript and TSX application files:
+
+```js
+// eslint.config.mjs
+import tinytsx from 'eslint-plugin-tinytsx'
+import tseslint from 'typescript-eslint'
+
+export default [{
+  files: ['**/*.{ts,tsx}'],
+  languageOptions: {
+    parser: tseslint.parser,
+    parserOptions: {ecmaFeatures: {jsx: true}},
+  },
+  plugins: {tinytsx},
+  rules: {'tinytsx/no-unsupported-syntax': 'error'},
+}]
+```
+
+The rule catches locally identifiable unsupported constructs such as runtime
+code generation, generators, dynamic imports, dynamic computed access,
+TypeScript runtime namespaces/enums, and unsupported
+intrinsic JSX attributes. It intentionally permits async/await, classes,
+loops, arrays, records, closures, and spread because TinyTSX supports bounded
+forms that require compiler analysis. Ambient `.d.ts` declarations are ignored.
+
+Linting is a preflight, not a compatibility proof. Run `tinytsx check` before
+building: only the compiler can validate compile-time closure, the pinned Hono
+and Web API surface, resource bounds, capabilities, imports, and lifetimes.
+The complete rule and configuration reference is in
+[`packages/eslint-plugin-tinytsx/README.md`](packages/eslint-plugin-tinytsx/README.md).
+
 ## Backend standard library
 
 TinyTSX exposes a small protected backend API rather than emulating Node.js:
@@ -359,6 +401,7 @@ frontend/          TypeScript module loader, evaluator, and HIR frontend
 runtime/           Native HTTP/bootstrap, worker, SQLite, and optional WASM code
 sdk/               Type declarations for TinyTSX built-ins
 examples/          Runnable supported applications
+packages/          Developer tooling, including eslint-plugin-tinytsx
 tests/compat/      Hono, Test262, WPT, native, and package evidence
 benchmarks/        TinyTSX/Bun harness and retained reports
 vendor/            Pinned upstream compatibility inputs

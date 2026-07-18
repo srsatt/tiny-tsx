@@ -5,7 +5,8 @@ matrix into an AArch64 native HTTP server without a JavaScript engine in the
 produced application.
 
 The archive contains `bin/tinytsx`, read-only compiler resources, documentation,
-and runnable source examples under `lib/tinytsx`. The compiler finds that
+runnable source examples, and the source package for `eslint-plugin-tinytsx`
+under `lib/tinytsx`. The compiler finds that
 directory relative to its executable;
 `TINYTSX_HOME` may explicitly override it. Building applications requires Node
 with the bundled TypeScript package, Cargo/Rust, Clang, a target linker, and the
@@ -38,6 +39,9 @@ request-selected strings, bounded static JSON primitive paths, selected async
 middleware, and
 the exact Test262 cases listed in `doc/COMPATIBILITY.md`. Unsupported reachable
 syntax fails compilation; the produced server never interprets JavaScript.
+The bundled ESLint plugin provides a faster syntax-only preflight for application
+source, but does not replace the compiler's semantic, capability, or resource
+validation.
 
 The executable Hono matrix consists of the pinned complete `basic` and
 `jsx-ssr` examples plus the published-package `@hono/zod-openapi`, static-file,
