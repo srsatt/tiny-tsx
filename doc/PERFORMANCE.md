@@ -7,8 +7,9 @@ Last updated: 2026-07-17
 TinyTSX is compelling for deployment and resident footprint, but the sustained
 eight-worker keep-alive matrix does not show throughput or tail-latency parity
 with Bun. The current comparison covers Hono basic, request-time dynamic JSX,
-finite text streaming, one counter actor, and one in-memory empty SQLite query.
-Every one of the 60 load samples passed its response contract.
+one decoded optional route parameter, finite text streaming, one counter actor,
+and one in-memory empty SQLite query. Every one of the 72 load samples passed
+its response contract.
 
 Across three 15-second samples at concurrency 8 and 64, TinyTSX reaches
 0.24–0.46x Bun throughput at concurrency 8 and 0.40–0.72x at concurrency 64.
@@ -18,8 +19,8 @@ close the owner/scheduling tail-latency gap.
 
 The honest current claim is:
 
-- **yes for footprint:** TinyTSX stays at 6.30–8.06 MiB warm RSS; Bun uses 8.7x
-  as much on SQLite and 16.4x–24.6x on the other four routes;
+- **yes for footprint:** TinyTSX stays at 6.30–8.06 MiB warm RSS; Bun uses
+  8.7x–24.6x as much across the six routes;
 - **repeated startup is close:** TinyTSX takes 20.99–22.86 ms and Bun takes
   17.49–21.31 ms, while TinyTSX's separately reported first post-build launch
   remains a 450.78–547.26 ms outlier;
@@ -39,8 +40,8 @@ The current summary is
 `benchmarks/results/2026-07-17-m5-max-sustained-15s-summary.md`; its adjacent
 JSON files retain every raw sample and each per-workload Markdown report pins
 the response differences and limitations. Files, non-empty or on-disk SQLite,
-transaction writes, large responses, route parameters, JSON branch mixes,
-cancellation, and multiple actors remain unmeasured.
+transaction writes, large responses, competing/catch-all route shapes, JSON
+branch mixes, cancellation, and multiple actors remain unmeasured.
 
 The five-second alpha comparison and earlier connection-close, JSX, streaming,
 Worker, and AI-provider results below are historical evidence. They remain

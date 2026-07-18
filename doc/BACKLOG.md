@@ -465,7 +465,7 @@ The next P4 tracer must come from the unmeasured families above; the sustained
 matrix does not promote a general performance claim or close the broad P4
 workload item.
 
-#### Selected next P4 tracer — optional Hono route parameter workload
+#### Selected P4 tracer — optional Hono route parameter workload (landed 2026-07-17)
 
 Add one `hono-route-param` workload around the existing project-owned
 `tests/compat/hono/optional-param-smoke.ts` tracer, derived from the pinned Hono
@@ -489,6 +489,16 @@ they are not mixed into this throughput point. Catch-all parameters, route
 competition, response-size scaling, files, JSON query/body branch mixes,
 SQLite writes, cancellation, and multi-actor pressure remain separate P4
 tracers.
+
+The tracer is green. The harness test pins the exact source and response
+contract; Apple arm64 release execution and Linux-arm64 assembly pass; and all
+12 target/concurrency samples in the three-by-15-second keep-alive matrix have
+success rate 1.0. TinyTSX reaches 58,997 requests/second (0.42x Bun) at
+concurrency 8 and 92,459 (0.57x) at concurrency 64, with 6.38 MiB warm RSS and
+9.755 ms concurrency-64 p99. Each TinyTSX run returns from 68 peak descriptors
+to 4. The raw evidence is the adjacent
+`benchmarks/results/2026-07-17-m5-max-sustained-15s-hono-route-param-keepalive-w8.*`
+pair; no general router-performance claim is made.
 
 Before implementing the next tracer, its selected goal must be copied into the
 active goal with: its exact tracer/source revision; admitted and rejected
@@ -765,10 +775,16 @@ explicitly promoted into a later goal.
     finite streaming, actor, and empty in-memory SQLite routes beside the Hono
     basic control. Five startup samples and three 15-second samples at
     concurrency 8/64 all pass. TinyTSX reaches 0.40–0.72x Bun at concurrency 64
-    with 6.30–8.06 MiB warm RSS, but p99 remains 9.575–15.622 ms. Route
-    parameters, large responses, file reads, non-empty/disk/transaction SQLite,
-    JSON branch mixes, cancellation, multi-actor contention, and isolated arena
-    pressure remain open, so this broad item stays unchecked.
+    with 6.30–8.06 MiB warm RSS, but p99 remains 9.575–15.622 ms. At that
+    checkpoint, route parameters, large responses, file reads,
+    non-empty/disk/transaction SQLite, JSON branch mixes, cancellation,
+    multi-actor contention, and isolated arena pressure remained open.
+  - 2026-07-17: the optional route-parameter tracer adds one decoded trailing
+    parameter and bounded JSON response using identical application source for
+    TinyTSX and Bun. Its three 15-second samples at concurrency 8/64 all pass;
+    TinyTSX reaches 0.42x/0.57x Bun with 6.38 MiB warm RSS and 9.755 ms
+    concurrency-64 p99. Catch-all/competing route shapes and the other named
+    workload families remain open, so this broad item stays unchecked.
 - [x] Add CPU, syscall, allocation, peak-RSS, and first-launch instrumentation.
   - 2026-07-17: the macOS harness samples whole-process CPU time, Unix/Mach
     syscalls, context switches, faults, threads, open-file-descriptor
@@ -779,7 +795,7 @@ explicitly promoted into a later goal.
     binaries do not include them, and no Bun allocation ratio is claimed.
 - [x] Run controlled longer-duration comparisons before publishing performance
       claims and optimize only from profiles.
-  - 2026-07-17: the five-workload sustained matrix retains three 15-second
+  - 2026-07-17: the six-workload sustained matrix retains three 15-second
     samples at concurrency 8 and 64 for both targets, alternates target and
     concurrency order, disables allocator instrumentation, and preserves all
     raw response-checked samples. It supports claims only for those exact

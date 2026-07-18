@@ -9,14 +9,15 @@ produces and serves a native Mach-O executable from the example TSX source.
 
 ## Alpha implementation evidence
 
-### Sustained five-workload server matrix (2026-07-17)
+### Sustained six-workload server matrix (2026-07-17)
 
-- A clean Apple M5 Max comparison covers Hono basic, dynamic JSX escaping,
-  finite text streaming, one counter actor, and one in-memory empty SQLite
-  query. Each target uses one process; TinyTSX uses eight HTTP workers; both
-  targets use keep-alive. The matrix retains five startup samples and three
-  15-second samples at concurrency 8 and 64 with alternating order.
-- All 60 load samples pass with success rate 1.0. TinyTSX reaches 0.24–0.46x
+- A clean Apple M5 Max comparison covers Hono basic, dynamic JSX escaping, one
+  decoded optional route parameter, finite text streaming, one counter actor,
+  and one in-memory empty SQLite query. Each target uses one process; TinyTSX
+  uses eight HTTP workers; both targets use keep-alive. The matrix retains five
+  startup samples and three 15-second samples at concurrency 8 and 64 with
+  alternating order.
+- All 72 load samples pass with success rate 1.0. TinyTSX reaches 0.24–0.46x
   Bun throughput at concurrency 8 and 0.40–0.72x at concurrency 64. Its
   concurrency-64 p99 is 9.575–15.622 ms versus Bun at 0.821–1.683 ms.
 - TinyTSX warm RSS is 6.30–8.06 MiB versus Bun at 70.33–154.70 MiB. Repeated
@@ -26,9 +27,10 @@ produces and serves a native Mach-O executable from the example TSX source.
   context-switch pressure without treating differently sized request totals as
   normalized costs. Actor and SQLite ownership are the next profiling seams;
   unmeasured workload families remain explicit in the backlog.
-- Evidence: commit `7c1a22c`, the combined
-  `benchmarks/results/2026-07-17-m5-max-sustained-15s-summary.md`, and five
-  adjacent raw JSON/rendered report pairs.
+- Evidence: clean commits `7c1a22c` and `04ac58b`, the combined
+  `benchmarks/results/2026-07-17-m5-max-sustained-15s-summary.md`, and six
+  adjacent raw JSON/rendered report pairs. The two commits have identical
+  compiler/runtime source.
 
 ### Clean post-transaction release rehearsal (2026-07-17)
 
@@ -40,10 +42,11 @@ produces and serves a native Mach-O executable from the example TSX source.
   `dist/release/tinytsx-0.1.0-alpha.1-aarch64-apple-darwin.tar.gz`, with SHA-256
   `d9d6522a806dc85fb1067b443629940af48e98ef7caaa305eab7544129790fb4`.
   Its schema-v2 manifest records `source.dirty == false`.
-- Later commits through the benchmark matrix change backlog/docs and committed
-  evidence only; the runtime/compiler source is the same as this rehearsal.
-  A future source change or release action must still produce a new clean
-  candidate and repeat the required target gates.
+- Later commits through the benchmark matrix change benchmark tooling,
+  backlog/docs, and committed evidence only; the runtime/compiler source is the
+  same as this rehearsal. A future runtime/compiler change or release action
+  must still produce a new clean candidate and repeat the required target
+  gates.
 
 ### Bounded prepared transaction callbacks (2026-07-17)
 
