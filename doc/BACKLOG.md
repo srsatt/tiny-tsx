@@ -465,6 +465,31 @@ The next P4 tracer must come from the unmeasured families above; the sustained
 matrix does not promote a general performance claim or close the broad P4
 workload item.
 
+#### Selected next P4 tracer — optional Hono route parameter workload
+
+Add one `hono-route-param` workload around the existing project-owned
+`tests/compat/hono/optional-param-smoke.ts` tracer, derived from the pinned Hono
+optional-parameter behavior at `vendor/hono` commit
+`b2ae3a2204a48ce15a26448fd746d39745eb1837`. TinyTSX and Bun must execute the
+same application source. The measured path is
+`/api/v1/animal/TinyTSX%20Bench`, and both targets must return status 200,
+`application/json`, and the exact decoded body `{"type":"TinyTSX Bench"}`
+before startup, RSS, or load samples are accepted.
+
+The harness unit test must pin the source, path, response, scope, and Bun
+adapter. A short native smoke must build the release TinyTSX binary, execute the
+response gate with keep-alive, retain every sample, and keep the existing Linux
+arm64 Hono assembly/release evidence green. Package the workload as a normal
+benchmark command and document its exact boundary.
+
+This tracer measures one decoded trailing route parameter plus a bounded JSON
+response through the pinned Hono router. The existing native compatibility
+suite continues to prove the missing optional branch and overlong 404 branch;
+they are not mixed into this throughput point. Catch-all parameters, route
+competition, response-size scaling, files, JSON query/body branch mixes,
+SQLite writes, cancellation, and multi-actor pressure remain separate P4
+tracers.
+
 Before implementing the next tracer, its selected goal must be copied into the
 active goal with: its exact tracer/source revision; admitted and rejected
 boundaries; Apple execution and Linux-arm64 evidence; failure, saturation, and
