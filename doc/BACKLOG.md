@@ -363,15 +363,15 @@ adds an explicit application acceptance test.
 
 #### Goal handoff
 
-The current stabilization pass has landed the complete eighteen-case native
+The current stabilization pass has landed the complete twenty-two-case native
 Test262 allowlist, the multi-module Hono user-auth tracer, copied structured
 actor messages, protected SQLite ownership, eight-actor and two-owner WAL
 pressure evidence, invalid UTF-8 form decoding, bounded Hono context variables,
 tagged special-number/symbol constants, and the pinned upstream secure-headers
-factory. Their implementation and evidence are recorded under P1-P4. The next
-bounded slice is the P1 local-`Map` tracer selected below; actor supervision,
-broader SQLite values, and the remaining P4 workload families stay separate
-proposals.
+factory plus the bounded local-`Map` tracer. Their implementation and evidence
+are recorded under P1-P4. The next bounded slice must be selected from the
+remaining actor supervision, SQLite value depth, or P4 workload families rather
+than widening Map beyond its recorded ownership boundary.
 
 Do not reopen the completed alpha foundations as broad projects. File reading,
 SQLite, and local actors already have public bounded built-ins. Their next work
@@ -381,15 +381,13 @@ named upstream tracer.
 
 The groomed candidates, in recommended dependency order, are:
 
-1. **Bounded local `Map`:** distinguish mutable runtime key/value storage from
-   immutable closed records through the selected primitive-key tracer below.
-2. **SQLite transaction/value depth:** add only the prepared/callback
+1. **SQLite transaction/value depth:** add only the prepared/callback
    transaction and dynamic value forms required by a selected application while
    retaining single-owner, non-interleaving execution.
-3. **Actor supervision proposal:** select a real parent/child tracer before
+2. **Actor supervision proposal:** select a real parent/child tracer before
    defining child startup, restart escalation, or failure observation; keep
    links, monitors, registries, persistence, and distribution separate.
-4. **Release-stability evidence:** finish the named P4 workload families and a
+3. **Release-stability evidence:** finish the named P4 workload families and a
    longer controlled TinyTSX/Bun run only after the selected functional slice
    is green. A new release candidate remains a separate explicitly selected
    goal.
@@ -968,7 +966,9 @@ separate calls; it serves through the Apple native HTTP test and assembles for
 Linux. All four unchanged Test262 programs compile, link, and execute natively,
 bringing the allowlist to eighteen complete native cases. Oversized symbol IDs
 and descriptions are rejected. General application symbol operations,
-non-finite arithmetic, and bounded native `Map` remain open.
+non-finite arithmetic, and bounded native `Map` remained open at this
+checkpoint; the later bounded-Map tracer below raises the allowlist to
+twenty-two.
 
 #### Selected P2 tracer — upstream secure headers
 
@@ -1014,7 +1014,7 @@ checksum-valid Apple- and Linux-arm64 alpha archives. CSP,
 permissions/reporting policy, nonce callbacks, and dynamic options remain
 rejected.
 
-#### Selected P1 tracer — bounded local `Map`
+#### Selected P1 tracer — bounded local `Map` (landed 2026-07-18)
 
 Pin the next language-depth slice to Test262 commit
 `f2d1435644797268dca1f7988cad5a4e89ccd8d2` and execute these four unchanged
@@ -1057,6 +1057,20 @@ replacement/deletion behavior, exact sixteen-entry acceptance and seventeenth-
 insertion rejection, allowlist/intake/package routing, and synchronized
 compatibility/status/backlog documentation before checking the parent P1 item.
 
+The tracer is green. Four unchanged Test262 programs now compile, link, and
+execute through explicit bounded Map HIR, bringing the native allowlist to
+twenty-two cases. Generated maps own sixteen inline entries, normalize signed
+zero and `NaN` keys with `SameValueZero`, preserve `SameValue` for returned
+values, and reject a seventeenth live entry; Linux arm64 assembles the same
+operations. The shared Hono tracer uses an ordinary helper and a request-local
+map to chain and replace `set`, observe `has`/`delete`/`size`, clear a second
+map, and return 32 concurrent isolated route values plus a recovery value on
+Apple native HTTP; Bun/Hono matches it. Exactly sixteen application entries
+compile, constructor iterables reject, the build report records
+`request/none`, and no managed heap is required. The installed example and
+clean release verification remain the final release gates before checking the
+parent P1 item.
+
 ### P1 — Compatibility and language depth
 
 - [x] Promote remaining syntax-only Test262 cases only when their complete
@@ -1068,7 +1082,7 @@ compatibility/status/backlog documentation before checking the parent P1 item.
     copied arguments, numeric slots, runtime field-name bytes, native abrupt
     completion, the portable host clock, bounded class/error identities, and a
     dependency-free native matcher, a hoisted mutable module-function binding,
-    and an async-function Promise brand. All eighteen allowlisted cases now run
+    and an async-function Promise brand. All twenty-two allowlisted cases now run
     complete native assertion programs; none remains syntax-only.
 - [ ] Expand ordinary functions to locals, branches, closures, additional native
       types, and general typed expressions/statements.
@@ -1110,7 +1124,14 @@ compatibility/status/backlog documentation before checking the parent P1 item.
     pinned Test262 programs prove `SameValue`, finiteness/classification, and
     symbol uniqueness in native code; the staged-constant example reaches
     read-only Apple data and Linux assembly. Runtime symbol operations,
-    non-finite arithmetic, and the general bounded `Map` keep this item open.
+    non-finite arithmetic remained open after this constant-only slice.
+  - 2026-07-18: four complete pinned Map programs now execute native
+    insertion/size, signed-zero `SameValueZero`, deletion, missing lookup, and
+    clear semantics in sixteen inline slots. A separate request-local Hono map
+    proves replacement, chaining, membership, deletion, exact capacity,
+    concurrent isolation, Apple/Linux targets, and Bun parity without a managed
+    heap. Constructor iterables, escaping identity, iteration, dynamic
+    request-derived keys, and collection transport remain separate proposals.
 - [ ] Replace whole-module forbidden-syntax rejection with request/initialization
       reachability and specialize remaining closed-shape Hono object rest.
   - 2026-07-17: exception syntax is no longer rejected module-wide. Unreachable

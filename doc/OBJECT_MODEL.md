@@ -39,25 +39,34 @@ AOT staging without implying any of those runtime capabilities.
 
 ## Maps
 
-A map has runtime keys, runtime membership, and object identity. Explicit
-`Map<K, V>` construction, index signatures with unknown keys, or operations that
-mutate an unknown property set require map semantics. These values need bounded
-native storage, dynamic lookup, and explicit process/request lifetime rules.
+A map has runtime keys, runtime membership, and identity distinct from a record.
+The first admitted `new Map()` slice is deliberately bounded: a non-escaping
+function/request-local map owns sixteen inline entries and admits closed
+primitive keys plus bounded primitive or request-time string values. `set`
+inserts or replaces and returns the receiver; `get`, `has`, `delete`, `clear`,
+and `size` observe the current entries. Key matching uses `SameValueZero`, so
+`NaN` matches itself and signed zero is one key. The frame owns and disposes all
+slots; HIR memory evidence is `request/none` and does not require a managed heap.
 
-The staging evaluator never converts `new Map(...)` into a record. Current tests
-prove that a closed object literal is staged while an adjacent `Map` binding is
-left for runtime lowering. Hono uses both models: many option/header objects can
-be records, while `Context.#var` is an actual `Map` and must stay dynamic unless
-whole-program analysis proves a fixed-key specialization.
+The staging evaluator represents this value as `runtimeMap`, never as `record`.
+It conservatively rejects a seventeenth possible live entry. Constructor
+iterables, capture/return, module persistence, request-derived keys, object,
+array, or record keys/values, iteration/`forEach`, subclassing, weak
+collections, and transport through JSON, SQLite, actors, or constants remain
+outside the admitted representation. Four unchanged Test262 programs execute
+equivalent explicit Map HIR operations in native sixteen-slot stack frames.
+Hono uses both object models: many option/header objects remain records, while
+the project-owned Map tracer uses the bounded local representation.
 
 That fixed-key specialization now exists for the first Hono Context-variable
 slice. One route may use 1–16 statically named slots; middleware and handlers
 share their request-local values, replacement is permitted, and missing lookup
 returns `undefined`. The compiler lowers the already-supported bounded scalar
-or request-string value directly into the response graph. No map object,
-membership table, or process-persistent state is emitted. Dynamic keys,
-iteration, `size`, `has`, `delete`, `clear`, and identity still require the
-future bounded native map representation. Direct identifier and closed
+or request-string value directly into the response graph. No application Map
+object aliases this view, and no process-persistent state is emitted. Dynamic
+Context-variable keys and iteration remain unsupported even though the
+separate local Map subset now provides `size`, `has`, `delete`, and `clear`.
+Direct identifier and closed
 string-literal `Context.var` reads resolve the same fixed slots; assignment,
 destructuring, enumeration, and escape of that view remain rejected.
 

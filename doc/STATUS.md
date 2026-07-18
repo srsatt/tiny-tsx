@@ -9,6 +9,30 @@ produces and serves a native Mach-O executable from the example TSX source.
 
 ## Alpha implementation evidence
 
+### Bounded local Map (2026-07-18)
+
+- Four unchanged programs from pinned Test262 revision `f2d1435644797268dca1f7988cad5a4e89ccd8d2`
+  now execute complete native assertions for primitive insertion/size,
+  signed-zero key normalization, deletion, missing `undefined`, and `clear`.
+  The allowlist contains twenty-two native cases.
+- Test262 HIR v3 carries explicit bounded Map operations. Generated Apple/Linux
+  code owns sixteen inline entries per map, uses `SameValueZero` for keys and
+  `SameValue` for returned values, and rejects a seventeenth live entry before
+  code generation.
+- Application `new Map()` is distinct from an immutable closed record. The
+  admitted non-escaping request/function-local subset supports `set`, `get`,
+  `has`, `delete`, `clear`, `size`, and `set` chaining for closed primitive keys
+  and bounded primitive/request-time string values. Build memory evidence is
+  `request/none`; no managed heap is required.
+- The shared Hono tracer calls an ordinary helper, replaces and deletes values,
+  clears a second map, returns 32 isolated concurrent route values, and recovers
+  afterward on Apple native HTTP. Linux arm64 assembly and Bun/Hono behavior
+  pass. Frontend failures cover constructor iterables and the seventeenth
+  insertion, while exactly sixteen entries compile.
+- Constructor iterables, escaping/captured/module-persistent maps, object or
+  collection keys/values, iteration, subclassing, dynamic request-derived keys,
+  and JSON/SQLite/actor/constant transport remain unsupported.
+
 ### Bounded Hono context variables (2026-07-18)
 
 - The pinned Hono `Context.set/get` and direct static `Context.var` contracts
@@ -797,7 +821,7 @@ produces and serves a native Mach-O executable from the example TSX source.
   route-path test proves the overlay participates in TypeScript checking.
 - Relative ESM components now compile through multi-module HIR into the native
   server; a second real HTTP E2E test verifies the imported component output.
-- Test262 intake validates the pin, provenance metadata, and parsing of eighteen
+- Test262 intake validates the pin, provenance metadata, and parsing of twenty-two
   allowlisted class, loop, RegExp, async, array-spread, primitive, function,
   throw, Error, `Date.now`, subtraction, record-membership, and array-unshift
   cases. Evidence mode is explicit per case. The exact `typeof undefined` case
@@ -829,7 +853,9 @@ produces and serves a native Mach-O executable from the example TSX source.
   creates and verifies its native Promise brand. Four additional unchanged
   programs execute `NaN` SameValue, signed-zero distinction, positive-infinity
   type/finiteness/NaN checks, and unique direct `Symbol()` identities. All
-  eighteen allowlisted cases now execute their complete assertions natively;
+  additional Map programs cover primitive insertion/size, signed-zero key
+  normalization, deletion, missing lookup, and clear. All twenty-two
+  allowlisted cases now execute their complete assertions natively;
   none relies on syntax-only evidence.
 - The dedicated native API suite currently covers Request method/path/query
   views, allocation-free form-decoded query-name presence, elapsed-header
@@ -1053,9 +1079,11 @@ produces and serves a native Mach-O executable from the example TSX source.
   invokes upstream Hono's actual `poweredBy()` factory and async closure, applies
   its post-handler header effect, and a native E2E reproduces the selected
   upstream root-route status and `X-Powered-By: Hono` assertions.
-- Closed object literals are records with compile-time fields; explicit `Map`
-  construction remains unstaged dynamic work. The two models and declaration-
-  overlay boundary are persisted in `doc/OBJECT_MODEL.md`.
+- Closed object literals remain immutable compile-time records. Empty
+  non-escaping `Map` construction now has a separate sixteen-entry local
+  representation; constructor iterables, escaping identity, iteration, and
+  managed lifetimes remain unsupported. The two models and declaration-overlay
+  boundary are persisted in `doc/OBJECT_MODEL.md`.
 - `tinytsx-runtime-worker` is a zero-dependency HTTP-agnostic runtime crate. Its
   fixed native pool provides a preallocated bounded FIFO queue, nonblocking
   submission with job recovery, stable worker-local state, per-job panic

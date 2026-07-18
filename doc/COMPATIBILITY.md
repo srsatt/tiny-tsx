@@ -650,6 +650,16 @@ standalone-runner and compile-time-constant evidence; it does not expose symbol
 boxing, registries, property keys, runtime descriptions, general coercion, or
 non-finite arithmetic to applications.
 
+Four unchanged `Map` programs from the same pin now execute as complete native
+assertion programs. Test262 HIR v3 owns one to four fixed-capacity maps with
+sixteen inline entries each and ordered `reset`, `set`, `get`, `has`, `delete`,
+`clear`, and `size` operations. Keys use `SameValueZero`, so all `NaN` values
+match and signed zero normalizes, while returned values retain `SameValue` and
+therefore still distinguish `+0` from `-0`. Apple arm64 executes all four cases;
+Linux arm64 assembles the same slot scans and comparisons. Constructor
+iterables, object identity, iteration, and escaping maps remain outside this
+standalone slice.
+
 The allowlisted `language/expressions/typeof/undefined.js` case is the first
 `mode: native` Test262 entry. `tinytsx test262 <case> --output <binary>` parses
 the untouched upstream source and lowers its two top-level
@@ -823,14 +833,30 @@ seventeenth entry. CSP, permissions/reporting policy, nonce callbacks, and
 dynamic options remain compile-time boundaries.
 
 Closed records and dynamic maps are separate compiler concepts. A record has a
-known layout and may use direct field offsets; a map has runtime membership and
-requires bounded dynamic lookup. `new Map(...)` is deliberately not staged as a
-record. The detailed rules are recorded in `doc/OBJECT_MODEL.md`.
+known immutable layout and may use direct field offsets. The admitted empty
+`new Map()` subset is mutable request/function-local storage with up to sixteen
+primitive-key entries; it supports `set`, `get`, `has`, `delete`, `clear`, and
+`size`, replaces without growing, returns `undefined` for a missing key, and
+uses `SameValueZero` membership. The compiler records a non-escaping
+`request/none` arena lifetime and requires no managed heap. Constructor
+iterables, capture/return, module persistence, object/array/record keys or
+values, iteration/`forEach`, subclassing, and transport through JSON, SQLite,
+actors, or constants are rejected. The detailed rules are recorded in
+`doc/OBJECT_MODEL.md`.
+
+The shared Hono tracer puts this subset in an ordinary helper called from a
+request handler. It chains `set`, replaces one request-time string, observes a
+successful deletion and later absence, checks size, and returns the retained
+value. Thirty-two concurrent Apple requests plus a recovery request prove
+isolation; a second route proves `clear`, Linux assembles the response, and
+Bun/Hono runs the unchanged tracer. Application keys remain compile-time closed
+in this first slice; request-derived keys need separate dynamic-lookup evidence.
 
 The bounded Hono Context-variable slice is a whole-program fixed-key
 specialization between those models: source Hono uses `Map`, but the compiler
 proves the complete key set and emits request-local slots. It neither changes
-record mutability nor exposes a general application `Map`.
+record mutability nor aliases Context variables to the separate application
+`Map` value.
 
 Request query state is neither model: it is a borrowed request view lowered to
 an allocation-free form-decoding predicate. The `prettyJSON()` trace therefore
