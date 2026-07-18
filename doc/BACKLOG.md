@@ -378,10 +378,14 @@ implementation and evidence are recorded under P1-P4.
 
 The nested-profile tracer is green through frontend/HIR/runtime tests, Apple
 native HTTP, Linux-arm64 assembly, Bun/Hono reference behavior, package and
-installed-archive routing, and the sustained response-checked benchmark. That
-does not make the working source a release candidate by itself. The generated
-Apple and Linux archives currently attest different source states; both native
-release gates must be repeated at one clean commit after this backlog update.
+installed-archive routing, and the sustained response-checked benchmark. A
+native Linux clean-checkout rehearsal then exposed an implicit dependency on
+ignored `tests/compat/node-server/node_modules` state. The frontend gate now
+installs that pinned published-Hono fixture explicitly, and its focused intake
+and frontend regressions pass. That does not make the working source a release
+candidate by itself. The generated Apple and Linux archives currently attest
+different source states; both native release gates must be repeated at one
+clean commit after this backlog update.
 
 Do not reopen the completed alpha foundations as broad projects. File reading,
 SQLite, and local actors already have public bounded built-ins. Their next work
@@ -406,10 +410,15 @@ The groomed candidates, in recommended dependency order, are:
 #### Next selectable goal — exact-source two-target release candidate
 
 This is the recommended next goal. It is verification and packaging work, not
-an API-expansion slice:
+an API-expansion slice. Freeze the commit produced by this backlog-only update
+as the candidate source; if verification requires a tracked fix, land that fix
+and restart both native gates from its new clean commit.
 
-- [ ] Begin from the clean commit containing this backlog update and run
-      `npm run release:verify` on native Apple arm64.
+- [x] Remove the clean-checkout dependency on a previously installed ignored
+      published-Hono fixture; `test:frontend` now prepares the pinned
+      `tests/compat/node-server` dependencies before executing its intake.
+- [ ] Run `npm run release:verify` from a clean native Apple-arm64 checkout of
+      the frozen candidate commit.
 - [ ] Run the same command on a native Linux-arm64 checkout of the exact same
       commit; cross-assembled ELF inspection is not a substitute.
 - [ ] Require both schema-v2 manifests to record the same source commit with
@@ -427,7 +436,9 @@ an API-expansion slice:
       summary, and synchronize performance/status claims before selecting the
       exact-source release commit.
 - [ ] If either target exposes a functional regression, stop this release goal
-      and groom the smallest failing seam as a separate implementation goal.
+      and groom the smallest failing seam as a separate implementation goal;
+      after its fix lands, discard both partial attestations and restart from
+      the replacement source commit.
 
 Completion produces two attachable archives and a tag-ready checklist. It does
 not create or publish `v0.1.0-alpha.1`; publication remains an explicit later
