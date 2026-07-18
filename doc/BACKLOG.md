@@ -649,7 +649,7 @@ returns from 68 peak descriptors to 4. The raw evidence is the adjacent
 pair; disk/WAL I/O, competing connections, rollback load, and request-derived
 values remain open.
 
-#### Selected P2/P4 tracer — bounded request JSON response values (functional slice landed 2026-07-18)
+#### Selected P2/P4 tracer — bounded request JSON response values (landed 2026-07-18)
 
 Add one shared project-owned `tests/compat/hono/json-body-smoke.ts` application
 against pinned Hono commit `b2ae3a2204a48ce15a26448fd746d39745eb1837`.
@@ -681,9 +681,13 @@ bounded request-time expression; the bootstrap preserves string escaping,
 finite numbers, booleans, and null, while missing/malformed/structured input
 returns 400. Apple proves the success/failure/limit paths and a valid pipelined
 request after application-level 400; Linux assembles the ABI; Bun/Hono reference
-tests and the manifest are release-gated. The benchmark harness now supports a
-fixed POST body and passes its short equivalence smoke. Sustained evidence is
-still pending, so the P4 part of this tracer remains open.
+tests and the manifest are release-gated. The benchmark harness supports a fixed
+POST body and retains all 12 samples from its three-by-15-second concurrency-8/64
+run. TinyTSX reaches 58,034 requests/second (0.45x Bun) at concurrency 8 and
+90,387 (0.64x) at 64, with 7.34 MiB warm RSS and 9.937 ms concurrency-64 p99.
+Every run returns from 68 peak descriptors to 4. The adjacent
+`benchmarks/results/2026-07-18-m5-max-sustained-15s-hono-json-body-keepalive-w8.*`
+pair retains the exact request contract; broader dynamic JSON remains open.
 
 Before implementing the next tracer, its selected goal must be copied into the
 active goal with: its exact tracer/source revision; admitted and rejected
@@ -1001,6 +1005,12 @@ explicitly promoted into a later goal.
     with 8.81 MiB warm RSS and 17.293 ms concurrency-64 p99. Disk/WAL I/O,
     competing connections, rollback load, request-derived values, and the
     other workload families remain open, so this broad item stays unchecked.
+  - 2026-07-18: the shared JSON-body tracer posts and returns one fixed 65-byte
+    primitive object through selected bounded request fields. All three
+    15-second samples at concurrency 8/64 pass; TinyTSX reaches 0.45x/0.64x Bun
+    with 7.34 MiB warm RSS and 9.937 ms concurrency-64 p99. Dynamic keys,
+    structured values, schema validation, mixed bodies, and other workload
+    families remain open, so this broad item stays unchecked.
 - [x] Add CPU, syscall, allocation, peak-RSS, and first-launch instrumentation.
   - 2026-07-17: the macOS harness samples whole-process CPU time, Unix/Mach
     syscalls, context switches, faults, threads, open-file-descriptor
@@ -1011,7 +1021,7 @@ explicitly promoted into a later goal.
     binaries do not include them, and no Bun allocation ratio is claimed.
 - [x] Run controlled longer-duration comparisons before publishing performance
       claims and optimize only from profiles.
-  - 2026-07-18: the eleven-workload sustained matrix retains three 15-second
+  - 2026-07-18: the twelve-workload sustained matrix retains three 15-second
     samples at concurrency 8 and 64 for both targets, alternates target and
     concurrency order, disables allocator instrumentation, and preserves all
     raw response-checked samples. It supports claims only for those exact

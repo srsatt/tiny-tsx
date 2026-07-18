@@ -25,31 +25,33 @@ produces and serves a native Mach-O executable from the example TSX source.
   assembles the exact response ABI. Bun/Hono reference tests retain upstream's
   differing malformed/missing behavior instead of claiming equivalence there.
 - Verification: 126 frontend tests, 47 focused bootstrap ABI tests, 90 compiler
-  tests, native/reference 2/2 each, Hono intake 8/8, and benchmark harness
-  32/32.
+  tests, 184 Rust workspace tests, native/reference 2/2 each, Hono intake 8/8,
+  benchmark harness 32/32, and workspace Clippy with warnings denied.
 
-### Sustained eleven-workload server matrix (2026-07-18)
+### Sustained twelve-workload server matrix (2026-07-18)
 
 - A clean Apple M5 Max comparison covers Hono basic, dynamic JSX escaping, one
   decoded optional route parameter, bounded warm-cache 21-byte and 22,173-byte
   file responses, compact/query-present pretty JSON, finite text streaming, one
   counter actor, one in-memory empty SQLite query, and an idempotent two-write
-  callback transaction followed by a non-empty row response. Each target uses
-  one process; TinyTSX uses eight HTTP workers; both targets use keep-alive. The
+  callback transaction followed by a non-empty row response. The matrix also
+  posts one fixed 65-byte primitive JSON object through the bounded request
+  field ABI. Each target uses one process; TinyTSX uses eight HTTP workers; both
+  targets use keep-alive. The
   matrix retains five startup samples and three 15-second samples at concurrency
   8 and 64 with alternating order.
-- All 132 load samples pass with success rate 1.0. TinyTSX reaches 0.24–0.54x
-  Bun throughput at concurrency 8 and 0.40–0.79x at concurrency 64 on the ten
+- All 144 load samples pass with success rate 1.0. TinyTSX reaches 0.24–0.54x
+  Bun throughput at concurrency 8 and 0.40–0.79x at concurrency 64 on the eleven
   small-response routes. The exact 22,173-byte route reaches 1.30x/1.78x Bun.
   TinyTSX concurrency-64 p99 is 9.575–22.030 ms versus Bun at 0.736–5.104 ms.
 - TinyTSX warm RSS is 6.30–8.81 MiB versus Bun at 64.50–154.70 MiB. Repeated
-  startup is 20.00–22.86 ms versus 17.49–21.31 ms. Every TinyTSX workload
+  startup is 19.68–22.86 ms versus 17.30–21.31 ms. Every TinyTSX workload
   returns to four open descriptors; median peaks are 68 for non-file routes, 71
   for the 21-byte file, and 73 for the 22 KiB file.
 - Whole-process counters are not normalized across different request totals.
-  TinyTSX records greater CPU on ten routes; Bun records more on the 21-byte
+  TinyTSX records greater CPU on eleven routes; Bun records more on the 21-byte
   file route, while TinyTSX records more Unix syscalls and context switches on
-  all eleven. Application-executor, filesystem, response-copy, actor, and SQLite
+  all twelve. Application-executor, filesystem, response-copy, actor, and SQLite
   ownership are profiling seams; unmeasured workload families remain explicit.
 - The upstream query-present pretty branch expands the same closed array from
   129 to 202 bytes. It reduces TinyTSX concurrency-64 throughput by 0.3% versus
@@ -59,10 +61,14 @@ produces and serves a native Mach-O executable from the example TSX source.
   the empty SQLite route, TinyTSX throughput changes by -0.4%/-12.3% at
   concurrency 8/64 and Bun changes by -26.2%/-32.0%; this is not a disk-I/O or
   isolated transaction-cost claim.
+- The fixed request JSON route reaches 0.45x/0.64x Bun at concurrency 8/64,
+  with 7.34 MiB warm RSS and 9.937 ms concurrency-64 p99. It is the only row on
+  the new request-field runtime ABI, so it is not used as a same-runtime delta
+  against earlier controls.
 - Evidence: clean commits `7c1a22c`, `04ac58b`, `c16333f`, `097982d`, and
-  `a6cc7ae`, plus `c488480`, the combined sustained summary, and eleven adjacent
-  raw JSON/rendered report pairs. All six commits have identical
-  compiler/runtime source.
+  `a6cc7ae`, plus `c488480` for the first eleven rows; clean commit `b35b608`
+  supplies the request-field ABI row. The combined summary and twelve adjacent
+  raw JSON/rendered report pairs retain every sample.
 
 ### Clean post-transaction release rehearsal (2026-07-17)
 
