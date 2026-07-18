@@ -4,6 +4,7 @@ use crate::hir::{HandlerResponse, HtmlOp, Program, ValueExpression};
 
 use super::Options;
 
+mod sqlite;
 mod values;
 
 pub(super) fn emit(program: &Program, options: &Options) -> Result<String, String> {
@@ -36,6 +37,7 @@ pub(super) fn emit(program: &Program, options: &Options) -> Result<String, Strin
          extern tiny_u32 tinytsx_request_query_has(const void *, const tiny_u8 *, tiny_usize);\n\
          extern tiny_u32 tinytsx_html_write_openai_chat_text(void *, const tiny_u8 *, tiny_usize, const tiny_u8 *, tiny_usize, const tiny_u8 *, tiny_usize);\n",
     );
+    sqlite::emit_declarations(&mut source);
     source.push_str(
         "extern tiny_usize tinytsx_request_body_length(const void *);\n\
          extern tiny_u32 tinytsx_response_header_static(void *, const tiny_u8 *, tiny_usize, const tiny_u8 *, tiny_usize);\n\
@@ -120,6 +122,20 @@ fn emit_data(source: &mut String, program: &Program, options: &Options) {
                 source,
                 &format!("tinytsx_handler_{index}_header_{header_index}_value"),
                 header.value.as_bytes(),
+            );
+        }
+        if let Some(limit) = &handler.body_limit {
+            emit_guard_header_data(
+                source,
+                &format!("tinytsx_handler_{index}_body_limit"),
+                &limit.rejected.headers,
+            );
+        }
+        if let Some(existence) = &handler.sqlite_existence {
+            emit_guard_header_data(
+                source,
+                &format!("tinytsx_handler_{index}_sqlite_missing"),
+                &existence.missing.headers,
             );
         }
     }
@@ -275,6 +291,43 @@ fn emit_view_function(
     source.push_str("    default: return 4;\n  }\n}\n");
 }
 
+fn emit_guard_header_data(source: &mut String, prefix: &str, headers: &[crate::hir::StaticHeader]) {
+    for (index, header) in headers.iter().enumerate() {
+        emit_bytes(
+            source,
+            &format!("{prefix}_header_{index}_name"),
+            header.name.as_bytes(),
+        );
+        emit_bytes(
+            source,
+            &format!("{prefix}_header_{index}_value"),
+            header.value.as_bytes(),
+        );
+    }
+}
+
+fn emit_guard_headers(
+    source: &mut String,
+    prefix: &str,
+    headers: &[crate::hir::StaticHeader],
+    indent: &str,
+) {
+    for (index, header) in headers.iter().enumerate() {
+        writeln!(
+            source,
+            "{indent}tiny_u32 guard_header_status_{index} = tinytsx_response_header_static(writer, {prefix}_header_{index}_name, {}, {prefix}_header_{index}_value, {});",
+            header.name.len(),
+            header.value.len(),
+        )
+        .unwrap();
+        writeln!(
+            source,
+            "{indent}if (guard_header_status_{index} != 0) return guard_header_status_{index};"
+        )
+        .unwrap();
+    }
+}
+
 fn emit_handler(source: &mut String, program: &Program) -> Result<(), String> {
     source.push_str("tiny_u32 tinytsx_handle_get(const void *request, void *writer) {\n");
     for (index, handler) in program.handlers.iter().enumerate() {
@@ -292,9 +345,27 @@ fn emit_handler(source: &mut String, program: &Program) -> Result<(), String> {
                 limit.max_bytes
             )
             .unwrap();
+            emit_guard_headers(
+                source,
+                &format!("tinytsx_handler_{index}_body_limit"),
+                &limit.rejected.headers,
+                "      ",
+            );
             emit_response(source, &limit.rejected.response, program, "      ")?;
             source.push_str("    }\n");
         }
+        if let Some(existence) = &handler.sqlite_existence {
+            sqlite::emit_existence_check(source, existence, program, "    ");
+            emit_guard_headers(
+                source,
+                &format!("tinytsx_handler_{index}_sqlite_missing"),
+                &existence.missing.headers,
+                "      ",
+            );
+            emit_response(source, &existence.missing.response, program, "      ")?;
+            source.push_str("      }\n    }\n");
+        }
+        sqlite::emit_actions(source, &handler.sqlite_actions, program, "    ")?;
         if let Some(request_id) = &handler.request_id {
             writeln!(
                 source,
@@ -569,6 +640,32 @@ fn emit_text_expression(
                     program.static_strings[*body].value.len()
                 ),
             );
+        }
+        ValueExpression::SqliteRunChanges { result, .. } => {
+            emit_write_call(
+                source,
+                indent,
+                &format!("tinytsx_html_write_sqlite_changes(writer, {result})"),
+            );
+        }
+        ValueExpression::SqliteRunLastInsertRowId { result, json, .. } => {
+            emit_write_call(
+                source,
+                indent,
+                &format!(
+                    "tinytsx_html_write_sqlite_last_insert_row_id(writer, {result}, {})",
+                    u32::from(*json)
+                ),
+            );
+        }
+        ValueExpression::SqliteQuery {
+            database,
+            sql,
+            mode,
+            parameters,
+            ..
+        } => {
+            sqlite::emit_query(source, indent, *database, *sql, mode, parameters, program);
         }
         _ if values::is_scalar(expression) => {
             let value = values::render_handler_expression(expression, program)?;

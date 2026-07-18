@@ -110,6 +110,18 @@ fn emits_assemblable_string_exceptions_for_linux_arm64() {
     assert_assembles_as_elf(&assembly, "function-exceptions");
 }
 
+#[test]
+fn emits_assemblable_hono_sqlite_for_linux_x86_64() {
+    let assembly = compile_linux_x86(
+        "examples/hono-sqlite/server.ts",
+        &["--allow-env", "TINYTSX_BLOG_NAME"],
+    );
+
+    assert!(assembly.contains("tinytsx_sqlite_query_json_params"));
+    assert!(assembly.contains("tinytsx_sqlite_execute_result"));
+    assert_assembles_as_x86_elf(&assembly, "hono-sqlite");
+}
+
 fn compile_linux(entry: &str, extra_arguments: &[&str]) -> String {
     let compiler = env!("CARGO_BIN_EXE_tinytsx");
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..");
@@ -129,6 +141,25 @@ fn compile_linux(entry: &str, extra_arguments: &[&str]) -> String {
     String::from_utf8(output.stdout).expect("assembly is UTF-8")
 }
 
+fn compile_linux_x86(entry: &str, extra_arguments: &[&str]) -> String {
+    let compiler = env!("CARGO_BIN_EXE_tinytsx");
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..");
+    let output = Command::new(compiler)
+        .current_dir(&root)
+        .arg("check")
+        .arg(entry)
+        .args(extra_arguments)
+        .args(["--target", "x86_64-unknown-linux-gnu", "--emit-asm"])
+        .output()
+        .expect("run TinyTSX compiler");
+    assert!(
+        output.status.success(),
+        "compiler failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8(output.stdout).expect("assembly is UTF-8")
+}
+
 fn assert_assembles_as_elf(assembly: &str, name: &str) {
     let temporary = temporary_directory(name);
     let assembly_path = temporary.join("generated.s");
@@ -137,6 +168,31 @@ fn assert_assembles_as_elf(assembly: &str, name: &str) {
 
     let clang = Command::new("clang")
         .arg("--target=aarch64-unknown-linux-gnu")
+        .arg("-c")
+        .arg(&assembly_path)
+        .arg("-o")
+        .arg(&object_path)
+        .output()
+        .expect("start clang");
+    assert!(
+        clang.status.success(),
+        "clang failed: {}",
+        String::from_utf8_lossy(&clang.stderr)
+    );
+    let object = fs::read(&object_path).expect("read ELF object");
+    assert_eq!(&object[..4], b"\x7fELF");
+
+    fs::remove_dir_all(temporary).expect("remove temporary directory");
+}
+
+fn assert_assembles_as_x86_elf(assembly: &str, name: &str) {
+    let temporary = temporary_directory(name);
+    let assembly_path = temporary.join("generated.s");
+    let object_path = temporary.join("generated.o");
+    fs::write(&assembly_path, assembly).expect("write generated assembly");
+
+    let clang = Command::new("clang")
+        .arg("--target=x86_64-unknown-linux-gnu")
         .arg("-c")
         .arg(&assembly_path)
         .arg("-o")
