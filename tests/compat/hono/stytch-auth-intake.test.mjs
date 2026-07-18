@@ -23,7 +23,8 @@ test("pins the next real-world Hono backend without widening its boundary", () =
   assert.equal(tracer.httpBehavior.status, "pass");
   assert.equal(tracer.referenceBehavior.status, "pass");
   assert.equal(tracer.persistenceAdapter.status, "pass");
-  assert.equal(tracer.packagedExample.status, "intake-pass");
+  assert.equal(tracer.packagedExample.status, "pass");
+  assert.ok(tracer.releaseGates.native.includes("test:release-installed"));
   assert.match(tracer.firstUnsupportedBoundary, /React\/Vite/);
   assert.match(tracer.firstUnsupportedBoundary, /live Stytch/);
 

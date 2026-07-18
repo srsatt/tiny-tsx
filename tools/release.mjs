@@ -51,6 +51,11 @@ for (const directory of ["compiler", "runtime", "sdk", "doc", "examples"]) {
     },
   });
 }
+mkdirSync(path.join(resources, "vendor"), {recursive: true});
+cpSync(path.join(root, "vendor", "hono"), path.join(resources, "vendor", "hono"), {
+  recursive: true,
+  filter: source => !source.split(path.sep).includes("node_modules"),
+});
 mkdirSync(path.join(resources, "frontend"), {recursive: true});
 for (const file of ["package.json", "package-lock.json"]) {
   cpSync(path.join(root, "frontend", file), path.join(resources, "frontend", file));

@@ -430,7 +430,7 @@
     },
     "packagedExample": {
       "path": "examples/hono-stytch-todo",
-      "status": "intake-pass",
+      "status": "pass",
       "sourceCopies": [
         {"source": "vendor/hono-examples/stytch-auth/api/index.ts", "packaged": "examples/hono-stytch-todo/server.ts"},
         {"source": "vendor/hono-examples/stytch-auth/api/TodoAPI.ts", "packaged": "examples/hono-stytch-todo/TodoAPI.ts"},
@@ -445,7 +445,7 @@
       "evidence": "tests/release/installed-native.test.mjs"
     },
     "releaseGates": {
-      "native": ["test:hono-stytch-todo"],
+      "native": ["test:hono-stytch-todo", "test:release-installed"],
       "reference": ["test:hono-stytch-todo-reference"]
     },
     "firstUnsupportedBoundary": "The admitted tracer is limited to the three pinned backend modules, the deterministic non-empty session-cookie boundary, one explicitly configured SQLite KV binding, sixteen TODO records per user, and 4 KiB text. JWT validation, live Stytch calls, ambient Cloudflare bindings, arbitrary KV values, the ASSETS mount, React/Vite, distributed actors, and general JavaScript class or dynamic-array compatibility remain unsupported."

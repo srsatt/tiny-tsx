@@ -112,6 +112,55 @@ test("ships runnable Hono, node-server, tinytsx serve, and Zod examples", async 
     await assertText(mapPort, "/map/second", 200, "second");
   }, {waitPath: "/map/ready"});
 
+  const stytchTodoPort = 39_504;
+  const stytchTodoBinary = binaryPath(project, "stytch-todo");
+  assertBuilt(build(
+    compiler,
+    project,
+    "hono-stytch-todo/server.ts",
+    stytchTodoBinary,
+    stytchTodoPort,
+    [
+      "--binding", "TODOS=sqlite-kv::memory:",
+      "--alias", `hono=${path.join(resources, "vendor/hono/src/index.ts")}`,
+      "--alias", `hono/cors=${path.join(resources, "vendor/hono/src/middleware/cors/index.ts")}`,
+      "--api", "hono=hono-stytch-todo/hono-api.d.ts",
+      "--api", "hono/cors=hono-stytch-todo/cors-api.d.ts",
+      "--api", "@hono/stytch-auth=hono-stytch-todo/stytch-api.d.ts",
+    ],
+  ), "Stytch TODO");
+  await withServer(stytchTodoBinary, stytchTodoPort, async () => {
+    await assertText(stytchTodoPort, "/api/todos", 401, "Unauthenticated");
+    const headers = {cookie: "stytch_session_jwt=release-user"};
+    const empty = await request(stytchTodoPort, "/api/todos", {headers});
+    assert.deepEqual(await empty.json(), {todos: []});
+    const created = await request(stytchTodoPort, "/api/todos", {
+      method: "POST",
+      headers: {...headers, "content-type": "application/json"},
+      body: JSON.stringify({todoText: "installed"}),
+    });
+    assert.equal(created.status, 200);
+    const body = await created.json();
+    assert.equal(body.todos.length, 1);
+    assert.equal(body.todos[0].text, "installed");
+    assert.equal(body.todos[0].completed, false);
+    const completed = await request(
+      stytchTodoPort,
+      `/api/todos/${body.todos[0].id}/complete`,
+      {method: "POST", headers},
+    );
+    assert.equal(completed.status, 200);
+    assert.deepEqual(await completed.json(), {
+      todos: [{...body.todos[0], completed: true}],
+    });
+    const deleted = await request(stytchTodoPort, `/api/todos/${body.todos[0].id}`, {
+      method: "DELETE",
+      headers,
+    });
+    assert.equal(deleted.status, 200);
+    assert.deepEqual(await deleted.json(), {todos: []});
+  }, {waitPath: "/api/todos"});
+
   const neutralPort = 39_491;
   const neutralBinary = binaryPath(project, "tiny-serve");
   assertBuilt(build(compiler, project, "tiny-serve/server.ts", neutralBinary, neutralPort), "tinytsx:serve");
