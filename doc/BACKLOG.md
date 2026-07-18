@@ -420,15 +420,28 @@ an API-expansion slice:
 - [ ] Retain the native Linux HTTP-contract evidence and update the tag-ready
       checklist without changing compiler/runtime/API sources between the two
       attestations.
-- [ ] Repeat the controlled control, actor, SQLite, and nested-profile
-      keep-alive workloads after pressure-aware idle scheduling; retain the
-      response-checked raw samples and update claims only from that evidence.
+- [x] Repeat the controlled control, actor, SQLite, and nested-profile
+      keep-alive workloads after pressure-aware idle scheduling and validate
+      every response-checked raw sample.
+- [ ] Commit the four adjacent JSON/Markdown report pairs, add their combined
+      summary, and synchronize performance/status claims before selecting the
+      exact-source release commit.
 - [ ] If either target exposes a functional regression, stop this release goal
       and groom the smallest failing seam as a separate implementation goal.
 
 Completion produces two attachable archives and a tag-ready checklist. It does
 not create or publish `v0.1.0-alpha.1`; publication remains an explicit later
 action.
+
+The pressure-aware rerun is complete at clean source commit `932743e`. It uses
+eight workers, keep-alive, five startup runs, and three 15-second load samples
+at concurrency 8/64 for both targets. All 48 load samples pass with success
+rate 1.0, and every TinyTSX process returns from 68 peak descriptors to its
+baseline of four. TinyTSX/Bun throughput ratios are 0.29x/0.47x for the basic
+control, 0.38x/0.63x for the actor route, 0.25x/0.39x for SQLite, and
+0.35x/0.59x for the nested profile. The correctness fix therefore carries a
+measurable control-path throughput and CPU cost; the release evidence must
+publish that tradeoff rather than claim a general performance improvement.
 
 #### Goal execution checkpoint — nested profile release slice
 
@@ -1749,6 +1762,16 @@ general AOT/JIT claim.
         16.20 ms p99, respectively. TinyTSX open descriptors return from 68 peak
         to 4 at every interval end. The basic, actor, SQLite, and user-auth Hono
         suites pass on Apple arm64 and assemble for Linux arm64.
+  - 2026-07-18: pressure-aware scheduling keeps the sixteen-request hot turn,
+    polls socket readiness for one millisecond while work is queued, bounds a
+    pressured idle connection to sixteen empty rotations, and preserves longer
+    idle reuse only when the queue is clear. The sustained basic, actor, SQLite,
+    and nested-profile rerun at clean source `932743e` passes all 48 samples and
+    restores descriptors from 68 to four. TinyTSX reaches 0.29–0.38x Bun at
+    concurrency 8 and 0.39–0.63x at concurrency 64. Compared with the earlier
+    basic control, this fixes single-worker starvation but reduces control
+    throughput and raises aggregate CPU, so it is retained as a bounded
+    correctness/stability tradeoff rather than a speedup.
 
 ### P5 — Research tracks outside the release critical path
 
