@@ -171,6 +171,63 @@ test("runs capability, malformed-input, and disposal failures in release servers
     await assertText(39_494, "/schema", 500, "internal server error", {method: "POST"});
   }, {waitPath: "/config", environment: {TINYTSX_BLOG_NAME: "Release Blog"}});
 
+  const nestedProfilePort = 39_503;
+  const nestedProfileBinary = binaryPath(project, "nested-profile");
+  assertBuilt(build(
+    compiler,
+    project,
+    "hono-nested-json/server.ts",
+    nestedProfileBinary,
+    nestedProfilePort,
+  ), "nested profile");
+  await withServer(nestedProfileBinary, nestedProfilePort, async () => {
+    await assertText(nestedProfilePort, "/profiles/schema", 200, "ready", {method: "POST"});
+    await assertText(
+      nestedProfilePort,
+      "/profiles/release",
+      201,
+      '{"id":"release","profile":{"name":"Release","preferences":{"theme":"dark","alerts":true}},"score":7}',
+      {
+        method: "POST",
+        headers: {"content-type": "application/json"},
+        body: '{"profile":{"name":"Release","preferences":{"theme":"dark","alerts":true}},"score":7}',
+      },
+    );
+    await assertText(
+      nestedProfilePort,
+      "/profiles/rolled-back",
+      500,
+      "internal server error",
+      {
+        method: "POST",
+        headers: {"content-type": "application/json"},
+        body: '{"profile":{"name":"Rollback","preferences":{"theme":"dark","alerts":false}},"score":null}',
+      },
+    );
+    await assertText(
+      nestedProfilePort,
+      "/profiles/rolled-back",
+      404,
+      '{"error":"Not Found"}',
+    );
+    await assertText(nestedProfilePort, "/profiles/malformed", 400, "bad request", {
+      method: "POST",
+      headers: {"content-type": "application/json"},
+      body: "{",
+    });
+    await assertText(
+      nestedProfilePort,
+      "/profiles/recovered",
+      201,
+      '{"id":"recovered","profile":{"name":"Recovered","preferences":{"theme":"light","alerts":false}},"score":null}',
+      {
+        method: "POST",
+        headers: {"content-type": "application/json"},
+        body: '{"profile":{"name":"Recovered","preferences":{"theme":"light","alerts":false}},"score":null}',
+      },
+    );
+  }, {waitPath: "/profiles/missing"});
+
   const actorBinary = binaryPath(project, "actors");
   assertBuilt(build(compiler, project, "hono-actors/server.ts", actorBinary, 39_495), "actors");
   await withServer(actorBinary, 39_495, async () => {

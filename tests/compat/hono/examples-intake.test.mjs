@@ -33,6 +33,7 @@ test("records the example matrix with executable evidence and boundaries", () =>
     "tinytsx-context-variables",
     "tinytsx-bounded-map",
     "tinytsx-json-body",
+    "tinytsx-nested-profile",
     "published-zod-openapi",
     "hono-node-server-entry",
     "tinytsx-serve-entry",
