@@ -16,7 +16,23 @@ pub(super) fn emit(program: &Program, options: &Options) -> Result<String, Strin
          extern tiny_u32 tinytsx_request_method_equals(const void *, const tiny_u8 *, tiny_usize);\n\
          extern tiny_u32 tinytsx_request_path_matches(const void *, const tiny_u8 *, tiny_usize);\n\
          extern tiny_u32 tinytsx_response_begin(void *, tiny_u16, tiny_u16);\n\
-         extern tiny_u32 tinytsx_html_write_static(void *, const tiny_u8 *, tiny_usize);\n",
+         extern tiny_u32 tinytsx_response_stream_begin(void *);\n\
+         extern tiny_u32 tinytsx_response_stream_chunk_static(void *, const tiny_u8 *, tiny_usize);\n\
+         extern tiny_u32 tinytsx_response_stream_chunk_begin(void *);\n\
+         extern tiny_u32 tinytsx_response_stream_chunk_end(void *);\n\
+         extern tiny_u32 tinytsx_html_write_static(void *, const tiny_u8 *, tiny_usize);\n\
+         extern tiny_u32 tinytsx_html_write_path_segment(void *, const void *, tiny_usize);\n\
+         extern tiny_u32 tinytsx_html_write_path_tail(void *, const void *, tiny_usize);\n\
+         extern tiny_u32 tinytsx_html_write_request_header(void *, const void *, const tiny_u8 *, tiny_usize);\n\
+         extern tiny_u32 tinytsx_html_write_request_json_field(void *, const void *, const tiny_u8 *, tiny_usize);\n\
+         extern tiny_u32 tinytsx_html_write_response_header(void *, const tiny_u8 *, tiny_usize);\n\
+         extern tiny_u32 tinytsx_html_write_request_cookie(void *, const void *, const tiny_u8 *, tiny_usize, const tiny_u8 *, tiny_usize);\n\
+         extern tiny_u32 tinytsx_html_write_environment_variable(void *, const tiny_u8 *, tiny_usize, const tiny_u8 *, tiny_usize, tiny_u32);\n\
+         extern tiny_u32 tinytsx_html_write_file_text(void *, const tiny_u8 *, tiny_usize, tiny_usize);\n\
+         extern tiny_u32 tinytsx_html_write_fetch_status(void *, const tiny_u8 *, tiny_usize);\n\
+         extern tiny_u32 tinytsx_html_write_query_parameter(void *, const void *, const tiny_u8 *, tiny_usize, const tiny_u8 *, tiny_usize, tiny_u32);\n\
+         extern tiny_u32 tinytsx_request_query_has(const void *, const tiny_u8 *, tiny_usize);\n\
+         extern tiny_u32 tinytsx_html_write_openai_chat_text(void *, const tiny_u8 *, tiny_usize, const tiny_u8 *, tiny_usize, const tiny_u8 *, tiny_usize);\n",
     );
 
     emit_data(&mut source, program);
@@ -183,19 +199,44 @@ fn emit_handler(source: &mut String, program: &Program) -> Result<(), String> {
                 .unwrap();
             }
             HandlerResponse::Text {
-                value: ValueExpression::StringLiteral { string, .. },
+                value,
                 status,
                 content_type,
             } => {
                 let content_type = content_type_id(content_type.as_deref());
                 writeln!(source, "    tiny_u32 status = tinytsx_response_begin(writer, {status}, {content_type});").unwrap();
                 source.push_str("    if (status != 0) return status;\n");
-                writeln!(
-                    source,
-                    "    return tinytsx_html_write_static(writer, tinytsx_string_{string}, {});",
-                    program.static_strings[*string].value.len(),
-                )
-                .unwrap();
+                emit_text_expression(source, value, program, "    ")?;
+                source.push_str("    return status;\n");
+            }
+            HandlerResponse::Stream {
+                chunks,
+                status,
+                content_type,
+            } => {
+                let content_type = content_type_id(content_type.as_deref());
+                writeln!(source, "    tiny_u32 status = tinytsx_response_begin(writer, {status}, {content_type});").unwrap();
+                source.push_str("    if (status != 0) return status;\n");
+                source.push_str("    status = tinytsx_response_stream_begin(writer);\n");
+                source.push_str("    if (status != 0) return status;\n");
+                for chunk in chunks {
+                    if let ValueExpression::StringLiteral { string, .. } = chunk {
+                        writeln!(
+                            source,
+                            "    status = tinytsx_response_stream_chunk_static(writer, tinytsx_string_{string}, {});",
+                            program.static_strings[*string].value.len(),
+                        )
+                        .unwrap();
+                        source.push_str("    if (status != 0) return status;\n");
+                    } else {
+                        source.push_str("    status = tinytsx_response_stream_chunk_begin(writer);\n");
+                        source.push_str("    if (status != 0) return status;\n");
+                        emit_text_expression(source, chunk, program, "    ")?;
+                        source.push_str("    status = tinytsx_response_stream_chunk_end(writer);\n");
+                        source.push_str("    if (status != 0) return status;\n");
+                    }
+                }
+                source.push_str("    return status;\n");
             }
             _ => {
                 return Err(
@@ -207,6 +248,195 @@ fn emit_handler(source: &mut String, program: &Program) -> Result<(), String> {
     }
     source.push_str("  return 5;\n}\n");
     Ok(())
+}
+
+fn emit_text_expression(
+    source: &mut String,
+    expression: &ValueExpression,
+    program: &Program,
+    indent: &str,
+) -> Result<(), String> {
+    match expression {
+        ValueExpression::StringLiteral { string, .. } => {
+            emit_write_call(
+                source,
+                indent,
+                &format!(
+                    "tinytsx_html_write_static(writer, tinytsx_string_{string}, {})",
+                    program.static_strings[*string].value.len()
+                ),
+            );
+        }
+        ValueExpression::Concat { values, .. } => {
+            for value in values {
+                emit_text_expression(source, value, program, indent)?;
+            }
+        }
+        ValueExpression::RouteParameter { segment, tail, .. } => {
+            let function = if *tail {
+                "tinytsx_html_write_path_tail"
+            } else {
+                "tinytsx_html_write_path_segment"
+            };
+            emit_write_call(
+                source,
+                indent,
+                &format!("{function}(writer, request, {segment})"),
+            );
+        }
+        ValueExpression::RequestHeader { header, .. } => {
+            emit_write_call(
+                source,
+                indent,
+                &format!(
+                    "tinytsx_html_write_request_header(writer, request, tinytsx_string_{header}, {})",
+                    program.static_strings[*header].value.len()
+                ),
+            );
+        }
+        ValueExpression::RequestJsonField { field, .. } => {
+            emit_write_call(
+                source,
+                indent,
+                &format!(
+                    "tinytsx_html_write_request_json_field(writer, request, tinytsx_string_{field}, {})",
+                    program.static_strings[*field].value.len()
+                ),
+            );
+        }
+        ValueExpression::RequestId { header, .. } => {
+            emit_write_call(
+                source,
+                indent,
+                &format!(
+                    "tinytsx_html_write_response_header(writer, tinytsx_string_{header}, {})",
+                    program.static_strings[*header].value.len()
+                ),
+            );
+        }
+        ValueExpression::RequestCookie {
+            cookie, fallback, ..
+        } => {
+            let (fallback, fallback_len) = optional_string(program, *fallback);
+            emit_write_call(
+                source,
+                indent,
+                &format!(
+                    "tinytsx_html_write_request_cookie(writer, request, tinytsx_string_{cookie}, {}, {fallback}, {fallback_len})",
+                    program.static_strings[*cookie].value.len()
+                ),
+            );
+        }
+        ValueExpression::EnvironmentVariable {
+            name,
+            required,
+            fallback,
+            ..
+        } => {
+            let (fallback, fallback_len) = optional_string(program, *fallback);
+            emit_write_call(
+                source,
+                indent,
+                &format!(
+                    "tinytsx_html_write_environment_variable(writer, tinytsx_string_{name}, {}, {fallback}, {fallback_len}, {})",
+                    program.static_strings[*name].value.len(),
+                    u32::from(*required)
+                ),
+            );
+        }
+        ValueExpression::FileText {
+            path, max_bytes, ..
+        } => {
+            emit_write_call(
+                source,
+                indent,
+                &format!(
+                    "tinytsx_html_write_file_text(writer, tinytsx_string_{path}, {}, {max_bytes})",
+                    program.static_strings[*path].value.len()
+                ),
+            );
+        }
+        ValueExpression::FetchStatus { url, .. } => {
+            emit_write_call(
+                source,
+                indent,
+                &format!(
+                    "tinytsx_html_write_fetch_status(writer, tinytsx_string_{url}, {})",
+                    program.static_strings[*url].value.len()
+                ),
+            );
+        }
+        ValueExpression::QueryParameter {
+            query,
+            fallback,
+            escape_html,
+            ..
+        } => {
+            let (fallback, fallback_len) = optional_string(program, *fallback);
+            emit_write_call(
+                source,
+                indent,
+                &format!(
+                    "tinytsx_html_write_query_parameter(writer, request, tinytsx_string_{query}, {}, {fallback}, {fallback_len}, {})",
+                    program.static_strings[*query].value.len(),
+                    u32::from(*escape_html)
+                ),
+            );
+        }
+        ValueExpression::QueryConditional {
+            query,
+            when_present,
+            when_absent,
+            ..
+        } => {
+            writeln!(
+                source,
+                "{indent}if (tinytsx_request_query_has(request, tinytsx_string_{query}, {})) {{",
+                program.static_strings[*query].value.len()
+            )
+            .unwrap();
+            emit_text_expression(source, when_present, program, &format!("{indent}  "))?;
+            writeln!(source, "{indent}}} else {{").unwrap();
+            emit_text_expression(source, when_absent, program, &format!("{indent}  "))?;
+            writeln!(source, "{indent}}}").unwrap();
+        }
+        ValueExpression::OpenAiChatText {
+            url,
+            authorization,
+            body,
+            ..
+        } => {
+            emit_write_call(
+                source,
+                indent,
+                &format!(
+                    "tinytsx_html_write_openai_chat_text(writer, tinytsx_string_{url}, {}, tinytsx_string_{authorization}, {}, tinytsx_string_{body}, {})",
+                    program.static_strings[*url].value.len(),
+                    program.static_strings[*authorization].value.len(),
+                    program.static_strings[*body].value.len()
+                ),
+            );
+        }
+        _ => return Err("portable x86 backend does not yet support this text expression".to_owned()),
+    }
+    Ok(())
+}
+
+fn emit_write_call(source: &mut String, indent: &str, call: &str) {
+    writeln!(source, "{indent}status = {call};").unwrap();
+    writeln!(source, "{indent}if (status != 0) return status;").unwrap();
+}
+
+fn optional_string(program: &Program, string: Option<usize>) -> (String, usize) {
+    string.map_or_else(
+        || ("(const tiny_u8 *)0".to_owned(), 0),
+        |string| {
+            (
+                format!("tinytsx_string_{string}"),
+                program.static_strings[string].value.len(),
+            )
+        },
+    )
 }
 
 fn content_type_id(content_type: Option<&str>) -> u16 {

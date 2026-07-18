@@ -68,6 +68,42 @@ fn html_program(target: Target) -> Program {
     .expect("valid HTML HIR fixture")
 }
 
+fn dynamic_program(target: Target) -> Program {
+    serde_json::from_str(&format!(
+        r#"{{
+          "version": 2,
+          "target": "{}",
+          "entry": "server.ts",
+          "modules": [{{"path": "server.ts"}}],
+          "functions": [],
+          "components": [],
+          "handlers": [{{
+            "method": "GET",
+            "path": "/users/:id",
+            "response": {{
+              "kind": "text",
+              "value": {{
+                "kind": "concat",
+                "values": [
+                  {{"kind":"stringLiteral","string":0,"span":{{"file":"server.ts","line":1,"column":1,"endLine":1,"endColumn":2}}}},
+                  {{"kind":"routeParameter","name":"id","segment":1,"tail":false,"span":{{"file":"server.ts","line":1,"column":1,"endLine":1,"endColumn":2}}}}
+                ],
+                "span": {{"file":"server.ts","line":1,"column":1,"endLine":1,"endColumn":2}}
+              }},
+              "status": 200,
+              "contentType": "application/json"
+            }},
+            "span": {{"file":"server.ts","line":1,"column":1,"endLine":1,"endColumn":2}}
+          }}],
+          "staticStrings": [{{"id":0,"value":"{{\"id\":\""}}],
+          "constants": [],
+          "statistics": {{"modules":1,"functions":0,"components":0,"constants":0,"staticHtmlBytes":7,"dynamicHtmlExpressions":1}}
+        }}"#,
+        target.triple()
+    ))
+    .expect("valid dynamic HIR fixture")
+}
+
 #[test]
 fn emits_linux_x86_64_static_handler_assembly() {
     let assembly = emit(
@@ -135,4 +171,13 @@ fn declares_components_before_nested_calls() {
         Options::default(),
     )
     .expect("emit forward component call");
+}
+
+#[test]
+fn emits_dynamic_route_text_for_both_x86_targets() {
+    for target in [Target::LinuxX86_64, Target::MacosX86_64] {
+        let assembly = emit(&dynamic_program(target), target, Options::default())
+            .expect("emit dynamic route response");
+        assert!(assembly.contains("tinytsx_html_write_path_segment"));
+    }
 }

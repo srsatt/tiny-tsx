@@ -2,12 +2,15 @@ use std::{
     fs,
     path::PathBuf,
     process::Command,
+    sync::atomic::{AtomicU64, Ordering},
     time::{SystemTime, UNIX_EPOCH},
 };
 
 use crate::{hir::Program, target::Target};
 
 use super::{Options, portable_c};
+
+static NEXT_TEMP_DIRECTORY: AtomicU64 = AtomicU64::new(0);
 
 pub(super) fn emit(program: &Program, options: Options, target: Target) -> Result<String, String> {
     let source = portable_c::emit(program, &options)?;
@@ -21,7 +24,11 @@ fn compile_to_assembly(source: &str, target: Target) -> Result<String, String> {
         .as_nanos();
     let directory = std::env::temp_dir()
         .join("tinytsx")
-        .join(format!("x86-codegen-{}-{nonce}", std::process::id()));
+        .join(format!(
+            "x86-codegen-{}-{nonce}-{}",
+            std::process::id(),
+            NEXT_TEMP_DIRECTORY.fetch_add(1, Ordering::Relaxed)
+        ));
     fs::create_dir_all(&directory)
         .map_err(|error| format!("could not create {}: {error}", directory.display()))?;
     let source_path = directory.join("generated.c");
