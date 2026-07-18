@@ -1829,6 +1829,7 @@ function executeStatement(
     && (
       expression.operatorToken.kind === ts.SyntaxKind.EqualsToken
       || expression.operatorToken.kind === ts.SyntaxKind.QuestionQuestionEqualsToken
+      || expression.operatorToken.kind === ts.SyntaxKind.BarBarEqualsToken
       || expression.operatorToken.kind === ts.SyntaxKind.PlusEqualsToken
     )
   ) {
@@ -4577,6 +4578,14 @@ function evaluateExpression(
     }
     if (operator === ts.SyntaxKind.QuestionQuestionEqualsToken) {
       if (left.kind !== "undefined" && left.kind !== "null") return left;
+      const right = evaluate(evaluator, expression.right, module, environment, instance);
+      assign(evaluator, expression.left, right, module, environment, instance);
+      return right;
+    }
+    if (operator === ts.SyntaxKind.BarBarEqualsToken) {
+      const decision = truthiness(left);
+      if (decision === true) return left;
+      if (decision === undefined) return unknown("logical OR assignment operand is not closed");
       const right = evaluate(evaluator, expression.right, module, environment, instance);
       assign(evaluator, expression.left, right, module, environment, instance);
       return right;

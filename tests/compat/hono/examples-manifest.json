@@ -386,7 +386,7 @@
       "status": "diagnostic-pass",
       "evidence": "tests/compat/hono/stytch-auth-intake.test.mjs",
       "diagnostic": "TINY1403",
-      "messageFragment": "expression effect is not supported: replaceRequest ||=",
+      "messageFragment": "route handler response is not closed (thrown)",
       "runtimeAliases": {
         "hono": "vendor/hono/src/index.ts",
         "hono/cors": "vendor/hono/src/middleware/cors/index.ts",

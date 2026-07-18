@@ -1114,6 +1114,30 @@ test("lowers an unchanged fluent constructed default application", () => {
   assert.ok(hir.staticStrings.some(value => value.value === "fluent route"));
 });
 
+test("keeps supported fluent routes beside an excluded upstream mount", () => {
+  const entry = write("fluent-default-mount.ts", `
+    import type {} from "@hono/stytch-auth";
+    import {Hono} from "hono";
+    export default new Hono<{}>()
+      .get("/health", context => context.text("healthy"))
+      .mount("/", (request, environment) => environment.ASSETS.fetch(request));
+  `);
+
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+    apiAliases: {
+      hono: path.join(repository, "tests/compat/hono/api.d.ts"),
+      "@hono/stytch-auth": path.join(repository, "tests/compat/stytch-auth/api.d.ts"),
+    },
+  });
+
+  assert.deepEqual(hir.handlers.map(handler => [handler.method, handler.path]), [
+    ["GET", "/health"],
+  ]);
+  assert.ok(hir.staticStrings.some(value => value.value === "healthy"));
+});
+
 test("traces a TinyTSX serve call as the application root and source port", () => {
   const file = write("served-application.ts", `
     import {serve as start} from "tinytsx:serve";
