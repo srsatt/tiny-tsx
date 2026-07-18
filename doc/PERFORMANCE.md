@@ -7,42 +7,46 @@ Last updated: 2026-07-17
 TinyTSX is compelling for deployment and resident footprint, but the sustained
 eight-worker keep-alive matrix does not show throughput or tail-latency parity
 with Bun. The current comparison covers Hono basic, request-time dynamic JSX,
-one decoded optional route parameter, one bounded warm-cache file read, finite
-text streaming, one counter actor, and one in-memory empty SQLite query. Every
-one of the 84 load samples passed its response contract.
+one decoded optional route parameter, bounded warm-cache 21-byte and 22,173-byte
+file responses, finite text streaming, one counter actor, and one in-memory
+empty SQLite query. Every one of the 96 load samples passed its response
+contract.
 
 Across three 15-second samples at concurrency 8 and 64, TinyTSX reaches
-0.24–0.54x Bun throughput at concurrency 8 and 0.40–0.72x at concurrency 64.
-Its concurrency-64 p99 is 9.575–20.939 ms versus Bun at 0.736–1.698 ms. The
-connection-turn hardening therefore holds over the longer run, but it does not
-close the owner/scheduling tail-latency gap.
+0.24–0.54x Bun throughput at concurrency 8 and 0.40–0.72x at concurrency 64 on
+the seven small-response routes. The exact 22,173-byte warm-cache response is
+the exception: TinyTSX reaches 1.30x Bun at concurrency 8 and 1.78x at 64.
+TinyTSX's concurrency-64 p99 remains higher on every route at 9.575–22.030 ms
+versus Bun at 0.736–5.104 ms.
 
 The honest current claim is:
 
 - **yes for footprint:** TinyTSX stays at 6.30–8.06 MiB warm RSS; Bun uses
-  8.7x–24.6x as much across the seven routes;
+  8.7x–24.6x as much across the eight routes;
 - **repeated startup is close:** TinyTSX takes 20.00–22.86 ms and Bun takes
   17.49–21.31 ms, while TinyTSX's separately reported first post-build launch
-  remains a 449.24–547.26 ms outlier;
-- **no throughput-parity claim:** TinyTSX reaches 40–72% of Bun at concurrency
-  64 on these exact routes;
-- **tail latency remains open:** TinyTSX's concurrency-64 p99 is 9.3–18.6x
-  Bun's despite improving throughput ratios under load;
+  remains a 437.66–547.26 ms outlier;
+- **no general throughput-parity claim:** TinyTSX reaches 40–72% of Bun at
+  concurrency 64 on the small-response routes, while the exact 22 KiB route
+  reaches 178%;
+- **tail latency remains open:** TinyTSX's concurrency-64 p99 is 4.3–18.6x
+  Bun's despite the large-response throughput result;
 - **owner boundaries are visible:** the actor route is 11.5% below TinyTSX's
   basic control at concurrency 64 and the SQLite route is 24.7% below it;
 - **process pressure needs profiling:** TinyTSX records greater aggregate CPU
-  on the six non-file routes; Bun records more CPU on the file route, while
-  TinyTSX still records more Unix syscalls and context switches there;
+  on seven routes; Bun records more on the 21-byte file route, while TinyTSX
+  records more Unix syscalls and context switches on all eight;
 - **bounded resources recover:** every TinyTSX workload returns to four open
-  descriptors; median peaks are 68 for non-file routes and 71 for file reads.
+  descriptors; median peaks are 68 for non-file routes, 71 for the 21-byte file,
+  and 73 for the 22 KiB file.
 
 The current summary is
 `benchmarks/results/2026-07-17-m5-max-sustained-15s-summary.md`; its adjacent
 JSON files retain every raw sample and each per-workload Markdown report pins
-the response differences and limitations. Cold/large/replaced files, non-empty
-or on-disk SQLite, transaction writes, large responses, competing/catch-all
-route shapes, JSON branch mixes, cancellation, and multiple actors remain
-unmeasured.
+the response differences and limitations. Cold/replaced/binary files, responses
+above 32 KiB, streaming/range/compression behavior, non-empty or on-disk
+SQLite, transaction writes, competing/catch-all route shapes, JSON branch
+mixes, cancellation, and multiple actors remain unmeasured.
 
 The five-second alpha comparison and earlier connection-close, JSX, streaming,
 Worker, and AI-provider results below are historical evidence. They remain
