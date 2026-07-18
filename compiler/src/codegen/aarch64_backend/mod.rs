@@ -149,6 +149,37 @@ fn emit_config(assembly: &mut Emitter, options: &Options, program: &Program) {
     emit_immediate(assembly, "x0", program.actors.len() as u64);
     asm_line!(assembly, "    ret");
 
+    assembly.global_function(format_args!("tinytsx_config_supervisors"));
+    emit_immediate(assembly, "x0", program.supervisors.len() as u64);
+    asm_line!(assembly, "    ret");
+
+    for (name, within_ms) in [
+        ("tinytsx_supervisor_restart_max", false),
+        ("tinytsx_supervisor_restart_within_ms", true),
+    ] {
+        assembly.global_function(format_args!("{name}"));
+        for (index, supervisor) in program.supervisors.iter().enumerate() {
+            asm_line!(assembly, "    cmp x0, #{index}");
+            asm_line!(assembly, "    b.eq L{name}_{index}");
+            let _ = supervisor;
+        }
+        asm_line!(assembly, "    mov x0, #0");
+        asm_line!(assembly, "    ret");
+        for (index, supervisor) in program.supervisors.iter().enumerate() {
+            asm_line!(assembly, "L{name}_{index}:");
+            emit_immediate(
+                assembly,
+                "x0",
+                if within_ms {
+                    supervisor.within_ms
+                } else {
+                    supervisor.max_restarts as u64
+                },
+            );
+            asm_line!(assembly, "    ret");
+        }
+    }
+
     for (name, selector) in [
         ("tinytsx_actor_operation", 0_u8),
         ("tinytsx_actor_initial_state", 1_u8),
@@ -156,6 +187,7 @@ fn emit_config(assembly: &mut Emitter, options: &Options, program: &Program) {
         ("tinytsx_actor_failure_message", 3_u8),
         ("tinytsx_actor_restart_max", 4_u8),
         ("tinytsx_actor_restart_within_ms", 5_u8),
+        ("tinytsx_actor_supervisor", 6_u8),
     ] {
         assembly.global_function(format_args!("{name}"));
         for (index, actor) in program.actors.iter().enumerate() {
@@ -180,10 +212,13 @@ fn emit_config(assembly: &mut Emitter, options: &Options, program: &Program) {
                     .restart
                     .as_ref()
                     .map_or(0, |restart| restart.max_restarts as u64),
-                _ => actor
+                5 => actor
                     .restart
                     .as_ref()
                     .map_or(0, |restart| restart.within_ms),
+                _ => actor
+                    .supervisor
+                    .map_or(0, |supervisor| supervisor as u64 + 1),
             };
             emit_immediate(assembly, "x0", value);
             asm_line!(assembly, "    ret");

@@ -13,7 +13,7 @@ interface ImportedOperation {
   operation: string;
 }
 
-type BuiltinResource = "actor" | "database" | "statement";
+type BuiltinResource = "actor" | "database" | "statement" | "supervisor";
 
 /** Validates protected built-ins before symbolic application execution. */
 export function validateBuiltinOperations(
@@ -23,6 +23,8 @@ export function validateBuiltinOperations(
   allowedWriteRoots: readonly string[],
 ): void {
   const diagnostics: Diagnostic[] = [];
+  const supervisorDeclarations: Array<{node: ts.Node; sourceFile: ts.SourceFile}> = [];
+  const supervisorChildren = new Map<string, Array<{node: ts.Node; sourceFile: ts.SourceFile}>>();
   for (const module of graph.modules) {
     const named = new Map<string, ImportedOperation>();
     const namespaces = new Map<string, string>();
@@ -107,6 +109,16 @@ export function validateBuiltinOperations(
           );
         } else if (imported.specifier === "tinytsx:actors" && imported.operation === "spawn") {
           validateActorSpawn(diagnostics, invocation, node, module.sourceFile, resources);
+          const supervisor = actorSupervisorBinding(invocation, resources);
+          if (supervisor !== undefined) {
+            const key = `${module.path}\0${supervisor}`;
+            const children = supervisorChildren.get(key) ?? [];
+            children.push({node, sourceFile: module.sourceFile});
+            supervisorChildren.set(key, children);
+          }
+        } else if (imported.specifier === "tinytsx:actors" && imported.operation === "supervise") {
+          validateActorSupervisor(diagnostics, invocation, node, module.sourceFile);
+          supervisorDeclarations.push({node, sourceFile: module.sourceFile});
         } else if (imported.specifier === "tinytsx:sqlite") {
           addDiagnostic(
             diagnostics,
@@ -123,7 +135,7 @@ export function validateBuiltinOperations(
             `actor operation \`tinytsx:actors.${imported.operation}\` is outside the alpha surface`,
             node,
             module.sourceFile,
-            "use spawn and CounterActorRef from `tinytsx --list-builtins`",
+            "use spawn, supervise, and declared actor refs from `tinytsx --list-builtins`",
           );
         }
       } else if (
@@ -135,12 +147,87 @@ export function validateBuiltinOperations(
         if (resource !== undefined) {
           validateResourceCall(diagnostics, resource, node, module.sourceFile, resources);
         }
+      } else if (
+        ts.isIdentifier(node)
+        && resources.get(node.text) === "supervisor"
+        && !isAllowedSupervisorReference(node, named, namespaces)
+      ) {
+        addDiagnostic(
+          diagnostics,
+          "TINY1520",
+          "supervisor values may only be passed to a static fallible actor spawn",
+          node,
+          module.sourceFile,
+          "pass the module-scope supervisor as ActorOptions.supervisor without returning, exporting, or storing it",
+        );
       }
       ts.forEachChild(node, visit);
     };
     visit(module.sourceFile);
   }
+  for (const declaration of supervisorDeclarations.slice(8)) {
+    addDiagnostic(
+      diagnostics,
+      "TINY1520",
+      "an application supports at most 8 root supervisors",
+      declaration.node,
+      declaration.sourceFile,
+      "remove the extra root supervisor or split the application",
+    );
+  }
+  for (const children of supervisorChildren.values()) {
+    for (const child of children.slice(16)) {
+      addDiagnostic(
+        diagnostics,
+        "TINY1520",
+        "a root supervisor supports at most 16 static children",
+        child.node,
+        child.sourceFile,
+        "remove the extra child or assign it to another root supervisor",
+      );
+    }
+  }
   if (diagnostics.length > 0) throw new CompileFailure(diagnostics);
+}
+
+function actorSupervisorBinding(
+  invocation: ts.CallExpression | ts.NewExpression | undefined,
+  resources: ReadonlyMap<string, BuiltinResource>,
+): string | undefined {
+  const options = invocation?.arguments?.[2];
+  if (options === undefined || !ts.isObjectLiteralExpression(options)) return undefined;
+  for (const property of options.properties) {
+    if (
+      ts.isPropertyAssignment(property)
+      && ts.isIdentifier(property.name)
+      && property.name.text === "supervisor"
+      && ts.isIdentifier(property.initializer)
+      && resources.get(property.initializer.text) === "supervisor"
+    ) return property.initializer.text;
+  }
+  return undefined;
+}
+
+function isAllowedSupervisorReference(
+  node: ts.Identifier,
+  named: ReadonlyMap<string, ImportedOperation>,
+  namespaces: ReadonlyMap<string, string>,
+): boolean {
+  if (ts.isVariableDeclaration(node.parent) && node.parent.name === node) return true;
+  const property = node.parent;
+  if (
+    !ts.isPropertyAssignment(property)
+    || property.initializer !== node
+    || !ts.isIdentifier(property.name)
+    || property.name.text !== "supervisor"
+  ) return false;
+  const options = property.parent;
+  const invocation = options.parent;
+  return ts.isObjectLiteralExpression(options)
+    && (ts.isCallExpression(invocation) || ts.isNewExpression(invocation))
+    && invocation.arguments?.[2] === options
+    && importedInvocation(invocation, named, namespaces)?.specifier === "tinytsx:actors"
+    && importedInvocation(invocation, named, namespaces)?.operation === "spawn";
 }
 
 function importedInvocation(
@@ -193,6 +280,11 @@ function collectResourceBindings(
         }
         if (imported?.specifier === "tinytsx:actors" && imported.operation === "spawn") {
           resources.set(name, "actor");
+          changed = true;
+          continue;
+        }
+        if (imported?.specifier === "tinytsx:actors" && imported.operation === "supervise") {
+          resources.set(name, "supervisor");
           changed = true;
           continue;
         }
@@ -375,6 +467,7 @@ function validateActorSpawn(
   const options = arguments_?.[2];
   const fallibleBehavior = behavior !== undefined && isFallibleCounterBehavior(behavior);
   const restartConfigured = hasActorOption(options, "restart");
+  const supervisorConfigured = hasActorOption(options, "supervisor");
   const persistenceConfigured = hasActorOption(options, "persistence");
   const validBehavior = behavior !== undefined
     && (ts.isIdentifier(behavior)
@@ -391,7 +484,11 @@ function validateActorSpawn(
     || !validActorOptions(options, resources)
     || behavior !== undefined
       && !ts.isIdentifier(behavior)
-      && (fallibleBehavior !== restartConfigured || fallibleBehavior && persistenceConfigured)
+      && (
+        fallibleBehavior !== (restartConfigured || supervisorConfigured)
+        || restartConfigured && supervisorConfigured
+        || fallibleBehavior && persistenceConfigured
+      )
   ) {
     addDiagnostic(
       diagnostics,
@@ -499,11 +596,63 @@ function validActorOptions(
       if (!validActorPersistence(property.initializer, resources)) return false;
     } else if (property.name.text === "restart") {
       if (!validActorRestart(property.initializer)) return false;
+    } else if (property.name.text === "supervisor") {
+      if (!ts.isIdentifier(property.initializer)
+        || resources.get(property.initializer.text) !== "supervisor") return false;
     } else {
       return false;
     }
   }
   return true;
+}
+
+function validateActorSupervisor(
+  diagnostics: Diagnostic[],
+  invocation: ts.CallExpression | ts.NewExpression | undefined,
+  node: ts.Node,
+  sourceFile: ts.SourceFile,
+): void {
+  const options = invocation?.arguments?.[0];
+  if (
+    invocation?.arguments?.length !== 1
+    || options === undefined
+    || !validActorSupervisorOptions(options)
+  ) {
+    addDiagnostic(
+      diagnostics,
+      "TINY1520",
+      "supervise requires one static oneForOne policy with maxRestarts 1..16 and withinMs 1..60000",
+      node,
+      sourceFile,
+    );
+  }
+}
+
+function validActorSupervisorOptions(expression: ts.Expression): boolean {
+  if (!ts.isObjectLiteralExpression(expression) || expression.properties.length !== 3) return false;
+  let strategy = false;
+  let maxRestarts: number | undefined;
+  let withinMs: number | undefined;
+  for (const property of expression.properties) {
+    if (!ts.isPropertyAssignment(property) || !ts.isIdentifier(property.name)) return false;
+    if (property.name.text === "strategy") {
+      strategy = ts.isStringLiteral(property.initializer)
+        && property.initializer.text === "oneForOne";
+    } else if (property.name.text === "maxRestarts") {
+      maxRestarts = staticInteger(property.initializer);
+    } else if (property.name.text === "withinMs") {
+      withinMs = staticInteger(property.initializer);
+    } else {
+      return false;
+    }
+  }
+  return strategy
+    && maxRestarts !== undefined
+    && maxRestarts >= 1
+    && maxRestarts <= 16
+    && withinMs !== undefined
+    && withinMs >= 1
+    && withinMs <= 60_000;
 }
 
 function validActorRestart(expression: ts.Expression): boolean {

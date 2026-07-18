@@ -46,6 +46,7 @@ struct BuildReport<'a> {
     workers: usize,
     application_workers: usize,
     logical_workers: usize,
+    supervisors: usize,
     actors: usize,
     sqlite_databases: usize,
     provider_workers: usize,
@@ -304,6 +305,9 @@ fn write_report(
     if actors {
         runtime_features.push("bounded-local-actors");
     }
+    if !compilation.program.supervisors.is_empty() {
+        runtime_features.push("bounded-one-for-one-supervision");
+    }
     if sqlite {
         runtime_features.push("bounded-sqlite");
     }
@@ -321,6 +325,7 @@ fn write_report(
         workers: options.workers,
         application_workers: usize::from(application_pool) * options.workers,
         logical_workers: compilation.program.workers.len(),
+        supervisors: compilation.program.supervisors.len(),
         actors: compilation.program.actors.len(),
         sqlite_databases: compilation.program.sqlite_databases.len(),
         provider_workers: usize::from(provider_transport) * options.workers,
@@ -390,6 +395,10 @@ fn print_summary(
     println!(
         "Actors:              {} local actor(s)",
         compilation.program.actors.len()
+    );
+    println!(
+        "Supervisors:         {} root supervisor(s)",
+        compilation.program.supervisors.len()
     );
     println!(
         "SQLite:              {} database owner(s)",

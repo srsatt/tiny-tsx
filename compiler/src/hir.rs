@@ -16,6 +16,8 @@ pub struct Program {
     #[serde(default)]
     pub workers: Vec<WorkerModule>,
     #[serde(default)]
+    pub supervisors: Vec<SupervisorModule>,
+    #[serde(default)]
     pub actors: Vec<ActorModule>,
     #[serde(default, rename = "sqliteDatabases")]
     pub sqlite_databases: Vec<SqliteDatabase>,
@@ -118,7 +120,24 @@ pub struct ActorModule {
     #[serde(default)]
     pub restart: Option<ActorRestart>,
     #[serde(default)]
+    pub supervisor: Option<usize>,
+    #[serde(default)]
     pub persistence: Option<ActorPersistence>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SupervisorModule {
+    pub id: usize,
+    pub strategy: SupervisorStrategy,
+    pub max_restarts: usize,
+    pub within_ms: u64,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SupervisorStrategy {
+    OneForOne,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -999,6 +1018,7 @@ impl Program {
                 return Err(format!("worker {index} references a missing module"));
             }
         }
+        validate_actor_supervision(&self.supervisors, &self.actors)?;
         for (index, actor) in self.actors.iter().enumerate() {
             if actor.id != index {
                 return Err(format!("actor id {} is not canonical", actor.id));
@@ -1010,29 +1030,34 @@ impl Program {
                 ActorOperation::Counter
                     if actor.initial_json.is_some()
                         || actor.failure_message.is_some()
-                        || actor.restart.is_some() =>
+                        || actor.restart.is_some()
+                        || actor.supervisor.is_some() =>
                 {
                     return Err(format!(
                         "counter actor {index} has fallible/JSON configuration"
                     ));
                 }
                 ActorOperation::FallibleCounter => {
-                    let Some(restart) = &actor.restart else {
-                        return Err(format!(
-                            "fallible counter actor {index} has no restart policy"
-                        ));
-                    };
                     if actor.initial_json.is_some()
                         || actor.failure_message.is_none()
                         || actor.persistence.is_some()
-                        || restart.max_restarts == 0
-                        || restart.max_restarts > 16
-                        || restart.within_ms == 0
-                        || restart.within_ms > 60_000
                     {
                         return Err(format!(
                             "fallible counter actor {index} has invalid restart configuration"
                         ));
+                    }
+                    match (&actor.restart, actor.supervisor) {
+                        (Some(restart), None)
+                            if restart.max_restarts > 0
+                                && restart.max_restarts <= 16
+                                && restart.within_ms > 0
+                                && restart.within_ms <= 60_000 => {}
+                        (None, Some(supervisor)) if supervisor < self.supervisors.len() => {}
+                        _ => {
+                            return Err(format!(
+                                "fallible counter actor {index} has invalid restart configuration"
+                            ));
+                        }
                     }
                 }
                 ActorOperation::JsonMailbox => {
@@ -1047,7 +1072,10 @@ impl Program {
                     if actor.persistence.is_some() {
                         return Err(format!("JSON actor {index} cannot use counter persistence"));
                     }
-                    if actor.failure_message.is_some() || actor.restart.is_some() {
+                    if actor.failure_message.is_some()
+                        || actor.restart.is_some()
+                        || actor.supervisor.is_some()
+                    {
                         return Err(format!("JSON actor {index} has restart configuration"));
                     }
                 }
@@ -2853,6 +2881,56 @@ fn validate_constant_value(value: &ConstantValue, depth: usize) -> Result<(), St
     }
 }
 
+fn validate_actor_supervision(
+    supervisors: &[SupervisorModule],
+    actors: &[ActorModule],
+) -> Result<(), String> {
+    if supervisors.len() > 8 {
+        return Err("program exceeds the 8-supervisor limit".to_owned());
+    }
+    for (index, supervisor) in supervisors.iter().enumerate() {
+        if supervisor.id != index {
+            return Err(format!("supervisor id {} is not canonical", supervisor.id));
+        }
+        if supervisor.max_restarts == 0
+            || supervisor.max_restarts > 16
+            || supervisor.within_ms == 0
+            || supervisor.within_ms > 60_000
+        {
+            return Err(format!(
+                "supervisor {index} has invalid restart configuration"
+            ));
+        }
+    }
+
+    let mut children = vec![0_usize; supervisors.len()];
+    for (index, actor) in actors.iter().enumerate() {
+        let Some(supervisor) = actor.supervisor else {
+            continue;
+        };
+        let Some(count) = children.get_mut(supervisor) else {
+            return Err(format!("actor {index} references a missing supervisor"));
+        };
+        if !matches!(actor.operation, ActorOperation::FallibleCounter)
+            || actor.restart.is_some()
+            || actor.persistence.is_some()
+        {
+            return Err(format!(
+                "actor {index} has invalid supervised configuration"
+            ));
+        }
+        *count += 1;
+    }
+    for (supervisor, children) in children.into_iter().enumerate() {
+        if children == 0 || children > 16 {
+            return Err(format!(
+                "supervisor {supervisor} child count is outside 1..=16"
+            ));
+        }
+    }
+    Ok(())
+}
+
 fn validate_actor_json(input: &str) -> Result<(), String> {
     if input.is_empty() || input.len() > 4_096 {
         return Err("is outside the 1..=4096 byte limit".to_owned());
@@ -2988,6 +3066,82 @@ mod memory_tests {
         assert_eq!(
             validate_memory_report(&memory, &modules),
             Err("memory summary does not match allocation sites".to_owned()),
+        );
+    }
+}
+
+#[cfg(test)]
+mod actor_supervision_tests {
+    use super::*;
+
+    fn supervisor() -> SupervisorModule {
+        SupervisorModule {
+            id: 0,
+            strategy: SupervisorStrategy::OneForOne,
+            max_restarts: 2,
+            within_ms: 60_000,
+        }
+    }
+
+    fn child(supervisor: Option<usize>) -> ActorModule {
+        ActorModule {
+            id: 0,
+            operation: ActorOperation::FallibleCounter,
+            initial_state: 0,
+            initial_json: None,
+            mailbox_capacity: 64,
+            failure_message: Some(-1),
+            restart: None,
+            supervisor,
+            persistence: None,
+        }
+    }
+
+    #[test]
+    fn validates_supervisor_cross_references_and_child_bounds() {
+        assert_eq!(
+            validate_actor_supervision(&[supervisor()], &[child(Some(0))]),
+            Ok(())
+        );
+        assert_eq!(
+            validate_actor_supervision(&[supervisor()], &[child(Some(1))]),
+            Err("actor 0 references a missing supervisor".to_owned())
+        );
+        assert_eq!(
+            validate_actor_supervision(&[supervisor()], &[]),
+            Err("supervisor 0 child count is outside 1..=16".to_owned())
+        );
+
+        let mut children = (0..17).map(|_| child(Some(0))).collect::<Vec<_>>();
+        for (id, child) in children.iter_mut().enumerate() {
+            child.id = id;
+        }
+        assert_eq!(
+            validate_actor_supervision(&[supervisor()], &children),
+            Err("supervisor 0 child count is outside 1..=16".to_owned())
+        );
+    }
+
+    #[test]
+    fn rejects_local_restart_or_persistence_on_a_supervised_child() {
+        let mut restarted = child(Some(0));
+        restarted.restart = Some(ActorRestart {
+            max_restarts: 1,
+            within_ms: 1_000,
+        });
+        assert_eq!(
+            validate_actor_supervision(&[supervisor()], &[restarted]),
+            Err("actor 0 has invalid supervised configuration".to_owned())
+        );
+
+        let mut persistent = child(Some(0));
+        persistent.persistence = Some(ActorPersistence {
+            database: 0,
+            key: "counter".to_owned(),
+        });
+        assert_eq!(
+            validate_actor_supervision(&[supervisor()], &[persistent]),
+            Err("actor 0 has invalid supervised configuration".to_owned())
         );
     }
 }

@@ -67,6 +67,97 @@ test("uses stable diagnostics for unsupported actor configuration and calls", ()
   `, "TINY1520");
 
   expectCode(`
+    import {supervise} from "tinytsx:actors";
+    const policy = {strategy: "oneForOne" as const, maxRestarts: 2, withinMs: 1000};
+    supervise(policy);
+    export function GET(): Response { return Response.text("ok"); }
+  `, "TINY1520");
+
+  expectCode(`
+    import {supervise} from "tinytsx:actors";
+    supervise({strategy: "oneForAll" as any, maxRestarts: 2, withinMs: 1000});
+    export function GET(): Response { return Response.text("ok"); }
+  `, "TINY1520");
+
+  expectCode(`
+    import {supervise} from "tinytsx:actors";
+    supervise({strategy: "oneForOne", maxRestarts: 17, withinMs: 1000});
+    export function GET(): Response { return Response.text("ok"); }
+  `, "TINY1520");
+
+  expectCode(`
+    import {spawn, supervise} from "tinytsx:actors";
+    const root = supervise({strategy: "oneForOne", maxRestarts: 2, withinMs: 1000});
+    spawn((context, delta: number) => {
+      context.state += delta;
+      return String(context.state);
+    }, 0, {supervisor: root});
+    export function GET(): Response { return Response.text("ok"); }
+  `, "TINY1520");
+
+  expectCode(`
+    import {spawn, supervise} from "tinytsx:actors";
+    const root = supervise({strategy: "oneForOne", maxRestarts: 2, withinMs: 1000});
+    spawn((context, delta: number) => {
+      if (delta === 99) throw Error("failure");
+      context.state += delta;
+      return String(context.state);
+    }, 0, {supervisor: root, restart: {maxRestarts: 2, withinMs: 1000}});
+    export function GET(): Response { return Response.text("ok"); }
+  `, "TINY1520");
+
+  expectCode(`
+    import {spawn} from "tinytsx:actors";
+    spawn((context, delta: number) => {
+      if (delta === 99) throw Error("failure");
+      context.state += delta;
+      return String(context.state);
+    }, 0, {supervisor: {} as any});
+    export function GET(): Response { return Response.text("ok"); }
+  `, "TINY1520");
+
+  expectCode(`
+    import {spawn, supervise} from "tinytsx:actors";
+    import {Database} from "tinytsx:sqlite";
+    const database = new Database(":memory:");
+    const root = supervise({strategy: "oneForOne", maxRestarts: 2, withinMs: 1000});
+    spawn((context, delta: number) => {
+      if (delta === 99) throw Error("failure");
+      context.state += delta;
+      return String(context.state);
+    }, 0, {supervisor: root, persistence: {database, key: "counter"}});
+    export function GET(): Response { return Response.text("ok"); }
+  `, "TINY1520");
+
+  expectCode(`
+    import {supervise} from "tinytsx:actors";
+    const root = supervise({strategy: "oneForOne", maxRestarts: 2, withinMs: 1000});
+    export function GET(): Response { return Response.json(root as any); }
+  `, "TINY1520");
+
+  expectCode(`
+    import {supervise} from "tinytsx:actors";
+    ${Array.from({length: 9}, (_, index) => `
+      const root${index} = supervise({strategy: "oneForOne", maxRestarts: 2, withinMs: 1000});
+    `).join("")}
+    export function GET(): Response { return Response.text("ok"); }
+  `, "TINY1520");
+
+  expectCode(`
+    import {spawn, supervise} from "tinytsx:actors";
+    const root = supervise({strategy: "oneForOne", maxRestarts: 2, withinMs: 1000});
+    const fallibleCounter = (context, delta: number) => {
+      if (delta === 99) throw Error("failure");
+      context.state += delta;
+      return String(context.state);
+    };
+    ${Array.from({length: 17}, () => `
+      spawn(fallibleCounter, 0, {supervisor: root});
+    `).join("")}
+    export function GET(): Response { return Response.text("ok"); }
+  `, "TINY1520");
+
+  expectCode(`
     import {spawn} from "tinytsx:actors";
     spawn((context, delta: number) => {
       context.state += delta;

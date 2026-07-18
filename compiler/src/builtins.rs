@@ -27,6 +27,8 @@ struct Limits {
     query_rows: Option<usize>,
     restart_attempts: Option<usize>,
     restart_window_ms: Option<u64>,
+    root_supervisors: Option<usize>,
+    supervisor_children: Option<usize>,
     transaction_steps: Option<usize>,
     transaction_parameters: Option<usize>,
     transaction_sql_bytes: Option<usize>,
@@ -96,6 +98,8 @@ fn manifest() -> Manifest {
                     value_bytes: Some(4_096),
                     restart_attempts: Some(16),
                     restart_window_ms: Some(60_000),
+                    root_supervisors: Some(8),
+                    supervisor_children: Some(16),
                     ..empty_limits()
                 },
             },
@@ -111,6 +115,8 @@ const fn empty_limits() -> Limits {
         query_rows: None,
         restart_attempts: None,
         restart_window_ms: None,
+        root_supervisors: None,
+        supervisor_children: None,
         transaction_steps: None,
         transaction_parameters: None,
         transaction_sql_bytes: None,
@@ -155,5 +161,7 @@ mod tests {
             manifest().builtins[4].limits.restart_window_ms,
             Some(60_000)
         );
+        assert_eq!(manifest().builtins[4].limits.root_supervisors, Some(8));
+        assert_eq!(manifest().builtins[4].limits.supervisor_children, Some(16));
     }
 }

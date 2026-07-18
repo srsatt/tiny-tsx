@@ -48,6 +48,7 @@ export type Value =
   | {kind: "environmentVariable"; name: string; required: boolean; fallback?: string}
   | {kind: "environmentBindings"}
   | {kind: "fileText"; path: string; maxBytes: number}
+  | {kind: "supervisor"; state: SupervisorState}
   | {kind: "actor"; state: ActorState}
   | {kind: "actorCall"; actor: ActorState; message: number | string; timeoutMs?: number}
   | {kind: "database"; state: DatabaseState}
@@ -127,7 +128,17 @@ export interface ActorState {
   mailboxCapacity: number;
   failureMessage?: number;
   restart?: {maxRestarts: number; withinMs: number};
+  supervisor?: SupervisorState;
   persistence?: {database: DatabaseState; key: string};
+}
+
+export interface SupervisorState {
+  id: number;
+  key: string;
+  strategy: "oneForOne";
+  maxRestarts: number;
+  withinMs: number;
+  children: number;
 }
 
 export interface DatabaseState {
@@ -348,6 +359,7 @@ export function truthiness(value: Value): boolean | undefined {
     case "streamWriter":
     case "streamReader": return true;
     case "worker": return true;
+    case "supervisor": return true;
     case "actor": return true;
     case "database": return true;
     case "statement": return true;
@@ -409,6 +421,7 @@ export function typeOf(value: Value): string {
     case "streamWriter":
     case "streamReader": return "object";
     case "worker": return "object";
+    case "supervisor": return "object";
     case "actor": return "object";
     case "database": return "object";
     case "statement": return "object";

@@ -634,6 +634,27 @@ test("lowers a bounded fallible counter restart policy", () => {
   }), [0, 1, 99]);
 });
 
+test("lowers a bounded root one-for-one supervisor", () => {
+  const entry = path.join(repository, "examples/hono-actors/supervision.ts");
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+    apiAliases: {hono: path.join(repository, "tests/compat/hono/api.d.ts")},
+  });
+
+  assert.deepEqual(hir.supervisors, [{
+    id: 0,
+    strategy: "oneForOne",
+    maxRestarts: 2,
+    withinMs: 60_000,
+  }]);
+  assert.equal(hir.actors.length, 3);
+  assert.deepEqual(hir.actors.slice(0, 2).map(actor => actor.supervisor), [0, 0]);
+  assert.equal(hir.actors[0]?.restart, undefined);
+  assert.equal(hir.actors[1]?.restart, undefined);
+  assert.equal(hir.actors[2]?.supervisor, undefined);
+});
+
 test("lowers bounded primitive array and record actor messages", () => {
   const entry = path.join(repository, "examples/hono-actors/messages.ts");
   const hir = compileEntry(entry, {

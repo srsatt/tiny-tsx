@@ -72,7 +72,15 @@ export interface ActorModule {
   mailboxCapacity: number;
   failureMessage?: number;
   restart?: {maxRestarts: number; withinMs: number};
+  supervisor?: number;
   persistence?: {database: number; key: string};
+}
+
+export interface SupervisorModule {
+  id: number;
+  strategy: "oneForOne";
+  maxRestarts: number;
+  withinMs: number;
 }
 
 export interface SqliteDatabase {
@@ -444,6 +452,7 @@ export interface HirProgram {
   functions: HirFunction[];
   components: Component[];
   workers: WorkerModule[];
+  supervisors: SupervisorModule[];
   actors: ActorModule[];
   sqliteDatabases: SqliteDatabase[];
   handlers: Handler[];

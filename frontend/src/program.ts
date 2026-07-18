@@ -249,6 +249,7 @@ export function compileEntry(entryPath: string, options: CompileOptions): HirPro
     functions,
     components,
     workers: [],
+    supervisors: [],
     actors: [],
     sqliteDatabases: [],
     handlers: [handler],
@@ -509,6 +510,12 @@ function lowerApplicationInitialization(
     functions: [],
     components: [],
     workers: workers.values,
+    supervisors: initialization.supervisors.map(supervisor => ({
+      id: supervisor.id,
+      strategy: supervisor.strategy,
+      maxRestarts: supervisor.maxRestarts,
+      withinMs: supervisor.withinMs,
+    })),
     actors: initialization.actors.map(actor => ({
       id: actor.id,
       operation: actor.operation,
@@ -517,6 +524,7 @@ function lowerApplicationInitialization(
       mailboxCapacity: actor.mailboxCapacity,
       ...(actor.failureMessage === undefined ? {} : {failureMessage: actor.failureMessage}),
       ...(actor.restart === undefined ? {} : {restart: actor.restart}),
+      ...(actor.supervisor === undefined ? {} : {supervisor: actor.supervisor.id}),
       ...(actor.persistence === undefined
         ? {}
         : {persistence: {database: actor.persistence.database.id, key: actor.persistence.key}}),

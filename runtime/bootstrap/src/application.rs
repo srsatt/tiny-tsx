@@ -16,8 +16,9 @@ use crate::abi::{
     APPLICATION_OVERLOAD, CLIENT_DISCONNECTED, INTERNAL_ERROR, OpenAiTransport, RENDER_ERROR,
     actor_failure_message, actor_initial_json, actor_initial_state, actor_mailbox_capacity,
     actor_operation, actor_persistence_database, actor_persistence_key, actor_restart_max,
-    actor_restart_within_ms, configured_actors, configured_provider_transport,
-    configured_sqlite_database_path, configured_sqlite_databases, configured_worker_modules,
+    actor_restart_within_ms, actor_supervisor, configured_actors, configured_provider_transport,
+    configured_sqlite_database_path, configured_sqlite_databases, configured_supervisors,
+    configured_worker_modules, supervisor_restart_max, supervisor_restart_within_ms,
     worker_operation,
 };
 
@@ -145,6 +146,7 @@ pub fn initialize(executor_count: usize) -> io::Result<(usize, bool, bool)> {
     let provider_enabled = configured_provider_transport();
     let filesystem_enabled = crate::filesystem::enabled();
     let actor_count = configured_actors();
+    let supervisor_count = configured_supervisors();
     let database_count = configured_sqlite_databases();
     let database_paths = (0..database_count)
         .map(|database| {
@@ -321,13 +323,28 @@ pub fn initialize(executor_count: usize) -> io::Result<(usize, bool, bool)> {
         },
     )?;
     let workers = (0..worker_count).map(|_| pool.spawn()).collect();
+    let supervisors = (0..supervisor_count)
+        .map(|supervisor| {
+            pool.supervise(RestartPolicy {
+                max_restarts: supervisor_restart_max(supervisor),
+                within: Duration::from_millis(supervisor_restart_within_ms(supervisor)),
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
     let actors = (0..actor_count)
         .map(|actor| {
-            let restart = (actor_operation(actor) == 3).then(|| RestartPolicy {
-                max_restarts: actor_restart_max(actor),
-                within: Duration::from_millis(actor_restart_within_ms(actor)),
-            });
-            pool.spawn_with_capacity_and_restart(actor_mailbox_capacity(actor), restart)
+            let supervisor =
+                actor_supervisor(actor).and_then(|supervisor| supervisors.get(supervisor));
+            let restart =
+                (actor_operation(actor) == 3 && supervisor.is_none()).then(|| RestartPolicy {
+                    max_restarts: actor_restart_max(actor),
+                    within: Duration::from_millis(actor_restart_within_ms(actor)),
+                });
+            if let Some(supervisor) = supervisor {
+                pool.spawn_with_capacity_and_supervisor(actor_mailbox_capacity(actor), supervisor)
+            } else {
+                pool.spawn_with_capacity_and_restart(actor_mailbox_capacity(actor), restart)
+            }
         })
         .collect::<Result<Vec<_>, _>>()?;
     let databases = (0..database_count).map(|_| pool.spawn()).collect();

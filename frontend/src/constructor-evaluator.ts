@@ -36,6 +36,7 @@ import {
   type Value,
   type RuntimeStringPart,
   type ActorState,
+  type SupervisorState,
   type DatabaseState,
   type SqliteParameter,
   type StreamState,
@@ -161,6 +162,7 @@ export interface ApplicationInitializationEvaluation extends ConstructorEvaluati
   notFoundResponse?: EvaluatedResponse;
   routerInsertions: number;
   actors: ActorState[];
+  supervisors: SupervisorState[];
   databases: DatabaseState[];
 }
 
@@ -178,6 +180,7 @@ interface Evaluator {
   memory: MemoryTracker;
   actorActions: WeakMap<Value & {kind: "instance"}, EvaluatedActorAction[]>;
   actors: Map<string, ActorState>;
+  supervisors: Map<string, SupervisorState>;
   databaseActions: WeakMap<Value & {kind: "instance"}, EvaluatedDatabaseAction[]>;
   sqliteExistence: WeakMap<Value & {kind: "instance"}, {
     query: Value & {kind: "sqliteQuery"};
@@ -249,6 +252,7 @@ export function evaluateApplicationInitialization(
     ...installedNotFound,
     routerInsertions: evaluator.routerInsertions,
     actors: [...evaluator.actors.values()],
+    supervisors: [...evaluator.supervisors.values()],
     databases: [...evaluator.databases.values()],
   };
 }
@@ -297,6 +301,7 @@ function initializeConstructor(
     memory: {sites: new Map(), values: new WeakMap()},
     actorActions: new WeakMap(),
     actors: new Map(),
+    supervisors: new Map(),
     databaseActions: new WeakMap(),
     sqliteExistence: new WeakMap(),
     databases: new Map(),
@@ -2723,6 +2728,46 @@ function evaluateCall(
         }
         : unknown("filesystem read requires a closed path and maxBytes");
     }
+    if (callable.kind === "reference" && isActorSuperviseBuiltin(callable)) {
+      const options = arguments_[0];
+      const fields = options?.kind === "record" ? options.fields : undefined;
+      const strategy = fields?.get("strategy");
+      const maxRestarts = fields?.get("maxRestarts");
+      const withinMs = fields?.get("withinMs");
+      if (
+        arguments_.length !== 1
+        || fields?.size !== 3
+        || strategy?.kind !== "string"
+        || strategy.value !== "oneForOne"
+        || maxRestarts?.kind !== "number"
+        || !Number.isSafeInteger(maxRestarts.value)
+        || maxRestarts.value < 1
+        || maxRestarts.value > 16
+        || withinMs?.kind !== "number"
+        || !Number.isSafeInteger(withinMs.value)
+        || withinMs.value < 1
+        || withinMs.value > 60_000
+      ) {
+        return unknown("supervise requires one static oneForOne policy with bounded restart intensity");
+      }
+      const key = `${module.path}:${call.getStart(module.sourceFile)}`;
+      let state = evaluator.supervisors.get(key);
+      if (state === undefined) {
+        if (evaluator.supervisors.size === 8) {
+          return unknown("an application supports at most 8 root supervisors");
+        }
+        state = {
+          id: evaluator.supervisors.size,
+          key,
+          strategy: "oneForOne",
+          maxRestarts: maxRestarts.value,
+          withinMs: withinMs.value,
+          children: 0,
+        };
+        evaluator.supervisors.set(key, state);
+      }
+      return {kind: "supervisor", state};
+    }
     if (callable.kind === "reference" && isActorSpawnBuiltin(callable)) {
       const behavior = arguments_[0];
       const initialState = arguments_[1];
@@ -2778,6 +2823,12 @@ function evaluateCall(
           && restartWithin.value <= 60_000
           ? {maxRestarts: restartMax.value, withinMs: restartWithin.value}
           : null;
+      const supervisorValue = optionFields?.get("supervisor");
+      const supervisor = supervisorValue === undefined
+        ? undefined
+        : supervisorValue.kind === "supervisor"
+          ? supervisorValue.state
+          : null;
       const counter = behavior?.kind === "closure"
         && initialState?.kind === "number"
         && Number.isSafeInteger(initialState.value)
@@ -2799,12 +2850,14 @@ function evaluateCall(
         || mailboxCapacity < 1
         || mailboxCapacity > 64
         || optionFields === undefined
-        || [...optionFields.keys()].some(name => name !== "mailboxCapacity" && name !== "persistence" && name !== "restart")
+        || [...optionFields.keys()].some(name => name !== "mailboxCapacity" && name !== "persistence" && name !== "restart" && name !== "supervisor")
         || persistence === null
         || restart === null
+        || supervisor === null
         || (!counter && failureMessage === undefined && initialJson === undefined)
         || (initialJson !== undefined && persistence !== undefined)
-        || (failureMessage === undefined) !== (restart === undefined)
+        || failureMessage === undefined && (restart !== undefined || supervisor !== undefined)
+        || failureMessage !== undefined && (restart === undefined) === (supervisor === undefined)
         || (failureMessage !== undefined && persistence !== undefined)
       ) {
         return unknown("actor spawn requires a bounded counter or JSON-mailbox behavior and mailbox capacity up to 64");
@@ -2812,6 +2865,9 @@ function evaluateCall(
       const key = `${module.path}:${call.getStart(module.sourceFile)}`;
       let state = evaluator.actors.get(key);
       if (state === undefined) {
+        if (supervisor !== undefined && supervisor.children === 16) {
+          return unknown("a root supervisor supports at most 16 children");
+        }
         state = {
           id: evaluator.actors.size,
           key,
@@ -2825,9 +2881,11 @@ function evaluateCall(
           mailboxCapacity,
           ...(failureMessage === undefined ? {} : {failureMessage}),
           ...(restart === undefined ? {} : {restart}),
+          ...(supervisor === undefined ? {} : {supervisor}),
           ...(persistence === undefined ? {} : {persistence}),
         };
         evaluator.actors.set(key, state);
+        if (supervisor !== undefined) supervisor.children++;
       }
       return {kind: "actor", state};
     }
@@ -3704,6 +3762,14 @@ function isActorSpawnBuiltin(value: Value & {kind: "reference"}): boolean {
   return declaration !== undefined
     && ts.isFunctionDeclaration(declaration)
     && declaration.name?.text === "spawn"
+    && value.callable?.module.path.replaceAll("\\", "/").endsWith("/sdk/builtins/actors.ts") === true;
+}
+
+function isActorSuperviseBuiltin(value: Value & {kind: "reference"}): boolean {
+  const declaration = value.callable?.declaration;
+  return declaration !== undefined
+    && ts.isFunctionDeclaration(declaration)
+    && declaration.name?.text === "supervise"
     && value.callable?.module.path.replaceAll("\\", "/").endsWith("/sdk/builtins/actors.ts") === true;
 }
 
@@ -5800,7 +5866,9 @@ function trackEvaluatedValue(
       valueKind: value.kind,
       instances: 0,
       maxReferences: 0,
-      escape: value.kind === "worker" || value.kind === "actor" ? "worker" : "none",
+      escape: value.kind === "worker" || value.kind === "actor" || value.kind === "supervisor"
+        ? "worker"
+        : "none",
     };
     tracker.sites.set(key, site);
   }

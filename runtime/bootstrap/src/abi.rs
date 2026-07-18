@@ -235,6 +235,9 @@ unsafe extern "C" {
         length: *mut usize,
     ) -> u32;
     pub fn tinytsx_config_actors() -> usize;
+    pub fn tinytsx_config_supervisors() -> usize;
+    pub fn tinytsx_supervisor_restart_max(supervisor: usize) -> usize;
+    pub fn tinytsx_supervisor_restart_within_ms(supervisor: usize) -> u64;
     pub fn tinytsx_config_sqlite_databases() -> usize;
     pub fn tinytsx_config_sqlite_database_path(
         index: usize,
@@ -246,6 +249,7 @@ unsafe extern "C" {
     pub fn tinytsx_actor_failure_message(actor: usize) -> i64;
     pub fn tinytsx_actor_restart_max(actor: usize) -> usize;
     pub fn tinytsx_actor_restart_within_ms(actor: usize) -> u64;
+    pub fn tinytsx_actor_supervisor(actor: usize) -> usize;
     pub fn tinytsx_actor_initial_json(
         actor: usize,
         pointer: *mut *const u8,
@@ -281,6 +285,11 @@ unsafe extern "C" fn tinytsx_actor_restart_max(_actor: usize) -> usize {
 
 #[cfg(not(feature = "generated"))]
 unsafe extern "C" fn tinytsx_actor_restart_within_ms(_actor: usize) -> u64 {
+    0
+}
+
+#[cfg(not(feature = "generated"))]
+unsafe extern "C" fn tinytsx_actor_supervisor(_actor: usize) -> usize {
     0
 }
 
@@ -339,6 +348,21 @@ unsafe extern "C" fn tinytsx_config_read_root(
 
 #[cfg(not(feature = "generated"))]
 unsafe extern "C" fn tinytsx_config_actors() -> usize {
+    0
+}
+
+#[cfg(not(feature = "generated"))]
+unsafe extern "C" fn tinytsx_config_supervisors() -> usize {
+    0
+}
+
+#[cfg(not(feature = "generated"))]
+unsafe extern "C" fn tinytsx_supervisor_restart_max(_supervisor: usize) -> usize {
+    0
+}
+
+#[cfg(not(feature = "generated"))]
+unsafe extern "C" fn tinytsx_supervisor_restart_within_ms(_supervisor: usize) -> u64 {
     0
 }
 
@@ -2985,6 +3009,21 @@ pub fn configured_actors() -> usize {
     unsafe { tinytsx_config_actors() }
 }
 
+pub fn configured_supervisors() -> usize {
+    // SAFETY: The generated object always provides the configuration function.
+    unsafe { tinytsx_config_supervisors() }
+}
+
+pub fn supervisor_restart_max(supervisor: usize) -> usize {
+    // SAFETY: The generated object returns zero for an invalid supervisor.
+    unsafe { tinytsx_supervisor_restart_max(supervisor) }
+}
+
+pub fn supervisor_restart_within_ms(supervisor: usize) -> u64 {
+    // SAFETY: The generated object returns zero for an invalid supervisor.
+    unsafe { tinytsx_supervisor_restart_within_ms(supervisor) }
+}
+
 pub fn configured_sqlite_databases() -> usize {
     // SAFETY: The generated object always provides the configuration function.
     unsafe { tinytsx_config_sqlite_databases() }
@@ -3028,6 +3067,11 @@ pub fn actor_restart_max(actor: usize) -> usize {
 pub fn actor_restart_within_ms(actor: usize) -> u64 {
     // SAFETY: The generated object returns zero for an invalid actor.
     unsafe { tinytsx_actor_restart_within_ms(actor) }
+}
+
+pub fn actor_supervisor(actor: usize) -> Option<usize> {
+    // SAFETY: The generated object returns zero for no or an invalid supervisor.
+    unsafe { tinytsx_actor_supervisor(actor) }.checked_sub(1)
 }
 
 pub fn actor_initial_json(actor: usize) -> Result<Vec<u8>, u32> {
