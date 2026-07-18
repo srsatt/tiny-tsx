@@ -41,6 +41,7 @@ test("records the example matrix with executable evidence and boundaries", () =>
     "upstream-blog",
     "tinytsx-actors-messages",
     "tinytsx-actors-restart",
+    "tinytsx-actors-multi-load",
     "upstream-durable-objects-counter",
   ];
   assert.deepEqual(manifest.matrix.map(row => row.id), required);

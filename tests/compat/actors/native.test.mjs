@@ -13,6 +13,7 @@ const entry = path.join(repository, "examples/hono-actors/server.ts");
 const persistentEntry = path.join(repository, "examples/hono-actors/persistent.ts");
 const messagesEntry = path.join(repository, "examples/hono-actors/messages.ts");
 const restartEntry = path.join(repository, "examples/hono-actors/restart.ts");
+const multiEntry = path.join(repository, "benchmarks/tiny/hono-actor-multi.ts");
 
 test("serves a local counter actor with ordered ask, tell, and idempotent stop", async context => {
   const directory = mkdtempSync(path.join(tmpdir(), "tinytsx-actors-native-"));
@@ -199,6 +200,53 @@ test("assembles the fallible actor restart policy for Linux arm64", () => {
   assert.equal(assembled.status, 0, assembled.stderr);
 });
 
+test("keeps eight native counter actors isolated under concurrent mutation", async context => {
+  const directory = mkdtempSync(path.join(tmpdir(), "tinytsx-actor-multi-"));
+  const binary = path.join(directory, "server");
+  const port = 39_495;
+  context.after(() => rmSync(directory, {recursive: true, force: true}));
+
+  const result = buildMulti(binary, port);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const report = JSON.parse(readFileSync(`${binary}.build.json`, "utf8"));
+  assert.equal(report.actors, 8);
+
+  const server = spawn(binary, [], {stdio: ["ignore", "pipe", "pipe"]});
+  context.after(() => server.kill("SIGTERM"));
+  await waitForServer(port, server, "/actor/0/read");
+  for (let index = 0; index < 8; index++) {
+    await assertResponse(port, `/actor/${index}/read`, 200, "0");
+  }
+
+  await assertResponse(port, "/actor/3/tell", 200, "queued");
+  await assertResponse(port, "/actor/3/tell", 200, "queued");
+  await assertResponse(port, "/actor/3/read", 200, "2");
+  await assertResponse(port, "/actor/2/read", 200, "0");
+
+  await Promise.all(Array.from({length: 8}, (_, index) =>
+    assertResponse(port, `/actor/${index}/tell`, 200, "queued")
+  ));
+  for (let index = 0; index < 8; index++) {
+    await assertResponse(port, `/actor/${index}/read`, 200, index === 3 ? "3" : "1");
+  }
+});
+
+test("assembles all eight counter actor routes for Linux arm64", () => {
+  const result = spawnSync("cargo", [
+    "run", "-q", "-p", "tinytsx", "--", "check", multiEntry,
+    "--emit-asm", "--target", "aarch64-unknown-linux-gnu",
+    "--alias", "hono=vendor/hono/src/index.ts",
+    "--api", "hono=tests/compat/hono/api.d.ts",
+  ], {cwd: repository, encoding: "utf8"});
+  assert.equal(result.status, 0, result.stderr);
+  assert.ok([...result.stdout.matchAll(/bl tinytsx_actor_tell_counter/g)].length >= 8);
+  assert.ok([...result.stdout.matchAll(/bl tinytsx_actor_ask_counter/g)].length >= 8);
+  const assembled = spawnSync("clang", [
+    "--target=aarch64-unknown-linux-gnu", "-x", "assembler", "-c", "-o", "/dev/null", "-",
+  ], {cwd: repository, input: result.stdout, encoding: "utf8"});
+  assert.equal(assembled.status, 0, assembled.stderr);
+});
+
 function build(binary, port) {
   return spawnSync("cargo", [
     "run", "-q", "-p", "tinytsx", "--", "build", entry,
@@ -239,6 +287,17 @@ function buildRestart(binary, port) {
     "--port", String(port),
     "--alias", "hono=vendor/hono/src/index.ts",
     "--api", "hono=tests/compat/hono/api.d.ts",
+  ], {cwd: repository, encoding: "utf8"});
+}
+
+function buildMulti(binary, port) {
+  return spawnSync("cargo", [
+    "run", "-q", "-p", "tinytsx", "--", "build", multiEntry,
+    "--output", binary,
+    "--port", String(port),
+    "--alias", "hono=vendor/hono/src/index.ts",
+    "--api", "hono=tests/compat/hono/api.d.ts",
+    "--workers", "8",
   ], {cwd: repository, encoding: "utf8"});
 }
 

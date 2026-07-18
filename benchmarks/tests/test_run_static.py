@@ -16,6 +16,7 @@ from run_static import (  # noqa: E402
     normalize_content_type,
     parse_allocation_metrics,
     tinytsx_build_command,
+    workload_load_target,
 )
 
 
@@ -205,6 +206,30 @@ class StaticHarnessTest(unittest.TestCase):
         self.assertIn("actor mailbox", workload["limitation"])
         self.assertEqual(workload["tiny_entry"], "examples/hono-actors/server.ts")
         self.assertEqual(workload["bun_script"], "benchmarks/bun/hono-actor-server.ts")
+
+    def test_multi_actor_workload_cycles_eight_response_equivalent_routes(self) -> None:
+        workload = WORKLOADS["hono-actor-multi"]
+
+        self.assertEqual(len(workload["paths"]), 8)
+        self.assertEqual(len(workload["state_paths"]), 8)
+        self.assertEqual(workload["body"], b"queued")
+        self.assertIn("fire-and-forget", workload["limitation"])
+        self.assertEqual(workload["tiny_entry"], "benchmarks/tiny/hono-actor-multi.ts")
+        self.assertEqual(
+            workload["bun_script"],
+            "benchmarks/bun/hono-actor-multi-server.ts",
+        )
+
+        target, urls_from_file, file = workload_load_target(39_495, workload)
+        try:
+            self.assertTrue(urls_from_file)
+            self.assertEqual(target, file.name)
+            self.assertEqual(
+                Path(target).read_text().splitlines(),
+                [f"http://127.0.0.1:39495/actor/{index}/tell" for index in range(8)],
+            )
+        finally:
+            file.close()
 
     def test_sqlite_workload_records_owner_serialization_boundary(self) -> None:
         workload = WORKLOADS["hono-sqlite"]

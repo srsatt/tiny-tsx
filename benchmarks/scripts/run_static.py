@@ -11,6 +11,7 @@ import shutil
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -60,6 +61,8 @@ HONO_BASIC_BUN_ARGS = [
     "--tsconfig-override", "benchmarks/bun/hono-tsconfig.json",
 ]
 JSON_BODY = b'{"name":"TinyTSX & \\"Bun\\"","count":7,"enabled":true,"note":null}'
+ACTOR_MULTI_TELL_PATHS = [f"/actor/{index}/tell" for index in range(8)]
+ACTOR_MULTI_READ_PATHS = [f"/actor/{index}/read" for index in range(8)]
 
 
 WORKLOADS = {
@@ -308,6 +311,26 @@ WORKLOADS = {
             "--tsconfig-override", "benchmarks/bun/hono-runtime-tsconfig.json",
         ],
     },
+    "hono-actor-multi": {
+        "body": b"queued",
+        "content_type": "text/plain; charset=UTF-8",
+        "headers": {},
+        "numeric_headers": [],
+        "path": ACTOR_MULTI_TELL_PATHS[0],
+        "paths": ACTOR_MULTI_TELL_PATHS,
+        "state_paths": ACTOR_MULTI_READ_PATHS,
+        "scope": "eight persistent signed counter owners behind response-equivalent Hono tell routes; URL-file traffic cycles all owners and post-load asks prove mutation; HTTP/1.1; localhost",
+        "limitation": "TinyTSX uses eight lightweight local actors while Bun uses eight Worker-owned counters. This measures distributed fire-and-forget mutation and complete-process pressure, not isolated ask latency, supervision, persistence, remote actors, or Worker creation cost.",
+        "tiny_entry": "benchmarks/tiny/hono-actor-multi.ts",
+        "tiny_args": [
+            "--alias", "hono=vendor/hono/src/index.ts",
+            "--api", "hono=tests/compat/hono/api.d.ts",
+        ],
+        "bun_script": "benchmarks/bun/hono-actor-multi-server.ts",
+        "bun_args": [
+            "--tsconfig-override", "benchmarks/bun/hono-runtime-tsconfig.json",
+        ],
+    },
     "hono-sqlite": {
         "body": b'{"values":[]}',
         "content_type": "application/json",
@@ -372,6 +395,7 @@ def main() -> int:
         raise RuntimeError("the current TinyTSX benchmark requires Apple Silicon macOS")
 
     port = free_port()
+    load_target, urls_from_file, load_file = workload_load_target(port, workload)
     tiny_suffix = "" if arguments.workers == 1 else f"-w{arguments.workers}"
     tiny_binary = ROOT / f"benchmarks/dist/tinytsx-{arguments.workload}{tiny_suffix}"
     build_tinytsx(
@@ -419,6 +443,7 @@ def main() -> int:
             "postWarmupRssSamplesBytes": [],
             "resourceSamples": [],
             "allocationSamples": [],
+            "stateSamples": [],
             "throughput": {str(value): [] for value in arguments.concurrency},
         }
         for name, spec in specs.items()
@@ -454,15 +479,19 @@ def main() -> int:
                     workload,
                 )
                 assert_correct(correctness, workload, name)
+                assert_additional_paths(process, port, workload, name)
                 targets[name]["idleRssSamplesBytes"].append(resident_bytes(process.pid))
                 sampler = ProcessSampler(process.pid)
-                url = f"http://127.0.0.1:{port}{specs[name]['path']}"
                 run_oha(
-                    url,
+                    load_target,
                     max(arguments.concurrency),
                     1,
                     arguments.keep_alive,
+                    urls_from_file=urls_from_file,
                     **oha_request(workload),
+                )
+                record_actor_states(
+                    targets[name], process, port, workload, run, "warmup"
                 )
                 targets[name]["postWarmupRssSamplesBytes"].append(
                     resident_bytes(process.pid)
@@ -474,13 +503,17 @@ def main() -> int:
                 )
                 for concurrency in concurrency_order:
                     sample = run_oha(
-                        url,
+                        load_target,
                         concurrency,
                         arguments.duration,
                         arguments.keep_alive,
+                        urls_from_file=urls_from_file,
                         **oha_request(workload),
                     )
                     targets[name]["throughput"][str(concurrency)].append(sample.as_json())
+                    record_actor_states(
+                        targets[name], process, port, workload, run, str(concurrency)
+                    )
             finally:
                 if sampler is not None:
                     targets[name]["resourceSamples"].append(sampler.stop())
@@ -521,6 +554,13 @@ def main() -> int:
         },
         "correctness": {
             "path": workload["path"],
+            "loadPaths": workload.get("paths", [workload["path"]]),
+            "statePaths": workload.get("state_paths", []),
+            "statePostcondition": (
+                "every actor state is a positive integer after warm-up and each load interval"
+                if workload.get("state_paths")
+                else None
+            ),
             "method": workload.get("method", "GET"),
             "requestContentType": workload.get("request_content_type"),
             "requestBodyUtf8": workload.get("request_body", b"").decode(),
@@ -552,7 +592,71 @@ def main() -> int:
     if support_process is not None:
         stop_server(support_process)
         atexit.unregister(stop_server)
+    if load_file is not None:
+        load_file.close()
     return 0
+
+
+def workload_load_target(
+    port: int,
+    workload: dict[str, Any],
+) -> tuple[str, bool, Any | None]:
+    paths = workload.get("paths")
+    if paths is None:
+        return f"http://127.0.0.1:{port}{workload['path']}", False, None
+    file = tempfile.NamedTemporaryFile(
+        mode="w",
+        encoding="utf8",
+        prefix="tinytsx-benchmark-urls-",
+        suffix=".txt",
+    )
+    for path in paths:
+        file.write(f"http://127.0.0.1:{port}{path}\n")
+    file.flush()
+    return file.name, True, file
+
+
+def assert_additional_paths(
+    process: subprocess.Popen[bytes],
+    port: int,
+    workload: dict[str, Any],
+    target: str,
+) -> None:
+    for path in workload.get("paths", [workload["path"]])[1:]:
+        assert_correct(wait_for_response(process, port, path, workload), workload, target)
+    read_actor_states(process, port, workload)
+
+
+def record_actor_states(
+    target: dict[str, Any],
+    process: subprocess.Popen[bytes],
+    port: int,
+    workload: dict[str, Any],
+    run: int,
+    phase: str,
+) -> None:
+    states = read_actor_states(process, port, workload)
+    if states:
+        target["stateSamples"].append({"run": run, "phase": phase, "values": states})
+
+
+def read_actor_states(
+    process: subprocess.Popen[bytes],
+    port: int,
+    workload: dict[str, Any],
+) -> list[int]:
+    states: list[int] = []
+    for path in workload.get("state_paths", []):
+        response = wait_for_response(process, port, path)
+        content_type = normalize_content_type(response["headers"].get("content-type"))
+        try:
+            state = int(response["body"].decode("ascii"))
+        except (UnicodeDecodeError, ValueError) as error:
+            raise RuntimeError(f"invalid actor state response for {path}: {response}") from error
+        if response["status"] != 200 or content_type != "text/plain;charset=utf-8" or state < 1:
+            raise RuntimeError(f"invalid actor state response for {path}: {response}")
+        states.append(state)
+    return states
 
 
 def parse_arguments() -> argparse.Namespace:

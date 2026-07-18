@@ -33,6 +33,18 @@ class OhaMetricsTest(unittest.TestCase):
         self.assertEqual(command[command.index("-d") + 1], '{"value":7}')
         self.assertEqual(command[command.index("-T") + 1], "application/json")
 
+    def test_reads_a_response_equivalent_url_set_from_a_file(self) -> None:
+        command = oha_command(
+            "/tmp/tinytsx-urls.txt",
+            64,
+            15,
+            True,
+            urls_from_file=True,
+        )
+
+        self.assertIn("--urls-from-file", command)
+        self.assertEqual(command[-1], "/tmp/tinytsx-urls.txt")
+
     def test_extracts_sub_millisecond_percentiles(self) -> None:
         payload = {
             "summary": {

@@ -217,6 +217,19 @@
       "firstUnsupportedBoundary": "Only one exact non-persistent counter behavior may throw on a closed integer sentinel and restart 1-16 times in a 1-60000 ms rolling window; persistence recovery, backoff, manual restart, supervision, links, monitors, registries, snapshots, arbitrary behaviors, and distributed actors are unsupported."
     },
     {
+      "id": "tinytsx-actors-multi-load",
+      "provenance": "tinytsx-local",
+      "entry": "benchmarks/tiny/hono-actor-multi.ts",
+      "imports": ["hono", "@hono/node-server", "tinytsx:actors"],
+      "apis": ["Hono", "get", "serve", "spawn", "ActorRef.ask", "ActorRef.tell"],
+      "intake": {"status": "pass", "evidence": "benchmarks/tests/test_run_static.py"},
+      "nativeCompile": {"appleArm64": "pass", "linuxArm64Assembly": "pass", "evidence": "tests/compat/actors/native.test.mjs"},
+      "httpBehavior": {"status": "pass", "evidence": "tests/compat/actors/native.test.mjs"},
+      "referenceBehavior": {"runtime": "Bun/Hono with eight Worker-owned counters", "status": "pass", "evidence": "tests/compat/actors/multi-reference.test.ts"},
+      "releaseGates": {"native": ["test:actors-native"], "reference": ["test:hono-actor-multi-reference"]},
+      "firstUnsupportedBoundary": "Eight compile-time-known local counter owners expose fixed tell/read routes; runtime actor lookup, request-derived messages, registries, supervision, persistence, remote identity, and distributed actors remain unsupported."
+    },
+    {
       "id": "upstream-durable-objects-counter",
       "provenance": "upstream-contract-with-tinytsx-adapter",
       "entry": "examples/hono-actors/server.ts",

@@ -30,6 +30,7 @@ def run_oha(
     method: str = "GET",
     body: str | None = None,
     content_type: str | None = None,
+    urls_from_file: bool = False,
 ) -> OhaSample:
     command = oha_command(
         url,
@@ -39,6 +40,7 @@ def run_oha(
         method=method,
         body=body,
         content_type=content_type,
+        urls_from_file=urls_from_file,
     )
     environment = os.environ.copy()
     environment["NO_COLOR"] = "1"
@@ -65,6 +67,7 @@ def oha_command(
     method: str = "GET",
     body: str | None = None,
     content_type: str | None = None,
+    urls_from_file: bool = False,
 ) -> list[str]:
     command = [
         "oha",
@@ -84,6 +87,8 @@ def oha_command(
         command[-1:-1] = ["-d", body]
     if content_type is not None:
         command[-1:-1] = ["-T", content_type]
+    if urls_from_file:
+        command.insert(-1, "--urls-from-file")
     if not keep_alive:
         command.insert(-1, "--disable-keepalive")
     return command
