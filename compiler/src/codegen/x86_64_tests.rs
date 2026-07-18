@@ -273,6 +273,100 @@ fn emits_request_guards_and_headers() {
 }
 
 #[test]
+fn emits_session_authorization_for_both_x86_targets() {
+    for target in [Target::LinuxX86_64, Target::MacosX86_64] {
+        let mut program = dynamic_program(target);
+        program.static_strings.extend([
+            crate::hir::StaticString {
+                id: 1,
+                value: "stytch_session_jwt".to_owned(),
+            },
+            crate::hir::StaticString {
+                id: 2,
+                value: "Unauthenticated".to_owned(),
+            },
+        ]);
+        program.handlers[0].session_authorization = Some(crate::hir::SessionAuthorization {
+            mode: "local".to_owned(),
+            cookie: 1,
+            rejected: crate::hir::GuardedResponse {
+                headers: vec![crate::hir::StaticHeader {
+                    name: "Cache-Control".to_owned(),
+                    value: "no-store".to_owned(),
+                }],
+                stderr: vec![2],
+                response: crate::hir::HandlerResponse::Text {
+                    value: crate::hir::ValueExpression::StringLiteral {
+                        string: 2,
+                        span: crate::hir::SourceSpan {
+                            file: "server.ts".to_owned(),
+                            line: 1,
+                            column: 1,
+                            end_line: 1,
+                            end_column: 2,
+                        },
+                    },
+                    status: 401,
+                    content_type: None,
+                },
+            },
+        });
+
+        let assembly = emit(&program, target, Options::default())
+            .expect("emit x86-64 session authorization");
+        assert!(assembly.contains("tinytsx_request_cookie_present"));
+        assert!(assembly.contains("tinytsx_console_error_static"));
+        assert!(assembly.contains("Cache-Control"));
+        assert!(assembly.contains("no-store"));
+    }
+}
+
+#[test]
+fn emits_basic_authorization_for_both_x86_targets() {
+    for target in [Target::LinuxX86_64, Target::MacosX86_64] {
+        let mut program = dynamic_program(target);
+        program.static_strings.push(crate::hir::StaticString {
+            id: 1,
+            value: "Unauthorized".to_owned(),
+        });
+        program.handlers[0].basic_authorization = Some(crate::hir::BasicAuthorization {
+            credentials: vec![crate::hir::BasicCredential {
+                username: "admin".to_owned(),
+                password: "secret".to_owned(),
+            }],
+            rejected: crate::hir::GuardedResponse {
+                headers: vec![crate::hir::StaticHeader {
+                    name: "WWW-Authenticate".to_owned(),
+                    value: "Basic realm=\"tinytsx\"".to_owned(),
+                }],
+                stderr: Vec::new(),
+                response: crate::hir::HandlerResponse::Text {
+                    value: crate::hir::ValueExpression::StringLiteral {
+                        string: 1,
+                        span: crate::hir::SourceSpan {
+                            file: "server.ts".to_owned(),
+                            line: 1,
+                            column: 1,
+                            end_line: 1,
+                            end_column: 2,
+                        },
+                    },
+                    status: 401,
+                    content_type: None,
+                },
+            },
+        });
+
+        let assembly = emit(&program, target, Options::default())
+            .expect("emit x86-64 basic authorization");
+        assert!(assembly.contains("tinytsx_request_basic_auth_equals"));
+        assert!(assembly.contains("admin"));
+        assert!(assembly.contains("secret"));
+        assert!(assembly.contains("WWW-Authenticate"));
+    }
+}
+
+#[test]
 fn emits_portable_scalar_functions() {
     for target in [Target::LinuxX86_64, Target::MacosX86_64] {
         let assembly = emit(&function_program(target), target, Options::default())

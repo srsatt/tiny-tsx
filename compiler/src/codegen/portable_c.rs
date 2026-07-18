@@ -19,6 +19,9 @@ pub(super) fn emit(program: &Program, options: &Options) -> Result<String, Strin
          typedef __SIZE_TYPE__ tiny_usize;\n\
          extern tiny_u32 tinytsx_request_method_equals(const void *, const tiny_u8 *, tiny_usize);\n\
          extern tiny_u32 tinytsx_request_path_matches(const void *, const tiny_u8 *, tiny_usize);\n\
+         extern tiny_u32 tinytsx_request_basic_auth_equals(const void *, const tiny_u8 *, tiny_usize, const tiny_u8 *, tiny_usize);\n\
+         extern tiny_u32 tinytsx_request_cookie_present(const void *, const tiny_u8 *, tiny_usize);\n\
+         extern void tinytsx_console_error_static(const tiny_u8 *, tiny_usize);\n\
          extern tiny_u32 tinytsx_response_begin(void *, tiny_u16, tiny_u16);\n\
          extern tiny_u32 tinytsx_response_stream_begin(void *);\n\
          extern tiny_u32 tinytsx_response_stream_chunk_static(void *, const tiny_u8 *, tiny_usize);\n\
@@ -131,6 +134,32 @@ fn emit_data(source: &mut String, program: &Program, options: &Options) {
                 source,
                 &format!("tinytsx_handler_{index}_body_limit"),
                 &limit.rejected.headers,
+            );
+        }
+        if let Some(authorization) = &handler.basic_authorization {
+            for (credential_index, credential) in authorization.credentials.iter().enumerate() {
+                emit_bytes(
+                    source,
+                    &format!("tinytsx_handler_{index}_credential_{credential_index}_username"),
+                    credential.username.as_bytes(),
+                );
+                emit_bytes(
+                    source,
+                    &format!("tinytsx_handler_{index}_credential_{credential_index}_password"),
+                    credential.password.as_bytes(),
+                );
+            }
+            emit_guard_header_data(
+                source,
+                &format!("tinytsx_handler_{index}_basic_rejected"),
+                &authorization.rejected.headers,
+            );
+        }
+        if let Some(authorization) = &handler.session_authorization {
+            emit_guard_header_data(
+                source,
+                &format!("tinytsx_handler_{index}_session_rejected"),
+                &authorization.rejected.headers,
             );
         }
         if let Some(existence) = &handler.sqlite_existence {
@@ -324,6 +353,46 @@ fn emit_handler(source: &mut String, program: &Program) -> Result<(), String> {
             emit_response(source, &limit.rejected.response, program, "      ")?;
             source.push_str("    }\n");
         }
+        if let Some(authorization) = &handler.basic_authorization {
+            source.push_str("    tiny_u32 basic_authorized = 0;\n");
+            for (credential_index, credential) in authorization.credentials.iter().enumerate() {
+                writeln!(
+                    source,
+                    "    if (!basic_authorized) basic_authorized = tinytsx_request_basic_auth_equals(request, tinytsx_handler_{index}_credential_{credential_index}_username, {}, tinytsx_handler_{index}_credential_{credential_index}_password, {});",
+                    credential.username.len(),
+                    credential.password.len(),
+                )
+                .unwrap();
+            }
+            source.push_str("    if (!basic_authorized) {\n");
+            emit_console_errors(source, &authorization.rejected.stderr, program, "      ");
+            emit_guard_headers(
+                source,
+                &format!("tinytsx_handler_{index}_basic_rejected"),
+                &authorization.rejected.headers,
+                "      ",
+            );
+            emit_response(source, &authorization.rejected.response, program, "      ")?;
+            source.push_str("    }\n");
+        }
+        if let Some(authorization) = &handler.session_authorization {
+            writeln!(
+                source,
+                "    if (!tinytsx_request_cookie_present(request, tinytsx_string_{}, {})) {{",
+                authorization.cookie,
+                program.static_strings[authorization.cookie].value.len(),
+            )
+            .unwrap();
+            emit_console_errors(source, &authorization.rejected.stderr, program, "      ");
+            emit_guard_headers(
+                source,
+                &format!("tinytsx_handler_{index}_session_rejected"),
+                &authorization.rejected.headers,
+                "      ",
+            );
+            emit_response(source, &authorization.rejected.response, program, "      ")?;
+            source.push_str("    }\n");
+        }
         if let Some(existence) = &handler.sqlite_existence {
             sqlite::emit_existence_check(source, existence, program, "    ");
             emit_guard_headers(
@@ -367,6 +436,17 @@ fn emit_handler(source: &mut String, program: &Program) -> Result<(), String> {
     }
     source.push_str("  return 5;\n}\n");
     Ok(())
+}
+
+fn emit_console_errors(source: &mut String, strings: &[usize], program: &Program, indent: &str) {
+    for string in strings {
+        writeln!(
+            source,
+            "{indent}tinytsx_console_error_static(tinytsx_string_{string}, {});",
+            program.static_strings[*string].value.len(),
+        )
+        .unwrap();
+    }
 }
 
 fn emit_response(
