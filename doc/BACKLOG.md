@@ -767,6 +767,52 @@ not an isolated Worker allocation claim. The adjacent
 `benchmarks/results/2026-07-18-m5-max-sustained-15s-hono-actor-multi-keepalive-w8.*`
 pair retains every response sample and actor-state checkpoint.
 
+#### Selected P3/P4 tracer — on-disk WAL contention and savepoint rollback
+
+Add one project-owned `benchmarks/tiny/hono-sqlite-wal.ts` application against
+pinned Hono commit `b2ae3a2204a48ce15a26448fd746d39745eb1837` and bundled
+SQLite 3.53.2. Construct two static `Database("wal-load.db")` values so the
+runtime opens two independent owner connections to one capability-scoped file.
+Two setup routes must select WAL mode and pin `synchronous=FULL`, a 1,000 ms
+busy timeout, and the default 1,000-page automatic checkpoint boundary before
+creating one fixed state row.
+
+Each owner gets one response-equivalent load route. In one outer SQLite
+transaction, every request must create a savepoint, increment a rollback probe,
+roll back to and release the savepoint, then increment a committed progress
+counter and return `committed`. Cycling both routes under concurrent load must
+therefore contend for the single WAL writer while remaining HTTP 200. After
+setup, warm-up, and every measured interval, query the live database and require
+WAL mode, a strictly progressing committed counter, and an exactly-zero
+rollback probe. Record the main database, WAL, and SHM existence and sizes while
+the process is live; reset all three names before every fresh process sample.
+
+The Bun/Hono adapter must use two independent Bun Workers, each owning one
+`bun:sqlite` connection to the same target-private file and executing the same
+PRAGMAs, transaction boundary, SQL, routes, response bytes, and state queries.
+Use separate protected temporary directories for TinyTSX and Bun so neither
+target observes the other's database. The harness must retain the exact load
+URL set, state postcondition, file samples, startup/RSS/throughput/latency,
+process counters, descriptor recovery, and clean disposal in schema-v2 output.
+
+Require frontend/HIR coverage for two same-path database owners, Apple-arm64
+native HTTP coverage for setup, concurrent progress, rollback invariance,
+restart persistence, bounded busy-timeout failure, and post-contention reuse.
+Linux arm64 must assemble both database IDs and the transaction ABI. Add the
+focused Bun reference, benchmark harness, Hono example-manifest, package gate,
+and synchronized persistence/performance/status documentation before running
+the normal short equivalence smoke and three-by-15-second concurrency-8/64,
+eight-worker keep-alive comparison.
+
+This tracer measures two connections, real on-disk WAL writes, write-lock
+contention, and successful savepoint rollback on every request. It does not
+measure failing full-transaction rollback frequency, crash/power-loss
+durability, cold storage, WAL growth with automatic checkpointing disabled,
+more than two connections, growing tables, request-derived values, arbitrary
+transaction callbacks, network filesystems, or cross-process writers. Those
+remain separate functional and performance tracers; the broad P3/P4 items stay
+unchecked until their other named workload families are proved.
+
 Before implementing the next tracer, its selected goal must be copied into the
 active goal with: its exact tracer/source revision; admitted and rejected
 boundaries; Apple execution and Linux-arm64 evidence; failure, saturation, and
