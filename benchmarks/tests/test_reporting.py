@@ -53,6 +53,21 @@ class ReportingTest(unittest.TestCase):
         self.assertIn("Body preview:", markdown)
         self.assertNotIn("x" * 200, markdown)
 
+    def test_renders_a_fixed_post_request_contract(self) -> None:
+        raw = self._raw()
+        raw["correctness"].update({
+            "method": "POST",
+            "requestContentType": "application/json",
+            "requestBodyUtf8": '{"value":7}',
+        })
+
+        markdown = render_markdown(summarize(raw))
+
+        self.assertIn("## Request contract", markdown)
+        self.assertIn("- Method: `POST`", markdown)
+        self.assertIn("- Content-Type: `application/json`", markdown)
+        self.assertIn(r'- Body: `"{\"value\":7}"` (11 bytes)', markdown)
+
     @staticmethod
     def _raw() -> dict:
         sample = {

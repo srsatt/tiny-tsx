@@ -110,6 +110,7 @@ def render_markdown(result: dict[str, Any]) -> str:
         "",
         _allocation_note(result),
         "",
+        *_request_contract_lines(result["correctness"]),
         "## Response contract",
         "",
         f"- Status: {result['correctness']['status']}",
@@ -165,6 +166,28 @@ def _response_body_lines(correctness: dict[str, Any]) -> list[str]:
     return [
         f"- Body: {length:,} UTF-8 bytes; SHA-256 `{digest}`",
         f"- Body preview: `{preview}...`",
+    ]
+
+
+def _request_contract_lines(correctness: dict[str, Any]) -> list[str]:
+    method = str(correctness.get("method", "GET"))
+    body = str(correctness.get("requestBodyUtf8", ""))
+    content_type = correctness.get("requestContentType")
+    if method == "GET" and body == "" and content_type is None:
+        return []
+    body_bytes = body.encode()
+    body_line = (
+        f"- Body: `{json.dumps(body, ensure_ascii=False)}` ({len(body_bytes)} bytes)"
+        if len(body_bytes) <= 256
+        else f"- Body: {len(body_bytes):,} UTF-8 bytes; SHA-256 `{hashlib.sha256(body_bytes).hexdigest()}`"
+    )
+    return [
+        "## Request contract",
+        "",
+        f"- Method: `{method}`",
+        f"- Content-Type: `{content_type}`",
+        body_line,
+        "",
     ]
 
 

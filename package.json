@@ -17,6 +17,7 @@
     "release:verify": "node tools/release.mjs",
     "benchmark:static": "python3 benchmarks/scripts/run_static.py",
     "benchmark:hono": "python3 benchmarks/scripts/run_static.py --workload hono-basic",
+    "benchmark:hono-json-body": "python3 benchmarks/scripts/run_static.py --workload hono-json-body --keep-alive",
     "benchmark:hono-json-compact": "python3 benchmarks/scripts/run_static.py --workload hono-json-compact --keep-alive",
     "benchmark:hono-json-pretty": "python3 benchmarks/scripts/run_static.py --workload hono-json-pretty --keep-alive",
     "benchmark:hono-jsx-ssr": "python3 benchmarks/scripts/run_static.py --workload hono-jsx-ssr",

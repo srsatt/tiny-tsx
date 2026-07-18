@@ -18,6 +18,21 @@ class OhaMetricsTest(unittest.TestCase):
         self.assertNotIn("--disable-keepalive", persistent)
         self.assertIn("--disable-keepalive", connection_close)
 
+    def test_posts_a_fixed_json_body_with_an_explicit_content_type(self) -> None:
+        command = oha_command(
+            "http://127.0.0.1/json-body",
+            8,
+            1,
+            True,
+            method="POST",
+            body='{"value":7}',
+            content_type="application/json",
+        )
+
+        self.assertEqual(command[command.index("-m") + 1], "POST")
+        self.assertEqual(command[command.index("-d") + 1], '{"value":7}')
+        self.assertEqual(command[command.index("-T") + 1], "application/json")
+
     def test_extracts_sub_millisecond_percentiles(self) -> None:
         payload = {
             "summary": {

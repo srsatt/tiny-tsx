@@ -68,6 +68,23 @@ class StaticHarnessTest(unittest.TestCase):
         self.assertIn("query-absent", compact["scope"])
         self.assertIn("query-present", pretty["scope"])
 
+    def test_json_body_workload_posts_the_shared_primitive_tracer(self) -> None:
+        workload = WORKLOADS["hono-json-body"]
+
+        self.assertEqual(workload["method"], "POST")
+        self.assertEqual(workload["path"], "/json-body")
+        self.assertEqual(workload["request_content_type"], "application/json")
+        self.assertEqual(workload["request_body"], workload["body"])
+        self.assertEqual(
+            workload["tiny_entry"],
+            "tests/compat/hono/json-body-smoke.ts",
+        )
+        self.assertEqual(
+            workload["bun_script"],
+            "benchmarks/bun/hono-json-body-server.ts",
+        )
+        self.assertIn("string, number, boolean, and null", workload["scope"])
+
     def test_hono_jsx_workload_uses_bun_as_the_byte_reference(self) -> None:
         workload = WORKLOADS["hono-jsx-ssr"]
         self.assertEqual(

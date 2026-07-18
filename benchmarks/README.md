@@ -1,6 +1,6 @@
 # TinyTSX benchmarks
 
-The harness has fifteen workloads:
+The harness has sixteen workloads:
 
 - `static-page` compares the current static TinyTSX vertical slice to an
   idiomatic `Bun.serve` server returning the same response;
@@ -8,6 +8,9 @@ The harness has fifteen workloads:
   `vendor/hono-examples/basic/src/index.ts` application through TinyTSX and Bun.
   Bun uses only a host `Bun.serve` adapter and path aliases to the same pinned
   Hono source submodule;
+- `hono-json-body` posts one fixed bounded JSON object through a shared Hono
+  route and returns selected string, number, boolean, and null fields with their
+  types and escaping preserved;
 - `hono-json-compact` and `hono-json-pretty` run the complete pinned basic app's
   `/api/posts` route without and with the upstream `?pretty` query-presence
   branch, using Bun to capture each exact JSON body;
@@ -72,6 +75,7 @@ Run the exact-source Hono comparison with:
 
 ```bash
 npm run benchmark:hono
+npm run benchmark:hono-json-body
 npm run benchmark:hono-json-compact
 npm run benchmark:hono-json-pretty
 npm run benchmark:hono-jsx-ssr

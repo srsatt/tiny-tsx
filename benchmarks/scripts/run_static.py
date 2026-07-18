@@ -59,6 +59,7 @@ HONO_BASIC_TINY_ARGS = [
 HONO_BASIC_BUN_ARGS = [
     "--tsconfig-override", "benchmarks/bun/hono-tsconfig.json",
 ]
+JSON_BODY = b'{"name":"TinyTSX & \\"Bun\\"","count":7,"enabled":true,"note":null}'
 
 
 WORKLOADS = {
@@ -94,6 +95,27 @@ WORKLOADS = {
         "tiny_args": HONO_BASIC_TINY_ARGS,
         "bun_script": "benchmarks/bun/hono-server.ts",
         "bun_args": HONO_BASIC_BUN_ARGS,
+    },
+    "hono-json-body": {
+        "body": JSON_BODY,
+        "content_type": "application/json",
+        "headers": {},
+        "numeric_headers": [],
+        "method": "POST",
+        "request_body": JSON_BODY,
+        "request_content_type": "application/json",
+        "path": "/json-body",
+        "scope": "shared pinned Hono POST route selecting one string, number, boolean, and null field from a bounded request JSON object and serializing the closed response; HTTP/1.1; localhost",
+        "limitation": "The route selects four fixed primitive fields from one fixed body; it does not measure dynamic keys, arrays, nested objects, mutation, coercion, schema validation, streaming JSON, or mixed request bodies.",
+        "tiny_entry": "tests/compat/hono/json-body-smoke.ts",
+        "tiny_args": [
+            "--alias", "hono=vendor/hono/src/index.ts",
+            "--api", "hono=tests/compat/hono/api.d.ts",
+        ],
+        "bun_script": "benchmarks/bun/hono-json-body-server.ts",
+        "bun_args": [
+            "--tsconfig-override", "benchmarks/bun/hono-runtime-tsconfig.json",
+        ],
     },
     "hono-json-compact": {
         "body": b"",
@@ -425,12 +447,23 @@ def main() -> int:
             process = start_server(specs[name])
             sampler = None
             try:
-                correctness = wait_for_response(process, port, specs[name]["path"])
+                correctness = wait_for_response(
+                    process,
+                    port,
+                    specs[name]["path"],
+                    workload,
+                )
                 assert_correct(correctness, workload, name)
                 targets[name]["idleRssSamplesBytes"].append(resident_bytes(process.pid))
                 sampler = ProcessSampler(process.pid)
                 url = f"http://127.0.0.1:{port}{specs[name]['path']}"
-                run_oha(url, max(arguments.concurrency), 1, arguments.keep_alive)
+                run_oha(
+                    url,
+                    max(arguments.concurrency),
+                    1,
+                    arguments.keep_alive,
+                    **oha_request(workload),
+                )
                 targets[name]["postWarmupRssSamplesBytes"].append(
                     resident_bytes(process.pid)
                 )
@@ -445,6 +478,7 @@ def main() -> int:
                         concurrency,
                         arguments.duration,
                         arguments.keep_alive,
+                        **oha_request(workload),
                     )
                     targets[name]["throughput"][str(concurrency)].append(sample.as_json())
             finally:
@@ -487,6 +521,9 @@ def main() -> int:
         },
         "correctness": {
             "path": workload["path"],
+            "method": workload.get("method", "GET"),
+            "requestContentType": workload.get("request_content_type"),
+            "requestBodyUtf8": workload.get("request_body", b"").decode(),
             "status": 200,
             "contentTypes": {
                 name: expected_content_type(workload, name)
@@ -633,7 +670,7 @@ def measure_startup(
     started = time.perf_counter_ns()
     process = start_server(spec)
     try:
-        response = wait_for_response(process, port, spec["path"])
+        response = wait_for_response(process, port, spec["path"], workload)
         assert_correct(response, workload, spec["name"])
         return (time.perf_counter_ns() - started) / 1_000_000
     finally:
@@ -648,7 +685,7 @@ def capture_reference_body(
     started = time.perf_counter_ns()
     process = start_server(spec)
     try:
-        response = wait_for_response(process, port, spec["path"])
+        response = wait_for_response(process, port, spec["path"], workload)
         actual_type = normalize_content_type(response["headers"].get("content-type"))
         expected_type = normalize_content_type(expected_content_type(workload, spec["name"]))
         if response["status"] != 200 or actual_type != expected_type:
@@ -666,6 +703,7 @@ def wait_for_response(
     process: subprocess.Popen[bytes],
     port: int,
     path: str = "/",
+    workload: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     deadline = time.monotonic() + 10
     last_error: Exception | None = None
@@ -675,7 +713,15 @@ def wait_for_response(
             raise RuntimeError(f"server exited with {process.returncode}: {stderr}")
         try:
             connection = http.client.HTTPConnection("127.0.0.1", port, timeout=0.5)
-            connection.request("GET", path, headers={"Connection": "close"})
+            headers = {"Connection": "close"}
+            if content_type := workload.get("request_content_type") if workload else None:
+                headers["Content-Type"] = str(content_type)
+            connection.request(
+                str(workload.get("method", "GET")) if workload else "GET",
+                path,
+                body=workload.get("request_body") if workload else None,
+                headers=headers,
+            )
             response = connection.getresponse()
             body = response.read()
             headers = {name.lower(): value for name, value in response.getheaders()}
@@ -685,6 +731,15 @@ def wait_for_response(
             last_error = error
             time.sleep(0.001)
     raise RuntimeError(f"server did not become ready: {last_error}")
+
+
+def oha_request(workload: dict[str, Any]) -> dict[str, str | None]:
+    body = workload.get("request_body")
+    return {
+        "method": str(workload.get("method", "GET")),
+        "body": body.decode() if body is not None else None,
+        "content_type": workload.get("request_content_type"),
+    }
 
 
 def assert_correct(

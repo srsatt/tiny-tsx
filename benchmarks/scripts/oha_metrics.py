@@ -26,8 +26,20 @@ def run_oha(
     concurrency: int,
     duration_seconds: int,
     keep_alive: bool = False,
+    *,
+    method: str = "GET",
+    body: str | None = None,
+    content_type: str | None = None,
 ) -> OhaSample:
-    command = oha_command(url, concurrency, duration_seconds, keep_alive)
+    command = oha_command(
+        url,
+        concurrency,
+        duration_seconds,
+        keep_alive,
+        method=method,
+        body=body,
+        content_type=content_type,
+    )
     environment = os.environ.copy()
     environment["NO_COLOR"] = "1"
     completed = subprocess.run(
@@ -49,6 +61,10 @@ def oha_command(
     concurrency: int,
     duration_seconds: int,
     keep_alive: bool,
+    *,
+    method: str = "GET",
+    body: str | None = None,
+    content_type: str | None = None,
 ) -> list[str]:
     command = [
         "oha",
@@ -62,6 +78,12 @@ def oha_command(
         "json",
         url,
     ]
+    if method != "GET":
+        command[-1:-1] = ["-m", method]
+    if body is not None:
+        command[-1:-1] = ["-d", body]
+    if content_type is not None:
+        command[-1:-1] = ["-T", content_type]
     if not keep_alive:
         command.insert(-1, "--disable-keepalive")
     return command

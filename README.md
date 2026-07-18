@@ -229,6 +229,7 @@ server is available separately:
 ```bash
 npm run benchmark:static
 npm run benchmark:hono
+npm run benchmark:hono-json-body
 npm run benchmark:hono-json-compact
 npm run benchmark:hono-json-pretty
 npm run benchmark:hono-jsx-ssr
