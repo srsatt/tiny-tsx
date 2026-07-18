@@ -122,6 +122,15 @@ fn emits_assemblable_hono_sqlite_for_linux_x86_64() {
     assert_assembles_as_x86_elf(&assembly, "hono-sqlite");
 }
 
+#[test]
+fn emits_assemblable_hono_actors_for_linux_x86_64() {
+    let assembly = compile_linux_x86("examples/hono-actors/server.ts", &[]);
+
+    assert!(assembly.contains("tinytsx_actor_ask_counter"));
+    assert!(assembly.contains("tinytsx_actor_tell_counter"));
+    assert_assembles_as_x86_elf(&assembly, "hono-actors");
+}
+
 fn compile_linux(entry: &str, extra_arguments: &[&str]) -> String {
     let compiler = env!("CARGO_BIN_EXE_tinytsx");
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..");

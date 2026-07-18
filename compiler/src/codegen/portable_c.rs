@@ -4,6 +4,7 @@ use crate::hir::{HandlerResponse, HtmlOp, Program, ValueExpression};
 
 use super::Options;
 
+mod application;
 mod sqlite;
 mod values;
 
@@ -38,6 +39,7 @@ pub(super) fn emit(program: &Program, options: &Options) -> Result<String, Strin
          extern tiny_u32 tinytsx_html_write_openai_chat_text(void *, const tiny_u8 *, tiny_usize, const tiny_u8 *, tiny_usize, const tiny_u8 *, tiny_usize);\n",
     );
     sqlite::emit_declarations(&mut source);
+    application::emit_declarations(&mut source);
     source.push_str(
         "extern tiny_usize tinytsx_request_body_length(const void *);\n\
          extern tiny_u32 tinytsx_response_header_static(void *, const tiny_u8 *, tiny_usize, const tiny_u8 *, tiny_usize);\n\
@@ -178,12 +180,6 @@ fn emit_config(source: &mut String, program: &Program, options: &Options) {
     .unwrap();
     writeln!(
         source,
-        "tiny_usize tinytsx_config_worker_modules(void) {{ return {}; }}",
-        program.workers.len()
-    )
-    .unwrap();
-    writeln!(
-        source,
         "tiny_usize tinytsx_config_provider_transport(void) {{ return {}; }}",
         usize::from(program.uses_openai_transport())
     )
@@ -226,37 +222,11 @@ fn emit_config(source: &mut String, program: &Program, options: &Options) {
     );
     writeln!(
         source,
-        "tiny_usize tinytsx_config_actors(void) {{ return {}; }}",
-        program.actors.len()
-    )
-    .unwrap();
-    writeln!(
-        source,
-        "tiny_usize tinytsx_config_supervisors(void) {{ return {}; }}",
-        program.supervisors.len()
-    )
-    .unwrap();
-    writeln!(
-        source,
         "tiny_usize tinytsx_config_sqlite_databases(void) {{ return {}; }}",
         program.sqlite_databases.len()
     )
     .unwrap();
-    source.push_str(
-        "tiny_usize tinytsx_supervisor_restart_max(tiny_usize value) { (void)value; return 0; }\n\
-         tiny_u64 tinytsx_supervisor_restart_within_ms(tiny_usize value) { (void)value; return 0; }\n\
-         tiny_u32 tinytsx_actor_operation(tiny_usize actor) { (void)actor; return 0; }\n\
-         tiny_i64 tinytsx_actor_initial_state(tiny_usize actor) { (void)actor; return 0; }\n\
-         tiny_i64 tinytsx_actor_failure_message(tiny_usize actor) { (void)actor; return 0; }\n\
-         tiny_usize tinytsx_actor_restart_max(tiny_usize actor) { (void)actor; return 0; }\n\
-         tiny_u64 tinytsx_actor_restart_within_ms(tiny_usize actor) { (void)actor; return 0; }\n\
-         tiny_usize tinytsx_actor_supervisor(tiny_usize actor) { (void)actor; return 0; }\n\
-         tiny_u32 tinytsx_actor_initial_json(tiny_usize actor, const tiny_u8 **pointer, tiny_usize *length) { (void)actor; (void)pointer; (void)length; return 4; }\n\
-         tiny_usize tinytsx_actor_mailbox_capacity(tiny_usize actor) { (void)actor; return 0; }\n\
-         tiny_usize tinytsx_actor_persistence_database(tiny_usize actor) { (void)actor; return 0; }\n\
-         tiny_u32 tinytsx_actor_persistence_key(tiny_usize actor, const tiny_u8 **pointer, tiny_usize *length) { (void)actor; (void)pointer; (void)length; return 4; }\n\
-         tiny_u32 tinytsx_worker_operation(tiny_usize worker) { (void)worker; return 0; }\n",
-    );
+    application::emit_config(source, program);
     emit_view_function(
         source,
         "tinytsx_config_sqlite_database_path",
@@ -366,6 +336,7 @@ fn emit_handler(source: &mut String, program: &Program) -> Result<(), String> {
             source.push_str("      }\n    }\n");
         }
         sqlite::emit_actions(source, &handler.sqlite_actions, program, "    ")?;
+        application::emit_actor_actions(source, &handler.actor_actions, program, "    ");
         if let Some(request_id) = &handler.request_id {
             writeln!(
                 source,
@@ -666,6 +637,24 @@ fn emit_text_expression(
             ..
         } => {
             sqlite::emit_query(source, indent, *database, *sql, mode, parameters, program);
+        }
+        ValueExpression::ActorCall {
+            actor,
+            message,
+            json_message,
+            timeout_ms,
+            ..
+        } => application::emit_actor_call(
+            source,
+            indent,
+            *actor,
+            *message,
+            *json_message,
+            *timeout_ms,
+            program,
+        ),
+        ValueExpression::WorkerCall { worker, input, .. } => {
+            application::emit_worker_call(source, indent, *worker, input, program)?;
         }
         _ if values::is_scalar(expression) => {
             let value = values::render_handler_expression(expression, program)?;
