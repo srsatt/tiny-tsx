@@ -19,23 +19,25 @@ produces and serves a native Mach-O executable from the example TSX source.
 - The reusable worker scheduler now tells resumable handlers whether other work
   is ready. HTTP retains the owned socket, parser bytes, and request count for
   at most sixteen hot requests per turn. When no complete next head is buffered,
-  one POSIX readiness poll waits at most one millisecond under queue pressure or
-  100 milliseconds without pressure; a pressured connection may rotate at most
-  sixteen empty probes before it closes.
+  one POSIX readiness poll waits at most one millisecond under queue pressure;
+  a pressured connection may rotate at most sixteen empty probes before it
+  closes. A single-worker server, or a connection that already observed
+  pressure, uses a 100-millisecond idle reuse wait when the queue is momentarily
+  empty. Never-contended multi-worker connections retain the five-second bound.
 - Ready input continues on the same executor without another queue rotation.
   Idle sockets yield behind accepted work, while partial/pipelined parser bytes,
   the 100-request lifetime cap, and the five-second active I/O bound remain
-  unchanged. A paused client beyond the 100-millisecond idle reuse window
-  reconnects rather than holding a native executor.
+  unchanged. A paused single-worker client beyond the 100-millisecond idle
+  reuse window reconnects rather than holding the only native executor.
 - The minimized runtime regression proves a queued connection completes before
   an idle keep-alive timeout with one executor. The original default-worker
   SQLite test now completes in about 6.9 seconds and its 32 concurrent writes
   complete in 12 milliseconds in the diagnostic run, followed by all 32
   successful lookups.
 - The minimized runtime regression is green, the original default-worker
-  SQLite test completes in about 9.5 seconds, and worker/bootstrap unit tests
+  SQLite test completes in about 7.2 seconds, and worker/bootstrap unit tests
   pass 22/22 and 70/70 under strict Clippy. A response-checked two-second
-  preview returns descriptors to 4/68/4 and reaches 72.5k requests/second at
+  preview returns descriptors to 4/68/4 and reaches 72.4k requests/second at
   concurrency 64 without response failures. Full native/release and controlled
   P4 reruns remain required at the final committed source.
 

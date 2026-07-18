@@ -139,9 +139,11 @@ keep-alive removes most accept/connect/close work from the measured path.
 
 Append `--keep-alive` to run the persistent-connection matrix. TinyTSX closes
 each connection after 100 requests. A hot connection runs at most sixteen
-requests per turn; an otherwise idle connection waits 100 milliseconds for
-reuse and yields sooner under queue pressure. The harness records that bounded
-reconnect policy as a limitation beside Bun's host behavior.
+requests per turn. Under queue pressure it uses bounded one-millisecond
+readiness probes; a single-worker or previously pressured connection waits 100
+milliseconds for idle reuse, while an uncontended multi-worker connection keeps
+the five-second bound. The harness records that reconnect policy as a limitation
+beside Bun's host behavior.
 
 A shorter exploratory run is useful during development:
 

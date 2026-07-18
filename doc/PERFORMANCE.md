@@ -185,8 +185,10 @@ experiments were rejected.
 The accepted design retains each socket, bounded parser buffer, and lifetime
 request count for at most sixteen hot requests per executor turn. When no
 complete next head is buffered, a POSIX readiness poll waits one millisecond
-under queue pressure or 100 milliseconds without it. A pressured idle
-connection rotates at most sixteen times before closing; ready socket input
+under queue pressure. A pressured idle connection rotates at most sixteen
+times before closing. Single-worker or previously pressured connections use a
+100-millisecond idle reuse wait when no work is queued; never-contended
+multi-worker connections retain the five-second bound. Ready socket input
 continues on the same executor without losing parser bytes. The external queue
 and resubmission boundary remain bounded.
 
