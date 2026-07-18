@@ -2636,6 +2636,7 @@ fn validate_memory_report(memory: &MemoryReport, modules: &HashSet<&str>) -> Res
             ("compileTime", "none") => summary.compile_time += 1,
             ("static", "response") => summary.static_sites += 1,
             ("request", "response") => summary.request += 1,
+            ("request", "none") if site.value_kind == "runtimeMap" => summary.request += 1,
             ("worker", "worker") => summary.worker += 1,
             ("message", "message") => summary.message += 1,
             ("managed", "process") => summary.managed += 1,
@@ -2909,6 +2910,32 @@ mod memory_tests {
                 static_sites: 1,
                 aliased_sites: 1,
                 response_escapes: 1,
+                ..MemorySummary::default()
+            },
+        };
+        let modules = HashSet::from(["app.ts"]);
+
+        assert_eq!(validate_memory_report(&memory, &modules), Ok(()));
+    }
+
+    #[test]
+    fn validates_a_non_escaping_request_local_map() {
+        let memory = MemoryReport {
+            policy: "arena".to_owned(),
+            managed_heap_required: false,
+            sites: vec![MemoryAllocationSite {
+                module: "app.ts".to_owned(),
+                line: 1,
+                column: 1,
+                value_kind: "runtimeMap".to_owned(),
+                instances: 1,
+                max_references: 2,
+                lifetime: "request".to_owned(),
+                escape: "none".to_owned(),
+            }],
+            summary: MemorySummary {
+                request: 1,
+                aliased_sites: 1,
                 ..MemorySummary::default()
             },
         };

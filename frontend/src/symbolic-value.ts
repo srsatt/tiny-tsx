@@ -29,6 +29,7 @@ export type Value =
   | {kind: "thrown"; value: Value}
   | {kind: "array"; items: Value[]}
   | {kind: "record"; fields: Map<string, Value>}
+  | {kind: "runtimeMap"; capacity: 16; entries: Array<{key: Value; value: Value}>}
   | {kind: "contextVariables"; fields: Map<string, Value>}
   | {kind: "headers"; entries: Map<string, {name: string; value: ResponseHeaderValue}>}
   | {kind: "request"; routePattern: string; method: string}
@@ -235,6 +236,9 @@ export function readProperty(value: Value, name: string): Value {
   if (value.kind === "record" || value.kind === "instance" || value.kind === "contextVariables") {
     return value.fields.get(name) ?? UNDEFINED;
   }
+  if (value.kind === "runtimeMap" && name === "size") {
+    return {kind: "number", value: value.entries.length};
+  }
   if (value.kind === "schema" && name === "~standard") {
     return {
       kind: "record",
@@ -320,6 +324,7 @@ export function truthiness(value: Value): boolean | undefined {
     case "html": return value.value.length > 0;
     case "array":
     case "record":
+    case "runtimeMap":
     case "contextVariables":
     case "regexp":
     case "symbol":

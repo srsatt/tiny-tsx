@@ -1365,6 +1365,36 @@ function isBoundedContextVariable(value: Value): boolean {
     || value.kind === "runtimeString";
 }
 
+function isClosedMapKey(value: Value): boolean {
+  return value.kind === "undefined"
+    || value.kind === "null"
+    || value.kind === "boolean"
+    || value.kind === "number"
+    || value.kind === "string"
+    || value.kind === "symbol";
+}
+
+function isBoundedMapValue(value: Value): boolean {
+  return isClosedMapKey(value)
+    || value.kind === "routeParameter"
+    || value.kind === "requestHeader"
+    || value.kind === "requestCookie"
+    || value.kind === "environmentVariable"
+    || value.kind === "fileText"
+    || value.kind === "runtimeString";
+}
+
+function mapKeyIndex(map: Value & {kind: "runtimeMap"}, key: Value): number {
+  return map.entries.findIndex(entry => mapKeysEqual(entry.key, key));
+}
+
+function mapKeysEqual(left: Value, right: Value): boolean {
+  if (left.kind === "number" && right.kind === "number") {
+    return left.value === right.value || Number.isNaN(left.value) && Number.isNaN(right.value);
+  }
+  return valuesEqual(left, right);
+}
+
 function applyContextVariableMiddlewarePrelude(
   evaluator: Evaluator,
   middleware: Value & {kind: "closure"},
@@ -2139,6 +2169,16 @@ function selectRouteValue(value: Value, name: string, key?: string): Value {
       ])),
     };
   }
+  if (value.kind === "runtimeMap") {
+    return {
+      kind: "runtimeMap",
+      capacity: 16,
+      entries: value.entries.map(entry => ({
+        key: selectRouteValue(entry.key, name, key),
+        value: selectRouteValue(entry.value, name, key),
+      })),
+    };
+  }
   return value;
 }
 
@@ -2321,6 +2361,43 @@ function executeEffectCall(
   }
   if (receiver.kind === "array" && name === "unshift") {
     receiver.items.unshift(...arguments_);
+    return true;
+  }
+  if (receiver.kind === "runtimeMap" && name === "set") {
+    const key = arguments_[0];
+    const value = arguments_[1];
+    if (
+      arguments_.length !== 2
+      || key === undefined
+      || value === undefined
+      || !isClosedMapKey(key)
+      || !isBoundedMapValue(value)
+    ) {
+      issue(evaluator, call, module, "Map.set requires one closed primitive key and one bounded primitive value");
+      return true;
+    }
+    const index = mapKeyIndex(receiver, key);
+    if (index >= 0) receiver.entries[index] = {key: receiver.entries[index]!.key, value};
+    else if (receiver.entries.length < receiver.capacity) receiver.entries.push({key, value});
+    else issue(evaluator, call, module, "Map supports at most 16 live entries");
+    return true;
+  }
+  if (receiver.kind === "runtimeMap" && name === "delete") {
+    const key = arguments_[0];
+    if (arguments_.length !== 1 || key === undefined || !isClosedMapKey(key)) {
+      issue(evaluator, call, module, "Map.delete requires one closed primitive key");
+      return true;
+    }
+    const index = mapKeyIndex(receiver, key);
+    if (index >= 0) receiver.entries.splice(index, 1);
+    return true;
+  }
+  if (receiver.kind === "runtimeMap" && name === "clear") {
+    if (arguments_.length !== 0) {
+      issue(evaluator, call, module, "Map.clear does not accept arguments");
+      return true;
+    }
+    receiver.entries.splice(0);
     return true;
   }
   if (receiver.kind === "worker" && name === "terminate" && arguments_.length === 0) {
@@ -2755,6 +2832,42 @@ function evaluateCall(
   if (ts.isPropertyAccessExpression(call.expression)) {
     const receiver = evaluate(evaluator, call.expression.expression, module, environment, instance);
     const name = memberName(call.expression.name);
+    if (receiver.kind === "runtimeMap") {
+      const key = arguments_[0];
+      if (name === "set") {
+        const value = arguments_[1];
+        if (
+          arguments_.length !== 2
+          || key === undefined
+          || value === undefined
+          || !isClosedMapKey(key)
+          || !isBoundedMapValue(value)
+        ) {
+          return unknown("Map.set requires one closed primitive key and one bounded primitive value");
+        }
+        const index = mapKeyIndex(receiver, key);
+        if (index >= 0) receiver.entries[index] = {key: receiver.entries[index]!.key, value};
+        else if (receiver.entries.length < receiver.capacity) receiver.entries.push({key, value});
+        else return unknown("Map supports at most 16 live entries");
+        return receiver;
+      }
+      if (name === "get" || name === "has" || name === "delete") {
+        if (arguments_.length !== 1 || key === undefined || !isClosedMapKey(key)) {
+          return unknown(`Map.${name} requires one closed primitive key`);
+        }
+        const index = mapKeyIndex(receiver, key);
+        if (name === "get") return index < 0 ? UNDEFINED : receiver.entries[index]!.value;
+        if (name === "has") return {kind: "boolean", value: index >= 0};
+        if (index >= 0) receiver.entries.splice(index, 1);
+        return {kind: "boolean", value: index >= 0};
+      }
+      if (name === "clear") {
+        if (arguments_.length !== 0) return unknown("Map.clear does not accept arguments");
+        receiver.entries.splice(0);
+        return UNDEFINED;
+      }
+      return unknown(`Map.${name} is outside the bounded local Map subset`);
+    }
     if (receiver.kind === "database" && name === "exec") {
       const sql = arguments_[0];
       if (arguments_.length !== 1 || sql?.kind !== "string" || Buffer.byteLength(sql.value, "utf8") > 65_536) {
@@ -4582,10 +4695,9 @@ function evaluateExpression(
       return {kind: "array", items};
     }
     if (expression.expression.text === "Map") {
-      return {
-        kind: "record",
-        fields: new Map([["size", {kind: "number", value: 0}]]),
-      };
+      return (expression.arguments?.length ?? 0) === 0
+        ? {kind: "runtimeMap", capacity: 16, entries: []}
+        : unknown("Map constructor iterables are outside the bounded local Map subset");
     }
     if (expression.expression.text === "Response") {
       const body = expression.arguments?.[0] === undefined
@@ -5715,6 +5827,11 @@ function markValueEscape(
     for (const item of value.items) markValueEscape(tracker, item, target, visited);
   } else if (value.kind === "record" || value.kind === "instance") {
     for (const field of value.fields.values()) markValueEscape(tracker, field, target, visited);
+  } else if (value.kind === "runtimeMap") {
+    for (const entry of value.entries) {
+      markValueEscape(tracker, entry.key, target, visited);
+      markValueEscape(tracker, entry.value, target, visited);
+    }
   } else if (value.kind === "closure") {
     for (const capture of value.environment.values()) markValueEscape(tracker, capture, target, visited);
   } else if (value.kind === "routeChoice") {
@@ -5770,6 +5887,7 @@ function lifetimeFor(site: MemorySiteState): EvaluatedLifetime {
   if (site.escape === "worker") return "worker";
   if (site.escape === "message") return "message";
   if (site.escape === "process") return "managed";
+  if (site.valueKind === "runtimeMap") return "request";
   if (site.escape === "response") {
     return site.valueKind === "string" || site.valueKind === "html" ? "static" : "request";
   }

@@ -1685,6 +1685,68 @@ test("lowers bounded Hono context variables across middleware and route handling
   assert.match(JSON.stringify(varResponse), /routeParameter/);
 });
 
+test("lowers a bounded request-local Map separately from closed records", () => {
+  const entry = path.join(repository, "tests/compat/hono/map-smoke.ts");
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+    apiAliases: {hono: path.join(repository, "tests/compat/hono/api.d.ts")},
+  });
+
+  const dynamic = hir.handlers.find(candidate => candidate.path === "/map/:value");
+  assert.equal(dynamic?.response.kind, "text");
+  assert.match(JSON.stringify(dynamic?.response), /routeParameter/);
+  const cleared = hir.handlers.find(candidate => candidate.path === "/map-clear");
+  assert.equal(cleared?.response.kind, "text");
+  assert.ok(hir.staticStrings.some(value => value.value === "empty"));
+  assert.ok(hir.memory.sites.some(site =>
+    site.valueKind === "runtimeMap" && site.lifetime === "request" && site.escape === "none"
+  ));
+  assert.equal(hir.memory.managedHeapRequired, false);
+});
+
+test("rejects Map capacity and ownership forms outside the bounded local subset", () => {
+  const setters = Array.from({length: 17}, (_, index) => `values.set("key-${index}", "value");`).join("\n");
+  const capacity = write("map-capacity.ts", `
+    import {Hono} from "hono";
+    const app = new Hono();
+    app.get("/", context => {
+      const values = new Map<string, string>();
+      ${setters}
+      return context.text(String(values.size));
+    });
+    export default app;
+  `);
+  assert.throws(
+    () => compileEntry(capacity, {
+      sdkPath: path.join(repository, "sdk/index.d.ts"),
+      aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+      apiAliases: {hono: path.join(repository, "tests/compat/hono/api.d.ts")},
+    }),
+    error => error instanceof CompileFailure
+      && error.diagnostics.some(diagnostic => diagnostic.message.includes("at most 16 live entries")),
+  );
+
+  const iterable = write("map-iterable.ts", `
+    import {Hono} from "hono";
+    const app = new Hono();
+    app.get("/", context => {
+      const values = new Map([["key", "value"]]);
+      return context.text(values.get("key")!);
+    });
+    export default app;
+  `);
+  assert.throws(
+    () => compileEntry(iterable, {
+      sdkPath: path.join(repository, "sdk/index.d.ts"),
+      aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+      apiAliases: {hono: path.join(repository, "tests/compat/hono/api.d.ts")},
+    }),
+    error => error instanceof CompileFailure
+      && error.diagnostics.some(diagnostic => diagnostic.message.includes("constructor iterables")),
+  );
+});
+
 test("rejects Context.var operations that require a runtime map", () => {
   const cases = [
     {
