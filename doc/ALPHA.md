@@ -41,7 +41,7 @@ syntax fails compilation; the produced server never interprets JavaScript.
 The executable Hono matrix consists of the pinned complete `basic` and
 `jsx-ssr` examples plus the published-package `@hono/zod-openapi`, static-file,
 blog/SQLite, prepared callback-transaction, environment, bounded Body Limit,
-bounded Request ID, and
+bounded Request ID, bounded fixed-key Context variables, and
 local/persistent-counter tracers recorded in
 `tests/compat/hono/examples-manifest.json`.
 `@hono/node-server` and `tinytsx:serve` share one AOT entry contract. This does

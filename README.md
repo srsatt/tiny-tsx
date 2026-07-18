@@ -101,8 +101,11 @@ emits finite native HTTP/1.1 chunks without collecting its body in that arena.
 The executable matrix additionally covers published-package middleware and
 backend tracers, including a closed 0–64 KiB Hono `bodyLimit()` guard with its
 default 413 response and a bounded Hono `requestId()` policy with request-local
-UUID fallback/reuse. Each admitted row and its first unsupported boundary is
-listed in `tests/compat/hono/examples-manifest.json` and `doc/HONO.md`.
+UUID fallback/reuse. A separate fixed-key specialization carries up to 16
+bounded `Context.set/get` values across matched middleware and route handling
+without exposing a general JavaScript `Map`. Each admitted row and its first
+unsupported boundary is listed in `tests/compat/hono/examples-manifest.json`
+and `doc/HONO.md`.
 
 Install the pinned build-time frontend and compile the Rust driver:
 

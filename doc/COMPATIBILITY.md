@@ -230,11 +230,27 @@ the installed archive builds and executes the packaged default example.
 Accepted input stays borrowed from the request through synchronous dispatch;
 generated UUID bytes live in fixed writer-owned storage through serialization.
 The response body copies the selected view into its bounded writer, so this
-does not add a dynamic Context map, general string identity, or a managed heap.
+does not add general string identity or a managed heap.
 Stable `TINY1403` diagnostics reject custom generators, missing middleware,
 empty/dynamic options, out-of-range limits, and multiple matching policies.
-Other Context keys and arbitrary middleware state remain outside the native
-contract.
+The `requestId` slot remains compiler-owned and cannot be replaced through the
+bounded general Context-variable slice below.
+
+Pinned Hono `Context.set/get` now has a separate fixed-key specialization based
+on `src/context.ts` and its upstream `c.set() and c.get()` test at commit
+`b2ae3a2204a48ce15a26448fd746d39745eb1837`. From 1 through 16 statically named
+non-empty UTF-8 keys of at most 128 bytes become request-local AOT slots. Values
+may be `undefined`, `null`, boolean, finite number, closed string, or an already
+supported bounded request-time string. Repeated `set` replaces the slot and a
+missing `get` yields `undefined`.
+
+The shared tracer stores a closed prefix before `next()` in matched middleware,
+then stores and reads a route parameter in the handler. Apple native HTTP proves
+32 concurrent requests cannot observe each other's values; Linux arm64
+assembles the path-segment ABI and Bun/Hono executes the same source. Dynamic,
+empty, or oversized keys, structured/escaping values, more than 16 slots,
+`Context.var`, general `new Map()`, identity, iteration, deletion, and mutation
+after response escape remain unsupported.
 
 The pinned upstream CORS factory now lowers for closed wildcard-origin options.
 Normal responses carry the configured static headers, while compiler-generated
@@ -785,6 +801,11 @@ Closed records and dynamic maps are separate compiler concepts. A record has a
 known layout and may use direct field offsets; a map has runtime membership and
 requires bounded dynamic lookup. `new Map(...)` is deliberately not staged as a
 record. The detailed rules are recorded in `doc/OBJECT_MODEL.md`.
+
+The bounded Hono Context-variable slice is a whole-program fixed-key
+specialization between those models: source Hono uses `Map`, but the compiler
+proves the complete key set and emits request-local slots. It neither changes
+record mutability nor exposes a general application `Map`.
 
 Request query state is neither model: it is a borrowed request view lowered to
 an allocation-free form-decoding predicate. The `prettyJSON()` trace therefore

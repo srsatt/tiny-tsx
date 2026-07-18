@@ -41,7 +41,15 @@ be from 1 through 1,024 bytes. A valid non-empty ASCII word/hyphen/equals value
 is reused; missing, invalid, or oversized input is replaced by UUIDv4. The same
 request-local value is exposed through `c.get('requestId')` and the response
 header. Custom generators, empty or dynamic options, multiple matching
-policies, and general Context variable storage remain rejected boundaries.
+policies, and replacement of the reserved `requestId` slot remain rejected
+boundaries.
+
+General Context variables have a separate fixed-key AOT slice. A route may use
+1–16 static non-empty UTF-8 keys of at most 128 bytes with bounded primitive or
+supported request-time string values. Pre-`next()` middleware and its handler
+share the request-local slots; repeated `set` replaces and a missing `get`
+returns `undefined`. Dynamic keys, structured/escaping values, `Context.var`,
+and general `Map` identity, iteration, or deletion remain unsupported.
 
 The upstream CORS factory now supplies a bounded native slice for closed
 `origin: "*"` options. Normal responses receive the declared allow-origin,

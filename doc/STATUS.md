@@ -9,6 +9,24 @@ produces and serves a native Mach-O executable from the example TSX source.
 
 ## Alpha implementation evidence
 
+### Bounded Hono context variables (2026-07-18)
+
+- The pinned Hono `Context.set/get` contract now admits 1–16 non-empty static
+  UTF-8 keys of at most 128 bytes. Values are bounded primitives or existing
+  request-time string expressions; repeated `set` replaces and a missing `get`
+  returns `undefined`.
+- A shared tracer sets a closed prefix before `next()` in matched middleware,
+  stores a route parameter in the handler, and returns both plus a missing-key
+  fallback. The compiler represents these as request-local AOT slots rather
+  than a record or general JavaScript `Map`; `requestId` stays reserved for the
+  separately bounded upstream middleware policy.
+- Frontend failures cover dynamic, empty, oversized, reserved, structured, and
+  over-capacity inputs. Apple native HTTP returns exact isolated values for 32
+  concurrent requests and a later recovery request. Linux arm64 assembles the
+  same response ABI, and Bun/Hono passes the unchanged shared tracer.
+- Verification: 130 frontend tests, context-variable native/assembly 2/2,
+  Bun/Hono reference 1/1, and Hono intake 8/8.
+
 ### Invalid UTF-8 form decoding (2026-07-18)
 
 - The WPT manifest now retains unchanged

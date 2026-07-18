@@ -79,8 +79,14 @@ writer-owned dynamic-header storage and remains valid through response
 serialization. Writing the body copies either view into the bounded response
 arena before the request ends. No value enters a general Context map or managed
 heap. Custom generators, empty/dynamic header names, dynamic/out-of-range
-limits, and multiple matching policies fail compilation; other Context keys
-remain unsupported.
+limits, and multiple matching policies fail compilation; the reserved slot
+cannot be replaced by the separate fixed-key Context-variable specialization.
+
+That specialization admits 1–16 statically named request-local slots shared by
+matched pre-`next()` middleware and the route handler. It reuses bounded
+primitive and request-string expressions and emits no general map object.
+Dynamic membership, `Context.var`, identity, iteration, and deletion remain
+outside the Web/Hono contract.
 
 Closed ETag middleware uses a second dedicated request predicate. SHA-1 is
 computed by the AOT frontend for immutable response bytes; the native runtime

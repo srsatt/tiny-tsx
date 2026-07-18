@@ -835,7 +835,7 @@ General JavaScript object identity, blanket Hono compatibility, distributed
 actors, production GC, and a new release tag remain out of scope unless
 explicitly promoted into a later goal.
 
-#### Selected P1/P2 tracer — bounded Hono context variables
+#### Selected P1/P2 tracer — bounded Hono context variables (landed 2026-07-18)
 
 Use pinned Hono commit `b2ae3a2204a48ce15a26448fd746d39745eb1837`,
 unchanged implementation `src/context.ts`, and the `c.set() and c.get()` case in
@@ -873,6 +873,15 @@ Because the slice has no owned native resource or queue, saturation is the
 compile-time 16-slot failure and disposal is request completion; native tests
 must prove recovery by serving a later valid request after rejected compilation
 is tested separately.
+
+The tracer is green. Frontend lowering proves missing lookup, replacement,
+request-derived values across a matched pre-`next()` middleware boundary, the
+reserved request-ID key, key/value bounds, and the 16-slot ceiling. Apple native
+HTTP returns the exact isolated value for 32 concurrent requests and a later
+recovery request; Linux arm64 assembles the same path-segment response ABI. The
+shared unchanged tracer also passes Bun/Hono, and its native/reference scripts
+are reachable through the Hono manifest and release suite. This closes only the
+fixed-key `Context.set/get` specialization; general `Map` remains open.
 
 ### P1 — Compatibility and language depth
 
@@ -917,6 +926,10 @@ is tested separately.
     bounds, `break`/`continue`, nested loops, and arbitrary bodies remain open.
 - [ ] Implement bounded native `Map`, constant `symbol`, signed zero, `NaN`, and
       infinities with complete semantics evidence.
+  - 2026-07-18: statically named Hono `Context.set/get` values now specialize to
+    1–16 request-local AOT slots with replacement and missing-`undefined`
+    behavior. Dynamic membership, identity, construction, iteration, deletion,
+    and general native `Map` remain open.
 - [ ] Replace whole-module forbidden-syntax rejection with request/initialization
       reachability and specialize remaining closed-shape Hono object rest.
   - 2026-07-17: exception syntax is no longer rejected module-wide. Unreachable

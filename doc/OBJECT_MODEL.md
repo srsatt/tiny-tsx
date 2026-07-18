@@ -47,6 +47,15 @@ left for runtime lowering. Hono uses both models: many option/header objects can
 be records, while `Context.#var` is an actual `Map` and must stay dynamic unless
 whole-program analysis proves a fixed-key specialization.
 
+That fixed-key specialization now exists for the first Hono Context-variable
+slice. One route may use 1–16 statically named slots; middleware and handlers
+share their request-local values, replacement is permitted, and missing lookup
+returns `undefined`. The compiler lowers the already-supported bounded scalar
+or request-string value directly into the response graph. No map object,
+membership table, or process-persistent state is emitted. Dynamic keys,
+iteration, `size`, `has`, `delete`, `clear`, identity, and `Context.var` still
+require the future bounded native map representation.
+
 Borrowed request state is modeled separately from both. For example,
 `c.req.query('pretty')` produces a request-time query predicate, not a record
 field and not a `Map` lookup. That distinction lets AOT code branch on presence
