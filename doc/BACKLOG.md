@@ -363,18 +363,15 @@ adds an explicit application acceptance test.
 
 #### Goal handoff
 
-The current stabilization pass has landed the complete native Test262
-allowlist, the multi-module Hono user-auth tracer, copied structured actor
-messages, protected SQLite ownership, actor pressure evidence, and bounded live
-HTTP-connection resubmission. The bounded Hono Body Limit tracer has also
-landed, followed by the bounded Hono Request ID tracer and immutable typed
-SQLite `Statement.run()` results. Hard-reset cancellation now also detaches an
-actor HTTP waiter without retracting accepted work, and the exact fallible
-counter has bounded restart intensity. Their implementation and evidence are
-recorded under P1-P4. The exact prepared-write transaction callback has now
-also landed with atomic rollback evidence. The next bounded slice is the P4
-release-stability evidence pass; actor supervision and broader SQLite values
-remain separate proposals.
+The current stabilization pass has landed the complete eighteen-case native
+Test262 allowlist, the multi-module Hono user-auth tracer, copied structured
+actor messages, protected SQLite ownership, eight-actor and two-owner WAL
+pressure evidence, invalid UTF-8 form decoding, bounded Hono context variables,
+tagged special-number/symbol constants, and the pinned upstream secure-headers
+factory. Their implementation and evidence are recorded under P1-P4. The next
+bounded slice is the P1 local-`Map` tracer selected below; actor supervision,
+broader SQLite values, and the remaining P4 workload families stay separate
+proposals.
 
 Do not reopen the completed alpha foundations as broad projects. File reading,
 SQLite, and local actors already have public bounded built-ins. Their next work
@@ -384,13 +381,15 @@ named upstream tracer.
 
 The groomed candidates, in recommended dependency order, are:
 
-1. **SQLite transaction/value depth:** add only the prepared/callback
+1. **Bounded local `Map`:** distinguish mutable runtime key/value storage from
+   immutable closed records through the selected primitive-key tracer below.
+2. **SQLite transaction/value depth:** add only the prepared/callback
    transaction and dynamic value forms required by a selected application while
    retaining single-owner, non-interleaving execution.
-2. **Actor supervision proposal:** select a real parent/child tracer before
+3. **Actor supervision proposal:** select a real parent/child tracer before
    defining child startup, restart escalation, or failure observation; keep
    links, monitors, registries, persistence, and distribution separate.
-3. **Release-stability evidence:** finish the named P4 workload families and a
+4. **Release-stability evidence:** finish the named P4 workload families and a
    longer controlled TinyTSX/Bun run only after the selected functional slice
    is green. A new release candidate remains a separate explicitly selected
    goal.
@@ -1010,8 +1009,53 @@ headers, and both `poweredBy` orderings match Bun/Hono on Apple native HTTP; the
 same 12-header route assembles for Linux. Compiler and runtime exact-capacity
 tests admit sixteen headers and reject the seventeenth. Manifest, docs matrix,
 reference script, package routing, and installed default example are release
-gates; CSP, permissions/reporting policy, nonce callbacks, and dynamic options
-remain rejected.
+gates. A clean `npm run release:verify` completed after this tracer and produced
+checksum-valid Apple- and Linux-arm64 alpha archives. CSP,
+permissions/reporting policy, nonce callbacks, and dynamic options remain
+rejected.
+
+#### Selected P1 tracer — bounded local `Map`
+
+Pin the next language-depth slice to Test262 commit
+`f2d1435644797268dca1f7988cad5a4e89ccd8d2` and execute these four unchanged
+programs in native mode:
+
+- `test/built-ins/Map/prototype/size/returns-count-of-present-values-by-insertion.js`;
+- `test/built-ins/Map/prototype/set/append-new-values-normalizes-zero-key.js`;
+- `test/built-ins/Map/prototype/size/returns-count-of-present-values-before-after-set-delete.js`;
+- `test/built-ins/Map/prototype/get/returns-undefined.js`.
+
+Admit non-escaping `new Map()` values in the Test262 entrypoint, ordinary
+functions, and request handlers. Each map owns at most sixteen live entries and
+supports `set`, `get`, `has`, `delete`, `clear`, and `size`. Keys and values are
+the bounded native primitive subset: `undefined`, `null`, booleans, strings,
+finite numbers, the four tagged special-number forms, and compile-time symbols.
+Key comparison is `SameValueZero`: all `NaN` keys match, and `-0` is normalized
+to `+0`. Replacing a key preserves size, `set` returns the receiver, missing
+`get` returns `undefined`, and delete reports whether a live entry existed.
+
+Keep records and maps distinct in HIR and documentation. A closed record is an
+immutable AOT layout with compile-time field names; a map is mutable runtime
+storage with primitive keys and values. Lower a map to sixteen inline slots
+owned by its invocation/request frame and dispose all slots when that frame
+returns. Conservatively reject a control-flow path that can perform more than
+sixteen distinct insertions, so the admitted slice has no hidden heap growth or
+runtime capacity failure.
+
+Reject constructor iterables, escaping/returned/captured maps, module-persistent
+maps in applications, object/array/record keys or values, iteration and
+`forEach`, dynamic method selection, subclassing, weak collections, more than
+sixteen possible live entries, and transport through JSON, SQLite, actors, or
+response constants. Those require separate identity, ownership, collection, or
+managed-lifetime tracers and must not be approximated as closed records.
+
+Require frontend staging/lowering and stable rejection tests, explicit HIR map
+operations and validation, Rust layout/code-generation tests, all four complete
+Test262 assertions on Apple arm64, Linux-arm64 code-generation/assembly, a
+project-owned request-local Hono route proving per-request isolation and
+replacement/deletion behavior, exact sixteen-entry acceptance and seventeenth-
+insertion rejection, allowlist/intake/package routing, and synchronized
+compatibility/status/backlog documentation before checking the parent P1 item.
 
 ### P1 — Compatibility and language depth
 
