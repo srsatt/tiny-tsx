@@ -1311,6 +1311,47 @@ test("binds unchanged TodoService get to an explicit SQLite KV adapter", () => {
   assert.match(JSON.stringify(hir.handlers[0]?.response), /todoStore/);
 });
 
+test("lowers the unchanged pinned Stytch TODO backend through the explicit adapter", () => {
+  const hir = compileEntry(
+    path.join(repository, "vendor/hono-examples/stytch-auth/api/index.ts"),
+    {
+      sdkPath: path.join(repository, "sdk/index.d.ts"),
+      aliases: {
+        hono: path.join(repository, "vendor/hono/src/index.ts"),
+        "hono/cors": path.join(repository, "vendor/hono/src/middleware/cors/index.ts"),
+        "@hono/stytch-auth": path.join(
+          repository,
+          "tests/compat/stytch-auth/node_modules/@hono/stytch-auth/dist/index.js",
+        ),
+      },
+      apiAliases: {
+        hono: path.join(repository, "tests/compat/hono/api.d.ts"),
+        "hono/cors": path.join(repository, "tests/compat/hono/cors-api.d.ts"),
+        "@hono/stytch-auth": path.join(repository, "tests/compat/stytch-auth/api.d.ts"),
+      },
+      sqliteKvBindings: {TODOS: ":memory:"},
+    },
+  );
+
+  assert.deepEqual(hir.handlers.map(handler => `${handler.method} ${handler.path}`), [
+    "GET /api/todos",
+    "OPTIONS /api/todos",
+    "POST /api/todos",
+    "POST /api/todos/:id/complete",
+    "OPTIONS /api/todos/:id/complete",
+    "DELETE /api/todos/:id",
+    "OPTIONS /api/todos/:id",
+  ]);
+  assert.deepEqual(hir.sqliteDatabases, [{id: 0, path: ":memory:"}]);
+  assert.deepEqual(hir.handlers.map(handler => handler.sessionAuthorization?.mode), [
+    "local", undefined, "remote", "remote", undefined, "remote", undefined,
+  ]);
+  assert.deepEqual(
+    hir.handlers.map(handler => JSON.stringify(handler.response).match(/todoStore/g)?.length),
+    [1, undefined, 1, 1, undefined, 1, undefined],
+  );
+});
+
 test("lowers the pinned Stytch local-session middleware as a credential-free guard", () => {
   const entry = path.join(repository, "tests/compat/hono/stytch-session-smoke.ts");
 

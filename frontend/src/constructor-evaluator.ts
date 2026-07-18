@@ -3360,6 +3360,15 @@ function evaluateCall(
     }
     if (receiver.kind === "request" && name === "param") {
       const key = arguments_[0];
+      if (arguments_.length === 0) {
+        return {
+          kind: "record",
+          fields: new Map(routeParameterNames(receiver.routePattern).map(parameter => [
+            parameter,
+            {kind: "routeParameter" as const, name: parameter},
+          ])),
+        };
+      }
       if (key?.kind !== "string") {
         return unknown("request parameter name is not a closed string");
       }
