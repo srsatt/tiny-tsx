@@ -92,6 +92,17 @@ test("makes every alpha example gate reachable from release verification", () =>
   }
 });
 
+test("prepares the published Hono fixture before frontend tests", () => {
+  assert.equal(
+    workspace.scripts["prepare:node-server-fixture"],
+    "npm ci --prefix tests/compat/node-server",
+  );
+  assert.match(
+    workspace.scripts["test:frontend"],
+    /^npm run prepare:node-server-fixture && /,
+  );
+});
+
 test("pins the explicit upstream Hono behavior allowlist", () => {
   for (const item of manifest.behaviorAllowlist) {
     assert.equal(item.evidenceMode, "native-derived");
