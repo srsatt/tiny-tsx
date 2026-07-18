@@ -32,6 +32,7 @@ export function validateForbiddenSyntax(
     if (
       ts.isElementAccessExpression(node)
       && !closedComputed.has(spanKeyFromNode(node, sourceFile))
+      && !isStaticContextVariableAccess(node)
     ) {
       throw tinyError(
         "TINY1004",
@@ -73,6 +74,13 @@ export function validateForbiddenSyntax(
   }
 
   visit(sourceFile);
+}
+
+function isStaticContextVariableAccess(node: ts.ElementAccessExpression): boolean {
+  return ts.isPropertyAccessExpression(node.expression)
+    && node.expression.name.text === "var"
+    && node.argumentExpression !== undefined
+    && ts.isStringLiteral(node.argumentExpression);
 }
 
 function isComponentTag(tag: ts.JsxTagNameExpression): boolean {

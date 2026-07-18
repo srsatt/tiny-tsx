@@ -1574,6 +1574,72 @@ test("lowers bounded Hono context variables across middleware and route handling
   assert.match(JSON.stringify(response), /routeParameter/);
   assert.ok(hir.staticStrings.some(value => value.value.includes("ctx:")));
   assert.ok(hir.staticStrings.some(value => value.value.includes(":absent")));
+
+  const varHandler = hir.handlers.find(candidate => candidate.path === "/context-var/:value");
+  assert.equal(varHandler?.response.kind, "text");
+  const varResponse = varHandler?.response.kind === "text" ? varHandler.response.value : undefined;
+  assert.equal(varResponse?.kind, "concat");
+  assert.match(JSON.stringify(varResponse), /routeParameter/);
+});
+
+test("rejects Context.var operations that require a runtime map", () => {
+  const cases = [
+    {
+      name: "dynamic key",
+      body: 'return context.text(`${context.var[context.req.param("key")]}`);',
+      message: "computed property access is not supported",
+    },
+    {
+      name: "enumeration",
+      body: 'return context.text(Object.keys(context.var).join(","));',
+      message: "Object.keys argument is not a closed object",
+    },
+    {
+      name: "destructuring",
+      body: 'const {value} = context.var; return context.text(value as string);',
+      message: "destructuring source is not a closed record",
+    },
+  ];
+  for (const candidate of cases) {
+    const entry = write(`context-var-${candidate.name}.ts`, `
+      import {Hono} from "hono";
+      const app = new Hono();
+      app.get("/:key", context => {
+        context.set("value", "closed");
+        ${candidate.body}
+      });
+      export default app;
+    `);
+    assert.throws(
+      () => compileEntry(entry, {
+        sdkPath: path.join(repository, "sdk/index.d.ts"),
+        aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+        apiAliases: {hono: path.join(repository, "tests/compat/hono/api.d.ts")},
+      }),
+      error => error instanceof CompileFailure
+        && error.diagnostics.some(diagnostic => diagnostic.message.includes(candidate.message)),
+      candidate.name,
+    );
+  }
+
+  const assignment = write("context-var-assignment.ts", `
+    import {Hono} from "hono";
+    const app = new Hono();
+    app.get("/", context => {
+      context.var.value = "changed";
+      return context.text("ok");
+    });
+    export default app;
+  `);
+  assert.throws(
+    () => compileEntry(assignment, {
+      sdkPath: path.join(repository, "sdk/index.d.ts"),
+      aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+      apiAliases: {hono: path.join(repository, "tests/compat/hono/api.d.ts")},
+    }),
+    error => error instanceof CompileFailure
+      && error.diagnostics.some(diagnostic => diagnostic.code === "TS2542"),
+  );
 });
 
 test("rejects context variables outside the bounded static slot contract", () => {

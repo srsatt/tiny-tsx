@@ -4226,6 +4226,13 @@ function evaluateExpression(
   }
   if (ts.isPropertyAccessExpression(expression)) {
     const receiver = evaluate(evaluator, expression.expression, module, environment, instance);
+    if (
+      receiver.kind === "instance"
+      && expression.name.text === "var"
+      && isHonoContextInstance(evaluator, receiver)
+    ) {
+      return {kind: "contextVariables", fields: contextVariables(receiver)};
+    }
     const direct = readProperty(receiver, expression.name.text);
     if (direct.kind !== "undefined") {
       return direct;

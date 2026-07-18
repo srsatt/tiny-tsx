@@ -11,6 +11,7 @@ export interface HonoContextApi<Bindings = Record<string, never>> {
   readonly req: HonoRequestApi;
   readonly res: Response;
   readonly env: Bindings;
+  readonly var: Readonly<Record<string, unknown>>;
   header(name: string, value: string): void;
   set(name: string, value: unknown): void;
   get<Value = unknown>(name: string): Value | undefined;

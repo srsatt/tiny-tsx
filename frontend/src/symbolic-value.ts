@@ -28,6 +28,7 @@ export type Value =
   | {kind: "thrown"; value: Value}
   | {kind: "array"; items: Value[]}
   | {kind: "record"; fields: Map<string, Value>}
+  | {kind: "contextVariables"; fields: Map<string, Value>}
   | {kind: "headers"; entries: Map<string, {name: string; value: ResponseHeaderValue}>}
   | {kind: "request"; routePattern: string; method: string}
   | {kind: "requestJson"}
@@ -230,7 +231,7 @@ export function readProperty(value: Value, name: string): Value {
   if (value.kind === "response" && name === "ok") {
     return {kind: "boolean", value: value.status >= 200 && value.status <= 299};
   }
-  if (value.kind === "record" || value.kind === "instance") {
+  if (value.kind === "record" || value.kind === "instance" || value.kind === "contextVariables") {
     return value.fields.get(name) ?? UNDEFINED;
   }
   if (value.kind === "schema" && name === "~standard") {
@@ -310,6 +311,7 @@ export function truthiness(value: Value): boolean | undefined {
     case "html": return value.value.length > 0;
     case "array":
     case "record":
+    case "contextVariables":
     case "regexp":
     case "schema":
     case "error":
