@@ -48,10 +48,13 @@ The alpha profiles are:
 
 ## Current implementation slice
 
-The `0.1.0-alpha.1` implementation and release candidate are complete. The
-executable example/failure gates, repeated TinyTSX/Bun comparison, installable
-Apple/Linux-arm64 archives, portable Test262/WPT allowlists, and schema-v2
-source attestation have all passed their clean release contracts. The tag is a
+The bounded `0.1.0-alpha.1` implementation contract is complete, and the
+nested-profile P1-P4 stabilization slice below is functionally green. The
+executable example/failure gates, repeated TinyTSX/Bun comparisons, portable
+Test262/WPT allowlists, package installation, and schema-v2 source attestation
+machinery are in place. The current source is not yet a taggable two-target
+release candidate: the Apple and Linux archives must be regenerated and run
+from clean native checkouts at the same post-backlog commit. Tagging remains a
 separate release action. New language, Hono, actor, SQLite, Web API, or GC work
 belongs to the ordered post-alpha backlog unless it fixes a regression in this
 published contract.
@@ -103,11 +106,12 @@ boundaries remain open.
 
 ### Release handoff
 
-Publishing `0.1.0-alpha.1` remains a separate release action: attach both
-already-verified archives, checksums, and schema-v2 manifests, then create
-`v0.1.0-alpha.1` from the attested commit. Do not mix that action with later
-implementation work; any source change creates a new candidate that must repeat
-both native gates.
+Publishing `0.1.0-alpha.1` remains a separate release action. After the
+exact-source goal below passes, attach its matching Apple/Linux archives,
+checksums, and schema-v2 manifests, then create `v0.1.0-alpha.1` from that
+attested commit. Do not reuse artifacts from an earlier source state or mix the
+release action with later implementation work; any source change creates a new
+candidate that must repeat both native gates.
 
 The goal is complete only when:
 
@@ -363,36 +367,21 @@ adds an explicit application acceptance test.
 
 #### Goal handoff
 
-The current stabilization pass has landed the complete twenty-two-case native
-Test262 allowlist, the multi-module Hono user-auth tracer, copied structured
-actor messages, protected SQLite ownership, eight-actor and two-owner WAL
-pressure evidence, invalid UTF-8 form decoding, bounded Hono context variables,
-tagged special-number/symbol constants, and the pinned upstream secure-headers
-factory plus the bounded local-`Map` tracer. Their implementation and evidence
-are recorded under P1-P4. The required-header SQLite idempotency and
-full-transaction rollback tracer has also landed with its sustained load
-evidence. The Map tracer passes the installed-package gate
-and a clean release verification with checksum-valid Apple- and Linux-arm64
-archives. The current post-Map head has not yet repeated that clean release
-attestation on both native targets. The 2026-07-18 Apple failure was deterministic,
-not flaky: awaited unknown effects were discarded, and invalid static SQLite
-header names reached Rust HIR validation without a frontend issue. Commit
-`9fbc605` now propagates every unsupported awaited effect except the explicit
-Hono middleware `next()` marker and validates the static header token before
-lowering. The complete clean Apple `release:verify` is green at that commit,
-including 141/141 frontend tests, native/reference/workspace suites, installed
-examples and failure paths, archive smoke, source attestation, and checksum.
-The Linux archive still attests an earlier commit, so a native Linux rerun at
-the same current source remains required before this head is called a release
-candidate. The bounded root one-for-one supervisor below has now landed through
-the public SDK/HIR/native path, Apple HTTP, Linux assembly, Bun/Hono reference,
-manifest, and installed-package gates. It deliberately does not widen into
-links, monitors, registries, dynamic children, arbitrary behaviors, or
-distribution. Clean Apple `release:verify` is green at exact commit `66cec3f`
-with schema-v2 `dirty: false` checksum
-`9134b383a70fca802fec7fa80ff3dfe4e04d8b396f2918f91347ffad1622a2bd`.
-Native Linux still needs to verify that same commit; later source commits need
-fresh attestations on both targets.
+The stabilization pass has landed the complete twenty-two-case native Test262
+allowlist, the multi-module Hono user-auth tracer, copied structured actor
+messages, protected SQLite ownership, bounded root supervision, eight-actor
+and two-owner WAL pressure evidence, invalid UTF-8 form decoding, bounded Hono
+context variables and local `Map`, tagged special-number/symbol constants, the
+pinned secure-headers factory, prepared callback transactions, required-header
+idempotency/rollback, and nested primitive profile persistence. Their exact
+implementation and evidence are recorded under P1-P4.
+
+The nested-profile tracer is green through frontend/HIR/runtime tests, Apple
+native HTTP, Linux-arm64 assembly, Bun/Hono reference behavior, package and
+installed-archive routing, and the sustained response-checked benchmark. That
+does not make the working source a release candidate by itself. The generated
+Apple and Linux archives currently attest different source states; both native
+release gates must be repeated at one clean commit after this backlog update.
 
 Do not reopen the completed alpha foundations as broad projects. File reading,
 SQLite, and local actors already have public bounded built-ins. Their next work
@@ -402,13 +391,41 @@ named upstream tracer.
 
 The groomed candidates, in recommended dependency order, are:
 
-1. **SQLite transaction/value depth:** add only the prepared/callback
-   transaction and dynamic value forms required by a selected application while
-   retaining single-owner, non-interleaving execution.
-2. **Release-stability evidence:** finish the named P4 workload families and a
-   longer controlled TinyTSX/Bun run only after the selected functional slice
-   is green. A new release candidate remains a separate explicitly selected
-   goal.
+1. **Exact-source release candidate:** repeat the complete clean Apple and
+   native Linux release gates at the same commit, install both archives outside
+   the checkout, and retain matching manifests/checksums and HTTP evidence.
+2. **Broader Hono application selection:** choose one pinned application before
+   adding APIs, record its unchanged upstream boundary, and turn each required
+   behavior into a named native/reference/release test.
+3. **Tracer-owned API depth:** add only the language, Web, actor, or SQLite
+   forms required by that application while preserving the bounded ownership
+   model. Do not reopen general JavaScript-engine compatibility.
+4. **Measured release stability:** extend P4 only for the selected application,
+   then repeat sustained TinyTSX/Bun evidence before naming a later candidate.
+
+#### Next selectable goal — exact-source two-target release candidate
+
+This is the recommended next goal. It is verification and packaging work, not
+an API-expansion slice:
+
+- [ ] Begin from the clean commit containing this backlog update and run
+      `npm run release:verify` on native Apple arm64.
+- [ ] Run the same command on a native Linux-arm64 checkout of the exact same
+      commit; cross-assembled ELF inspection is not a substitute.
+- [ ] Require both schema-v2 manifests to record the same source commit with
+      `dirty: false`, and verify each archive against its retained SHA-256.
+- [ ] Install each archive outside the source checkout and execute the packaged
+      hello, Hono, file, actor, SQLite, user-auth, and nested-profile gates,
+      including their bounded failure paths.
+- [ ] Retain the native Linux HTTP-contract evidence and update the tag-ready
+      checklist without changing compiler/runtime/API sources between the two
+      attestations.
+- [ ] If either target exposes a functional regression, stop this release goal
+      and groom the smallest failing seam as a separate implementation goal.
+
+Completion produces two attachable archives and a tag-ready checklist. It does
+not create or publish `v0.1.0-alpha.1`; publication remains an explicit later
+action.
 
 #### Goal execution checkpoint — nested profile release slice
 
