@@ -1,6 +1,6 @@
 # TinyTSX benchmarks
 
-The harness has eleven workloads:
+The harness has twelve workloads:
 
 - `static-page` compares the current static TinyTSX vertical slice to an
   idiomatic `Bun.serve` server returning the same response;
@@ -18,6 +18,8 @@ The harness has eleven workloads:
 - `hono-file-read` reads the pinned 21-byte serve-static asset on every request
   through `tinytsx:fs` or `Bun.file` and returns it through the same Hono route;
   and
+- `hono-large-file` repeats that warm-cache shape with the pinned 22,173-byte
+  Hono context source and a 32 KiB TinyTSX file bound; and
 - `hono-stream-text` runs the pinned 33-module upstream `streamText()` path and
   requires three finite HTTP/1.1 chunks plus the decoded 19-byte body; and
 - `hono-worker` compares one persistent logical string worker per target,
@@ -69,6 +71,7 @@ npm run benchmark:hono-jsx-ssr-keepalive
 npm run benchmark:hono-dynamic-jsx
 npm run benchmark:hono-route-param
 npm run benchmark:hono-file-read
+npm run benchmark:hono-large-file
 npm run benchmark:hono-stream-text
 npm run benchmark:hono-worker
 npm run benchmark:hono-actor

@@ -173,6 +173,27 @@ WORKLOADS = {
             "--tsconfig-override", "benchmarks/bun/hono-tsconfig.json",
         ],
     },
+    "hono-large-file": {
+        "body": (ROOT / "vendor/hono/src/context.ts").read_bytes(),
+        "content_type": "text/plain; charset=UTF-8",
+        "headers": {"x-powered-by": "Hono"},
+        "numeric_headers": [],
+        "path": "/large-file",
+        "scope": "one request-time read of the pinned 22,173-byte Hono context source through a 32 KiB-bounded file API and one Hono text response; HTTP/1.1; connection close; localhost",
+        "limitation": "This measures repeated warm page-cache reads and one 22,173-byte response; it does not control the OS cache, isolate copies, or cover cold storage, responses above 32 KiB, streaming, binary data, ranges, or compression.",
+        "tiny_entry": "benchmarks/tiny/hono-large-file.ts",
+        "tiny_args": [
+            "--allow-read", str(ROOT / "vendor/hono/src"),
+            "--alias", "hono=vendor/hono/src/index.ts",
+            "--api", "hono=tests/compat/hono/api.d.ts",
+            "--alias", "hono/powered-by=vendor/hono/src/middleware/powered-by/index.ts",
+            "--api", "hono/powered-by=tests/compat/hono/powered-by-api.d.ts",
+        ],
+        "bun_script": "benchmarks/bun/hono-large-file-server.ts",
+        "bun_args": [
+            "--tsconfig-override", "benchmarks/bun/hono-tsconfig.json",
+        ],
+    },
     "hono-stream-text": {
         "body": b"first\nsecond\nthird\n",
         "content_type": "text/plain; charset=UTF-8",

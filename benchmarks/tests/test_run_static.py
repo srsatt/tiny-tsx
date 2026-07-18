@@ -114,6 +114,23 @@ class StaticHarnessTest(unittest.TestCase):
             "benchmarks/bun/hono-file-read-server.ts",
         )
 
+    def test_large_file_workload_scales_the_same_response_shape(self) -> None:
+        workload = WORKLOADS["hono-large-file"]
+        source_root = Path(__file__).resolve().parents[2] / "vendor/hono/src"
+
+        self.assertEqual(workload["path"], "/large-file")
+        self.assertEqual(len(workload["body"]), 22_173)
+        self.assertEqual(workload["body"], (source_root / "context.ts").read_bytes())
+        self.assertEqual(workload["headers"], {"x-powered-by": "Hono"})
+        self.assertEqual(workload["tiny_entry"], "benchmarks/tiny/hono-large-file.ts")
+        read_option = workload["tiny_args"].index("--allow-read")
+        self.assertEqual(workload["tiny_args"][read_option + 1], str(source_root))
+        self.assertIn("22,173-byte", workload["scope"])
+        self.assertEqual(
+            workload["bun_script"],
+            "benchmarks/bun/hono-large-file-server.ts",
+        )
+
     def test_stream_workload_requires_chunked_framing(self) -> None:
         workload = WORKLOADS["hono-stream-text"]
         response = {
