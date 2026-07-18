@@ -22,7 +22,10 @@ alpha critical path:
 
 The transport and request API now provide the bounded body foundation: a
 64-KiB cap and statically selected `HonoRequest.json()` fields used by prepared
-SQLite parameters. The pinned upstream `bodyLimit()` factory runs unchanged for
+SQLite parameters or one closed primitive `Context.json()` response. The latter
+preserves string escaping, finite numbers, booleans, and null while rejecting
+missing or structured selected fields with 400; it does not create a general
+runtime body object. The pinned upstream `bodyLimit()` factory runs unchanged for
 a closed integer `maxSize` from 0 through 64 KiB and its default 413 response.
 The guard applies to `Content-Length` requests before the handler executes;
 multiple closed guards use the smallest limit. Custom `onError`, dynamic or

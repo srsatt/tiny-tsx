@@ -649,7 +649,7 @@ returns from 68 peak descriptors to 4. The raw evidence is the adjacent
 pair; disk/WAL I/O, competing connections, rollback load, and request-derived
 values remain open.
 
-#### Selected P2/P4 tracer — bounded request JSON response values
+#### Selected P2/P4 tracer — bounded request JSON response values (functional slice landed 2026-07-18)
 
 Add one shared project-owned `tests/compat/hono/json-body-smoke.ts` application
 against pinned Hono commit `b2ae3a2204a48ce15a26448fd746d39745eb1837`.
@@ -675,6 +675,15 @@ descriptor recovery. This tracer does not admit dynamic keys, whole-object
 identity, arrays/nested objects, body mutation, schema coercion/defaults,
 streaming JSON, arbitrary content types, or a general JavaScript object model.
 Those require separate tracers.
+
+The functional slice is green. Typed HIR carries each selected field as a
+bounded request-time expression; the bootstrap preserves string escaping,
+finite numbers, booleans, and null, while missing/malformed/structured input
+returns 400. Apple proves the success/failure/limit paths and a valid pipelined
+request after application-level 400; Linux assembles the ABI; Bun/Hono reference
+tests and the manifest are release-gated. The benchmark harness now supports a
+fixed POST body and passes its short equivalence smoke. Sustained evidence is
+still pending, so the P4 part of this tracer remains open.
 
 Before implementing the next tracer, its selected goal must be copied into the
 active goal with: its exact tracer/source revision; admitted and rejected
@@ -771,6 +780,12 @@ explicitly promoted into a later goal.
     `deleteCookie` path returns the deleted value and emits `Max-Age=0`, while
     repeated `setCookie` calls preserve both response values. All-cookie objects,
     dynamic attributes, prefixes, and signing remain open.
+  - 2026-07-18: a closed `Context.json()` response may select bounded primitive
+    fields from `await Context.req.json()`. String escaping, finite numbers,
+    booleans, null, malformed/missing/structured rejection, the transport limit,
+    safe application-400 keep-alive recovery, and Apple/Linux native paths are
+    release-gated. Dynamic keys, whole-object identity, arrays/nested objects,
+    mutation, coercion/defaults, and streaming JSON remain open.
 - [x] Compile the pinned upstream Hono `bodyLimit` middleware unchanged for a
       closed literal `maxSize` and its default error response.
   - Admit `Content-Length` request bodies within the existing 64 KiB transport

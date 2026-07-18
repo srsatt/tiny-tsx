@@ -194,12 +194,17 @@ flow, nested or mixed-database transactions, and an interactive transaction
 object remain unsupported.
 
 The first request-body slice retains at most 64 KiB and recognizes
-`await c.req.json()` only when statically selected fields flow directly into a
-prepared SQLite call. The bootstrap parses the body once at that ABI boundary,
-binds up to 16 route/body values without interpolation, and rejects malformed,
-missing, boolean, array, nested-object, or oversized input with a recoverable
-client response. It does not construct a general runtime record, implement
-arbitrary JSON access, or expose a general body object.
+`await c.req.json()` when statically selected fields flow into a prepared SQLite
+call or one closed `Context.json()` response. The SQLite ABI binds up to 16
+route/body string, finite-number, or null values without interpolation and
+continues to reject boolean or structured parameters. The response ABI selects
+non-empty field names up to 128 UTF-8 bytes and preserves JSON string escaping,
+finite numbers, booleans, and null. Malformed input, a missing selected field,
+or a selected array/object returns 400; a fully framed application-level 400
+keeps HTTP/1.1 reusable, while an oversized transport body returns terminal
+413. This does not construct a general runtime record, implement dynamic keys,
+arrays/nested objects, mutation, coercion/defaults, or expose whole-object
+identity.
 
 The pinned upstream Hono `bodyLimit()` factory now compiles unchanged from both
 its TypeScript source and the published `hono@4.12.30` JavaScript package. One

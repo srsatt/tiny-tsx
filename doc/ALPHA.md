@@ -49,9 +49,10 @@ not claim the rest of Node server lifecycle, TLS, event, or platform-adapter
 behavior.
 
 The Web API allowlist covers the Request/Response/Headers behavior exercised by
-that matrix, selected route/query/header reads, bounded JSON input and a closed
-`Content-Length` body guard,
-`crypto.randomUUID()`, one bounded request-local ID policy, one closed
+that matrix, selected route/query/header reads, bounded JSON input and selected
+primitive fields in a closed JSON response, plus a closed
+`Content-Length` body guard, `crypto.randomUUID()`, one bounded request-local ID
+policy, one closed
 fetch-status path on Apple, finite text streaming, and the WPT-derived behavior
 in `doc/WEB_API.md`. TypeScript DOM type availability is not evidence that an
 unlisted runtime API exists.

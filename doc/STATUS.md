@@ -9,6 +9,25 @@ produces and serves a native Mach-O executable from the example TSX source.
 
 ## Alpha implementation evidence
 
+### Bounded request JSON response values (2026-07-18)
+
+- A shared Hono `POST /json-body` tracer selects one string, finite number,
+  boolean, and null from a bounded `context.req.json()` object and returns them
+  through `context.json()` with JSON types and escaping preserved. This is a
+  closed response shape, not a general JavaScript object.
+- The bootstrap validates non-empty field names up to 128 UTF-8 bytes and
+  rejects malformed JSON, missing selected fields, and selected arrays/objects
+  with 400. Fully framed application-level 400 responses now preserve safe
+  keep-alive reuse; parser/framing errors, request OOM, overload, and oversized
+  transport bodies still close.
+- Apple arm64 proves success, malformed/missing/structured rejection, the 64
+  KiB transport limit, and a valid pipelined request after a 400. Linux arm64
+  assembles the exact response ABI. Bun/Hono reference tests retain upstream's
+  differing malformed/missing behavior instead of claiming equivalence there.
+- Verification: 126 frontend tests, 47 focused bootstrap ABI tests, 90 compiler
+  tests, native/reference 2/2 each, Hono intake 8/8, and benchmark harness
+  32/32.
+
 ### Sustained eleven-workload server matrix (2026-07-18)
 
 - A clean Apple M5 Max comparison covers Hono basic, dynamic JSX escaping, one

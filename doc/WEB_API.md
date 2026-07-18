@@ -12,7 +12,7 @@ The current boundary is:
 
 | API | Type contract | Native behavior |
 | --- | --- | --- |
-| `Request` | standard DOM declaration | borrowed method, path, and raw query ABI views; allocation-free form-decoded query-name presence predicate |
+| `Request` | standard DOM declaration | borrowed method, path, raw query, and bounded body ABI views; allocation-free form-decoded query-name presence predicate; selected closed JSON fields |
 | `Response` | standard DOM declaration | bounded body writer, explicit status, optional HTML/text/JSON content-type IDs; closed `new Response(string or null, { status, headers })` AOT fast path |
 | `Headers` | standard DOM declaration | closed construction/cloning; bounded request-header borrowing and response-header storage with case-insensitive lookup/replacement; one request-local Request ID header |
 | `fetch` | standard DOM declaration | one closed URL string; request-time GET; `.status` only; Apple system libcurl transport |
@@ -131,6 +131,15 @@ through upstream `JSON.stringify`, `setDefaultContentType`, `#newResponse`,
 the exact `application/json` content type into native POST dispatch. This is a
 closed AOT path; arbitrary runtime JSON graphs and general Headers iteration are
 not implemented.
+
+The bounded dynamic JSON response slice accepts one closed response record whose
+values select named primitive fields from `await context.req.json()`. The body
+is limited by the existing 64 KiB transport cap; field names are non-empty and
+at most 128 UTF-8 bytes. Native output preserves JSON escaping and the string,
+finite-number, boolean, and null types. Malformed JSON, missing selected fields,
+and selected arrays/objects return 400, and a following fully framed request may
+reuse the connection. Dynamic keys, whole-object identity, arrays/nested
+objects, mutation, coercion/defaults, and streaming JSON remain unsupported.
 
 The native writer currently holds at most eight custom headers. It validates
 HTTP token names, rejects values containing NUL, CR, or LF, and implements
