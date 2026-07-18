@@ -34,6 +34,11 @@ pub(super) fn emit(program: &Program, options: &Options) -> Result<String, Strin
          extern tiny_u32 tinytsx_request_query_has(const void *, const tiny_u8 *, tiny_usize);\n\
          extern tiny_u32 tinytsx_html_write_openai_chat_text(void *, const tiny_u8 *, tiny_usize, const tiny_u8 *, tiny_usize, const tiny_u8 *, tiny_usize);\n",
     );
+    source.push_str(
+        "extern tiny_usize tinytsx_request_body_length(const void *);\n\
+         extern tiny_u32 tinytsx_response_header_static(void *, const tiny_u8 *, tiny_usize, const tiny_u8 *, tiny_usize);\n\
+         extern tiny_u32 tinytsx_response_header_request_id(void *, const void *, const tiny_u8 *, tiny_usize, tiny_usize);\n",
+    );
 
     emit_data(&mut source, program);
     emit_config(&mut source, program, options);
@@ -102,6 +107,18 @@ fn emit_data(source: &mut String, program: &Program) {
             &format!("tinytsx_path_{index}"),
             handler.path.as_bytes(),
         );
+        for (header_index, header) in handler.headers.iter().enumerate() {
+            emit_bytes(
+                source,
+                &format!("tinytsx_handler_{index}_header_{header_index}_name"),
+                header.name.as_bytes(),
+            );
+            emit_bytes(
+                source,
+                &format!("tinytsx_handler_{index}_header_{header_index}_value"),
+                header.value.as_bytes(),
+            );
+        }
     }
 }
 
@@ -188,65 +205,121 @@ fn emit_handler(source: &mut String, program: &Program) -> Result<(), String> {
             handler.path.len(),
         )
         .unwrap();
-        match &handler.response {
-            HandlerResponse::Html { component } => {
-                source.push_str("    tiny_u32 status = tinytsx_response_begin(writer, 200, 1);\n");
-                source.push_str("    if (status != 0) return status;\n");
-                writeln!(
-                    source,
-                    "    return tinytsx_component_{component}(request, writer);"
-                )
-                .unwrap();
-            }
-            HandlerResponse::Text {
-                value,
-                status,
-                content_type,
-            } => {
-                let content_type = content_type_id(content_type.as_deref());
-                writeln!(source, "    tiny_u32 status = tinytsx_response_begin(writer, {status}, {content_type});").unwrap();
-                source.push_str("    if (status != 0) return status;\n");
-                emit_text_expression(source, value, program, "    ")?;
-                source.push_str("    return status;\n");
-            }
-            HandlerResponse::Stream {
-                chunks,
-                status,
-                content_type,
-            } => {
-                let content_type = content_type_id(content_type.as_deref());
-                writeln!(source, "    tiny_u32 status = tinytsx_response_begin(writer, {status}, {content_type});").unwrap();
-                source.push_str("    if (status != 0) return status;\n");
-                source.push_str("    status = tinytsx_response_stream_begin(writer);\n");
-                source.push_str("    if (status != 0) return status;\n");
-                for chunk in chunks {
-                    if let ValueExpression::StringLiteral { string, .. } = chunk {
-                        writeln!(
-                            source,
-                            "    status = tinytsx_response_stream_chunk_static(writer, tinytsx_string_{string}, {});",
-                            program.static_strings[*string].value.len(),
-                        )
-                        .unwrap();
-                        source.push_str("    if (status != 0) return status;\n");
-                    } else {
-                        source.push_str("    status = tinytsx_response_stream_chunk_begin(writer);\n");
-                        source.push_str("    if (status != 0) return status;\n");
-                        emit_text_expression(source, chunk, program, "    ")?;
-                        source.push_str("    status = tinytsx_response_stream_chunk_end(writer);\n");
-                        source.push_str("    if (status != 0) return status;\n");
-                    }
-                }
-                source.push_str("    return status;\n");
-            }
-            _ => {
-                return Err(
-                    "portable x86 backend does not yet support this handler response".to_owned(),
-                );
-            }
+        if let Some(limit) = &handler.body_limit {
+            writeln!(
+                source,
+                "    if (tinytsx_request_body_length(request) > {}) {{",
+                limit.max_bytes
+            )
+            .unwrap();
+            emit_response(source, &limit.rejected.response, program, "      ")?;
+            source.push_str("    }\n");
         }
+        if let Some(request_id) = &handler.request_id {
+            writeln!(
+                source,
+                "    tiny_u32 header_status = tinytsx_response_header_request_id(writer, request, tinytsx_string_{}, {}, {});",
+                request_id.header,
+                program.static_strings[request_id.header].value.len(),
+                request_id.max_length,
+            )
+            .unwrap();
+            source.push_str("    if (header_status != 0) return header_status;\n");
+        }
+        for (header_index, header) in handler.headers.iter().enumerate() {
+            writeln!(
+                source,
+                "    tiny_u32 header_status_{header_index} = tinytsx_response_header_static(writer, tinytsx_handler_{index}_header_{header_index}_name, {}, tinytsx_handler_{index}_header_{header_index}_value, {});",
+                header.name.len(),
+                header.value.len(),
+            )
+            .unwrap();
+            writeln!(
+                source,
+                "    if (header_status_{header_index} != 0) return header_status_{header_index};"
+            )
+            .unwrap();
+        }
+        emit_response(source, &handler.response, program, "    ")?;
         source.push_str("  }\n");
     }
     source.push_str("  return 5;\n}\n");
+    Ok(())
+}
+
+fn emit_response(
+    source: &mut String,
+    response: &HandlerResponse,
+    program: &Program,
+    indent: &str,
+) -> Result<(), String> {
+    match response {
+        HandlerResponse::Html { component } => {
+            writeln!(
+                source,
+                "{indent}tiny_u32 status = tinytsx_response_begin(writer, 200, 1);"
+            )
+            .unwrap();
+            writeln!(source, "{indent}if (status != 0) return status;").unwrap();
+            writeln!(
+                source,
+                "{indent}return tinytsx_component_{component}(request, writer);"
+            )
+            .unwrap();
+        }
+        HandlerResponse::Text {
+            value,
+            status,
+            content_type,
+        } => {
+            let content_type = content_type_id(content_type.as_deref());
+            writeln!(source, "{indent}tiny_u32 status = tinytsx_response_begin(writer, {status}, {content_type});").unwrap();
+            writeln!(source, "{indent}if (status != 0) return status;").unwrap();
+            emit_text_expression(source, value, program, indent)?;
+            writeln!(source, "{indent}return status;").unwrap();
+        }
+        HandlerResponse::Stream {
+            chunks,
+            status,
+            content_type,
+        } => {
+            let content_type = content_type_id(content_type.as_deref());
+            writeln!(source, "{indent}tiny_u32 status = tinytsx_response_begin(writer, {status}, {content_type});").unwrap();
+            writeln!(source, "{indent}if (status != 0) return status;").unwrap();
+            writeln!(
+                source,
+                "{indent}status = tinytsx_response_stream_begin(writer);"
+            )
+            .unwrap();
+            writeln!(source, "{indent}if (status != 0) return status;").unwrap();
+            for chunk in chunks {
+                if let ValueExpression::StringLiteral { string, .. } = chunk {
+                    writeln!(
+                        source,
+                        "{indent}status = tinytsx_response_stream_chunk_static(writer, tinytsx_string_{string}, {});",
+                        program.static_strings[*string].value.len(),
+                    )
+                    .unwrap();
+                    writeln!(source, "{indent}if (status != 0) return status;").unwrap();
+                } else {
+                    writeln!(
+                        source,
+                        "{indent}status = tinytsx_response_stream_chunk_begin(writer);"
+                    )
+                    .unwrap();
+                    writeln!(source, "{indent}if (status != 0) return status;").unwrap();
+                    emit_text_expression(source, chunk, program, indent)?;
+                    writeln!(
+                        source,
+                        "{indent}status = tinytsx_response_stream_chunk_end(writer);"
+                    )
+                    .unwrap();
+                    writeln!(source, "{indent}if (status != 0) return status;").unwrap();
+                }
+            }
+            writeln!(source, "{indent}return status;").unwrap();
+        }
+    }
     Ok(())
 }
 

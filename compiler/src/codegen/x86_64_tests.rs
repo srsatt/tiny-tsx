@@ -181,3 +181,51 @@ fn emits_dynamic_route_text_for_both_x86_targets() {
         assert!(assembly.contains("tinytsx_html_write_path_segment"));
     }
 }
+
+#[test]
+fn emits_request_guards_and_headers() {
+    let mut program = dynamic_program(Target::LinuxX86_64);
+    program.static_strings.push(crate::hir::StaticString {
+        id: 1,
+        value: "X-Request-Id".to_owned(),
+    });
+    program.handlers[0].headers.push(crate::hir::StaticHeader {
+        name: "X-Frame-Options".to_owned(),
+        value: "DENY".to_owned(),
+    });
+    program.handlers[0].request_id = Some(crate::hir::RequestId {
+        header: 1,
+        max_length: 255,
+    });
+    program.handlers[0].body_limit = Some(crate::hir::BodyLimit {
+        max_bytes: 64,
+        rejected: crate::hir::GuardedResponse {
+            headers: Vec::new(),
+            stderr: Vec::new(),
+            response: crate::hir::HandlerResponse::Text {
+                value: crate::hir::ValueExpression::StringLiteral {
+                    string: 0,
+                    span: crate::hir::SourceSpan {
+                        file: "server.ts".to_owned(),
+                        line: 1,
+                        column: 1,
+                        end_line: 1,
+                        end_column: 2,
+                    },
+                },
+                status: 413,
+                content_type: None,
+            },
+        },
+    });
+
+    let assembly = emit(
+        &program,
+        Target::LinuxX86_64,
+        Options::default(),
+    )
+    .expect("emit handler guards");
+    assert!(assembly.contains("tinytsx_request_body_length"));
+    assert!(assembly.contains("tinytsx_response_header_request_id"));
+    assert!(assembly.contains("tinytsx_response_header_static"));
+}
