@@ -689,7 +689,7 @@ Every run returns from 68 peak descriptors to 4. The adjacent
 `benchmarks/results/2026-07-18-m5-max-sustained-15s-hono-json-body-keepalive-w8.*`
 pair retains the exact request contract; broader dynamic JSON remains open.
 
-#### Selected P2 tracer — invalid UTF-8 form decoding (pinned 2026-07-18)
+#### Selected P2 tracer — invalid UTF-8 form decoding (landed 2026-07-18)
 
 Use Web Platform Tests revision
 `08e168922e0c0d42250335a40e679fa5123489df`, unchanged source
@@ -717,6 +717,16 @@ coverage, Apple-arm64 native execution of the derived replacement case, a
 Linux-arm64 compile check for the portable runtime, the complete existing WPT
 allowlist, and synchronized compatibility/Web API/status documentation before
 checking the P2 item.
+
+The tracer is green. The unchanged upstream source and digest are manifest-
+pinned, while a four-test derived source executes the selected rows through the
+native WPT compiler. The fixed-capacity C runtime now applies UTF-8 maximal-
+subpart replacement after form percent decoding, retains valid UTF-8 and
+malformed percent escapes, accepts 85 invalid bytes as 255 replacement bytes,
+and rejects 86 invalid bytes before storing a partial pair. The portable smoke
+executes on Apple arm64 and compiles as freestanding Linux-arm64 assembly.
+Existing bootstrap coverage still proves Hono path parameters preserve an
+undecodable percent group, so the two parser contracts remain separate.
 
 Before implementing the next tracer, its selected goal must be copied into the
 active goal with: its exact tracer/source revision; admitted and rejected
@@ -878,7 +888,15 @@ explicitly promoted into a later goal.
     writes it with bounded percent decoding on Apple and Linux arm64.
     Non-trailing optionals, non-terminal catch-alls, and general constraints
     remain open.
-- [ ] Add invalid UTF-8 replacement semantics with upstream parser evidence.
+- [x] Add invalid UTF-8 replacement semantics with upstream parser evidence.
+  - 2026-07-18: four rows from pinned WPT `url/urlencoded-parser.any.js` now
+    execute through a provenance-linked derived native case. `%FE%FF` and
+    `%FF%FE` produce two U+FFFD values; incomplete/interrupted `%C2` produces
+    one replacement and preserves following ASCII. Fixed-capacity overflow,
+    valid UTF-8, malformed escapes, Apple execution, and Linux-arm64 portable
+    compilation are release-gated. This is WPT-runtime evidence only;
+    application `URLSearchParams` and form-data APIs remain open under the
+    general Web API item.
 - [ ] Add request-dependent stream chunks, sleep, cancellation, backpressure,
       and disconnect propagation.
 - [ ] Continue expanding the explicit upstream Hono behavior allowlist and

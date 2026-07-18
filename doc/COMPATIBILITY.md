@@ -802,6 +802,19 @@ ordered pairs, deletes by name or name/value pair, decodes form input, and
 serializes current state. The selected URL-linked cases keep a distinct URL
 slot pointing at the same parameter collection so native mutation updates its
 query serialization.
+
+Four URLSearchParams rows from the unchanged pinned
+`urlencoded-parser.any.js` are additionally retained as native-derived
+evidence and execute through a project-owned equivalent case. After plus and
+percent decoding, invalid UTF-8 is replaced by U+FFFD using maximal subparts:
+`%FE%FF` and `%FF%FE` produce two replacements, `%C2` one replacement, and
+`%C2x` a replacement followed by `x`. The 256-byte component bound applies to
+the expanded UTF-8 bytes; overflow rejects the pair. The same runtime executes
+on Apple arm64 and compiles freestanding for Linux arm64.
+
+This does not change Hono request decoding. Pinned Hono `tryDecode()` preserves
+an invalid percent group such as `%A4%A2`, and the bootstrap path-parameter test
+continues to pin that behavior separately from Web form parsing.
 That is dynamic collection behavior rather than record field semantics. It is
 not a generic `Map`, and it is not yet wired into application-generated
 `URLSearchParams` objects. The distinction prevents successful closed WPT

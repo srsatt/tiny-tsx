@@ -9,6 +9,29 @@ produces and serves a native Mach-O executable from the example TSX source.
 
 ## Alpha implementation evidence
 
+### Invalid UTF-8 form decoding (2026-07-18)
+
+- The WPT manifest now retains unchanged
+  `url/urlencoded-parser.any.js` from revision
+  `08e168922e0c0d42250335a40e679fa5123489df` with its exact digest. A
+  provenance-linked four-test source executes the selected URLSearchParams
+  invalid-byte rows through the native compiler; the upstream table harness
+  and Request/Response form-data branches remain explicitly unclaimed.
+- The portable fixed-capacity form decoder applies UTF-8 maximal-subpart
+  replacement after plus and percent decoding. `%FE%FF` and `%FF%FE` become two
+  U+FFFD values; incomplete `%C2` becomes one replacement; `%C2x` retains the
+  following ASCII. Valid UTF-8 and malformed percent escapes remain unchanged.
+- Replacement expansion is bounded: 85 invalid bytes produce 255 bytes and
+  succeed, while 86 would require 258 bytes and rejects before a pair is
+  retained. Removing libc string calls lets the same smoke execute on Apple
+  arm64 and compile as freestanding Linux-arm64 assembly.
+- Hono request decoding remains separate and preserves undecodable percent
+  groups as pinned upstream requires; the focused bootstrap ABI regression is
+  still green. This evidence does not expose application `URLSearchParams`,
+  `formData()`, `TextDecoder`, iteration, or object identity.
+- Verification: 127 frontend tests, WPT intake 1/1, WPT native/portable 6/6,
+  90 compiler tests, and the focused Hono path-preservation ABI test.
+
 ### Bounded request JSON response values (2026-07-18)
 
 - A shared Hono `POST /json-body` tracer selects one string, finite number,

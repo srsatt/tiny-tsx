@@ -189,10 +189,17 @@ complete query after linked mutation. The allowlist-driven `test:wpt-native`
 command builds all three Mach-O executables and treats any failed assertion as
 a non-zero process result.
 
-This runner is semantic evidence for those three complete source files, not yet
-the application-facing `URLSearchParams` class. It does not currently
-replace malformed UTF-8 with U+FFFD, accept dynamic inputs, expose object
-identity/iteration, or implement general URL parsing and normalization.
+Four URLSearchParams parser rows from pinned WPT
+`url/urlencoded-parser.any.js` are also retained as native-derived provenance
+and execute through an equivalent bounded case. Form parsing now replaces
+invalid UTF-8 maximal subparts with U+FFFD after plus/percent decoding. The
+fixed component rejects replacement expansion beyond 256 bytes. Hono request
+path/query decoding remains a separate preserve-on-error contract.
+
+This runner is semantic evidence for those three complete source files and the
+four derived parser rows, not yet the application-facing `URLSearchParams`
+class. It does not accept dynamic inputs, expose object identity/iteration, or
+implement general URL parsing and normalization.
 Application-generated Request/URL objects continue to use their separate
 borrowed query view rather than constructing this collection. Its query-name
 predicate now applies the same `+` and valid-percent-triplet decoding while
