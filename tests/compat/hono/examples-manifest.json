@@ -348,6 +348,48 @@
       "firstUnsupportedBoundary": "The adapters prove an in-memory and optional SQLite-persistent local signed-integer counter plus hard-reset waiter detachment that preserves accepted effects; clean-close and general AbortSignal cancellation, Cloudflare bindings, alarms, remote identity, arbitrary persistent actor behaviors, and request-derived messages are out of scope."
     }
   ],
+  "nextTracer": {
+    "id": "upstream-stytch-auth-todo-backend",
+    "provenance": "unchanged-upstream-backend-with-tinytsx-adapters",
+    "upstreamCommit": "3b0b62875a0e1265763fea1c6388866d5697ef81",
+    "entry": "vendor/hono-examples/stytch-auth/api/index.ts",
+    "apiEntry": "vendor/hono-examples/stytch-auth/api/TodoAPI.ts",
+    "serviceEntry": "vendor/hono-examples/stytch-auth/api/TodoService.ts",
+    "files": [
+      {
+        "path": "vendor/hono-examples/stytch-auth/api/index.ts",
+        "sha256": "5019d3611324134f172b4b7f0671fbc8c92f8aadf370c5fdb59b9eaf861df3e6"
+      },
+      {
+        "path": "vendor/hono-examples/stytch-auth/api/TodoAPI.ts",
+        "sha256": "8bfc69df0c1025662eceabd3ae649e42d922fdfb49f182727013bff6d2a03158"
+      },
+      {
+        "path": "vendor/hono-examples/stytch-auth/api/TodoService.ts",
+        "sha256": "1574bd118a982ec5ced15ee9e46e9aa9cfb77dd3e17ebe1341c740999cc3d33f"
+      }
+    ],
+    "packageDeclaration": {
+      "path": "vendor/hono-examples/stytch-auth/package.json",
+      "specifier": "@hono/stytch-auth",
+      "declaredRange": "^0.1.0",
+      "resolvedVersion": null
+    },
+    "intake": {
+      "status": "audit-pass",
+      "evidence": "tests/compat/hono/stytch-auth-intake.test.mjs"
+    },
+    "nativeCompile": {
+      "status": "not-admitted"
+    },
+    "httpBehavior": {
+      "status": "not-admitted"
+    },
+    "referenceBehavior": {
+      "status": "not-admitted"
+    },
+    "firstUnsupportedBoundary": "The pinned backend intake does not yet admit its request-local TodoService class, private async method, runtime Todo arrays, Stytch authentication package, Cloudflare KV/ASSETS bindings, React/Vite frontend, or live Stytch credentials; each requires the selected bounded adapter and native evidence before this tracer can move into the supported matrix."
+  },
   "behaviorAllowlist": [
     {"source":"vendor/hono-examples/basic/src/index.test.ts","selectors":["expect(res.status).toBe(200)","expect(res.headers.get('x-powered-by')).toBe('Hono')"],"evidenceMode":"native-derived","nativeEvidence":"compiler/tests/e2e.rs"},
     {"source":"vendor/hono/src/middleware/powered-by/index.test.ts","selectors":["Should return with X-Powered-By header"],"evidenceMode":"native-derived","nativeEvidence":"tests/compat/hono/powered-by-smoke.ts"},

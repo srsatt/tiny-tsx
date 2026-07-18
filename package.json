@@ -44,7 +44,7 @@
     "test:native-api": "cargo test -p tinytsx-runtime-bootstrap abi::tests",
     "test:test262-intake": "node --test tests/compat/test262/intake.test.mjs",
     "test:test262-native": "npm run build:frontend && node --test tests/compat/test262/native.test.mjs",
-    "test:hono-intake": "node --test tests/compat/hono/docs-matrix.test.mjs tests/compat/hono/examples-intake.test.mjs",
+    "test:hono-intake": "node --test tests/compat/hono/docs-matrix.test.mjs tests/compat/hono/examples-intake.test.mjs tests/compat/hono/stytch-auth-intake.test.mjs",
     "test:hono-alpha-native": "npm run build:frontend && node --test tests/compat/hono/alpha-native.test.mjs",
     "test:hono-user-auth": "npm run build:frontend && node --test tests/compat/hono/user-auth-native.test.mjs",
     "test:hono-basic-reference": "bun run --tsconfig-override tests/compat/hono/jsx-ssr-bun-tsconfig.json tests/compat/hono/basic.behavior.test.ts",
