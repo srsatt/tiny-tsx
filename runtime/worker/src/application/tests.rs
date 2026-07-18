@@ -346,6 +346,102 @@ fn restart_intensity_terminates_the_logical_worker() {
 }
 
 #[test]
+fn one_for_one_supervisor_restarts_only_the_failed_child_and_contains_exhaustion() {
+    let pool = ApplicationPool::new(
+        1,
+        8,
+        8,
+        |id| if id == 0 { 10_i64 } else { 100_i64 },
+        |state, value| {
+            if value == -99 {
+                *state = -1;
+                panic!("supervised failure");
+            }
+            *state += value;
+            *state
+        },
+    )
+    .expect("create application pool");
+    let supervisor = pool
+        .supervise(RestartPolicy {
+            max_restarts: 2,
+            within: Duration::from_secs(1),
+        })
+        .expect("create root supervisor");
+    let left = pool
+        .spawn_with_capacity_and_supervisor(8, &supervisor)
+        .expect("spawn left child");
+    let right = pool
+        .spawn_with_capacity_and_supervisor(8, &supervisor)
+        .expect("spawn right child");
+    let outside = pool.spawn();
+
+    assert_eq!(left.call(5), Ok(15));
+    assert_eq!(right.call(7), Ok(107));
+    assert_eq!(outside.call(1), Ok(101));
+
+    assert_eq!(left.call(-99), Err(CallError::Reply(ReplyError::Panicked)));
+    assert_eq!(left.call(0), Ok(10));
+    assert_eq!(right.call(0), Ok(107));
+
+    assert_eq!(right.call(-99), Err(CallError::Reply(ReplyError::Panicked)));
+    assert_eq!(left.call(0), Ok(10));
+    assert_eq!(right.call(0), Ok(100));
+
+    assert_eq!(left.call(-99), Err(CallError::Reply(ReplyError::Panicked)));
+    assert_eq!(left.call(0), Err(CallError::Post(PostError::Terminated(0))));
+    assert_eq!(
+        right.call(0),
+        Err(CallError::Post(PostError::Terminated(0)))
+    );
+    assert_eq!(outside.call(1), Ok(102));
+    pool.join();
+}
+
+#[test]
+fn root_supervisor_expires_attempts_from_its_shared_rolling_window() {
+    let pool = ApplicationPool::new(
+        1,
+        4,
+        4,
+        |_| 0_i64,
+        |state, value| {
+            if value == -1 {
+                panic!("supervised failure");
+            }
+            *state += value;
+            *state
+        },
+    )
+    .expect("create application pool");
+    let supervisor = pool
+        .supervise(RestartPolicy {
+            max_restarts: 1,
+            within: Duration::from_millis(10),
+        })
+        .expect("create root supervisor");
+    let left = pool
+        .spawn_with_capacity_and_supervisor(4, &supervisor)
+        .expect("spawn left child");
+    let right = pool
+        .spawn_with_capacity_and_supervisor(4, &supervisor)
+        .expect("spawn right child");
+
+    assert_eq!(left.call(-1), Err(CallError::Reply(ReplyError::Panicked)));
+    std::thread::sleep(Duration::from_millis(20));
+    assert_eq!(right.call(-1), Err(CallError::Reply(ReplyError::Panicked)));
+    assert_eq!(left.call(1), Ok(1));
+    assert_eq!(right.call(1), Ok(1));
+
+    assert_eq!(left.call(-1), Err(CallError::Reply(ReplyError::Panicked)));
+    assert_eq!(
+        right.call(0),
+        Err(CallError::Post(PostError::Terminated(0)))
+    );
+    pool.join();
+}
+
+#[test]
 fn rejected_post_returns_message_ownership() {
     let barrier = Arc::new(Barrier::new(2));
     let (started_tx, started_rx) = mpsc::channel();
