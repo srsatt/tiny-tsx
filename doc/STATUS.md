@@ -9,34 +9,41 @@ produces and serves a native Mach-O executable from the example TSX source.
 
 ## Alpha implementation evidence
 
-### Sustained ten-workload server matrix (2026-07-18)
+### Sustained eleven-workload server matrix (2026-07-18)
 
 - A clean Apple M5 Max comparison covers Hono basic, dynamic JSX escaping, one
   decoded optional route parameter, bounded warm-cache 21-byte and 22,173-byte
   file responses, compact/query-present pretty JSON, finite text streaming, one
-  counter actor, and one in-memory empty SQLite query. Each target uses one
-  process; TinyTSX uses eight HTTP workers; both targets use keep-alive. The
+  counter actor, one in-memory empty SQLite query, and an idempotent two-write
+  callback transaction followed by a non-empty row response. Each target uses
+  one process; TinyTSX uses eight HTTP workers; both targets use keep-alive. The
   matrix retains five startup samples and three 15-second samples at concurrency
   8 and 64 with alternating order.
-- All 120 load samples pass with success rate 1.0. TinyTSX reaches 0.24–0.54x
-  Bun throughput at concurrency 8 and 0.40–0.79x at concurrency 64 on the nine
+- All 132 load samples pass with success rate 1.0. TinyTSX reaches 0.24–0.54x
+  Bun throughput at concurrency 8 and 0.40–0.79x at concurrency 64 on the ten
   small-response routes. The exact 22,173-byte route reaches 1.30x/1.78x Bun.
   TinyTSX concurrency-64 p99 is 9.575–22.030 ms versus Bun at 0.736–5.104 ms.
-- TinyTSX warm RSS is 6.30–8.06 MiB versus Bun at 70.33–154.70 MiB. Repeated
+- TinyTSX warm RSS is 6.30–8.81 MiB versus Bun at 64.50–154.70 MiB. Repeated
   startup is 20.00–22.86 ms versus 17.49–21.31 ms. Every TinyTSX workload
   returns to four open descriptors; median peaks are 68 for non-file routes, 71
   for the 21-byte file, and 73 for the 22 KiB file.
 - Whole-process counters are not normalized across different request totals.
-  TinyTSX records greater CPU on nine routes; Bun records more on the 21-byte
+  TinyTSX records greater CPU on ten routes; Bun records more on the 21-byte
   file route, while TinyTSX records more Unix syscalls and context switches on
-  all ten. Application-executor, filesystem, response-copy, actor, and SQLite
+  all eleven. Application-executor, filesystem, response-copy, actor, and SQLite
   ownership are profiling seams; unmeasured workload families remain explicit.
 - The upstream query-present pretty branch expands the same closed array from
   129 to 202 bytes. It reduces TinyTSX concurrency-64 throughput by 0.3% versus
   compact JSON and Bun throughput by 23.2%; this is not a dynamic-JSON claim.
+- The prepared transaction route performs two fixed-key idempotent writes in
+  one owner message, copies one non-empty row, and emits 41 bytes. Relative to
+  the empty SQLite route, TinyTSX throughput changes by -0.4%/-12.3% at
+  concurrency 8/64 and Bun changes by -26.2%/-32.0%; this is not a disk-I/O or
+  isolated transaction-cost claim.
 - Evidence: clean commits `7c1a22c`, `04ac58b`, `c16333f`, `097982d`, and
-  `a6cc7ae`, the combined sustained summary, and ten adjacent raw JSON/rendered
-  report pairs. All five commits have identical compiler/runtime source.
+  `a6cc7ae`, plus `c488480`, the combined sustained summary, and eleven adjacent
+  raw JSON/rendered report pairs. All six commits have identical
+  compiler/runtime source.
 
 ### Clean post-transaction release rehearsal (2026-07-17)
 
@@ -408,8 +415,9 @@ produces and serves a native Mach-O executable from the example TSX source.
   disk-backed program also assembles for Linux arm64.
 - Runtime database opens now use `SQLITE_OPEN_NOFOLLOW`, and a Unix regression
   test rejects a database-file symlink. Later post-alpha evidence below adds the
-  service-owned directory and sidecar policy; broader callback transactions
-  and HTTP-level contention load remain open. Core native evidence holds a
+  service-owned directory and sidecar policy, the exact prepared-write callback,
+  and fixed-value single-owner HTTP load. Broader callback forms and disk or
+  multi-connection contention load remain open. Core native evidence holds a
   competing writer through the bounded busy timeout and proves the second
   connection recovers after the lock is released; the persistent counter actor
   is covered separately above.

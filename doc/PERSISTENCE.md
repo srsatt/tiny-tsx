@@ -77,8 +77,10 @@ code running as the same effective user. Roots writable through unusual ACLs,
 mount changes, privileged attackers, network filesystems with weaker Unix
 semantics, and out-of-process same-UID mutation are unsupported; deploy those
 cases behind an OS sandbox or dedicated service account. General dynamic
-transaction callbacks and HTTP-level contention load are also post-alpha. The
-native SQLite core holds a competing writer through the one-second busy timeout,
+transaction callbacks remain post-alpha. A sustained HTTP tracer now covers one
+in-memory owner with fixed-key transaction work; it does not cover disk/WAL I/O
+or competing connections. The native SQLite core holds a competing writer
+through the one-second busy timeout,
 observes a recoverable error, releases the lock, and proves the second
 connection can write successfully afterward.
 
@@ -109,6 +111,14 @@ same transaction-step ABI. Callback arguments or returned values, query steps,
 visible per-step results, `Database.exec` steps, branches or loops, nesting,
 mixed databases, and an interactive transaction object are not admitted.
 
+The focused performance tracer repeats two fixed-key idempotent prepared writes
+as one callback transaction, then copies and JSON-encodes one non-empty prepared
+row. Apple and Linux native gates pin the exact source, and the sustained
+TinyTSX/Bun matrix retains startup, RSS, throughput, latency, process counters,
+and descriptor recovery. This is single-owner HTTP pressure, not evidence for
+disk/WAL behavior, competing SQLite connections, rollback frequency, growing
+tables, request-derived values, or primitive-operation parity.
+
 The HTTP transport retains at most 64 KiB of request body. `HonoRequest.json()`
 is not exposed as a general dynamic JavaScript object: the compiler records
 only statically selected fields and the bootstrap parses those fields at the
@@ -128,8 +138,8 @@ user-auth tracer additionally proves a closed string parameter written to an
 on-disk database and observed after process restart. It now also returns both
 fields from an inserted row and proves a zero-change update yields
 `lastInsertRowId: null`. Additional caller-provided dynamic values, broader
-callback transaction forms, arbitrary result-object operations, and HTTP
-contention load remain post-alpha. Bounded wildcard-origin CORS,
+callback transaction forms, arbitrary result-object operations, and disk or
+multi-connection contention load remain post-alpha. Bounded wildcard-origin CORS,
 Content-Type preflight, and OS-random version-4 IDs bound as prepared values are
 native. The adapter also maps its typed Hono blog-name binding to a permitted
 immutable startup value. The pinned upstream 404/204 envelopes match through

@@ -1,13 +1,14 @@
-# Sustained ten-workload comparison
+# Sustained eleven-workload comparison
 
 Collected on 2026-07-17 and 2026-07-18 local time.
 
-This matrix compares ten exact Hono routes. The original five use clean commit
+This matrix compares eleven exact Hono routes. The original five use clean commit
 `7c1a22c`; the route-parameter tracer uses clean commit `04ac58b`; the 21-byte
 file tracer uses clean commit `c16333f`; and the 22,173-byte file/response tracer
 uses clean commit `097982d`. The compact/pretty JSON pair uses clean commit
-`a6cc7ae`. The commits have identical compiler/runtime source; the intervening
-changes add benchmark evidence, documentation, and harness entries. This is
+`a6cc7ae`; the prepared transaction tracer uses clean commit `c488480`. The
+commits have identical compiler/runtime source; the intervening changes add
+benchmark evidence, documentation, and harness entries. This is
 longer release-stability evidence, not a general AOT/JIT or JavaScript-runtime
 claim.
 
@@ -24,7 +25,7 @@ claim.
 - status, body, headers, and framing checked before measurement, with declared
   target-specific differences retained in each workload report.
 
-All 120 load samples completed with success rate 1.0. No samples were discarded.
+All 132 load samples completed with success rate 1.0. No samples were discarded.
 
 ## Throughput and latency
 
@@ -42,9 +43,10 @@ Values are medians of the three retained load samples.
 | Finite text stream | 32,391 / 78,808 (0.41x) | 2.680 / 0.340 ms | 58,211 / 80,664 (0.72x) | 15.622 / 1.683 ms |
 | Counter actor | 35,690 / 92,896 (0.38x) | 0.367 / 0.149 ms | 69,988 / 107,180 (0.65x) | 12.935 / 1.194 ms |
 | Empty SQLite query | 32,430 / 132,946 (0.24x) | 2.161 / 0.112 ms | 59,545 / 148,474 (0.40x) | 15.282 / 0.821 ms |
+| Prepared SQLite transaction | 32,292 / 98,111 (0.33x) | 3.375 / 0.138 ms | 52,193 / 100,896 (0.52x) | 17.293 / 1.214 ms |
 
 TinyTSX does not reach general Bun throughput parity in this matrix. Across the
-nine small-response routes it reaches 0.24x–0.54x Bun at concurrency 8 and
+ten small-response routes it reaches 0.24x–0.54x Bun at concurrency 8 and
 0.40x–0.79x at concurrency 64. On the exact 22,173-byte warm-cache response it
 reaches 1.30x Bun at concurrency 8 and 1.78x at concurrency 64. Concurrency-64
 p99 remains higher for every route: TinyTSX records 9.575–22.030 ms versus Bun
@@ -61,6 +63,12 @@ to 202 bytes. Relative to compact JSON, TinyTSX throughput is 2.1% lower at
 concurrency 8 and 0.3% lower at 64; Bun is 19.4% and 23.2% lower. This is an
 end-to-end query-presence and formatting delta for one closed array, not a
 general JSON serializer comparison.
+
+Relative to the empty SQLite route, the prepared transaction route changes
+TinyTSX throughput by -0.4% at concurrency 8 and -12.3% at 64; Bun changes by
+-26.2% and -32.0%. The transaction route performs two idempotent writes plus a
+non-empty row copy and emits 41 bytes instead of an empty 13-byte envelope, so
+these are end-to-end route deltas rather than isolated transaction costs.
 
 The dynamic JSX route is not a direct cost delta against `hono-basic`: the
 control includes `poweredBy` and response-time middleware that the escaping
@@ -81,13 +89,14 @@ chunks, while Bun emits the same decoded 19-byte body with a content length.
 | Finite text stream | 22.07 / 21.31 ms | 547.26 / 29.77 ms | 6.30 / 154.70 MiB | 6.42 / 154.81 MiB |
 | Counter actor | 22.84 / 18.45 ms | 452.39 / 29.11 ms | 6.63 / 108.56 MiB | 6.97 / 149.50 MiB |
 | Empty SQLite query | 22.86 / 17.49 ms | 451.07 / 27.60 ms | 8.06 / 70.33 MiB | 8.19 / 71.84 MiB |
+| Prepared SQLite transaction | 22.60 / 19.67 ms | 510.45 / 29.51 ms | 8.81 / 64.50 MiB | 8.94 / 64.88 MiB |
 
 Repeated startup is close: TinyTSX is 20.00–22.86 ms and Bun is
 17.49–21.31 ms. TinyTSX's first post-build launch is a separate 437.66–547.26
 ms outlier and must not be folded into that repeated-startup claim.
 
-TinyTSX warm RSS stays at 6.30–8.06 MiB. Bun uses 8.7x–24.6x as much warm RSS
-across the ten routes. The footprint advantage remains the clearest result in
+TinyTSX warm RSS stays at 6.30–8.81 MiB. Bun uses 7.3x–24.6x as much warm RSS
+across the eleven routes. The footprint advantage remains the clearest result in
 this matrix.
 
 ## Whole-process pressure
@@ -118,10 +127,12 @@ must not be interpreted as normalized per-request costs.
 |  | Bun | 43.30 s / 137.4% | 10,148,273 / 8,434,556 | 1,920,004 | 6,728 | 17 | 6/70/6 |
 | Empty SQLite query | TinyTSX | 76.54 s / 243.7% | 25,749,966 / 5,679,011 | 6,119,876 | 40 | 17 | 4/68/4 |
 |  | Bun | 31.01 s / 98.2% | 9,610,831 / 475,285 | 113,794 | 2,130 | 16 | 5/69/5 |
+| Prepared SQLite transaction | TinyTSX | 78.59 s / 250.3% | 23,061,120 / 7,877,903 | 6,744,232 | 90 | 17 | 4/68/4 |
+|  | Bun | 31.26 s / 99.2% | 6,642,170 / 423,673 | 61,501 | 1,627 | 15 | 5/69/5 |
 
-TinyTSX records greater aggregate CPU on nine routes; Bun records more on the
+TinyTSX records greater aggregate CPU on ten routes; Bun records more on the
 21-byte file route. TinyTSX records more Unix syscalls and context switches on
-all ten. The two file routes have the highest CPU totals, while SQLite has
+all eleven. The two file routes have the highest CPU totals, while SQLite has
 TinyTSX's highest context-switch count. This is evidence to profile
 application-executor, filesystem, response-copy, and owner-message boundaries;
 it is not enough by itself to choose an optimization.
@@ -134,9 +145,14 @@ workload baseline.
 
 ## Boundaries and next evidence
 
-The SQLite route uses one in-memory database, repeats `CREATE TABLE IF NOT
+The empty SQLite route uses one in-memory database, repeats `CREATE TABLE IF NOT
 EXISTS`, executes an empty prepared `SELECT`, and emits a JSON envelope. It
-does not measure rows, result copying, disk access, writes, or transactions.
+does not measure rows, result copying, disk access, writes, or transactions. The
+prepared transaction route adds two fixed-key idempotent writes in one callback
+transaction and copies one non-empty row. It does not measure disk/WAL I/O,
+competing connections, rollback frequency, growing tables, or request-derived
+values.
+
 The actor route uses one persistent zero-delta counter ask; it does not measure
 mutation contention, restart, cancellation, supervision, persistence, or
 multiple actors.
@@ -145,7 +161,8 @@ Still unmeasured in this sustained matrix:
 
 - cold-cache, files/responses above 32 KiB, replacement, binary, range,
   compression, and filesystem-denial load;
-- non-empty SQLite results, disk I/O, and transaction writes;
+- SQLite disk/WAL I/O, competing connections, rollback load, and growing or
+  request-derived values;
 - streamed/very-large responses and competing/catch-all route shapes;
 - arbitrary query-value comparisons, dynamic JSON, and randomized branch mixes;
 - cancellation and multi-actor contention.

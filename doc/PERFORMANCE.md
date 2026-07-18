@@ -10,20 +10,21 @@ with Bun. The current comparison covers Hono basic, request-time dynamic JSX,
 one decoded optional route parameter, bounded warm-cache 21-byte and 22,173-byte
 file responses, finite text streaming, one counter actor, and one in-memory
 empty SQLite query. The matrix also pairs compact and query-present pretty JSON
-from the complete pinned basic app. Every one of the 120 load samples passed its
-response contract.
+from the complete pinned basic app, plus two idempotent prepared writes and a
+non-empty row response in one in-memory callback transaction. Every one of the
+132 load samples passed its response contract.
 
 Across three 15-second samples at concurrency 8 and 64, TinyTSX reaches
 0.24–0.54x Bun throughput at concurrency 8 and 0.40–0.79x at concurrency 64 on
-the nine small-response routes. The exact 22,173-byte warm-cache response is
+the ten small-response routes. The exact 22,173-byte warm-cache response is
 the exception: TinyTSX reaches 1.30x Bun at concurrency 8 and 1.78x at 64.
 TinyTSX's concurrency-64 p99 remains higher on every route at 9.575–22.030 ms
 versus Bun at 0.736–5.104 ms.
 
 The honest current claim is:
 
-- **yes for footprint:** TinyTSX stays at 6.30–8.06 MiB warm RSS; Bun uses
-  8.7x–24.6x as much across the ten routes;
+- **yes for footprint:** TinyTSX stays at 6.30–8.81 MiB warm RSS; Bun uses
+  7.3x–24.6x as much across the eleven routes;
 - **repeated startup is close:** TinyTSX takes 20.00–22.86 ms and Bun takes
   17.49–21.31 ms, while TinyTSX's separately reported first post-build launch
   remains a 437.66–547.26 ms outlier;
@@ -33,12 +34,15 @@ The honest current claim is:
 - **tail latency remains open:** TinyTSX's concurrency-64 p99 is 4.3–18.6x
   Bun's despite the large-response throughput result;
 - **owner boundaries are visible:** the actor route is 11.5% below TinyTSX's
-  basic control at concurrency 64 and the SQLite route is 24.7% below it;
+  basic control at concurrency 64 and the empty SQLite route is 24.7% below it;
+- **transaction depth has a measured route cost:** versus the empty SQLite
+  route, the two-write/non-empty-row route changes TinyTSX throughput by -0.4%
+  at concurrency 8 and -12.3% at 64; Bun changes by -26.2%/-32.0%;
 - **closed pretty JSON is inexpensive here:** versus compact JSON, TinyTSX loses
   0.3% throughput at concurrency 64 while Bun loses 23.2%;
 - **process pressure needs profiling:** TinyTSX records greater aggregate CPU
-  on nine routes; Bun records more on the 21-byte file route, while TinyTSX
-  records more Unix syscalls and context switches on all ten;
+  on ten routes; Bun records more on the 21-byte file route, while TinyTSX
+  records more Unix syscalls and context switches on all eleven;
 - **bounded resources recover:** every TinyTSX workload returns to four open
   descriptors; median peaks are 68 for non-file routes, 71 for the 21-byte file,
   and 73 for the 22 KiB file.
@@ -47,10 +51,10 @@ The current summary is
 `benchmarks/results/2026-07-17-m5-max-sustained-15s-summary.md`; its adjacent
 JSON files retain every raw sample and each per-workload Markdown report pins
 the response differences and limitations. Cold/replaced/binary files, responses
-above 32 KiB, streaming/range/compression behavior, non-empty or on-disk
-SQLite, transaction writes, competing/catch-all route shapes, JSON branch
-mixes with arbitrary values or dynamic collections, cancellation, and multiple
-actors remain unmeasured.
+above 32 KiB, streaming/range/compression behavior, on-disk/WAL SQLite,
+competing connections and rollback load, competing/catch-all route shapes,
+JSON branch mixes with arbitrary values or dynamic collections, cancellation,
+and multiple actors remain unmeasured.
 
 The five-second alpha comparison and earlier connection-close, JSX, streaming,
 Worker, and AI-provider results below are historical evidence. They remain

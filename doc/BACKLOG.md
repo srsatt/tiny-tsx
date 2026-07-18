@@ -609,7 +609,7 @@ evidence is the adjacent
 `benchmarks/results/2026-07-18-m5-max-sustained-15s-hono-json-{compact,pretty}-keepalive-w8.*`
 pairs; no dynamic-collection or arbitrary-query claim is made.
 
-#### Selected P4 tracer — idempotent prepared transaction and non-empty result
+#### Selected P4 tracer — idempotent prepared transaction and non-empty result (landed 2026-07-18)
 
 Add one `hono-sqlite-transaction` workload around a project-owned focused Hono
 route using pinned Hono commit `b2ae3a2204a48ce15a26448fd746d39745eb1837`
@@ -636,6 +636,18 @@ request-derived values, growing tables, arbitrary transaction callbacks,
 visible step results, or SQLite primitive parity. Those remain separate
 functional or performance tracers, and this workload cannot close them by
 inference.
+
+The tracer is green. The harness contract pins the two source adapters, SQL
+shape, exact 41-byte row response, and explicit limitations. Sixteen repeated
+Apple-arm64 native requests return the same non-empty row; Linux arm64 assembles
+the exact transaction-step ABI; and all 12 target/concurrency samples in the
+three-by-15-second keep-alive matrix have success rate 1.0. TinyTSX reaches
+32,292 requests/second (0.33x Bun) at concurrency 8 and 52,193 (0.52x) at 64,
+with 8.81 MiB warm RSS and 17.293 ms concurrency-64 p99. Every TinyTSX run
+returns from 68 peak descriptors to 4. The raw evidence is the adjacent
+`benchmarks/results/2026-07-18-m5-max-sustained-15s-hono-sqlite-transaction-keepalive-w8.*`
+pair; disk/WAL I/O, competing connections, rollback load, and request-derived
+values remain open.
 
 Before implementing the next tracer, its selected goal must be copied into the
 active goal with: its exact tracer/source revision; admitted and rejected
@@ -941,6 +953,12 @@ explicitly promoted into a later goal.
     -19.4%/-23.2%. Dynamic collections, arbitrary query values, request JSON,
     randomized branch mixes, and the other workload families remain open, so
     this broad item stays unchecked.
+  - 2026-07-18: the prepared SQLite tracer adds two fixed-key idempotent writes
+    in one callback transaction plus one non-empty row response. All three
+    15-second samples at concurrency 8/64 pass; TinyTSX reaches 0.33x/0.52x Bun
+    with 8.81 MiB warm RSS and 17.293 ms concurrency-64 p99. Disk/WAL I/O,
+    competing connections, rollback load, request-derived values, and the
+    other workload families remain open, so this broad item stays unchecked.
 - [x] Add CPU, syscall, allocation, peak-RSS, and first-launch instrumentation.
   - 2026-07-17: the macOS harness samples whole-process CPU time, Unix/Mach
     syscalls, context switches, faults, threads, open-file-descriptor
@@ -951,7 +969,7 @@ explicitly promoted into a later goal.
     binaries do not include them, and no Bun allocation ratio is claimed.
 - [x] Run controlled longer-duration comparisons before publishing performance
       claims and optimize only from profiles.
-  - 2026-07-18: the ten-workload sustained matrix retains three 15-second
+  - 2026-07-18: the eleven-workload sustained matrix retains three 15-second
     samples at concurrency 8 and 64 for both targets, alternates target and
     concurrency order, disables allocator instrumentation, and preserves all
     raw response-checked samples. It supports claims only for those exact
