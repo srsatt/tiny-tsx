@@ -94,6 +94,26 @@
       "path": "test/built-ins/Array/prototype/unshift/S15.4.4.13_A1_T1.js",
       "feature": "closed-array-unshift",
       "mode": "native"
+    },
+    {
+      "path": "test/built-ins/Map/prototype/size/returns-count-of-present-values-by-insertion.js",
+      "feature": "bounded-map-primitive-keys",
+      "mode": "native"
+    },
+    {
+      "path": "test/built-ins/Map/prototype/set/append-new-values-normalizes-zero-key.js",
+      "feature": "bounded-map-samevaluezero",
+      "mode": "native"
+    },
+    {
+      "path": "test/built-ins/Map/prototype/size/returns-count-of-present-values-before-after-set-delete.js",
+      "feature": "bounded-map-size-delete",
+      "mode": "native"
+    },
+    {
+      "path": "test/built-ins/Map/prototype/get/returns-undefined.js",
+      "feature": "bounded-map-missing-clear",
+      "mode": "native"
     }
   ]
 }
