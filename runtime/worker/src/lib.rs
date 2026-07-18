@@ -4,10 +4,12 @@
 //! caller supplies an owned job type, per-thread state, and a job handler.
 
 mod application;
+mod readiness;
 
 pub use application::{
     ApplicationPool, CallError, LogicalWorker, PostError, Reply, ReplyError, RestartPolicy,
 };
+pub use readiness::{EventControl, EventWorkerPool};
 
 use std::{
     collections::VecDeque,

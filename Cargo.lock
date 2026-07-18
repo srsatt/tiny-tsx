@@ -263,6 +263,9 @@ dependencies = [
 [[package]]
 name = "tinytsx-runtime-worker"
 version = "0.1.0-alpha.1"
+dependencies = [
+ "libc",
+]
 
 [[package]]
 name = "unicode-ident"
