@@ -1,8 +1,4 @@
 use super::{
-    BAD_REQUEST, CONTENT_TYPE_HTML, CONTENT_TYPE_NONE, CONTENT_TYPE_TEXT,
-    EMPTY_SQLITE_EXECUTE_RESULT, INTERNAL_ERROR, MAX_DYNAMIC_HEADER_BYTES, MAX_RESPONSE_HEADERS,
-    MAX_SQLITE_RESULTS, MAX_STREAM_CHUNKS, OK, OpenAiTransport, REQUEST_OOM, RequestArena,
-    TinyHeader, TinyResponseWriter, TinySqlParameter, TinySqliteExecuteResult, TinyStringView,
     decode_sqlite_parameters, render, request, request_with_body, request_with_headers,
     tinytsx_html_write_fetch_status, tinytsx_html_write_path_segment, tinytsx_html_write_path_tail,
     tinytsx_html_write_query_parameter, tinytsx_html_write_request_header,
@@ -15,6 +11,10 @@ use super::{
     tinytsx_response_header_request_id, tinytsx_response_header_static,
     tinytsx_response_stream_begin, tinytsx_response_stream_chunk_begin,
     tinytsx_response_stream_chunk_end, tinytsx_response_stream_chunk_static, write_console_error,
+    OpenAiTransport, RequestArena, TinyHeader, TinyResponseWriter, TinySqlParameter,
+    TinySqliteExecuteResult, TinyStringView, BAD_REQUEST, CONTENT_TYPE_HTML, CONTENT_TYPE_NONE,
+    CONTENT_TYPE_TEXT, EMPTY_SQLITE_EXECUTE_RESULT, INTERNAL_ERROR, MAX_DYNAMIC_HEADER_BYTES,
+    MAX_RESPONSE_HEADERS, MAX_SQLITE_RESULTS, MAX_STREAM_CHUNKS, OK, REQUEST_OOM,
 };
 use std::{
     io::{Read, Write},
@@ -176,10 +176,9 @@ fn sqlite_parameters_generate_distinct_version_four_uuids() {
         assert_eq!(uuid.len(), 36);
         assert_eq!(&uuid[14..15], "4");
         assert!(matches!(&uuid[19..20], "8" | "9" | "a" | "b"));
-        assert!(
-            uuid.bytes()
-                .all(|byte| byte.is_ascii_hexdigit() || byte == b'-')
-        );
+        assert!(uuid
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() || byte == b'-'));
     }
 }
 
@@ -974,11 +973,9 @@ fn openai_chat_posts_json_and_decodes_the_assistant_text() {
     let request = peer.join().expect("join local provider");
     assert!(request.starts_with(b"POST /v1/chat/completions HTTP/1.1\r\n"));
     let authorization = b"Authorization: Bearer local-test-key\r\n";
-    assert!(
-        request
-            .windows(authorization.len())
-            .any(|window| window.eq_ignore_ascii_case(authorization))
-    );
+    assert!(request
+        .windows(authorization.len())
+        .any(|window| window.eq_ignore_ascii_case(authorization)));
     assert!(request.ends_with(body));
 }
 
@@ -1067,6 +1064,45 @@ fn response_headers_reject_invalid_names_and_values() {
         BAD_REQUEST
     );
     assert_eq!(writer.header_count, 0);
+}
+
+#[test]
+fn response_headers_accept_exact_capacity_and_reject_overflow() {
+    let mut output = [];
+    let mut writer = writer(&mut output);
+    let names = (0..=MAX_RESPONSE_HEADERS)
+        .map(|index| format!("x-test-{index}"))
+        .collect::<Vec<_>>();
+
+    for name in &names[..MAX_RESPONSE_HEADERS] {
+        assert_eq!(
+            unsafe {
+                tinytsx_response_header_static(
+                    &mut writer,
+                    name.as_ptr(),
+                    name.len(),
+                    b"x".as_ptr(),
+                    1,
+                )
+            },
+            OK
+        );
+    }
+    assert_eq!(writer.header_count, MAX_RESPONSE_HEADERS);
+    let overflow = &names[MAX_RESPONSE_HEADERS];
+    assert_eq!(
+        unsafe {
+            tinytsx_response_header_static(
+                &mut writer,
+                overflow.as_ptr(),
+                overflow.len(),
+                b"x".as_ptr(),
+                1,
+            )
+        },
+        REQUEST_OOM
+    );
+    assert_eq!(writer.header_count, MAX_RESPONSE_HEADERS);
 }
 
 fn writer(output: &mut [u8]) -> TinyResponseWriter {

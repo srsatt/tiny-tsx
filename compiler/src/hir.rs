@@ -2729,8 +2729,8 @@ fn validate_response_headers(
     headers: &[StaticHeader],
     elapsed_headers: &[ElapsedHeader],
 ) -> Result<(), String> {
-    if headers.len() + elapsed_headers.len() > 8 {
-        return Err("handler contains more than eight response headers".to_owned());
+    if headers.len() + elapsed_headers.len() > 16 {
+        return Err("handler contains more than sixteen response headers".to_owned());
     }
     let mut names = HashSet::new();
     for header in headers {
@@ -3118,5 +3118,26 @@ mod constant_value_tests {
                 Err("constant symbol exceeds its ID or 256-byte description limit".to_owned())
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod response_header_tests {
+    use super::*;
+
+    #[test]
+    fn admits_sixteen_response_headers_and_rejects_overflow() {
+        let headers = (0..17)
+            .map(|index| StaticHeader {
+                name: format!("x-test-{index}"),
+                value: "value".to_owned(),
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(validate_response_headers(&headers[..16], &[]), Ok(()));
+        assert_eq!(
+            validate_response_headers(&headers, &[]),
+            Err("handler contains more than sixteen response headers".to_owned())
+        );
     }
 }

@@ -2353,6 +2353,13 @@ function executeEffectCall(
       return true;
     }
   }
+  if (receiver.kind === "headers" && name === "delete") {
+    const headerName = arguments_[0];
+    if (arguments_.length === 1 && headerName?.kind === "string") {
+      receiver.entries.delete(headerName.value.toLowerCase());
+      return true;
+    }
+  }
   if (receiver.kind === "reference" && receiver.name === "console" && name === "error") {
     if (arguments_.some(argument => argument.kind === "unknown" || argument.kind === "thrown")) {
       return false;
