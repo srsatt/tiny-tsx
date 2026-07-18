@@ -573,6 +573,31 @@ descriptors to 4. The raw evidence is the adjacent
 `benchmarks/results/2026-07-17-m5-max-sustained-15s-hono-large-file-keepalive-w8.*`
 pair; the result is limited to this exact warm-cache payload shape.
 
+#### Selected next P4 tracer — upstream compact/pretty JSON branch pair
+
+Add paired `hono-json-compact` and `hono-json-pretty` workloads using the
+unchanged pinned 34-module `vendor/hono-examples/basic/src/index.ts` application
+at `vendor/hono-examples` commit
+`3b0b62875a0e1265763fea1c6388866d5697ef81` and Hono commit
+`b2ae3a2204a48ce15a26448fd746d39745eb1837`. Both targets must execute the same
+source and middleware graph. The compact path is `/api/posts`; the query-present
+path is `/api/posts?pretty`. Bun supplies each exact byte reference before any
+sample is accepted; status 200, JSON content type, `x-powered-by: Hono`, numeric
+`x-response-time`, body bytes, and framing must agree.
+
+The harness test must pin both paths, the shared entry/adapter, reference-body
+capture, middleware aliases, and branch-specific scopes. Apple arm64 must
+execute both response gates, the existing complete-source Linux-arm64 assembly
+gate must remain green, and each branch must run the same three-by-15-second,
+concurrency-8/64, eight-worker keep-alive protocol with all raw samples and
+descriptor end-states retained.
+
+This pair measures the upstream query-presence decision plus compact versus
+two-space formatted serialization of one closed four-record array. It does not
+measure dynamic JSON collections, request-body decoding, arbitrary query-value
+comparison, mixed/randomized branch traffic, large JSON, replacers, cycles, or
+general middleware branching.
+
 Before implementing the next tracer, its selected goal must be copied into the
 active goal with: its exact tracer/source revision; admitted and rejected
 boundaries; Apple execution and Linux-arm64 evidence; failure, saturation, and
