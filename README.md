@@ -231,6 +231,7 @@ npm run benchmark:static
 npm run benchmark:hono
 npm run benchmark:hono-jsx-ssr
 npm run benchmark:hono-dynamic-jsx
+npm run benchmark:hono-route-param
 npm run benchmark:hono-stream-text
 npm run benchmark:hono-actor
 npm run benchmark:hono-sqlite

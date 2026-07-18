@@ -134,6 +134,24 @@ WORKLOADS = {
             "--tsconfig-override", "benchmarks/bun/hono-runtime-tsconfig.json",
         ],
     },
+    "hono-route-param": {
+        "body": b'{"type":"TinyTSX Bench"}',
+        "content_type": "application/json",
+        "headers": {},
+        "numeric_headers": [],
+        "path": "/api/v1/animal/TinyTSX%20Bench",
+        "scope": "pinned Hono optional route with one decoded trailing route parameter and bounded JSON response; HTTP/1.1; connection close; localhost",
+        "limitation": "The measured path contains the optional parameter; the missing-parameter and overlong 404 branches are correctness-tested separately and are not mixed into this throughput point.",
+        "tiny_entry": "tests/compat/hono/optional-param-smoke.ts",
+        "tiny_args": [
+            "--alias", "hono=vendor/hono/src/index.ts",
+            "--api", "hono=tests/compat/hono/api.d.ts",
+        ],
+        "bun_script": "benchmarks/bun/hono-route-param-server.ts",
+        "bun_args": [
+            "--tsconfig-override", "benchmarks/bun/hono-runtime-tsconfig.json",
+        ],
+    },
     "hono-stream-text": {
         "body": b"first\nsecond\nthird\n",
         "content_type": "text/plain; charset=UTF-8",

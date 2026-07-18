@@ -79,6 +79,22 @@ class StaticHarnessTest(unittest.TestCase):
         self.assertEqual(workload["reference_target"], "bun")
         self.assertEqual(workload["tiny_entry"], "tests/compat/hono/dynamic-jsx-smoke.tsx")
 
+    def test_route_parameter_workload_uses_the_same_hono_source(self) -> None:
+        workload = WORKLOADS["hono-route-param"]
+
+        self.assertEqual(workload["path"], "/api/v1/animal/TinyTSX%20Bench")
+        self.assertEqual(workload["body"], b'{"type":"TinyTSX Bench"}')
+        self.assertEqual(workload["content_type"], "application/json")
+        self.assertIn("decoded trailing route parameter", workload["scope"])
+        self.assertEqual(
+            workload["tiny_entry"],
+            "tests/compat/hono/optional-param-smoke.ts",
+        )
+        self.assertEqual(
+            workload["bun_script"],
+            "benchmarks/bun/hono-route-param-server.ts",
+        )
+
     def test_stream_workload_requires_chunked_framing(self) -> None:
         workload = WORKLOADS["hono-stream-text"]
         response = {
