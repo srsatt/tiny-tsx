@@ -2,8 +2,8 @@ use std::fmt::Write;
 
 use crate::target::Target;
 use crate::test262_hir::{
-    ArrayUnshiftOperation, NumericOperand, NumericSubtractionOperation, Test262Assertion,
-    Test262Program,
+    ArrayUnshiftOperation, NumericOperand, NumericSubtractionOperation, PrimitiveComparison,
+    PrimitiveExpression, PrimitiveIdentityCheck, PrimitiveNumber, Test262Assertion, Test262Program,
 };
 
 const ARRAY_STACK_BYTES: usize = 144;
@@ -143,6 +143,9 @@ pub fn emit(program: &Test262Program, target: Target) -> Result<String, String> 
             Test262Assertion::AsyncPromiseBrandProgram { .. } => {
                 emit_async_promise_brand_program(&mut assembly, index)
             }
+            Test262Assertion::PrimitiveIdentityProgram { checks, .. } => {
+                emit_primitive_identity_program(&mut assembly, index, checks)
+            }
         }
     }
     writeln!(assembly, "    mov w0, #0").unwrap();
@@ -217,6 +220,134 @@ pub fn emit(program: &Test262Program, target: Target) -> Result<String, String> 
         }
     }
     Ok(assembly)
+}
+
+fn emit_primitive_identity_program(
+    assembly: &mut String,
+    assertion_index: usize,
+    checks: &[PrimitiveIdentityCheck],
+) {
+    for (check_index, check) in checks.iter().enumerate() {
+        let scope = format!("{assertion_index}_{check_index}");
+        emit_primitive_expression(assembly, &check.actual, &format!("{scope}_actual"));
+        writeln!(assembly, "    mov x11, x9").unwrap();
+        writeln!(assembly, "    mov x12, x10").unwrap();
+        emit_primitive_expression(assembly, &check.expected, &format!("{scope}_expected"));
+        writeln!(assembly, "    cmp x11, x9").unwrap();
+        writeln!(
+            assembly,
+            "    b.ne Ltinytsx_test262_primitive_{scope}_different"
+        )
+        .unwrap();
+        writeln!(assembly, "    cmp x12, x10").unwrap();
+        writeln!(assembly, "Ltinytsx_test262_primitive_{scope}_different:").unwrap();
+        match check.comparison {
+            PrimitiveComparison::SameValue => {
+                writeln!(assembly, "    b.ne Ltinytsx_test262_fail").unwrap();
+            }
+            PrimitiveComparison::NotSameValue => {
+                writeln!(assembly, "    b.eq Ltinytsx_test262_fail").unwrap();
+            }
+        }
+    }
+}
+
+fn emit_primitive_expression(assembly: &mut String, expression: &PrimitiveExpression, scope: &str) {
+    match expression {
+        PrimitiveExpression::Number { value } => {
+            emit_immediate(assembly, "x9", 0);
+            emit_immediate(
+                assembly,
+                "x10",
+                match value {
+                    PrimitiveNumber::PositiveZero => 0.0f64.to_bits(),
+                    PrimitiveNumber::NegativeZero => (-0.0f64).to_bits(),
+                    PrimitiveNumber::Nan => f64::NAN.to_bits(),
+                    PrimitiveNumber::PositiveInfinity => f64::INFINITY.to_bits(),
+                },
+            );
+        }
+        PrimitiveExpression::Symbol { id, .. } => {
+            emit_immediate(assembly, "x9", 1);
+            emit_immediate(assembly, "x10", u64::from(*id));
+        }
+        PrimitiveExpression::String { value } => {
+            emit_immediate(assembly, "x9", 2);
+            emit_immediate(assembly, "x10", primitive_string_code(value));
+        }
+        PrimitiveExpression::Boolean { value } => {
+            emit_immediate(assembly, "x9", 3);
+            emit_immediate(assembly, "x10", u64::from(*value));
+        }
+        PrimitiveExpression::TypeOf { value } => {
+            emit_primitive_expression(assembly, value, &format!("{scope}_operand"));
+            let types = [
+                (0, 1, "number"),
+                (1, 2, "symbol"),
+                (2, 3, "string"),
+                (3, 4, "boolean"),
+            ];
+            for (tag, _, name) in types {
+                writeln!(assembly, "    cmp x9, #{tag}").unwrap();
+                writeln!(
+                    assembly,
+                    "    b.eq Ltinytsx_test262_primitive_{scope}_typeof_{name}"
+                )
+                .unwrap();
+            }
+            writeln!(assembly, "    b Ltinytsx_test262_fail").unwrap();
+            for (_, code, name) in types {
+                writeln!(
+                    assembly,
+                    "Ltinytsx_test262_primitive_{scope}_typeof_{name}:"
+                )
+                .unwrap();
+                emit_immediate(assembly, "x10", code);
+                writeln!(
+                    assembly,
+                    "    b Ltinytsx_test262_primitive_{scope}_typeof_done"
+                )
+                .unwrap();
+            }
+            writeln!(assembly, "Ltinytsx_test262_primitive_{scope}_typeof_done:").unwrap();
+            emit_immediate(assembly, "x9", 2);
+        }
+        PrimitiveExpression::IsFinite { value } => {
+            emit_primitive_expression(assembly, value, &format!("{scope}_operand"));
+            writeln!(assembly, "    cbnz x9, Ltinytsx_test262_fail").unwrap();
+            writeln!(assembly, "    lsr x13, x10, #52").unwrap();
+            writeln!(assembly, "    and x13, x13, #0x7ff").unwrap();
+            writeln!(assembly, "    cmp x13, #0x7ff").unwrap();
+            writeln!(assembly, "    cset w10, ne").unwrap();
+            emit_immediate(assembly, "x9", 3);
+        }
+        PrimitiveExpression::IsNaN { value } => {
+            emit_primitive_expression(assembly, value, &format!("{scope}_operand"));
+            writeln!(assembly, "    cbnz x9, Ltinytsx_test262_fail").unwrap();
+            writeln!(assembly, "    lsr x13, x10, #52").unwrap();
+            writeln!(assembly, "    and x13, x13, #0x7ff").unwrap();
+            writeln!(assembly, "    cmp x13, #0x7ff").unwrap();
+            writeln!(assembly, "    cset w14, eq").unwrap();
+            emit_immediate(assembly, "x15", 0x000f_ffff_ffff_ffff);
+            writeln!(assembly, "    and x13, x10, x15").unwrap();
+            writeln!(assembly, "    cmp x13, #0").unwrap();
+            writeln!(assembly, "    cset w15, ne").unwrap();
+            writeln!(assembly, "    and w10, w14, w15").unwrap();
+            emit_immediate(assembly, "x9", 3);
+        }
+    }
+}
+
+fn primitive_string_code(value: &str) -> u64 {
+    match value {
+        "number" => 1,
+        "symbol" => 2,
+        "string" => 3,
+        "boolean" => 4,
+        _ => value.bytes().fold(0xcbf2_9ce4_8422_2325, |hash, byte| {
+            (hash ^ u64::from(byte)).wrapping_mul(0x100_0000_01b3)
+        }),
+    }
 }
 
 fn emit_async_promise_brand_program(assembly: &mut String, assertion_index: usize) {

@@ -41,6 +41,26 @@
       "mode": "native"
     },
     {
+      "path": "test/harness/assert-samevalue-nan.js",
+      "feature": "nan-samevalue",
+      "mode": "native"
+    },
+    {
+      "path": "test/harness/assert-notsamevalue-zeros.js",
+      "feature": "signed-zero-samevalue",
+      "mode": "native"
+    },
+    {
+      "path": "test/built-ins/Infinity/S15.1.1.2_A1.js",
+      "feature": "positive-infinity",
+      "mode": "native"
+    },
+    {
+      "path": "test/built-ins/Symbol/uniqueness.js",
+      "feature": "symbol-identity",
+      "mode": "native"
+    },
+    {
       "path": "test/language/module-code/instn-local-bndng-fun.js",
       "feature": "function-declaration-direct-call",
       "mode": "native"

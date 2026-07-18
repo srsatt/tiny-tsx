@@ -233,3 +233,32 @@ test("lowers the complete pinned async Promise-brand Test262 case", () => {
     span: program.assertions[0]?.span,
   }]);
 });
+
+test("lowers complete special-number and symbol-identity Test262 programs", () => {
+  const cases = [
+    ["vendor/test262/test/harness/assert-samevalue-nan.js", 1],
+    ["vendor/test262/test/harness/assert-notsamevalue-zeros.js", 1],
+    ["vendor/test262/test/built-ins/Infinity/S15.1.1.2_A1.js", 4],
+    ["vendor/test262/test/built-ins/Symbol/uniqueness.js", 4],
+  ] as const;
+
+  for (const [file, checks] of cases) {
+    const program = compileTest262Entry(path.join(repository, file));
+    const assertion = program.assertions[0];
+    assert.equal(assertion?.kind, "primitiveIdentityProgram", file);
+    assert.equal(
+      assertion?.kind === "primitiveIdentityProgram" ? assertion.checks.length : undefined,
+      checks,
+      file,
+    );
+  }
+
+  const symbolProgram = compileTest262Entry(path.join(
+    repository,
+    "vendor/test262/test/built-ins/Symbol/uniqueness.js",
+  ));
+  const assertion = symbolProgram.assertions[0];
+  const serialized = JSON.stringify(assertion);
+  for (let id = 0; id < 8; id++) assert.match(serialized, new RegExp(`"id":${id}`));
+  assert.match(serialized, /"description":"null"/);
+});

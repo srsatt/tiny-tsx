@@ -106,6 +106,63 @@ pub enum Test262Assertion {
         expected_brand: String,
         span: SourceSpan,
     },
+    PrimitiveIdentityProgram {
+        checks: Vec<PrimitiveIdentityCheck>,
+        span: SourceSpan,
+    },
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrimitiveIdentityCheck {
+    pub comparison: PrimitiveComparison,
+    pub actual: PrimitiveExpression,
+    pub expected: PrimitiveExpression,
+    pub span: SourceSpan,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PrimitiveComparison {
+    SameValue,
+    NotSameValue,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum PrimitiveExpression {
+    Number {
+        value: PrimitiveNumber,
+    },
+    Symbol {
+        id: u32,
+        #[serde(default)]
+        description: Option<String>,
+    },
+    String {
+        value: String,
+    },
+    Boolean {
+        value: bool,
+    },
+    TypeOf {
+        value: Box<PrimitiveExpression>,
+    },
+    IsFinite {
+        value: Box<PrimitiveExpression>,
+    },
+    IsNaN {
+        value: Box<PrimitiveExpression>,
+    },
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PrimitiveNumber {
+    PositiveZero,
+    NegativeZero,
+    Nan,
+    PositiveInfinity,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -285,10 +342,50 @@ impl Test262Program {
                 {
                     return Err("Test262 async expected brand must be Promise".to_owned());
                 }
+                Test262Assertion::PrimitiveIdentityProgram { checks, .. } => {
+                    validate_primitive_identity(checks)?;
+                }
                 _ => {}
             }
         }
         Ok(())
+    }
+}
+
+fn validate_primitive_identity(checks: &[PrimitiveIdentityCheck]) -> Result<(), String> {
+    if checks.is_empty() || checks.len() > 16 {
+        return Err("Test262 primitive identity requires 1-16 checks".to_owned());
+    }
+    for check in checks {
+        validate_primitive_expression(&check.actual, 0)?;
+        validate_primitive_expression(&check.expected, 0)?;
+    }
+    Ok(())
+}
+
+fn validate_primitive_expression(
+    expression: &PrimitiveExpression,
+    depth: usize,
+) -> Result<(), String> {
+    if depth > 4 {
+        return Err("Test262 primitive expression nesting exceeds four".to_owned());
+    }
+    match expression {
+        PrimitiveExpression::Symbol { id, description }
+            if *id >= 16
+                || description
+                    .as_ref()
+                    .is_some_and(|description| description.len() > 256) =>
+        {
+            Err("Test262 primitive symbol exceeds its ID or description limit".to_owned())
+        }
+        PrimitiveExpression::String { value } if value.len() > 64 => {
+            Err("Test262 primitive string exceeds 64 bytes".to_owned())
+        }
+        PrimitiveExpression::TypeOf { value }
+        | PrimitiveExpression::IsFinite { value }
+        | PrimitiveExpression::IsNaN { value } => validate_primitive_expression(value, depth + 1),
+        _ => Ok(()),
     }
 }
 

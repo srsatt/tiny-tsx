@@ -53,6 +53,11 @@ import {
   lowerAsyncPromiseBrandProgram,
   type AsyncPromiseBrandProgramAssertion,
 } from "./test262-async.js";
+import {
+  isPrimitiveIdentityProgram,
+  lowerPrimitiveIdentityProgram,
+  type PrimitiveIdentityProgramAssertion,
+} from "./test262-primitives.js";
 
 export interface Test262Program {
   version: 3;
@@ -74,7 +79,8 @@ export type Test262Assertion =
   | ErrorMessageProgramAssertion
   | RegExpTestProgramAssertion
   | ModuleFunctionBindingProgramAssertion
-  | AsyncPromiseBrandProgramAssertion;
+  | AsyncPromiseBrandProgramAssertion
+  | PrimitiveIdentityProgramAssertion;
 
 export interface SameValueStringAssertion {
   kind: "sameValueString";
@@ -147,6 +153,8 @@ export function compileTest262Entry(entryPath: string): Test262Program {
       ? [lowerClassConstructorProgram(sourceFile)]
     : isDateNowTypeProgram(sourceFile)
       ? [lowerDateNowTypeProgram(sourceFile)]
+    : isPrimitiveIdentityProgram(sourceFile)
+      ? [lowerPrimitiveIdentityProgram(sourceFile)]
     : sourceFile.statements.every(isSameValueStatement)
     ? sourceFile.statements.map(statement => lowerSameValueAssertion(statement, sourceFile))
     : isArraySpreadApplyProgram(sourceFile)
