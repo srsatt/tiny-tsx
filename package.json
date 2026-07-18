@@ -32,6 +32,7 @@
     "benchmark:hono-actor-multi": "python3 benchmarks/scripts/run_static.py --workload hono-actor-multi --keep-alive",
     "benchmark:hono-sqlite": "python3 benchmarks/scripts/run_static.py --workload hono-sqlite --keep-alive",
     "benchmark:hono-sqlite-transaction": "python3 benchmarks/scripts/run_static.py --workload hono-sqlite-transaction --keep-alive",
+    "benchmark:hono-nested-profile": "python3 benchmarks/scripts/run_static.py --workload hono-nested-profile --keep-alive",
     "benchmark:hono-sqlite-wal": "python3 benchmarks/scripts/run_static.py --workload hono-sqlite-wal --keep-alive",
     "benchmark:hono-sqlite-rollback": "python3 benchmarks/scripts/run_static.py --workload hono-sqlite-rollback --keep-alive",
     "benchmark:hono-ai-provider": "python3 benchmarks/scripts/run_static.py --workload hono-ai-provider --keep-alive",

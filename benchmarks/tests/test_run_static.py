@@ -1,3 +1,4 @@
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -261,6 +262,46 @@ class StaticHarnessTest(unittest.TestCase):
         self.assertEqual(
             workload["bun_script"],
             "benchmarks/bun/hono-sqlite-transaction-server.ts",
+        )
+
+    def test_nested_profile_workload_pins_request_transaction_and_response(self) -> None:
+        workload = WORKLOADS["hono-nested-profile"]
+
+        self.assertEqual(workload["method"], "POST")
+        self.assertEqual(workload["expected_status"], 201)
+        self.assertEqual(workload["path"], "/profiles/benchmark")
+        self.assertEqual(workload["request_content_type"], "application/json")
+        self.assertEqual(
+            json.loads(workload["request_body"]),
+            {
+                "profile": {
+                    "name": "Benchmark",
+                    "preferences": {"theme": "dark", "alerts": True},
+                },
+                "score": 7,
+            },
+        )
+        self.assertEqual(
+            json.loads(workload["body"]),
+            {
+                "id": "benchmark",
+                "profile": {
+                    "name": "Benchmark",
+                    "preferences": {"theme": "dark", "alerts": True},
+                },
+                "score": 7,
+            },
+        )
+        self.assertIn("four bounded nested primitive", workload["scope"])
+        self.assertIn("two idempotent prepared writes", workload["scope"])
+        self.assertIn("duplicate-theme rollback", workload["limitation"])
+        self.assertEqual(
+            workload["tiny_entry"],
+            "benchmarks/tiny/hono-nested-profile.ts",
+        )
+        self.assertEqual(
+            workload["bun_script"],
+            "benchmarks/bun/hono-nested-profile-server.ts",
         )
 
     def test_sqlite_wal_workload_cycles_two_durable_rollback_owners(self) -> None:

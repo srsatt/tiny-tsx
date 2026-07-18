@@ -61,6 +61,8 @@ HONO_BASIC_BUN_ARGS = [
     "--tsconfig-override", "benchmarks/bun/hono-tsconfig.json",
 ]
 JSON_BODY = b'{"name":"TinyTSX & \\"Bun\\"","count":7,"enabled":true,"note":null}'
+NESTED_PROFILE_BODY = b'{"profile":{"name":"Benchmark","preferences":{"theme":"dark","alerts":true}},"score":7}'
+NESTED_PROFILE_RESPONSE = b'{"id":"benchmark","profile":{"name":"Benchmark","preferences":{"theme":"dark","alerts":true}},"score":7}'
 ACTOR_MULTI_TELL_PATHS = [f"/actor/{index}/tell" for index in range(8)]
 ACTOR_MULTI_READ_PATHS = [f"/actor/{index}/read" for index in range(8)]
 
@@ -363,6 +365,28 @@ WORKLOADS = {
             "--api", "hono=tests/compat/hono/api.d.ts",
         ],
         "bun_script": "benchmarks/bun/hono-sqlite-transaction-server.ts",
+        "bun_args": [
+            "--tsconfig-override", "benchmarks/bun/hono-runtime-tsconfig.json",
+        ],
+    },
+    "hono-nested-profile": {
+        "body": NESTED_PROFILE_RESPONSE,
+        "content_type": "application/json",
+        "headers": {},
+        "numeric_headers": [],
+        "expected_status": 201,
+        "method": "POST",
+        "request_body": NESTED_PROFILE_BODY,
+        "request_content_type": "application/json",
+        "path": "/profiles/benchmark",
+        "scope": "one in-memory SQLite owner behind a pinned Hono POST route; schema check, four bounded nested primitive request leaves, two idempotent prepared writes in one callback transaction, and the nested JSON response per request; HTTP/1.1; localhost",
+        "limitation": "The fixed profile and ID keep the two writes idempotent. This does not measure growing data, duplicate-theme rollback frequency, malformed-input mixtures, dynamic schemas, arrays, JSON columns, disk or WAL I/O, competing connections, or arbitrary callback shapes.",
+        "tiny_entry": "benchmarks/tiny/hono-nested-profile.ts",
+        "tiny_args": [
+            "--alias", "hono=vendor/hono/src/index.ts",
+            "--api", "hono=tests/compat/hono/api.d.ts",
+        ],
+        "bun_script": "benchmarks/bun/hono-nested-profile-server.ts",
         "bun_args": [
             "--tsconfig-override", "benchmarks/bun/hono-runtime-tsconfig.json",
         ],
