@@ -12,6 +12,7 @@ from run_static import (  # noqa: E402
     benchmark_limitations,
     benchmark_scope,
     decode_sqlite_wal_state,
+    decode_sqlite_rollback_state,
     expected_content_type,
     is_millisecond_header,
     materialize_workload,
@@ -290,6 +291,55 @@ class StaticHarnessTest(unittest.TestCase):
             )
         finally:
             file.close()
+
+    def test_sqlite_rollback_workload_declares_failure_and_recovery_contracts(self) -> None:
+        workload = WORKLOADS["hono-sqlite-rollback"]
+
+        self.assertEqual(workload["expected_status"], 500)
+        self.assertEqual(workload["method"], "POST")
+        self.assertEqual(workload["request_headers"], {"Idempotency-Key": "benchmark-key"})
+        self.assertEqual(workload["database_file"], "rollback-load.db")
+        self.assertEqual(workload["state_kind"], "sqlite-rollback")
+        self.assertIn("fails its second callback-transaction step", workload["scope"])
+        self.assertEqual(
+            workload["tiny_entry"],
+            "benchmarks/tiny/hono-sqlite-rollback.ts",
+        )
+        self.assertEqual(
+            workload["bun_script"],
+            "benchmarks/bun/hono-sqlite-rollback-server.ts",
+        )
+
+    def test_validates_sqlite_rollback_recovery_and_live_files(self) -> None:
+        response = lambda body: {
+            "status": 200,
+            "headers": {"content-type": "application/json"},
+            "body": body,
+        }
+        files = {
+            name: {"exists": True, "bytes": size}
+            for name, size in (("database", 4096), ("wal", 28_000), ("shm", 32_768))
+        }
+
+        self.assertEqual(
+            decode_sqlite_rollback_state(
+                response(b'{"state":{"partialRows":0,"committed":3}}'),
+                response(b'{"journal":{"journal_mode":"wal"}}'),
+                files,
+            ),
+            {
+                "partialRows": 0,
+                "committed": 3,
+                "journalMode": "wal",
+                "files": files,
+            },
+        )
+        with self.assertRaises(RuntimeError):
+            decode_sqlite_rollback_state(
+                response(b'{"state":{"partialRows":1,"committed":3}}'),
+                response(b'{"journal":{"journal_mode":"wal"}}'),
+                files,
+            )
 
     def test_materializes_separate_target_private_sqlite_roots(self) -> None:
         workload, directory = materialize_workload(

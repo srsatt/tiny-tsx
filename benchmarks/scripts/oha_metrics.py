@@ -118,9 +118,8 @@ def parse_oha_json(raw: str, *, expected_status: int = 200) -> OhaSample:
         total_seconds=float(summary["total"]),
         status_codes=status_codes,
     )
-    expected_success_rate = 1.0 if 200 <= expected_status < 400 else 0.0
     if (
-        sample.success_rate != expected_success_rate
+        sample.success_rate != 1.0
         or set(status_codes) != {str(expected_status)}
         or sum(status_codes.values()) < 1
     ):

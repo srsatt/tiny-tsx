@@ -86,7 +86,7 @@ class OhaMetricsTest(unittest.TestCase):
     def test_accepts_only_the_declared_failure_status(self) -> None:
         payload = {
             "summary": {
-                "successRate": 0.0,
+                "successRate": 1.0,
                 "total": 1,
                 "slowest": 0.1,
                 "requestsPerSec": 2,

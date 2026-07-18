@@ -173,7 +173,8 @@ def _request_contract_lines(correctness: dict[str, Any]) -> list[str]:
     method = str(correctness.get("method", "GET"))
     body = str(correctness.get("requestBodyUtf8", ""))
     content_type = correctness.get("requestContentType")
-    if method == "GET" and body == "" and content_type is None:
+    headers = correctness.get("requestHeaders", {})
+    if method == "GET" and body == "" and content_type is None and not headers:
         return []
     body_bytes = body.encode()
     body_line = (
@@ -187,6 +188,7 @@ def _request_contract_lines(correctness: dict[str, Any]) -> list[str]:
         f"- Method: `{method}`",
         f"- Content-Type: `{content_type}`",
         body_line,
+        *[f"- Header `{name}`: `{value}`" for name, value in headers.items()],
         "",
     ]
 

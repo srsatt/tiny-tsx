@@ -394,6 +394,46 @@ WORKLOADS = {
             "--tsconfig-override", "benchmarks/bun/hono-runtime-tsconfig.json",
         ],
     },
+    "hono-sqlite-rollback": {
+        "body": b"internal server error",
+        "content_type": "text/plain; charset=UTF-8",
+        "headers": {},
+        "numeric_headers": [],
+        "expected_status": 500,
+        "method": "POST",
+        "request_body": b'{"amount":7}',
+        "request_content_type": "application/json",
+        "request_headers": {"Idempotency-Key": "benchmark-key"},
+        "path": "/sqlite-rollback/fail/acme",
+        "setup_requests": [
+            {"path": "/sqlite-rollback/setup", "body": b"ready", "content_type": "text/plain; charset=UTF-8"},
+        ],
+        "recovery_request": {
+            "body": b"recovered",
+            "content_type": "text/plain; charset=UTF-8",
+            "headers": {},
+            "numeric_headers": [],
+            "method": "POST",
+            "request_body": b'{"amount":9}',
+            "request_content_type": "application/json",
+            "request_headers": {"Idempotency-Key": "recovery-key"},
+        },
+        "state_paths": ["/sqlite-rollback/state", "/sqlite-rollback/journal"],
+        "state_kind": "sqlite-rollback",
+        "state_postcondition": "every failed callback transaction leaves zero benchmark-key payment rows, a successful recovery transaction advances after every interval, journal mode is wal, and the live database/WAL/SHM files are non-empty",
+        "database_file": "rollback-load.db",
+        "scope": "one capability-scoped on-disk WAL owner; every POST copies a fixed required idempotency header plus route/JSON values, inserts a payment, fails its second callback-transaction step on a pinned uniqueness conflict, rolls the whole transaction back, and returns the declared 500 response; HTTP/1.1; localhost",
+        "limitation": "The failure and recovery keys, JSON body, SQL, and uniqueness conflict are fixed; this does not measure conflict handling in application code, growing data, competing or cross-process writers, cancellation, arbitrary callbacks, crash durability, or network filesystems.",
+        "tiny_entry": "benchmarks/tiny/hono-sqlite-rollback.ts",
+        "tiny_args": [
+            "--alias", "hono=vendor/hono/src/index.ts",
+            "--api", "hono=tests/compat/hono/api.d.ts",
+        ],
+        "bun_script": "benchmarks/bun/hono-sqlite-rollback-server.ts",
+        "bun_args": [
+            "--tsconfig-override", "benchmarks/bun/hono-runtime-tsconfig.json",
+        ],
+    },
     "hono-ai-provider": {
         "body": b"Hello from local provider",
         "content_type": "text/plain; charset=UTF-8",
@@ -619,7 +659,8 @@ def main() -> int:
             "method": workload.get("method", "GET"),
             "requestContentType": workload.get("request_content_type"),
             "requestBodyUtf8": workload.get("request_body", b"").decode(),
-            "status": 200,
+            "requestHeaders": workload.get("request_headers", {}),
+            "status": int(workload.get("expected_status", 200)),
             "contentTypes": {
                 name: expected_content_type(workload, name)
                 for name in specs
@@ -727,7 +768,7 @@ def record_workload_state(
     state = read_workload_state(process, port, workload, spec)
     if state is None:
         return
-    if workload.get("state_kind") == "sqlite-wal":
+    if workload.get("state_kind") in {"sqlite-wal", "sqlite-rollback"}:
         previous = next(
             (
                 sample["values"]["committed"]
@@ -753,6 +794,25 @@ def read_workload_state(
         state = wait_for_response(process, port, "/sqlite-wal/state")
         journal = wait_for_response(process, port, "/sqlite-wal/journal")
         return decode_sqlite_wal_state(
+            state,
+            journal,
+            sample_database_files(Path(spec["database_path"])),
+        )
+    if workload.get("state_kind") == "sqlite-rollback":
+        recovery = workload["recovery_request"]
+        assert_correct(
+            wait_for_response(
+                process,
+                port,
+                "/sqlite-rollback/recover",
+                recovery,
+            ),
+            recovery,
+            spec["name"],
+        )
+        state = wait_for_response(process, port, "/sqlite-rollback/state")
+        journal = wait_for_response(process, port, "/sqlite-rollback/journal")
+        return decode_sqlite_rollback_state(
             state,
             journal,
             sample_database_files(Path(spec["database_path"])),
@@ -795,6 +855,45 @@ def decode_sqlite_wal_state(
     return {
         "committed": committed,
         "rolledBack": rolled_back,
+        "journalMode": journal_mode,
+        "files": files,
+    }
+
+
+def decode_sqlite_rollback_state(
+    state_response: dict[str, Any],
+    journal_response: dict[str, Any],
+    files: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    for name, response in (("state", state_response), ("journal", journal_response)):
+        content_type = normalize_content_type(response["headers"].get("content-type"))
+        if response["status"] != 200 or content_type != "application/json":
+            raise RuntimeError(f"invalid SQLite rollback {name} response: {response}")
+    try:
+        state = json.loads(state_response["body"])["state"]
+        journal = json.loads(journal_response["body"])["journal"]
+        partial_rows = state["partialRows"]
+        committed = state["committed"]
+        journal_mode = journal["journal_mode"]
+    except (KeyError, TypeError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise RuntimeError("malformed SQLite rollback state response") from error
+    if (
+        isinstance(partial_rows, bool)
+        or partial_rows != 0
+        or isinstance(committed, bool)
+        or not isinstance(committed, int)
+        or committed < 1
+        or journal_mode != "wal"
+        or any(not value["exists"] or value["bytes"] < 1 for value in files.values())
+    ):
+        raise RuntimeError(
+            "invalid SQLite rollback postcondition: "
+            f"partialRows={partial_rows}, committed={committed}, "
+            f"journalMode={journal_mode}, files={files}"
+        )
+    return {
+        "partialRows": partial_rows,
+        "committed": committed,
         "journalMode": journal_mode,
         "files": files,
     }
@@ -1024,6 +1123,7 @@ def wait_for_response(
         try:
             connection = http.client.HTTPConnection("127.0.0.1", port, timeout=0.5)
             headers = {"Connection": "close"}
+            headers.update(workload.get("request_headers", {}) if workload else {})
             if content_type := workload.get("request_content_type") if workload else None:
                 headers["Content-Type"] = str(content_type)
             connection.request(
@@ -1043,12 +1143,14 @@ def wait_for_response(
     raise RuntimeError(f"server did not become ready: {last_error}")
 
 
-def oha_request(workload: dict[str, Any]) -> dict[str, str | None]:
+def oha_request(workload: dict[str, Any]) -> dict[str, Any]:
     body = workload.get("request_body")
     return {
         "method": str(workload.get("method", "GET")),
         "body": body.decode() if body is not None else None,
         "content_type": workload.get("request_content_type"),
+        "headers": workload.get("request_headers"),
+        "expected_status": int(workload.get("expected_status", 200)),
     }
 
 
@@ -1059,7 +1161,7 @@ def assert_correct(
 ) -> None:
     headers = response["headers"]
     expected = {
-        "status": 200,
+        "status": int(workload.get("expected_status", 200)),
         "content-type": normalize_content_type(expected_content_type(workload, target)),
         "framing": expected_framing(workload, target),
     }
