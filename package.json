@@ -42,7 +42,7 @@
     "test:wasm": "cargo test -p tinytsx-runtime-wasm --features interpreter",
     "prepare:node-server-fixture": "npm ci --prefix tests/compat/node-server",
     "prepare:stytch-auth-fixture": "npm ci --prefix tests/compat/stytch-auth",
-    "test:frontend": "npm run prepare:node-server-fixture && npm --prefix frontend test",
+    "test:frontend": "npm run prepare:node-server-fixture && npm run prepare:stytch-auth-fixture && npm --prefix frontend test",
     "test:native-api": "cargo test -p tinytsx-runtime-bootstrap abi::tests",
     "test:test262-intake": "node --test tests/compat/test262/intake.test.mjs",
     "test:test262-native": "npm run build:frontend && node --test tests/compat/test262/native.test.mjs",

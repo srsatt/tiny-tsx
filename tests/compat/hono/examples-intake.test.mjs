@@ -101,6 +101,10 @@ test("prepares the published Hono fixture before frontend tests", () => {
     workspace.scripts["test:frontend"],
     /^npm run prepare:node-server-fixture && /,
   );
+  assert.match(
+    workspace.scripts["test:frontend"],
+    /npm run prepare:stytch-auth-fixture && npm --prefix frontend test$/,
+  );
 });
 
 test("prepares the pinned Stytch auth fixture before its intake audit", () => {
