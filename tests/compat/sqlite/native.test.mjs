@@ -25,6 +25,7 @@ const benchmarkTransactionEntry = path.join(
 );
 const walBenchmarkEntry = path.join(repository, "benchmarks/tiny/hono-sqlite-wal.ts");
 const idempotencyEntry = path.join(repository, "tests/compat/sqlite/idempotency-smoke.ts");
+const rollbackBenchmarkEntry = path.join(repository, "benchmarks/tiny/hono-sqlite-rollback.ts");
 
 test("serializes an in-memory SQLite owner and recovers from SQL errors", async context => {
   const directory = mkdtempSync(path.join(tmpdir(), "tinytsx-sqlite-native-"));
@@ -358,6 +359,68 @@ test("assembles both WAL database owners for Linux arm64", () => {
   assert.equal(assembled.status, 0, assembled.stderr);
 });
 
+test("rolls back every failed header transaction and reuses the WAL owner", async context => {
+  const directory = mkdtempSync(path.join(tmpdir(), "tinytsx-sqlite-rollback-native-"));
+  const stateDirectory = path.join(directory, "state");
+  const database = path.join(stateDirectory, "rollback-load.db");
+  const binary = path.join(directory, "server");
+  const port = 39_499;
+  mkdirSync(stateDirectory, {mode: 0o700});
+  context.after(() => rmSync(directory, {recursive: true, force: true}));
+
+  const result = buildRollbackBenchmark(binary, port, stateDirectory);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const server = spawn(binary, [], {stdio: ["ignore", "pipe", "pipe"]});
+  context.after(() => server.kill("SIGTERM"));
+  await waitForServer(port, server);
+
+  await assertGet(port, "/sqlite-rollback/setup", 200, "ready");
+  await assertRollbackPost(port, "/sqlite-rollback/fail/acme", "benchmark-key", 7, 500);
+  await assertGet(
+    port,
+    "/sqlite-rollback/state",
+    200,
+    '{"state":{"partialRows":0,"committed":0}}',
+  );
+  await assertGet(port, "/sqlite-rollback/journal", 200, '{"journal":{"journal_mode":"wal"}}');
+  await assertRollbackPost(port, "/sqlite-rollback/recover", "recovery-key", 9, 200);
+  await assertGet(
+    port,
+    "/sqlite-rollback/state",
+    200,
+    '{"state":{"partialRows":0,"committed":1}}',
+  );
+  await assertRollbackPost(port, "/sqlite-rollback/fail/acme", "benchmark-key", 7, 500);
+  await assertGet(
+    port,
+    "/sqlite-rollback/state",
+    200,
+    '{"state":{"partialRows":0,"committed":1}}',
+  );
+  for (const file of [database, `${database}-wal`, `${database}-shm`]) {
+    assert.equal(existsSync(file), true, `${file} must exist while the owner is live`);
+    assert.ok(statSync(file).size > 0, `${file} must be non-empty`);
+  }
+});
+
+test("assembles the full-rollback WAL workload for Linux arm64", () => {
+  const result = spawnSync("cargo", [
+    "run", "-q", "-p", "tinytsx", "--", "check", rollbackBenchmarkEntry,
+    "--emit-asm", "--target", "aarch64-unknown-linux-gnu",
+    "--alias", "hono=vendor/hono/src/index.ts",
+    "--api", "hono=tests/compat/hono/api.d.ts",
+    "--allow-read", repository,
+    "--allow-write", repository,
+  ], {cwd: repository, encoding: "utf8"});
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /movz x9, #9/);
+  assert.match(result.stdout, /tinytsx_sqlite_transaction_params/);
+  const assembled = spawnSync("clang", [
+    "--target=aarch64-unknown-linux-gnu", "-x", "assembler", "-c", "-o", "/dev/null", "-",
+  ], {cwd: repository, input: result.stdout, encoding: "utf8"});
+  assert.equal(assembled.status, 0, assembled.stderr);
+});
+
 test("assembles the transaction benchmark ABI for Linux arm64", () => {
   const result = spawnSync("cargo", [
     "run", "-q", "-p", "tinytsx", "--", "check", benchmarkTransactionEntry,
@@ -494,6 +557,18 @@ function buildIdempotency(binary, port) {
   ], {cwd: repository, encoding: "utf8"});
 }
 
+function buildRollbackBenchmark(binary, port, directory) {
+  return spawnSync("cargo", [
+    "run", "-q", "-p", "tinytsx", "--", "build", rollbackBenchmarkEntry,
+    "--output", binary,
+    "--port", String(port),
+    "--alias", "hono=vendor/hono/src/index.ts",
+    "--api", "hono=tests/compat/hono/api.d.ts",
+    "--allow-read", directory,
+    "--allow-write", directory,
+  ], {cwd: repository, encoding: "utf8"});
+}
+
 function holdWriteLock(database) {
   return spawn("python3", ["-c", [
     "import sqlite3, sys",
@@ -575,6 +650,22 @@ async function assertIdempotency(port, pathname, key, amount, status) {
   assert.equal(await response.text(), status === 201 ? '{"ok":true}' : status === 400
     ? "bad request"
     : "internal server error");
+}
+
+async function assertRollbackPost(port, pathname, key, amount, status) {
+  const response = await fetch(`http://127.0.0.1:${port}${pathname}`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "idempotency-key": key,
+    },
+    body: JSON.stringify({amount}),
+  });
+  assert.equal(response.status, status);
+  assert.equal(
+    await response.text(),
+    status === 200 ? "recovered" : "internal server error",
+  );
 }
 
 async function assertCors(port) {
