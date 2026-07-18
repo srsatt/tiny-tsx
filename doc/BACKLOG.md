@@ -384,11 +384,10 @@ including 141/141 frontend tests, native/reference/workspace suites, installed
 examples and failure paths, archive smoke, source attestation, and checksum.
 The Linux archive still attests an earlier commit, so a native Linux rerun at
 the same current source remains required before this head is called a release
-candidate. No next feature tracer is selected by this backlog update; the next
-goal must explicitly choose either that remaining release-hygiene gate or a
-bounded slice from actor supervision, SQLite value families, or P4 workload
-families rather than widening Map or SQLite headers beyond their recorded
-ownership boundaries.
+candidate. The next selected feature tracer is the bounded root one-for-one
+supervisor below. It must not widen into links, monitors, registries, dynamic
+children, arbitrary behaviors, or distribution; the native Linux release rerun
+remains a separate release-hygiene gate.
 
 Do not reopen the completed alpha foundations as broad projects. File reading,
 SQLite, and local actors already have public bounded built-ins. Their next work
@@ -1140,6 +1139,44 @@ marker. A clean Apple release rerun at `9fbc605` passes and produces checksum
 `2e12572fa861d0e9a55b85fd69390ef9b296d142f76e81de5423455f4a2960a4`.
 Treat this as current Apple release evidence only; the Linux archive must still
 be regenerated from the same current source before release-candidate status.
+
+#### Selected P3 tracer — bounded root one-for-one supervisor
+
+Add one reusable `tinytsx:actors` supervision primitive around the existing
+fallible counter behavior. The public source shape is a module-scope
+`supervise({strategy: "oneForOne", maxRestarts, withinMs})` value passed as
+`ActorOptions.supervisor` to statically spawned children. A program may declare
+at most eight supervisors and sixteen children per supervisor. Strategy and
+limits are compile-time constants; `maxRestarts` remains 1–16 and `withinMs`
+remains 1–60,000 milliseconds. A supervised child cannot also configure its
+local `restart` policy or persistence.
+
+The first project-owned Hono tracer has exactly two supervised fallible counter
+children plus one ordinary outside counter. Mutate both children, fail the left
+child, and prove one-for-one reinitialization resets only the left child. Fail
+the right child and prove the same shared root restart window counts that
+failure without resetting the left child. The next failure inside the window
+must exhaust the root supervisor, return the existing bounded 500 to that
+caller, terminate both supervised children and their queued replies, and leave
+the outside actor usable. Expired attempts must leave the shared window in a
+deterministic worker-runtime test without waiting in HTTP coverage.
+
+Require SDK and built-in manifest declarations; stable frontend diagnostics for
+dynamic options, invalid limits/strategy, escaping supervisor values, local
+restart plus supervisor, persistence, unsupported behaviors, more than eight
+supervisors, and more than sixteen children; explicit HIR supervisor IDs and
+cross-reference validation; shared runtime restart accounting and group
+termination tests; Apple-arm64 native HTTP behavior; Linux-arm64 assembly; a
+Bun/Hono reference for the same external sequence; Hono manifest/package and
+installed-release routing; and synchronized actor/compatibility/status/backlog
+documentation.
+
+This slice is a static root supervisor and one-for-one failure domain, not a
+general Erlang/OTP implementation. Supervisors have no public mailbox or status
+API, cannot be nested or dynamically created, and do not add `oneForAll`,
+`restForOne`, child specs, manual restart, backoff, links, monitors, registries,
+process aliases, persistence snapshots, remote nodes, or distributed identity.
+Those require separate tracers after this one is green.
 
 ### P1 — Compatibility and language depth
 

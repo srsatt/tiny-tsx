@@ -138,6 +138,42 @@ its recovery source and disk/memory reconciliation require a separate policy.
 There is no backoff, manual restart, supervisor, child hierarchy, link, monitor,
 registry, snapshot, or distributed identity.
 
+## Selected bounded supervision tracer
+
+The next admitted actor slice is a static root one-for-one supervisor for the
+same exact fallible counter behavior:
+
+```ts
+const root = supervise({
+  strategy: "oneForOne",
+  maxRestarts: 2,
+  withinMs: 60_000,
+});
+
+const left = spawn(fallibleCounter, 10, {supervisor: root});
+const right = spawn(fallibleCounter, 100, {supervisor: root});
+```
+
+This is a selected implementation contract, not part of the shipped API until
+its SDK, frontend, HIR, runtime, native/reference, package, and release gates
+are green. The supervisor value is created at module initialization and is only
+accepted as a `supervisor` option for statically known fallible counter
+children. It shares one rolling 1–16 restart budget and 1–60,000 millisecond
+window across at most sixteen children. A program may declare at most eight
+root supervisors.
+
+When a child handler panics, that caller receives the existing internal-error
+envelope. While restart capacity remains, only the failed child reruns its
+initializer; sibling state and queued work remain intact. The next failure
+after shared intensity exhaustion terminates every child in that root failure
+domain and cancels their queued replies. Actors outside the supervisor remain
+usable. A supervised child cannot also select local restart or persistence.
+
+The selected API deliberately exposes no supervisor mailbox or status query.
+Nested/dynamic supervisors and children, alternate strategies, child specs,
+manual restart, backoff, links, monitors, registries, snapshots, remote nodes,
+and distributed identity remain unsupported.
+
 ## Stop and failures
 
 `stop()` and `dispose()` are idempotent. Stopping rejects new messages and
