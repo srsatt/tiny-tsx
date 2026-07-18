@@ -37,6 +37,41 @@ Every new language or API feature should enable at least one focused unit test,
 one allowlisted standards case when available, and one Hono case when Hono uses
 that behavior.
 
+## Pinned Stytch-auth TODO backend
+
+The real-world server tracer is the unchanged backend half of the Hono examples
+`stytch-auth` application at commit
+`3b0b62875a0e1265763fea1c6388866d5697ef81`: `api/index.ts`, `api/TodoAPI.ts`,
+and `api/TodoService.ts`. Intake pins all three SHA-256 digests plus published
+`@hono/stytch-auth@0.1.0`, `hono@4.12.30`, and `stytch@12.21.0`. The installed
+example carries byte-identical backend copies and declaration-only overlays;
+runtime evaluation still follows the pinned Hono source and published auth
+package shape.
+
+The admitted P1 language slice is deliberately source-specific. A request owns
+one `TodoService` constructor instance, its arrow-method fields, one private
+method, direct async/await sequencing, and a bounded array of closed
+`{id, text, completed}` records. The exact upstream `push`, `find`, `filter`,
+and comparator `sort` calls execute. This does not promote arbitrary classes,
+escaping object identity, unbounded arrays, a general Promise scheduler, or a
+managed heap.
+
+The P2 server slice executes the unchanged nested `/api` route graph, CORS,
+selected JSON body, no-argument `c.req.param()` record access, and local/remote
+session middleware ordering. Automated native and Bun/Hono references use a
+credential-free boundary: one non-empty `stytch_session_jwt` cookie becomes the
+bounded `user_id`. It does not validate a JWT, contact Stytch, mount the React
+assets, expose ambient Cloudflare bindings, or claim general
+`@hono/stytch-auth` compatibility.
+
+Apple arm64 executes credential denial, authenticated CRUD, CORS, per-user
+isolation, malformed input, saturation rollback, restart persistence,
+disposal, and recovery. The same source assembles for Linux arm64. The staged
+Apple archive installs outside the checkout and runs list/create/complete/delete
+from shipped sources; native Linux archive execution remains a separate release
+gate. The exact executable and performance evidence is recorded by the
+`nextTracer` entry in `tests/compat/hono/examples-manifest.json`.
+
 ## First exact-source target
 
 ```ts

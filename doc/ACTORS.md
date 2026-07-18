@@ -210,6 +210,15 @@ state, and cross-actor parallelism independently of the counter adapter.
 
 ## Evidence and remaining work
 
+The TODO persistence adapter is described as actor-owned because one logical
+application worker owns its SQLite connection and serializes every mutation
+through the existing bounded mailbox/executor machinery. It does not create a
+public `ActorRef`, one native thread per user, or one actor per TODO. User
+isolation is a key in the single owner; the complete mutation and response read
+are one owner operation. This reuses the actor ownership model without
+promoting Cloudflare Durable Objects, remote identity, distribution, or a
+general dynamically spawned behavior.
+
 `examples/hono-actors/server.ts` is the native Hono counter tracer. Its test
 proves ordered ask/tell, decrement, idempotent stop, post-stop recovery, an
 Apple-arm64 native server, and Linux-arm64 assembly. It is a TinyTSX adapter to

@@ -43,8 +43,9 @@ The executable Hono matrix consists of the pinned complete `basic` and
 `jsx-ssr` examples plus the published-package `@hono/zod-openapi`, static-file,
 blog/SQLite, prepared callback-transaction, environment, bounded Body Limit,
 bounded Request ID, bounded fixed-key Context variables, nested-profile
-persistence, and
-local/persistent-counter tracers recorded in
+persistence, the pinned three-module Stytch TODO backend with a credential-free
+session boundary and explicit SQLite KV binding, and local/persistent-counter
+tracers recorded in
 `tests/compat/hono/examples-manifest.json`.
 `@hono/node-server` and `tinytsx:serve` share one AOT entry contract. This does
 not claim the rest of Node server lifecycle, TLS, event, or platform-adapter
@@ -112,8 +113,8 @@ Use `tinytsx:serve` instead of `@hono/node-server` when the application wants
 the same native server entrypoint without the Hono package namespace.
 
 Focused examples for both entrypoints, Body Limit, Request ID,
-`@hono/zod-openapi`, file reads, SQLite, and local, supervised, and persistent
-actors ship in `$TINYTSX_HOME/examples`.
+`@hono/zod-openapi`, the pinned Stytch TODO backend, file reads, SQLite, and
+local, supervised, and persistent actors ship in `$TINYTSX_HOME/examples`.
 Copy that directory to a writable project and follow its `README.md`; the
 archive release gate runs those sources against their pinned npm packages
 before publication. See the capability documents before granting files,

@@ -17,12 +17,17 @@ back a savepoint probe on every request. A fifteenth row repeatedly fails the
 second step of a request-header/route/JSON transaction on one WAL owner, then
 proves zero partial rows and successful recovery. A sixteenth row posts four
 bounded nested primitive leaves, performs two idempotent prepared writes in one
-callback transaction, and returns the nested response. Every one of the 192
+callback transaction, and returns the nested response. A seventeenth row runs
+the unchanged pinned Stytch TODO backend through authenticated
+create/list/complete/delete cycles backed by one actor-owned in-memory SQLite
+adapter. Every one of the 204
 load samples passed its declared response contract. All 18 multi-actor state
 snapshots proved progress on every actor, all 18 two-owner WAL checkpoints
 proved committed progress and a zero rollback probe, and all 18 full-rollback
-checkpoints proved zero partial rows plus later recovery. Both disk workloads
-retained WAL mode and non-empty live DB/WAL/SHM files.
+checkpoints proved zero partial rows plus later recovery. The TODO row adds 18
+interval checkpoints covering complete cycles, per-request response checks,
+final empty state, and post-load recovery. Both disk workloads retained WAL
+mode and non-empty live DB/WAL/SHM files.
 
 The post-fix candidate comparison reruns the Hono basic, counter-actor, empty
 SQLite, and nested-profile rows at clean source commit `932743e`. Its 48 load
@@ -31,6 +36,16 @@ concurrency 8 and 0.39–0.63x at concurrency 64, with 12.576–16.008 ms
 concurrency-64 p99 versus Bun at 0.835–1.283 ms. These four rows supersede
 their historical counterparts when evaluating the pressure-aware scheduler;
 the wider sixteen-workload matrix remains the breadth baseline.
+
+The TODO application comparison runs at clean harness commit `efed239` with a
+bounded closed-loop client because its record IDs are created at runtime. One
+fixed user per client worker owns at most one record; every create, list,
+complete, and delete response is validated before that worker continues. At
+concurrency 8/64 TinyTSX reaches 15,905/17,367 checked HTTP requests per second
+versus Bun at 23,359/23,049 (0.68x/0.75x). Warm RSS is 8.16 MiB versus
+66.38 MiB. TinyTSX p99 is 1.624/50.026 ms versus Bun at 0.939/8.365 ms, so the
+workload strengthens the footprint result but exposes high-concurrency tail
+latency as the clearest remaining performance cost.
 
 Across the fourteen successful small-response rows, TinyTSX reaches
 0.24–1.14x Bun throughput at concurrency 8 and 0.40–0.79x at concurrency 64 on
@@ -69,6 +84,11 @@ The honest current claim is:
   writes, and returns 104 response bytes. In the pressure-aware rerun TinyTSX
   reaches 0.35x/0.59x Bun at concurrency 8/64 with 8.86 MiB versus 72.25 MiB
   warm RSS; concurrency-64 p99 is 16.008 ms versus 1.283 ms;
+- **authenticated bounded CRUD is now measured:** the pinned TODO application
+  completes checked create/list/complete/delete cycles at 0.68x/0.75x Bun
+  throughput for concurrency 8/64, uses 8.16 MiB versus 66.38 MiB warm RSS,
+  and restores every worker user to empty state; concurrency-64 p99 reaches
+  50.026 ms versus 8.365 ms, so this is not latency parity;
 - **multi-actor progress is now measured:** the eight-owner mutation workload
   reaches 0.40x/0.76x Bun at concurrency 8/64, retains positive balanced state
   for every owner, and uses 6.64 MiB warm RSS; the eight-Worker Bun process uses
@@ -84,19 +104,22 @@ The honest current claim is:
   71,849/73,923, with 8.05/75.81 MiB warm RSS; the owner/error path needs
   profiling before this can be considered a practical high-rate failure path;
 - **process pressure needs profiling:** TinyTSX records greater aggregate CPU
-  on thirteen workloads; Bun records more on the 21-byte file, WAL contention,
+  on fourteen workloads; Bun records more on the 21-byte file, WAL contention,
   and full-rollback rows. TinyTSX records more Unix syscalls on the original
-  fifteen but Bun records more on full rollback; TinyTSX records more context
-  switches on fifteen rows;
+  fifteen plus the TODO row but Bun records more on full rollback; TinyTSX
+  records more context switches on sixteen rows;
 - **bounded resources recover:** the original workloads return to four TinyTSX
   descriptors; the live two-connection WAL route returns from 73 to its
   nine-descriptor database baseline. The full-rollback row returns from 59 to
-  seven for TinyTSX and 72 to eight for Bun.
+  seven for TinyTSX and 72 to eight for Bun. The TODO row returns from 68 to
+  four for TinyTSX and 69 to five for Bun.
 
 The current baseline summary is
 `benchmarks/results/2026-07-17-m5-max-sustained-15s-summary.md`; the later
 `2026-07-18-m5-max-sustained-15s-hono-nested-profile-keepalive-w8.*` pair adds
-the nested-profile row. The current scheduler comparison is
+the nested-profile row; the adjacent
+`2026-07-18-m5-max-sustained-15s-hono-stytch-todo-keepalive-w8.*` pair adds the
+response-checked real-world CRUD row. The current scheduler comparison is
 `benchmarks/results/2026-07-18-m5-max-pressure-aware-15s-summary.md`; its four
 adjacent JSON/Markdown pairs retain all 48 post-fix load samples. Each
 per-workload report pins the response differences and limitations.

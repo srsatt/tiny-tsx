@@ -104,7 +104,10 @@ default 413 response and a bounded Hono `requestId()` policy with request-local
 UUID fallback/reuse. A separate fixed-key specialization carries up to 16
 bounded `Context.set/get` values across matched middleware and route handling,
 with direct static `Context.var` reads, without exposing a general JavaScript
-`Map`. Each admitted row and its first
+`Map`. The unchanged three-module Stytch TODO backend also executes its bounded
+class/async/array shape, nested auth routes, and one explicit actor-owned SQLite
+KV binding; automated tests use a credential-free cookie boundary and do not
+claim live Stytch/JWT compatibility. Each admitted row and its first
 unsupported boundary is listed in `tests/compat/hono/examples-manifest.json`
 and `doc/HONO.md`.
 
@@ -248,12 +251,16 @@ npm run benchmark:hono-actor-multi
 npm run benchmark:hono-sqlite
 npm run benchmark:hono-sqlite-transaction
 npm run benchmark:hono-sqlite-wal
+npm run benchmark:hono-stytch-todo
 ```
 
-The harness verifies equivalent status, content type, content length, and body,
-then records repeated startup-to-first-response, RSS, throughput, and latency
-samples through `oha`. The current fourteen-workload sustained comparison is
-`benchmarks/results/2026-07-17-m5-max-sustained-15s-summary.md`. See
+The harness verifies each declared response/state contract, then records
+repeated startup-to-first-response, RSS, throughput, latency, CPU, syscall, and
+descriptor samples. Most fixed-response rows use `oha`; the TODO row uses a
+bounded closed-loop client that validates every create/list/complete/delete
+response and final empty state. The breadth summary is
+`benchmarks/results/2026-07-17-m5-max-sustained-15s-summary.md`; later dated
+reports add the nested-profile and Stytch TODO rows. See
 `benchmarks/README.md` for the exact protocol, reproduction commands, and
 limitations.
 

@@ -11,6 +11,13 @@ saturation groups. The tag has not been created.
 This checklist prepares a release candidate; it does not create or push a tag.
 Run it from the exact commit intended for `v0.1.0-alpha.1`.
 
+Post-candidate work now packages and executes the pinned Stytch TODO backend on
+Apple arm64, assembles it for Linux arm64, and retains its response-checked
+TinyTSX/Bun CRUD benchmark. That later source does not replace the attested
+`f56d8a26` artifacts above. Promoting it to another candidate requires native
+Linux extracted-archive execution and fresh clean Apple/Linux archives from the
+same new commit; the open gates are tracked in `doc/BACKLOG.md`.
+
 ## Contract and source
 
 - [x] Workspace, frontend, and SDK versions are `0.1.0-alpha.1`.

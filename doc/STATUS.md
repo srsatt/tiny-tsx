@@ -4,10 +4,50 @@ Last updated: 2026-07-18
 
 ## Current state
 
-Milestones 0–2 are complete for the static-page vertical slice. The compiler
-produces and serves a native Mach-O executable from the example TSX source.
+The alpha contract and its exact-source two-target candidate are complete at
+the frozen commit recorded in `doc/BACKLOG.md`. Post-candidate P1-P4 work now
+adds the pinned Stytch-auth TODO backend as a real-world class, Hono/auth,
+actor-owned SQLite, packaging, and measured-load tracer. Apple functional and
+installed-archive evidence plus Linux-arm64 assembly are green. Native Linux
+execution and a fresh same-commit two-target release attestation remain open.
 
 ## Alpha implementation evidence
+
+### Pinned Stytch-auth TODO backend (2026-07-18)
+
+- Intake pins the unchanged three-module backend from `vendor/hono-examples`
+  commit `3b0b62875a0e1265763fea1c6388866d5697ef81`, all three SHA-256 digests,
+  and the exact published auth graph. The packaged example keeps byte-identical
+  source copies, declaration-only overlays, and pinned Hono compiler sources.
+- The frontend executes the exact `TodoService` constructor, arrow methods,
+  private setter, direct async sequences, and bounded `push`/`find`/`filter`/
+  `sort` operations. Recognition is guarded by the complete service-source
+  digest rather than its checkout path. The unchanged nested Hono route graph,
+  CORS, JSON body, route parameters, and deterministic local/remote session
+  guards lower without introducing a JavaScript engine or managed heap.
+- `--binding TODOS=sqlite-kv:<path>` creates one bounded application-worker
+  SQLite owner. Apple native HTTP proves unauthenticated denial, CRUD, user
+  isolation, 16-record saturation rollback, malformed-input rejection,
+  restart persistence, capability denial, disposal, and recovery. Linux-arm64
+  assembly and the credential-free Bun/Hono reference pass.
+- Dirty-tree release staging passed all optimized runtime tests and all four
+  installed-release groups. The extracted Apple archive compiled and executed
+  unauthenticated denial plus list/create/complete/delete using only shipped
+  examples, overlays, Hono sources, and compile-time npm dependencies. This is
+  package evidence, not a clean candidate attestation.
+- The retained P4 run at clean harness commit `efed239` uses eight TinyTSX
+  workers, five startup samples, and three 15-second samples at concurrency
+  8/64 for each target. All 12 load samples and 18 state/recovery checkpoints
+  pass. TinyTSX reaches 15,905/17,367 checked HTTP requests per second versus
+  Bun at 23,359/23,049 (0.68x/0.75x), with 8.16/66.38 MiB warm RSS. Its p99 is
+  1.624/50.026 ms versus Bun at 0.939/8.365 ms. Both targets restore every
+  worker user to empty state; TinyTSX descriptors return from 68 to four.
+  Evidence is
+  `benchmarks/results/2026-07-18-m5-max-sustained-15s-hono-stytch-todo-keepalive-w8.*`.
+- The supported claim remains narrow: credential-free cookie sessions, one
+  explicit SQLite KV binding, 16 records per user, and the pinned service
+  digest. Live Stytch/JWT/network calls, ambient Cloudflare bindings, arbitrary
+  classes/KV/arrays, React/Vite assets, and distributed actors are excluded.
 
 ### Pressure-aware idle keep-alive scheduling (2026-07-18)
 
@@ -1569,19 +1609,19 @@ rtk npm run benchmark:hono-jsx-ssr
 
 ## Active slice
 
-Deterministic `generateText`, finite `streamText`, the first real local
-OpenAI-compatible provider path are complete through HIR, native linking, real
-HTTP responses, sustained load, and executed escape reports. The optional WASM
-profile and bounded no-WASI fixture are also complete at the crate boundary.
-The active AI slice is deterministic multi-step/tool-call behavior; invalid Zod
-behavior is an independent promotion gate. Neither current path justifies a GC.
-Connection fairness remains a measured optimization target.
+The pinned Stytch-auth TODO tracer is complete through P1-P4 functional,
+package, Apple installed-archive, and measured-load evidence. Its measured tail
+latency and syscall/context-switch pressure remain optimization inputs, not
+release blockers. The open release gate is native Linux-arm64 execution from an
+extracted archive followed by clean Apple/Linux archives from the same final
+source commit. Live Stytch credentials and broader JavaScript compatibility are
+not part of that gate.
 
 ## Resume point
 
-Read `doc/AI_COMPATIBILITY.md`, `doc/MEMORY_MANAGEMENT.md`, and
-`doc/WASM.md`. Run `rtk npm run test:ai-intake`,
-`rtk npm run test:ai-reference`, `rtk npm run test:ai-provider-native`, and
-`rtk npm run test:wasm`. Add deterministic multi-step/tool-call behavior next,
-keeping invalid-Zod behavior separate. Do not start a collector spike without
-an executed managed escape.
+Run the current TODO intake, native, Bun reference, benchmark, and installed
+release gates. Then execute the extracted archive on a native Linux-arm64 host,
+retaining its checksum, schema-v2 manifest, version report, and HTTP/failure
+evidence. Once Linux is green, repeat clean Apple and Linux release verification
+at one source commit and update the tag-ready checklist without creating or
+moving the tag.

@@ -1,6 +1,6 @@
 # TinyTSX benchmarks
 
-The harness has nineteen workloads:
+The harness has twenty-one workloads:
 
 - `static-page` compares the current static TinyTSX vertical slice to an
   idiomatic `Bun.serve` server returning the same response;
@@ -40,6 +40,12 @@ The harness has nineteen workloads:
 - `hono-sqlite-transaction` compares a schema check, two fixed-key idempotent
   writes in one callback transaction, and one non-empty prepared row response
   through the same in-memory ownership boundary; and
+- `hono-nested-profile` posts four bounded nested primitive leaves, performs
+  two idempotent writes in one callback transaction, and returns the nested
+  response; and
+- `hono-stytch-todo` runs the unchanged pinned three-module backend through
+  credential-free authenticated create/list/complete/delete cycles, checking
+  every response and final empty per-worker state; and
 - `hono-sqlite-wal` alternates two independent owners of one target-private
   on-disk WAL file; every request rolls back one savepoint update, commits one
   progress update, and the harness checks live DB/WAL/SHM files and state after
@@ -52,13 +58,21 @@ The harness has nineteen workloads:
   OpenAI-compatible provider graph against one shared zero-delay loopback
   provider. The support process is excluded from both targets' RSS.
 
-Both verify status, content length, response bytes, powered-by behavior, and a
+Fixed-response workloads verify status, content length, response bytes,
+powered-by behavior, and a
 numeric response-time header before collecting samples. Target-specific content
 types are recorded instead of hidden: after the example's response-time
 middleware clones the body, TinyTSX preserves `text/plain;charset=UTF-8` while
 Bun 1.3.13 serves the stream as `application/octet-stream`. The pinned Fetch
 WPT requires the TinyTSX value for the original string body; the Bun value is a
 visible reference-runtime deviation, not the portable contract.
+
+The TODO workload uses a bounded closed-loop Python client instead of `oha`
+because each create response supplies the ID required by its later complete and
+delete requests. One fixed user per client worker retains at most one TODO. The
+client validates status, content type, ID, text, completion, final empty state,
+and a post-load recovery read before accepting a sample. Throughput counts the
+four individual HTTP requests in each complete CRUD cycle.
 
 This is deliberately not presented as a general TypeScript performance result.
 TinyTSX uses the worker count selected with `--workers`; the harness uses
@@ -101,7 +115,10 @@ npm run benchmark:hono-actor
 npm run benchmark:hono-actor-multi
 npm run benchmark:hono-sqlite
 npm run benchmark:hono-sqlite-transaction
+npm run benchmark:hono-nested-profile
 npm run benchmark:hono-sqlite-wal
+npm run benchmark:hono-sqlite-rollback
+npm run benchmark:hono-stytch-todo
 npm run benchmark:hono-ai-provider
 npm run benchmark:actor-scale
 ```

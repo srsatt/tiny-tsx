@@ -15,6 +15,29 @@ The runtime core currently owns the following release bounds:
 - busy timeout: one second;
 - values: null, signed 64-bit integer, finite `f64`, UTF-8 text, and bytes.
 
+The pinned Stytch TODO tracer also exposes one compiler-recognized
+`--binding TODOS=sqlite-kv:<path>` adapter. One application worker owns one
+SQLite connection and executes each list, add, complete, or delete as a single
+serialized transaction that creates the schema, applies any mutation, and
+selects the returned state before commit. The upstream `TodoService.ts` remains
+byte-identical; only that exact source digest and statically named binding are
+admitted.
+
+Rows are isolated by bounded user ID and retain an insertion sequence so the
+upstream ordering contract is deterministic: incomplete records first, then
+decimal millisecond ID, then sequence. Each user may retain at most 16 records;
+text is limited to 4 KiB and the store to 1,024 users. Saturation or malformed
+input rolls back the complete request. Native tests prove user isolation,
+atomic read/modify/write, process restart, saturation rollback, capability
+denial, disposal, and later recovery. Duplicate millisecond IDs preserve the
+upstream behavior: complete changes the first match and delete removes every
+matching ID.
+
+`:memory:` is process-local. An on-disk adapter path requires the same matching
+read/write root, protected directory ownership, no-follow sidecar handling, and
+busy-timeout behavior as a public `Database`. The adapter is not a general KV
+store, dynamic table API, distributed actor, or cross-process transaction.
+
 Prepared parameters are passed through SQLite rather than interpolated into SQL.
 Malformed SQL, non-finite numbers, and every size limit are recoverable typed
 runtime errors, and a failed operation does not poison the connection. The core

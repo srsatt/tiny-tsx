@@ -465,7 +465,7 @@ publish that tradeoff rather than claim a general performance improvement. The
 raw pairs and combined report are retained under
 `benchmarks/results/2026-07-18-m5-max-pressure-aware-15s-*`.
 
-#### Next selectable goal — pinned Stytch-auth TODO backend
+#### Selected goal — pinned Stytch-auth TODO backend
 
 Use the backend half of the pinned upstream Hono `stytch-auth` example at
 `vendor/hono-examples` commit
@@ -480,15 +480,13 @@ three source digests, `@hono/stytch-auth@0.1.0`, `hono@4.12.30`, and
 `test:hono-intake` audits both the unchanged backend and the complete published
 authentication dependency graph. The functional P1-P3 implementation is now
 green on Apple arm64 and as Linux-arm64 assembly, including the bounded
-actor-owned SQLite binding. Release packaging, native Linux execution, the
-measured workload, synchronized documentation, and a fresh two-target
-attestation remain open.
+actor-owned SQLite binding. Release packaging, the measured workload, and
+synchronized documentation are now green. Native Linux archive execution and a
+fresh same-commit two-target attestation remain open.
 
-The compiler-first tranche is complete. Resume this goal at the package
-boundary: ship the unchanged backend, declaration-only overlays, and the exact
-pinned Hono sources needed by the compiler; then prove that an extracted
-archive can build and run the tracer outside the checkout. Do not widen the
-language or runtime surface while closing package evidence unless an installed
+The compiler, package, installed-Apple, and benchmark tranches are complete.
+Resume this goal at the native Linux archive boundary. Do not widen the language
+or runtime surface while closing the two-target evidence unless an installed
 example exposes a stable missing boundary.
 
 Goal checklist, in dependency order:
@@ -512,19 +510,19 @@ Goal checklist, in dependency order:
       rollback, saturation, denial, disposal, and recovery.
 - [x] Add Apple-arm64 HTTP/failure evidence, Linux-arm64 assembly, and Bun/Hono
       credential-free reference behavior for the unchanged backend.
-- [ ] Package the unchanged backend, declaration-only overlays, and pinned Hono
+- [x] Package the unchanged backend, declaration-only overlays, and pinned Hono
       compiler inputs; prove manifest/declaration routing and extracted-archive
       execution on Apple arm64.
 - [ ] Execute the same HTTP success and bounded-failure contract natively on
       Linux arm64 from the extracted archive; retain checksum, schema-v2 source
       attestation, version, and HTTP evidence from the same clean commit.
-- [ ] Add the response-checked authenticated CRUD workload to P4 and publish
+- [x] Add the response-checked authenticated CRUD workload to P4 and publish
       TinyTSX/Bun startup, RSS, throughput, latency, CPU, overload, and recovery
       evidence for this exact tracer.
-- [ ] Synchronize the executable matrix and compatibility, standard-library,
-      persistence, actor, status, performance, and release-handoff documents;
-      then repeat clean Apple/Linux release verification before selecting a
-      later release candidate.
+- [x] Synchronize the executable matrix and compatibility, standard-library,
+      persistence, actor, status, performance, and release-handoff documents.
+- [ ] Repeat clean Apple/Linux release verification at one source commit before
+      selecting a later release candidate.
 
 2026-07-18 checkpoint: the unchanged three-module backend lowers through the
 explicit `--binding TODOS=sqlite-kv:<path>` capability. The frontend tests retain
@@ -539,26 +537,37 @@ credential-free behavior with Bun, Hono, and the unchanged `TodoService.ts`.
 The adapter does not claim arbitrary KV/class/array support or live Stytch
 validation.
 
-Next-goal handoff, in order:
+The packaged example and pinned Hono compiler sources pass the complete staged
+Apple installed-release suite, including unauthenticated denial and exact
+list/create/complete/delete behavior outside the checkout. The P4 run at clean
+harness commit `efed239` retains 12 successful load samples and 18 state/
+recovery checkpoints. At concurrency 8/64 TinyTSX reaches 15,905/17,367 checked
+requests per second versus Bun at 23,359/23,049 (0.68x/0.75x), with 8.16/66.38
+MiB warm RSS and p99 of 1.624/50.026 ms versus 0.939/8.365 ms. Every fixed
+worker user finishes empty, and TinyTSX descriptors return from 68 to four.
+This is evidence for the exact credential-free adapter workload, not live
+Stytch, growing lists, shared-user contention, or a general AOT/JIT claim.
 
-1. **Package exact inputs:** retain byte-identical copies of the three pinned
+Completed execution order and remaining handoff:
+
+1. **Package exact inputs (complete):** retain byte-identical copies of the three pinned
    backend files, fail intake on digest drift, ship their declaration overlays
    and the pinned Hono compiler sources, and expose one documented installed
    build command.
-2. **Prove installed Apple behavior:** build from the extracted archive outside
+2. **Prove installed Apple behavior (complete):** build from the extracted archive outside
    the checkout and execute unauthenticated denial plus authenticated
    list/create/complete/delete behavior with bounded SQLite state.
-3. **Close native Linux evidence:** repeat the installed success, malformed
+3. **Close native Linux evidence (open):** repeat the installed success, malformed
    input, saturation/rollback, restart, denial, disposal, and recovery contract
    on a native Linux-arm64 host. Cross-assembled ELF evidence is necessary but
    is not a substitute.
-4. **Measure the application:** add a state-bounded, response-checked CRUD mix
+4. **Measure the application (complete):** add a state-bounded, response-checked CRUD mix
    to the existing TinyTSX/Bun harness. Include fixed users, deterministic
    cleanup, overload recovery, startup, warm/peak RSS, throughput, median/p99,
    CPU, process/allocation counters where comparable, and retained raw samples.
-5. **Synchronize and attest:** update every named compatibility and release
-   document from the executable evidence, run the clean two-target release
-   suite at one source commit, and leave tagging as a separate action.
+5. **Synchronize and attest:** the named documents now reflect the executable
+   evidence. Run the clean two-target release suite at one source commit and
+   leave tagging as a separate action.
 
 Implement this as one vertical real-world slice rather than isolated syntax
 demos:

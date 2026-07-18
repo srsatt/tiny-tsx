@@ -80,6 +80,25 @@ All inputs and outputs are bounded. Compiled defaults are published by
 release maximum. Results are copied into the documented request, message, or
 owner arena and cannot outlive that domain.
 
+### Explicit resource bindings
+
+`--binding TODOS=sqlite-kv:<path>` is the first named host-resource adapter. It
+is not a new `tinytsx:` module and does not expose an ambient Cloudflare
+environment. The binding name is compile-time-known; at most 16 bindings may be
+declared; names and adapter kinds must be unique and supported. `:memory:` needs
+no filesystem capability. A relative on-disk path uses the same single matching
+`--allow-read`/`--allow-write` root and protected SQLite open policy as
+`tinytsx:sqlite`.
+
+For the pinned TODO tracer only, the statically named `TODOS` field supports the
+exact upstream JSON `get`/`put` behavior through one owner-serialized SQLite
+operation per service call. It stores at most 16 closed TODO records per user,
+4 KiB per text field, and 1,024 bounded user identities. This adapter does not
+promote arbitrary KV names, values, methods, iteration, expiration, metadata,
+cross-process transactions, or dynamic binding lookup. Unsupported binding
+forms fail compilation; runtime capacity and SQLite failures remain recoverable
+and do not poison the owner.
+
 ## Alpha modules
 
 ### `tinytsx:env`

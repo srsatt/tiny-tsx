@@ -73,6 +73,17 @@ scope. In particular, alpha does not need compression, cache storage,
 WebSockets, JWT/JWK, proxying, SSG, platform adapter detection, or Bun/Node
 runtime compatibility merely because Hono documents them.
 
+The post-candidate real-world tracer executes the unchanged backend half of the
+pinned Hono `stytch-auth` example. Its nested `/api` graph uses bounded CORS,
+selected JSON bodies, no-argument route-parameter record access, and local/
+remote auth middleware order. Automated tests replace credentials and network
+calls with one deterministic non-empty session-cookie boundary; they do not
+claim JWT validation or live `@hono/stytch-auth` compatibility. The exact
+`TodoService` class and array operations run through an explicit SQLite KV
+adapter. Apple native, Linux assembly, Bun/Hono, installed-archive, and checked
+load evidence are pinned by `examples-manifest.json`; native Linux archive
+execution remains the final target gate.
+
 The separate example matrix in `tests/compat/hono/examples-manifest.json`
 records the complete tracer allowlist with provenance, imports/APIs, intake,
 native/assembly state, HTTP/reference evidence, and the first unsupported
