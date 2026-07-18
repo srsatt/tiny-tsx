@@ -30,6 +30,8 @@ def run_oha(
     method: str = "GET",
     body: str | None = None,
     content_type: str | None = None,
+    headers: dict[str, str] | None = None,
+    expected_status: int = 200,
     urls_from_file: bool = False,
 ) -> OhaSample:
     command = oha_command(
@@ -40,6 +42,7 @@ def run_oha(
         method=method,
         body=body,
         content_type=content_type,
+        headers=headers,
         urls_from_file=urls_from_file,
     )
     environment = os.environ.copy()
@@ -55,7 +58,7 @@ def run_oha(
         raise RuntimeError(
             f"oha failed ({completed.returncode}):\n{completed.stderr.strip()}"
         )
-    return parse_oha_json(completed.stdout)
+    return parse_oha_json(completed.stdout, expected_status=expected_status)
 
 
 def oha_command(
@@ -67,6 +70,7 @@ def oha_command(
     method: str = "GET",
     body: str | None = None,
     content_type: str | None = None,
+    headers: dict[str, str] | None = None,
     urls_from_file: bool = False,
 ) -> list[str]:
     command = [
@@ -87,6 +91,8 @@ def oha_command(
         command[-1:-1] = ["-d", body]
     if content_type is not None:
         command[-1:-1] = ["-T", content_type]
+    for name, value in (headers or {}).items():
+        command[-1:-1] = ["-H", f"{name}: {value}"]
     if urls_from_file:
         command.insert(-1, "--urls-from-file")
     if not keep_alive:
@@ -94,7 +100,7 @@ def oha_command(
     return command
 
 
-def parse_oha_json(raw: str) -> OhaSample:
+def parse_oha_json(raw: str, *, expected_status: int = 200) -> OhaSample:
     payload = json.loads(raw)
     summary = payload["summary"]
     percentiles = payload["latencyPercentiles"]
@@ -112,9 +118,14 @@ def parse_oha_json(raw: str) -> OhaSample:
         total_seconds=float(summary["total"]),
         status_codes=status_codes,
     )
-    if sample.success_rate != 1.0 or set(status_codes) != {"200"}:
+    expected_success_rate = 1.0 if 200 <= expected_status < 400 else 0.0
+    if (
+        sample.success_rate != expected_success_rate
+        or set(status_codes) != {str(expected_status)}
+        or sum(status_codes.values()) < 1
+    ):
         raise RuntimeError(
-            f"benchmark response failure: success={sample.success_rate}, "
-            f"statuses={status_codes}"
+            f"benchmark response failure: expected={expected_status}, "
+            f"success={sample.success_rate}, statuses={status_codes}"
         )
     return sample

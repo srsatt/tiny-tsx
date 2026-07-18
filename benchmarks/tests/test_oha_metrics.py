@@ -27,11 +27,13 @@ class OhaMetricsTest(unittest.TestCase):
             method="POST",
             body='{"value":7}',
             content_type="application/json",
+            headers={"Idempotency-Key": "benchmark-key"},
         )
 
         self.assertEqual(command[command.index("-m") + 1], "POST")
         self.assertEqual(command[command.index("-d") + 1], '{"value":7}')
         self.assertEqual(command[command.index("-T") + 1], "application/json")
+        self.assertEqual(command[command.index("-H") + 1], "Idempotency-Key: benchmark-key")
 
     def test_reads_a_response_equivalent_url_set_from_a_file(self) -> None:
         command = oha_command(
@@ -80,6 +82,23 @@ class OhaMetricsTest(unittest.TestCase):
         }
         with self.assertRaises(RuntimeError):
             parse_oha_json(json.dumps(payload))
+
+    def test_accepts_only_the_declared_failure_status(self) -> None:
+        payload = {
+            "summary": {
+                "successRate": 0.0,
+                "total": 1,
+                "slowest": 0.1,
+                "requestsPerSec": 2,
+            },
+            "latencyPercentiles": {"p50": 0.1, "p95": 0.1, "p99": 0.1},
+            "statusCodeDistribution": {"500": 2},
+        }
+
+        sample = parse_oha_json(json.dumps(payload), expected_status=500)
+        self.assertEqual(sample.status_codes, {"500": 2})
+        with self.assertRaises(RuntimeError):
+            parse_oha_json(json.dumps(payload), expected_status=400)
 
 
 if __name__ == "__main__":
