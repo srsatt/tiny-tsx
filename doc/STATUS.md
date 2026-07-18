@@ -142,7 +142,32 @@ produces and serves a native Mach-O executable from the example TSX source.
   sustained samples plus 18 state/file checkpoints, and workspace Clippy with
   warnings denied.
 
-### Sustained fourteen-workload server matrix (2026-07-18)
+### Request-header SQLite idempotency and full rollback load (2026-07-18)
+
+- A required statically named `Idempotency-Key` now lowers as an explicit
+  prepared SQLite parameter. Runtime decoding performs case-insensitive lookup,
+  requires 1–256 bytes of valid UTF-8, and copies the value before posting the
+  owner message; missing, empty, oversized, and invalid UTF-8 values return 400.
+- The Hono correctness tracer combines that header with route and JSON values
+  inside the bounded callback transaction. Apple native HTTP proves 32
+  concurrent isolated commits, a second-step uniqueness rollback with no
+  partial payment, boundary rejection, and later reuse. Linux arm64 assembles
+  the parameter tag and transaction ABI; Bun/Hono with `bun:sqlite` matches.
+- A protected on-disk WAL workload repeats the second-step failure as a declared
+  500. After every warm-up/load interval the harness commits recovery on the
+  same connection and requires `partialRows == 0`, a progressing recovery
+  counter, WAL mode, and non-empty DB/WAL/SHM files.
+- All 12 sustained samples and 18 state/file checkpoints pass. TinyTSX reaches
+  605/4,545 requests per second at concurrency 8/64 (0.01x/0.06x Bun), with
+  13.328/15.161 ms p50, 16.541/34.160 ms p99, and 8.05 MiB warm RSS. Bun uses
+  75.81 MiB warm RSS. The result identifies failed-transaction owner/error-path
+  overhead as a profiling target rather than suggesting parity.
+- Optional/fallback or dynamic-name headers, query/cookie/environment values,
+  structured values, application conflict handling, growing data, competing or
+  cross-process writers, cancellation, arbitrary callbacks, and crash
+  durability remain separate.
+
+### Sustained fifteen-workload server matrix (2026-07-18)
 
 - A clean Apple M5 Max comparison covers Hono basic, dynamic JSX escaping, one
   decoded optional route parameter, bounded warm-cache 21-byte and 22,173-byte
@@ -153,13 +178,16 @@ produces and serves a native Mach-O executable from the example TSX source.
   field ABI. A mixed-route actor workload also distributes `tell(+1)` across
   eight independent owners and reads every state after each interval. The new
   on-disk WAL row also alternates two independent database owners and validates
-  one successful savepoint rollback per request. Each
+  one successful savepoint rollback per request. The full-rollback row posts a
+  fixed idempotency header/route/JSON tuple, requires the second transaction
+  step to fail, and validates zero partial rows plus later recovery. Each
   target uses one process; TinyTSX uses eight HTTP workers; both targets use
   keep-alive. The matrix retains five startup samples and three 15-second
   samples at concurrency 8 and 64 with alternating order.
-- All 168 load samples pass with success rate 1.0. TinyTSX reaches 0.24–1.14x
-  Bun throughput at concurrency 8 and 0.40–0.79x at concurrency 64 on the thirteen
-  small-response routes. The exact 22,173-byte route reaches 1.30x/1.78x Bun.
+- All 180 load samples pass with success rate 1.0. On the original thirteen
+  small-response routes TinyTSX reaches 0.24–1.14x Bun throughput at concurrency
+  8 and 0.40–0.79x at concurrency 64. The expected-500 full-rollback row reaches
+  0.01x/0.06x; the exact 22,173-byte route reaches 1.30x/1.78x Bun.
   TinyTSX concurrency-64 p99 is 9.575–108.839 ms versus Bun at
   0.736–13.504 ms.
 - TinyTSX warm RSS is 6.30–8.81 MiB versus Bun at 64.50–154.70 MiB. Repeated
@@ -192,11 +220,16 @@ produces and serves a native Mach-O executable from the example TSX source.
   703.77 MiB median peak across three consistent runs and returns to its
   13-descriptor process baseline; complete-process totals do not isolate Worker
   creation or GC.
+- The failed full-transaction row reaches 605/4,545 TinyTSX requests per second
+  versus Bun at 71,849/73,923. All 18 additional checkpoints retain zero partial
+  rows and progressing recovery. Its 8.05 MiB warm RSS versus Bun at 75.81 MiB
+  does not offset the 0.01x/0.06x throughput result.
 - Evidence: clean commits `7c1a22c`, `04ac58b`, `c16333f`, `097982d`, and
   `a6cc7ae`, plus `c488480` for the first eleven rows; clean commit `b35b608`
   supplies the request-field ABI row, and clean commit `528ecd6` supplies the
-  mixed eight-actor row. Clean commit `07efc5d` supplies the two-owner WAL row.
-  The combined summary and fourteen adjacent raw JSON/rendered report pairs
+  mixed eight-actor row. Clean commit `07efc5d` supplies the two-owner WAL row,
+  and clean commit `794ba22` supplies the request-header full-rollback row.
+  The combined summary and fifteen adjacent raw JSON/rendered report pairs
   retain every sample and actor/database-state checkpoint.
 
 ### Clean post-transaction release rehearsal (2026-07-17)

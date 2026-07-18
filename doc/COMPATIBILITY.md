@@ -193,6 +193,18 @@ same descriptor ABI. Queries, callback values, visible step results, control
 flow, nested or mixed-database transactions, and an interactive transaction
 object remain unsupported.
 
+Required static-name request headers now add one real request-derived SQLite
+value. `context.req.header("Idempotency-Key")!` lowers to an explicit HIR
+parameter whose native decoder performs a case-insensitive lookup, requires
+1–256 bytes of valid UTF-8, and copies the value before posting the owner
+message. Missing/empty/oversized/invalid values return 400; dynamic or invalid
+names reject. A project-owned Hono tracer commits header/route/JSON values,
+forces a second-step uniqueness failure, proves the first insert is absent, and
+then reuses the connection. Apple native HTTP, Linux-arm64 assembly, and a
+Bun/Hono `bun:sqlite` reference gate the contract. This does not admit optional
+headers, fallbacks, query/cookie/environment parameters, structured values, or
+arbitrary request expressions.
+
 The first request-body slice retains at most 64 KiB and recognizes
 `await c.req.json()` when statically selected fields flow into a prepared SQLite
 call or one closed `Context.json()` response. The SQLite ABI binds up to 16

@@ -369,12 +369,14 @@ actor messages, protected SQLite ownership, eight-actor and two-owner WAL
 pressure evidence, invalid UTF-8 form decoding, bounded Hono context variables,
 tagged special-number/symbol constants, and the pinned upstream secure-headers
 factory plus the bounded local-`Map` tracer. Their implementation and evidence
-are recorded under P1-P4. The Map tracer also passes the installed-package gate
+are recorded under P1-P4. The required-header SQLite idempotency and
+full-transaction rollback tracer has also landed with its sustained load
+evidence. The Map tracer passes the installed-package gate
 and a clean release verification with checksum-valid Apple- and Linux-arm64
 archives. No next tracer is selected by this backlog update; the next goal must
 choose a bounded slice from the remaining actor supervision, SQLite value
-depth, or P4 workload families rather than widening Map beyond its recorded
-ownership boundary.
+families, or P4 workload families rather than widening Map or SQLite headers
+beyond their recorded ownership boundaries.
 
 Do not reopen the completed alpha foundations as broad projects. File reading,
 SQLite, and local actors already have public bounded built-ins. Their next work
@@ -1109,6 +1111,16 @@ failed-transaction load; query/cookie/environment values, arbitrary header
 expressions, conflict recovery in application code, cross-process writers,
 cancellation, and interactive transaction objects remain separate tracers.
 
+The tracer is green. Frontend and HIR tests retain the explicit request-header
+parameter and reject dynamic/invalid names. The bootstrap copies a present
+1–256-byte UTF-8 value before posting the owner message and returns 400 for
+missing, empty, oversized, or invalid input. Apple native HTTP proves 32
+isolated values, second-step rollback, and recovery; Linux arm64 assembles the
+same ABI; Bun/Hono matches both the in-memory contract and disk/WAL workload.
+All 12 sustained expected-500 samples and 18 recovery/file checkpoints pass
+with zero partial rows. TinyTSX reaches 0.01x/0.06x Bun at concurrency 8/64
+with 8.05 MiB warm RSS, selecting the failed owner/error path for profiling.
+
 ### P1 — Compatibility and language depth
 
 - [x] Promote remaining syntax-only Test262 cases only when their complete
@@ -1392,6 +1404,13 @@ cancellation, and interactive transaction objects remain separate tracers.
     ABI. Queries, callback values, visible step results, control flow, nesting,
     mixed databases, `Database.exec` steps, and broader dynamic values remain
     open.
+  - 2026-07-18: a required statically named request header now contributes a
+    copied 1–256-byte UTF-8 `TEXT` parameter to prepared calls and callback
+    transactions. The idempotency tracer proves concurrent isolation,
+    second-step rollback, and same-owner recovery on Apple, Linux, and
+    Bun/Hono. Optional/fallback headers, query/cookie/environment values,
+    structured values, and arbitrary expressions remain open, so this broad
+    item stays unchecked.
 - [ ] Add actor supervision trees, restart intensity, monitors/links, registries,
       persistence snapshots, and remote/distributed actors only from separate
       evidence-driven proposals.
@@ -1464,9 +1483,16 @@ cancellation, and interactive transaction objects remain separate tracers.
     request, and verifies live DB/WAL/SHM files after every interval. All 12
     samples and 18 state checkpoints pass; TinyTSX reaches 1.14x/0.58x Bun at
     concurrency 8/64 with 8.06 MiB warm RSS, while concurrency-64 p99 reaches
-    108.839 ms. Failed full-transaction rollback load, cross-process writers,
-    growing/request-derived data, cancellation, and other workload families
-    remain open, so this broad item stays unchecked.
+    108.839 ms. Cross-process writers, growing/request-derived data,
+    cancellation, and other workload families remain open, so this broad item
+    stays unchecked.
+  - 2026-07-18: the full-rollback WAL tracer binds one required request header,
+    route value, and JSON integer, then forces its second callback step to fail.
+    All 12 declared-500 samples and 18 checkpoints retain zero partial rows,
+    progressing recovery, WAL mode, and live files. TinyTSX reaches 0.01x/0.06x
+    Bun at concurrency 8/64 with 8.05 MiB warm RSS. Application conflict
+    handling, growing data, competing/cross-process writers, cancellation, and
+    other workload families remain open, so this broad item stays unchecked.
 - [x] Add CPU, syscall, allocation, peak-RSS, and first-launch instrumentation.
   - 2026-07-17: the macOS harness samples whole-process CPU time, Unix/Mach
     syscalls, context switches, faults, threads, open-file-descriptor
@@ -1477,7 +1503,7 @@ cancellation, and interactive transaction objects remain separate tracers.
     binaries do not include them, and no Bun allocation ratio is claimed.
 - [x] Run controlled longer-duration comparisons before publishing performance
       claims and optimize only from profiles.
-  - 2026-07-18: the fourteen-workload sustained matrix retains three 15-second
+  - 2026-07-18: the fifteen-workload sustained matrix retains three 15-second
     samples at concurrency 8 and 64 for both targets, alternates target and
     concurrency order, disables allocator instrumentation, and preserves all
     raw response-checked samples. It supports claims only for those exact

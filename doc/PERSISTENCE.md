@@ -32,9 +32,9 @@ preserves the complete signed SQLite `i64` domain rather than rounding through
 a JavaScript number. A run with zero changed rows reports `null`; otherwise the
 field contains SQLite's connection-local last-insert row ID. A prepared call
 accepts at most 16 selected values from named route parameters, UUID generation,
-a closed request JSON object, or compile-time string, safe-integer, finite-real,
-boolean, and null literals. Parameters use SQLite binding rather than SQL
-interpolation.
+a closed request JSON object, a required statically named request header, or
+compile-time string, safe-integer, finite-real, boolean, and null literals.
+Parameters use SQLite binding rather than SQL interpolation.
 
 Each handler is limited to 16 SQLite actions and therefore 16 stable result
 slots. A `run()` action sends its slot through the serialized owner request;
@@ -111,11 +111,24 @@ same transaction-step ABI. Callback arguments or returned values, query steps,
 visible per-step results, `Database.exec` steps, branches or loops, nesting,
 mixed databases, and an interactive transaction object are not admitted.
 
+A separate idempotency tracer binds `context.req.header("Idempotency-Key")!`
+as SQLite `TEXT` in both prepared writes and the callback transaction. The
+generated descriptor carries only the static header name. During dispatch the
+bootstrap requires a present 1–256-byte valid UTF-8 value, copies it into an
+owned `String`, and only then posts the database-owner message, so request-head
+disposal cannot invalidate queued work. Missing, empty, oversized, or invalid
+UTF-8 values return 400; a dynamic or invalid header name rejects at compile
+time. Apple HTTP also proves 32 concurrent distinct values, second-step rollback,
+and later reuse; Linux assembly and a Bun/Hono `bun:sqlite` reference pin the
+same external contract. Optional/fallback headers, query/cookie/environment
+values, structured values, and arbitrary runtime expressions remain outside
+this slice.
+
 The focused performance tracer repeats two fixed-key idempotent prepared writes
 as one callback transaction, then copies and JSON-encodes one non-empty prepared
 row. Apple and Linux native gates pin the exact source, and the sustained
 TinyTSX/Bun matrix retains startup, RSS, throughput, latency, process counters,
-and descriptor recovery. This is single-owner HTTP pressure, not evidence for
+and descriptor recovery. This earlier tracer is single-owner in-memory HTTP pressure, not evidence for
 disk/WAL behavior, competing SQLite connections, rollback frequency, growing
 tables, request-derived values, or primitive-operation parity.
 
@@ -138,6 +151,20 @@ and successful savepoint rollback, not failed full-transaction rollback load,
 cross-process writers, crash/power-loss durability, network filesystems,
 disabled automatic checkpoints, growing tables, or request-derived values.
 
+The adjacent full-rollback tracer uses one protected on-disk WAL owner and a
+fixed POST containing a required idempotency header, route value, and JSON
+integer. Its first callback step inserts a payment and its second violates a
+pinned audit-key uniqueness constraint. Every declared 500 must leave the
+payment absent. After warm-up and each measured interval, the harness commits a
+separate recovery transaction on the same owner, requires its counter to
+advance, and checks WAL mode plus non-empty DB/WAL/SHM files. All 12 load samples
+and 18 state/file checkpoints pass. TinyTSX reaches 605/4,545 requests per
+second at concurrency 8/64 versus Bun at 71,849/73,923, with 8.05 MiB versus
+75.81 MiB warm RSS. This intentionally exposes a severe failed-transaction
+throughput gap; it does not measure application conflict handling, growing
+data, competing or cross-process writers, cancellation, arbitrary callbacks,
+crash durability, or network filesystems.
+
 The HTTP transport retains at most 64 KiB of request body. `HonoRequest.json()`
 is not exposed as a general dynamic JavaScript object: the compiler records
 only statically selected fields and the bootstrap parses those fields at the
@@ -156,9 +183,9 @@ The manifest classifies this bounded surface as `native`. The multi-module
 user-auth tracer additionally proves a closed string parameter written to an
 on-disk database and observed after process restart. It now also returns both
 fields from an inserted row and proves a zero-change update yields
-`lastInsertRowId: null`. Additional caller-provided dynamic values, broader
+`lastInsertRowId: null`. Additional caller-provided value families, broader
 callback transaction forms, arbitrary result-object operations, and disk or
-multi-connection contention load remain post-alpha. Bounded wildcard-origin CORS,
+multi-connection contention shapes remain post-alpha. Bounded wildcard-origin CORS,
 Content-Type preflight, and OS-random version-4 IDs bound as prepared values are
 native. The adapter also maps its typed Hono blog-name binding to a permitted
 immutable startup value. The pinned upstream 404/204 envelopes match through
