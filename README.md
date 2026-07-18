@@ -229,6 +229,8 @@ server is available separately:
 ```bash
 npm run benchmark:static
 npm run benchmark:hono
+npm run benchmark:hono-json-compact
+npm run benchmark:hono-json-pretty
 npm run benchmark:hono-jsx-ssr
 npm run benchmark:hono-dynamic-jsx
 npm run benchmark:hono-route-param

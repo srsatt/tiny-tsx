@@ -44,6 +44,22 @@ AI_TINY_ARGS = [
     }),
 ]
 
+HONO_BASIC_TINY_ARGS = [
+    "--alias", "hono=vendor/hono/src/index.ts",
+    "--alias", "hono/basic-auth=vendor/hono/src/middleware/basic-auth/index.ts",
+    "--alias", "hono/etag=vendor/hono/src/middleware/etag/index.ts",
+    "--alias", "hono/powered-by=vendor/hono/src/middleware/powered-by/index.ts",
+    "--alias", "hono/pretty-json=vendor/hono/src/middleware/pretty-json/index.ts",
+    "--api", "hono=tests/compat/hono/api.d.ts",
+    "--api", "hono/basic-auth=tests/compat/hono/basic-auth-api.d.ts",
+    "--api", "hono/etag=tests/compat/hono/etag-api.d.ts",
+    "--api", "hono/powered-by=tests/compat/hono/powered-by-api.d.ts",
+    "--api", "hono/pretty-json=tests/compat/hono/pretty-json-api.d.ts",
+]
+HONO_BASIC_BUN_ARGS = [
+    "--tsconfig-override", "benchmarks/bun/hono-tsconfig.json",
+]
+
 
 WORKLOADS = {
     "static-page": {
@@ -75,22 +91,37 @@ WORKLOADS = {
         "scope": "complete pinned 34-module Hono basic application, GET / with poweredBy and response-time middleware; HTTP/1.1; connection close; localhost",
         "limitation": "The measured root route has a six-byte closed body; it executes Hono routing and middleware but not request-dependent JSON or fetch work.",
         "tiny_entry": "vendor/hono-examples/basic/src/index.ts",
-        "tiny_args": [
-            "--alias", "hono=vendor/hono/src/index.ts",
-            "--alias", "hono/basic-auth=vendor/hono/src/middleware/basic-auth/index.ts",
-            "--alias", "hono/etag=vendor/hono/src/middleware/etag/index.ts",
-            "--alias", "hono/powered-by=vendor/hono/src/middleware/powered-by/index.ts",
-            "--alias", "hono/pretty-json=vendor/hono/src/middleware/pretty-json/index.ts",
-            "--api", "hono=tests/compat/hono/api.d.ts",
-            "--api", "hono/basic-auth=tests/compat/hono/basic-auth-api.d.ts",
-            "--api", "hono/etag=tests/compat/hono/etag-api.d.ts",
-            "--api", "hono/powered-by=tests/compat/hono/powered-by-api.d.ts",
-            "--api", "hono/pretty-json=tests/compat/hono/pretty-json-api.d.ts",
-        ],
+        "tiny_args": HONO_BASIC_TINY_ARGS,
         "bun_script": "benchmarks/bun/hono-server.ts",
-        "bun_args": [
-            "--tsconfig-override", "benchmarks/bun/hono-tsconfig.json",
-        ],
+        "bun_args": HONO_BASIC_BUN_ARGS,
+    },
+    "hono-json-compact": {
+        "body": b"",
+        "content_type": "application/json",
+        "headers": {"x-powered-by": "Hono"},
+        "numeric_headers": ["x-response-time"],
+        "path": "/api/posts",
+        "scope": "complete pinned 34-module Hono basic application, query-absent compact JSON branch serializing four closed records; HTTP/1.1; connection close; localhost",
+        "limitation": "The route serializes one closed four-record array; it does not exercise dynamic collections, request JSON decoding, randomized branch traffic, replacers, or cycles.",
+        "reference_target": "bun",
+        "tiny_entry": "vendor/hono-examples/basic/src/index.ts",
+        "tiny_args": HONO_BASIC_TINY_ARGS,
+        "bun_script": "benchmarks/bun/hono-server.ts",
+        "bun_args": HONO_BASIC_BUN_ARGS,
+    },
+    "hono-json-pretty": {
+        "body": b"",
+        "content_type": "application/json",
+        "headers": {"x-powered-by": "Hono"},
+        "numeric_headers": ["x-response-time"],
+        "path": "/api/posts?pretty",
+        "scope": "complete pinned 34-module Hono basic application, query-present prettyJSON branch serializing four closed records with two-space formatting; HTTP/1.1; connection close; localhost",
+        "limitation": "The route measures query presence and pretty formatting for one closed array; it does not compare arbitrary query values, dynamic collections, request JSON decoding, or mixed branch traffic.",
+        "reference_target": "bun",
+        "tiny_entry": "vendor/hono-examples/basic/src/index.ts",
+        "tiny_args": HONO_BASIC_TINY_ARGS,
+        "bun_script": "benchmarks/bun/hono-server.ts",
+        "bun_args": HONO_BASIC_BUN_ARGS,
     },
     "hono-jsx-ssr": {
         "body": b"",

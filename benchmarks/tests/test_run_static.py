@@ -49,6 +49,25 @@ class StaticHarnessTest(unittest.TestCase):
             "application/octet-stream",
         )
 
+    def test_json_branch_pair_uses_the_complete_pinned_example(self) -> None:
+        compact = WORKLOADS["hono-json-compact"]
+        pretty = WORKLOADS["hono-json-pretty"]
+
+        self.assertEqual(compact["path"], "/api/posts")
+        self.assertEqual(pretty["path"], "/api/posts?pretty")
+        for workload in (compact, pretty):
+            self.assertEqual(
+                workload["tiny_entry"],
+                "vendor/hono-examples/basic/src/index.ts",
+            )
+            self.assertEqual(workload["bun_script"], "benchmarks/bun/hono-server.ts")
+            self.assertEqual(workload["reference_target"], "bun")
+            self.assertEqual(workload["headers"], {"x-powered-by": "Hono"})
+            self.assertEqual(workload["numeric_headers"], ["x-response-time"])
+            self.assertIn("hono/pretty-json", " ".join(workload["tiny_args"]))
+        self.assertIn("query-absent", compact["scope"])
+        self.assertIn("query-present", pretty["scope"])
+
     def test_hono_jsx_workload_uses_bun_as_the_byte_reference(self) -> None:
         workload = WORKLOADS["hono-jsx-ssr"]
         self.assertEqual(
