@@ -972,6 +972,21 @@ unsafe fn decode_sqlite_parameters(
             8 if parameter.value == 0 && parameter.pointer.is_null() => {
                 output.push(tinytsx_runtime_sqlite::SqlValue::Null);
             }
+            9 => {
+                if parameter.pointer.is_null() || parameter.value == 0 || parameter.value > 128 {
+                    return Err(INTERNAL_ERROR);
+                }
+                // SAFETY: Generated header names point at immutable static strings.
+                let name = unsafe { slice::from_raw_parts(parameter.pointer, parameter.value) };
+                // SAFETY: The request and its header table remain valid during dispatch.
+                let value = unsafe { request_header_value(&*request, name) }.ok_or(BAD_REQUEST)?;
+                if value.is_empty() || value.len() > 256 {
+                    return Err(BAD_REQUEST);
+                }
+                output.push(tinytsx_runtime_sqlite::SqlValue::Text(
+                    String::from_utf8(value.to_vec()).map_err(|_| BAD_REQUEST)?,
+                ));
+            }
             _ => return Err(INTERNAL_ERROR),
         }
     }

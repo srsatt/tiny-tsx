@@ -2957,7 +2957,9 @@ function evaluateCall(
     }
     if (receiver.kind === "statement" && name === "run") {
       const parameters = sqliteParameters(arguments_);
-      if (parameters === undefined) return unknown("Statement.run accepts up to 16 route or JSON-field values");
+      if (parameters === undefined) {
+        return unknown("Statement.run accepts up to 16 bounded SQLite values");
+      }
       const action: EvaluatedDatabaseAction = {
         kind: "exec",
         database: receiver.state.database,

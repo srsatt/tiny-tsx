@@ -75,6 +75,18 @@ fn emit_parameters_at(
                 assembly.address("x9", format_args!("Ltinytsx_string_{field}"));
                 asm_line!(assembly, "    str x9, [sp, #{}]", offset + 16);
             }
+            SqliteParameter::RequestHeader { header } => {
+                emit_immediate(assembly, "x9", 9);
+                asm_line!(assembly, "    str x9, [sp, #{offset}]");
+                emit_immediate(
+                    assembly,
+                    "x9",
+                    program.static_strings[*header].value.len() as u64,
+                );
+                asm_line!(assembly, "    str x9, [sp, #{}]", offset + 8);
+                assembly.address("x9", format_args!("Ltinytsx_string_{header}"));
+                asm_line!(assembly, "    str x9, [sp, #{}]", offset + 16);
+            }
             SqliteParameter::RandomUuid => {
                 emit_immediate(assembly, "x9", 3);
                 asm_line!(assembly, "    str x9, [sp, #{offset}]");

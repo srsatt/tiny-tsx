@@ -199,6 +199,7 @@ pub struct SqliteTransactionStep {
 pub enum SqliteParameter {
     RouteParameter { segment: usize },
     RequestJsonField { field: usize },
+    RequestHeader { header: usize },
     RandomUuid,
     StaticString { string: usize },
     StaticInteger { value: i64 },
@@ -1558,6 +1559,34 @@ impl Program {
                         .is_none_or(|field| field.value.is_empty() || field.value.len() > 128) =>
                 {
                     return Err("SQLite JSON parameter has an invalid field name".to_owned());
+                }
+                SqliteParameter::RequestHeader { header }
+                    if self.static_strings.get(*header).is_none_or(|header| {
+                        header.value.is_empty()
+                            || header.value.len() > 128
+                            || !header.value.bytes().all(|byte| {
+                                byte.is_ascii_alphanumeric()
+                                    || matches!(
+                                        byte,
+                                        b'!' | b'#'
+                                            | b'$'
+                                            | b'%'
+                                            | b'&'
+                                            | b'\''
+                                            | b'*'
+                                            | b'+'
+                                            | b'-'
+                                            | b'.'
+                                            | b'^'
+                                            | b'_'
+                                            | b'`'
+                                            | b'|'
+                                            | b'~'
+                                    )
+                            })
+                    }) =>
+                {
+                    return Err("SQLite request-header parameter has an invalid name".to_owned());
                 }
                 SqliteParameter::RandomUuid => {}
                 SqliteParameter::StaticString { string }
