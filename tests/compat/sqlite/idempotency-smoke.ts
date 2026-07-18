@@ -21,7 +21,7 @@ app.post("/idempotency/schema", async context => {
 
 app.post("/idempotency/succeed/:account", async context => {
   const input = await context.req.json() as {amount: number};
-  const key = context.req.header("Idempotency-Key");
+  const key = context.req.header("Idempotency-Key")!;
   await database.transaction(async () => {
     await insertPayment.run([key, context.req.param("account"), input.amount]);
     await insertAudit.run([key]);
@@ -31,7 +31,7 @@ app.post("/idempotency/succeed/:account", async context => {
 
 app.post("/idempotency/fail/:account", async context => {
   const input = await context.req.json() as {amount: number};
-  const key = context.req.header("Idempotency-Key");
+  const key = context.req.header("Idempotency-Key")!;
   await database.transaction(async () => {
     await insertPayment.run([key, context.req.param("account"), input.amount]);
     await insertAudit.run(["blocked"]);

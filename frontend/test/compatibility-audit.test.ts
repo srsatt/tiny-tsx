@@ -373,6 +373,46 @@ test("lowers a required request header into bounded SQLite transaction parameter
   );
 });
 
+test("rejects dynamic and invalid SQLite request-header parameter names", () => {
+  const cases = [
+    {
+      name: "dynamic",
+      header: 'context.req.header(context.req.param("name"))!',
+      message: "Statement.run accepts up to 16 bounded SQLite values",
+    },
+    {
+      name: "invalid",
+      header: 'context.req.header("bad header")!',
+      message: "SQLite request-header parameter has an invalid name",
+    },
+  ];
+  for (const candidate of cases) {
+    const entry = write(`sqlite-request-header-${candidate.name}.ts`, `
+      import {Database} from "tinytsx:sqlite";
+      import {Hono} from "hono";
+      const database = new Database(":memory:");
+      const insert = database.prepare("INSERT INTO values_table (value) VALUES (?1)");
+      const app = new Hono();
+      app.post("/:name", async context => {
+        await insert.run([${candidate.header}]);
+        return context.text("ok");
+      });
+      export default app;
+    `);
+    assert.throws(
+      () => compileEntry(entry, {
+        sdkPath: path.join(repository, "sdk/index.d.ts"),
+        aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+        apiAliases: {hono: path.join(repository, "tests/compat/hono/api.d.ts")},
+      }),
+      error => error instanceof CompileFailure
+        && (error.message.includes(candidate.message)
+          || error.diagnostics.some(diagnostic => diagnostic.message.includes(candidate.message))),
+      candidate.name,
+    );
+  }
+});
+
 test("lowers selected request JSON primitives into a dynamic JSON response", () => {
   const entry = write("hono-json-body.ts", `
     import {serve} from "tinytsx:serve";

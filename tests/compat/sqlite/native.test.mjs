@@ -24,6 +24,7 @@ const benchmarkTransactionEntry = path.join(
   "benchmarks/tiny/hono-sqlite-transaction.ts",
 );
 const walBenchmarkEntry = path.join(repository, "benchmarks/tiny/hono-sqlite-wal.ts");
+const idempotencyEntry = path.join(repository, "tests/compat/sqlite/idempotency-smoke.ts");
 
 test("serializes an in-memory SQLite owner and recovers from SQL errors", async context => {
   const directory = mkdtempSync(path.join(tmpdir(), "tinytsx-sqlite-native-"));
@@ -170,6 +171,81 @@ test("assembles the prepared transaction callback ABI for Linux arm64", () => {
     "--api", "hono=tests/compat/hono/api.d.ts",
   ], {cwd: repository, encoding: "utf8"});
   assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /tinytsx_sqlite_transaction_params/);
+  const assembled = spawnSync("clang", [
+    "--target=aarch64-unknown-linux-gnu", "-x", "assembler", "-c", "-o", "/dev/null", "-",
+  ], {cwd: repository, input: result.stdout, encoding: "utf8"});
+  assert.equal(assembled.status, 0, assembled.stderr);
+});
+
+test("copies request-header values into transactions and recovers after rollback", async context => {
+  const directory = mkdtempSync(path.join(tmpdir(), "tinytsx-sqlite-idempotency-"));
+  const binary = path.join(directory, "server");
+  const port = 39_498;
+  context.after(() => rmSync(directory, {recursive: true, force: true}));
+
+  const result = buildIdempotency(binary, port);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const server = spawn(binary, [], {stdio: ["ignore", "pipe", "pipe"]});
+  context.after(() => server.kill("SIGTERM"));
+  await waitForServer(port, server);
+
+  await assertResponse(port, "/idempotency/schema", 200, "ready");
+  await assertIdempotency(port, "/idempotency/succeed/acme%20eu", "paid-1", 42, 201);
+  await assertGet(
+    port,
+    "/idempotency/payment/paid-1",
+    200,
+    '{"payment":{"key":"paid-1","account":"acme eu","amount":42}}',
+  );
+  await assertGet(port, "/idempotency/audit/paid-1", 200, '{"audit":{"key":"paid-1"}}');
+
+  await assertIdempotency(port, "/idempotency/fail/acme", "rolled-back", 7, 500);
+  await assertGet(
+    port,
+    "/idempotency/payment/rolled-back",
+    404,
+    '{"error":"Not Found"}',
+  );
+  await assertGet(
+    port,
+    "/idempotency/audit/rolled-back",
+    404,
+    '{"error":"Not Found"}',
+  );
+
+  await assertIdempotency(port, "/idempotency/succeed/recovery", undefined, 1, 400);
+  await assertIdempotency(port, "/idempotency/succeed/recovery", "", 1, 400);
+  await assertIdempotency(port, "/idempotency/succeed/recovery", "x".repeat(257), 1, 400);
+  await Promise.all(Array.from({length: 32}, (_, index) =>
+    assertIdempotency(
+      port,
+      `/idempotency/succeed/account-${index}`,
+      `concurrent-${index}`,
+      index,
+      201,
+    )
+  ));
+  for (let index = 0; index < 32; index++) {
+    await assertGet(
+      port,
+      `/idempotency/payment/concurrent-${index}`,
+      200,
+      `{"payment":{"key":"concurrent-${index}","account":"account-${index}","amount":${index}}}`,
+    );
+  }
+  await assertIdempotency(port, "/idempotency/succeed/recovery", "after-failure", 9, 201);
+});
+
+test("assembles request-header SQLite transactions for Linux arm64", () => {
+  const result = spawnSync("cargo", [
+    "run", "-q", "-p", "tinytsx", "--", "check", idempotencyEntry,
+    "--emit-asm", "--target", "aarch64-unknown-linux-gnu",
+    "--alias", "hono=vendor/hono/src/index.ts",
+    "--api", "hono=tests/compat/hono/api.d.ts",
+  ], {cwd: repository, encoding: "utf8"});
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /movz x9, #9/);
   assert.match(result.stdout, /tinytsx_sqlite_transaction_params/);
   const assembled = spawnSync("clang", [
     "--target=aarch64-unknown-linux-gnu", "-x", "assembler", "-c", "-o", "/dev/null", "-",
@@ -408,6 +484,16 @@ function buildWalBenchmark(binary, port, directory) {
   ], {cwd: repository, encoding: "utf8"});
 }
 
+function buildIdempotency(binary, port) {
+  return spawnSync("cargo", [
+    "run", "-q", "-p", "tinytsx", "--", "build", idempotencyEntry,
+    "--output", binary,
+    "--port", String(port),
+    "--alias", "hono=vendor/hono/src/index.ts",
+    "--api", "hono=tests/compat/hono/api.d.ts",
+  ], {cwd: repository, encoding: "utf8"});
+}
+
 function holdWriteLock(database) {
   return spawn("python3", ["-c", [
     "import sqlite3, sys",
@@ -475,6 +561,20 @@ async function assertRawJson(port, pathname, method, value, status, body) {
   });
   assert.equal(response.status, status);
   assert.equal(await response.text(), body);
+}
+
+async function assertIdempotency(port, pathname, key, amount, status) {
+  const headers = {"content-type": "application/json"};
+  if (key !== undefined) headers["idempotency-key"] = key;
+  const response = await fetch(`http://127.0.0.1:${port}${pathname}`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({amount}),
+  });
+  assert.equal(response.status, status);
+  assert.equal(await response.text(), status === 201 ? '{"ok":true}' : status === 400
+    ? "bad request"
+    : "internal server error");
 }
 
 async function assertCors(port) {

@@ -229,6 +229,58 @@ fn sqlite_parameters_decode_closed_primitive_values() {
 }
 
 #[test]
+fn sqlite_parameters_copy_a_required_bounded_request_header() {
+    use tinytsx_runtime_sqlite::SqlValue;
+
+    let name = b"Idempotency-Key";
+    let mut value = b"payment-123".to_vec();
+    let headers = [TinyHeader {
+        name: TinyStringView::from_bytes(name),
+        value: TinyStringView::from_bytes(&value),
+    }];
+    let request = request_with_headers(b"POST", b"/payments", &headers);
+    let parameter = TinySqlParameter {
+        kind: 9,
+        value: name.len(),
+        pointer: name.as_ptr(),
+    };
+
+    let decoded = unsafe { decode_sqlite_parameters(&request, &parameter, 1) }
+        .expect("decode request header parameter");
+    value.fill(b'x');
+
+    assert_eq!(decoded, vec![SqlValue::Text("payment-123".into())]);
+}
+
+#[test]
+fn sqlite_parameters_reject_missing_empty_oversized_and_invalid_utf8_headers() {
+    let name = b"Idempotency-Key";
+    let parameter = TinySqlParameter {
+        kind: 9,
+        value: name.len(),
+        pointer: name.as_ptr(),
+    };
+
+    let request = request(b"POST", b"/payments");
+    assert_eq!(
+        unsafe { decode_sqlite_parameters(&request, &parameter, 1) },
+        Err(BAD_REQUEST),
+    );
+
+    for value in [&[][..], &[b'x'; 257][..], &[0xff][..]] {
+        let headers = [TinyHeader {
+            name: TinyStringView::from_bytes(name),
+            value: TinyStringView::from_bytes(value),
+        }];
+        let request = request_with_headers(b"POST", b"/payments", &headers);
+        assert_eq!(
+            unsafe { decode_sqlite_parameters(&request, &parameter, 1) },
+            Err(BAD_REQUEST),
+        );
+    }
+}
+
+#[test]
 fn request_path_matching_uses_the_path_without_the_query() {
     let request = request(b"GET", b"/users?expand=true");
 
