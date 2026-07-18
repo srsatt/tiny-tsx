@@ -24,6 +24,14 @@ proved committed progress and a zero rollback probe, and all 18 full-rollback
 checkpoints proved zero partial rows plus later recovery. Both disk workloads
 retained WAL mode and non-empty live DB/WAL/SHM files.
 
+The post-fix candidate comparison reruns the Hono basic, counter-actor, empty
+SQLite, and nested-profile rows at clean source commit `932743e`. Its 48 load
+samples all pass with success rate 1.0. TinyTSX reaches 0.25–0.38x Bun at
+concurrency 8 and 0.39–0.63x at concurrency 64, with 12.576–16.008 ms
+concurrency-64 p99 versus Bun at 0.835–1.283 ms. These four rows supersede
+their historical counterparts when evaluating the pressure-aware scheduler;
+the wider sixteen-workload matrix remains the breadth baseline.
+
 Across the fourteen successful small-response rows, TinyTSX reaches
 0.24–1.14x Bun throughput at concurrency 8 and 0.40–0.79x at concurrency 64 on
 three 15-second samples. The expected-500 full-rollback row reaches 0.01x/0.06x.
@@ -45,8 +53,9 @@ The honest current claim is:
   expected-500 rollback row, while the exact 22 KiB route reaches 178%;
 - **tail latency remains open:** TinyTSX's concurrency-64 p99 is 4.3–20.6x
   Bun's despite the large-response throughput result;
-- **owner boundaries are visible:** the actor route is 11.5% below TinyTSX's
-  basic control at concurrency 64 and the empty SQLite route is 24.7% below it;
+- **owner boundaries are visible:** in the pressure-aware rerun the actor route
+  is 6.8% below TinyTSX's basic control at concurrency 64 and the empty SQLite
+  route is 19.5% below it;
 - **transaction depth has a measured route cost:** versus the empty SQLite
   route, the two-write/non-empty-row route changes TinyTSX throughput by -0.4%
   at concurrency 8 and -12.3% at 64; Bun changes by -26.2%/-32.0%;
@@ -57,9 +66,9 @@ The honest current claim is:
   evidence for dynamic keys, structured values, validation, or mixed bodies;
 - **nested request persistence is now measured:** the fixed 87-byte profile
   POST selects four nested primitive leaves, performs two idempotent prepared
-  writes, and returns 104 response bytes. TinyTSX reaches 0.34x/0.60x Bun at
-  concurrency 8/64 with 8.86 MiB versus 72.03 MiB warm RSS; concurrency-64 p99
-  remains 15.645 ms versus 1.262 ms;
+  writes, and returns 104 response bytes. In the pressure-aware rerun TinyTSX
+  reaches 0.35x/0.59x Bun at concurrency 8/64 with 8.86 MiB versus 72.25 MiB
+  warm RSS; concurrency-64 p99 is 16.008 ms versus 1.283 ms;
 - **multi-actor progress is now measured:** the eight-owner mutation workload
   reaches 0.40x/0.76x Bun at concurrency 8/64, retains positive balanced state
   for every owner, and uses 6.64 MiB warm RSS; the eight-Worker Bun process uses
@@ -87,8 +96,10 @@ The honest current claim is:
 The current baseline summary is
 `benchmarks/results/2026-07-17-m5-max-sustained-15s-summary.md`; the later
 `2026-07-18-m5-max-sustained-15s-hono-nested-profile-keepalive-w8.*` pair adds
-the nested-profile row. Their adjacent JSON files retain every raw sample and
-each per-workload Markdown report pins the response differences and limitations.
+the nested-profile row. The current scheduler comparison is
+`benchmarks/results/2026-07-18-m5-max-pressure-aware-15s-summary.md`; its four
+adjacent JSON/Markdown pairs retain all 48 post-fix load samples. Each
+per-workload report pins the response differences and limitations.
 Cold/replaced/binary files, responses
 above 32 KiB, streaming/range/compression behavior, cross-process writers,
 growing or broader request-derived database state,
@@ -98,8 +109,9 @@ and actor supervision/restart/persistence load remain unmeasured.
 
 The five-second alpha comparison and earlier connection-close, JSX, streaming,
 Worker, and AI-provider results below are historical evidence. They remain
-useful for explaining the optimization sequence, but the sustained matrix is
-the current release-stability baseline.
+useful for explaining the optimization sequence. The sustained matrix is the
+breadth baseline; the pressure-aware four-workload rerun is the current
+release-candidate scheduler evidence.
 
 ## Alpha release comparison (historical five-second baseline)
 
@@ -207,9 +219,20 @@ The raw samples are retained in the adjacent
 reports.
 
 Those results predate pressure-aware idle-connection scheduling. They remain
-historical evidence for the sixteen-request hot path, but a current control,
-actor, SQLite, and nested-profile rerun is required before release comparison
-claims are attached to the post-fix candidate.
+historical evidence for the sixteen-request hot path. The current controlled
+rerun at clean source `932743e` retains three 15-second samples at concurrency
+8/64 for the basic, actor, SQLite, and nested-profile routes. All 48 load
+samples pass and TinyTSX descriptors return from 68 to four. TinyTSX reaches
+38,359/71,646 basic requests per second, 34,918/66,797 actor requests per
+second, 32,282/57,703 SQLite requests per second, and 32,183/56,376 nested
+profile requests per second at concurrency 8/64.
+
+The historical basic row at `7c1a22c` reached 44,669/79,044 requests per second
+and recorded 63.26 seconds of TinyTSX CPU. The current basic row records
+70.49 seconds while reaching 38,359/71,646. This is a measurable
+correctness/stability tradeoff from preventing single-worker idle-socket
+starvation, not a performance improvement. The combined current report is
+`benchmarks/results/2026-07-18-m5-max-pressure-aware-15s-summary.md`.
 
 ## Earlier connection-close and compatibility evidence
 

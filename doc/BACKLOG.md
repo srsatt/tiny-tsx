@@ -423,7 +423,7 @@ an API-expansion slice:
 - [x] Repeat the controlled control, actor, SQLite, and nested-profile
       keep-alive workloads after pressure-aware idle scheduling and validate
       every response-checked raw sample.
-- [ ] Commit the four adjacent JSON/Markdown report pairs, add their combined
+- [x] Commit the four adjacent JSON/Markdown report pairs, add their combined
       summary, and synchronize performance/status claims before selecting the
       exact-source release commit.
 - [ ] If either target exposes a functional regression, stop this release goal
@@ -441,7 +441,9 @@ baseline of four. TinyTSX/Bun throughput ratios are 0.29x/0.47x for the basic
 control, 0.38x/0.63x for the actor route, 0.25x/0.39x for SQLite, and
 0.35x/0.59x for the nested profile. The correctness fix therefore carries a
 measurable control-path throughput and CPU cost; the release evidence must
-publish that tradeoff rather than claim a general performance improvement.
+publish that tradeoff rather than claim a general performance improvement. The
+raw pairs and combined report are retained under
+`benchmarks/results/2026-07-18-m5-max-pressure-aware-15s-*`.
 
 #### Goal execution checkpoint — nested profile release slice
 
