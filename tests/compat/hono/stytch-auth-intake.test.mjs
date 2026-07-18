@@ -23,12 +23,24 @@ test("pins the next real-world Hono backend without widening its boundary", () =
   assert.equal(tracer.httpBehavior.status, "pass");
   assert.equal(tracer.referenceBehavior.status, "pass");
   assert.equal(tracer.persistenceAdapter.status, "pass");
+  assert.equal(tracer.packagedExample.status, "intake-pass");
   assert.match(tracer.firstUnsupportedBoundary, /React\/Vite/);
   assert.match(tracer.firstUnsupportedBoundary, /live Stytch/);
 
   for (const file of tracer.files) {
     const source = readFileSync(path.join(repository, file.path));
     assert.equal(createHash("sha256").update(source).digest("hex"), file.sha256, file.path);
+  }
+
+  for (const copy of tracer.packagedExample.sourceCopies) {
+    assert.deepEqual(
+      readFileSync(path.join(repository, copy.packaged)),
+      readFileSync(path.join(repository, copy.source)),
+      copy.packaged,
+    );
+  }
+  for (const overlay of tracer.packagedExample.declarationOverlays) {
+    assert.ok(readFileSync(path.join(repository, overlay), "utf8").length > 0, overlay);
   }
 
   const packageJson = JSON.parse(readFileSync(

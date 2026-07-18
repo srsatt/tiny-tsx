@@ -428,6 +428,22 @@
       "evidence": "tests/compat/hono/stytch-todo-native.test.mjs",
       "boundaries": "One explicit binding owns one SQLite connection through the bounded application-worker pool. Tests prove user isolation, owner-serialized mutation and response, restart persistence, saturation rollback, capability denial, process disposal, and later recovery."
     },
+    "packagedExample": {
+      "path": "examples/hono-stytch-todo",
+      "status": "intake-pass",
+      "sourceCopies": [
+        {"source": "vendor/hono-examples/stytch-auth/api/index.ts", "packaged": "examples/hono-stytch-todo/server.ts"},
+        {"source": "vendor/hono-examples/stytch-auth/api/TodoAPI.ts", "packaged": "examples/hono-stytch-todo/TodoAPI.ts"},
+        {"source": "vendor/hono-examples/stytch-auth/api/TodoService.ts", "packaged": "examples/hono-stytch-todo/TodoService.ts"}
+      ],
+      "declarationOverlays": [
+        "examples/hono-stytch-todo/hono-api.d.ts",
+        "examples/hono-stytch-todo/cors-api.d.ts",
+        "examples/hono-stytch-todo/stytch-api.d.ts"
+      ],
+      "compilerInputs": "vendor/hono/src",
+      "evidence": "tests/release/installed-native.test.mjs"
+    },
     "releaseGates": {
       "native": ["test:hono-stytch-todo"],
       "reference": ["test:hono-stytch-todo-reference"]

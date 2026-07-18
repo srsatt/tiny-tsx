@@ -4130,8 +4130,9 @@ function evaluatePinnedTodoServiceCall(
   const runtimeClass = evaluator.instanceClasses.get(receiver);
   if (
     runtimeClass?.declaration.name?.text !== "TodoService"
-    || !runtimeClass.module.path.replaceAll("\\", "/")
-      .endsWith("/hono-examples/stytch-auth/api/TodoService.ts")
+    || createHash("sha256")
+      .update(runtimeClass.module.sourceFile.getFullText())
+      .digest("hex") !== "1574bd118a982ec5ced15ee9e46e9aa9cfb77dd3e17ebe1341c740999cc3d33f"
   ) return undefined;
   const environment = receiver.fields.get("env");
   const user = receiver.fields.get("userID");
