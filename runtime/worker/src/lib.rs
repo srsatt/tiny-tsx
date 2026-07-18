@@ -15,10 +15,7 @@ use std::{
     panic::{AssertUnwindSafe, catch_unwind},
     sync::{Arc, Condvar, Mutex, MutexGuard},
     thread::{self, JoinHandle},
-    time::Duration,
 };
-
-const PARKED_JOB_POLL_INTERVAL: Duration = Duration::from_millis(1);
 
 /// A job rejected by [`WorkerPool::try_submit`].
 #[derive(Debug, PartialEq, Eq)]
@@ -45,9 +42,6 @@ pub enum JobControl<J> {
     Complete,
     /// The owned job remains live and should rotate behind queued work.
     Resubmit(J),
-    /// The owned job is idle and should be retried only when no ready work is
-    /// waiting. This keeps a blocked resource from occupying a native thread.
-    Park(J),
 }
 
 /// A fixed set of native threads consuming a bounded FIFO job queue.
@@ -78,7 +72,7 @@ impl<J: Send + 'static> WorkerPool<J> {
             worker_count,
             queue_capacity,
             initialize,
-            move |state, job| {
+            move |state, job, _queued_work| {
                 handle(state, job);
                 JobControl::Complete
             },
@@ -101,7 +95,7 @@ impl<J: Send + 'static> WorkerPool<J> {
     where
         S: Send + 'static,
         Initialize: Fn(usize) -> S + Send + Sync + 'static,
-        Handle: Fn(&mut S, J) -> JobControl<J> + Send + Sync + 'static,
+        Handle: Fn(&mut S, J, bool) -> JobControl<J> + Send + Sync + 'static,
     {
         if worker_count == 0 {
             return Err(io::Error::new(
@@ -133,21 +127,16 @@ impl<J: Send + 'static> WorkerPool<J> {
                         let mut current = job;
                         loop {
                             let outcome = catch_unwind(AssertUnwindSafe(|| {
-                                worker_handle(&mut state, current)
+                                let queued_work = worker_shared.has_queued_work();
+                                worker_handle(&mut state, current, queued_work)
                             }));
-                            match outcome {
-                                Ok(JobControl::Resubmit(job)) => {
-                                    let Some(next) = worker_shared.resubmit(job) else {
-                                        break;
-                                    };
-                                    current = next;
-                                }
-                                Ok(JobControl::Park(job)) => {
-                                    worker_shared.park(job);
-                                    break;
-                                }
-                                Ok(JobControl::Complete) | Err(_) => break,
-                            }
+                            let Ok(JobControl::Resubmit(job)) = outcome else {
+                                break;
+                            };
+                            let Some(next) = worker_shared.resubmit(job) else {
+                                break;
+                            };
+                            current = next;
                         }
                     }
                 });
@@ -213,8 +202,7 @@ impl<J> Shared<J> {
     fn new(capacity: usize) -> Self {
         Self {
             queue: Mutex::new(Queue {
-                ready: VecDeque::with_capacity(capacity),
-                parked: VecDeque::new(),
+                jobs: VecDeque::with_capacity(capacity),
                 capacity,
                 closed: false,
             }),
@@ -227,10 +215,10 @@ impl<J> Shared<J> {
         if queue.closed {
             return Err(SubmitError::Closed(job));
         }
-        if queue.ready.len() + queue.parked.len() == queue.capacity {
+        if queue.jobs.len() == queue.capacity {
             return Err(SubmitError::Full(job));
         }
-        queue.ready.push_back(job);
+        queue.jobs.push_back(job);
         self.available.notify_one();
         Ok(())
     }
@@ -238,25 +226,8 @@ impl<J> Shared<J> {
     fn take(&self) -> Option<J> {
         let mut queue = lock(&self.queue);
         loop {
-            if let Some(job) = queue.ready.pop_front() {
+            if let Some(job) = queue.jobs.pop_front() {
                 return Some(job);
-            }
-            if !queue.parked.is_empty() {
-                if queue.closed {
-                    return queue.parked.pop_front();
-                }
-                let (next, _) = self
-                    .available
-                    .wait_timeout(queue, PARKED_JOB_POLL_INTERVAL)
-                    .unwrap_or_else(|error| error.into_inner());
-                queue = next;
-                if let Some(job) = queue.ready.pop_front() {
-                    return Some(job);
-                }
-                if let Some(job) = queue.parked.pop_front() {
-                    return Some(job);
-                }
-                continue;
             }
             if queue.closed {
                 return None;
@@ -273,20 +244,15 @@ impl<J> Shared<J> {
         if queue.closed {
             return None;
         }
-        let Some(next) = queue.ready.pop_front() else {
+        let Some(next) = queue.jobs.pop_front() else {
             return Some(job);
         };
-        queue.ready.push_back(job);
+        queue.jobs.push_back(job);
         Some(next)
     }
 
-    fn park(&self, job: J) {
-        let mut queue = lock(&self.queue);
-        if queue.closed {
-            return;
-        }
-        queue.parked.push_back(job);
-        self.available.notify_one();
+    fn has_queued_work(&self) -> bool {
+        !lock(&self.queue).jobs.is_empty()
     }
 
     fn close(&self) {
@@ -297,8 +263,7 @@ impl<J> Shared<J> {
 }
 
 struct Queue<J> {
-    ready: VecDeque<J>,
-    parked: VecDeque<J>,
+    jobs: VecDeque<J>,
     capacity: usize,
     closed: bool,
 }
@@ -318,7 +283,7 @@ mod tests {
     use std::{
         sync::{
             Arc, Condvar, Mutex,
-            atomic::{AtomicBool, AtomicUsize, Ordering},
+            atomic::{AtomicUsize, Ordering},
             mpsc,
         },
         time::Duration,
@@ -467,7 +432,7 @@ mod tests {
         let (started_tx, started_rx) = mpsc::channel();
         let pool = WorkerPool::new_resumable(1, 1, |_| (), {
             let gate = Arc::clone(&gate);
-            move |_, (job, turns)| {
+            move |_, (job, turns), _queued_work| {
                 started_tx.send(job).expect("report job turn");
                 if job == 1 && turns == 2 {
                     let (open, changed) = &*gate;
@@ -500,37 +465,6 @@ mod tests {
     }
 
     #[test]
-    fn parked_jobs_yield_to_new_ready_work() {
-        let release_parked = Arc::new(AtomicBool::new(false));
-        let parked_turns = Arc::new(AtomicUsize::new(0));
-        let (parked_tx, parked_rx) = mpsc::channel();
-        let (completed_tx, completed_rx) = mpsc::channel();
-        let pool = WorkerPool::new_resumable(1, 2, |_| (), {
-            let release_parked = Arc::clone(&release_parked);
-            let parked_turns = Arc::clone(&parked_turns);
-            move |_, job| {
-                if job == 1 && !release_parked.load(Ordering::Acquire) {
-                    if parked_turns.fetch_add(1, Ordering::Relaxed) == 0 {
-                        parked_tx.send(()).expect("report parked job");
-                    }
-                    return JobControl::Park(job);
-                }
-                completed_tx.send(job).expect("report completed job");
-                JobControl::Complete
-            }
-        })
-        .expect("create parkable pool");
-
-        pool.try_submit(1).expect("submit parked job");
-        assert_eq!(parked_rx.recv_timeout(Duration::from_secs(1)), Ok(()));
-        pool.try_submit(2).expect("submit ready job");
-        assert_eq!(completed_rx.recv_timeout(Duration::from_secs(1)), Ok(2));
-        release_parked.store(true, Ordering::Release);
-        assert_eq!(completed_rx.recv_timeout(Duration::from_secs(1)), Ok(1));
-        pool.join();
-    }
-
-    #[test]
     fn close_stops_a_live_job_at_its_resubmission_boundary() {
         let gate = Arc::new((Mutex::new(false), Condvar::new()));
         let turns = Arc::new(AtomicUsize::new(0));
@@ -538,7 +472,7 @@ mod tests {
         let pool = WorkerPool::new_resumable(1, 1, |_| (), {
             let gate = Arc::clone(&gate);
             let turns = Arc::clone(&turns);
-            move |_, job| {
+            move |_, job, _queued_work| {
                 turns.fetch_add(1, Ordering::Relaxed);
                 started_tx.send(()).expect("report job turn");
                 let (open, changed) = &*gate;

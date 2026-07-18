@@ -1,7 +1,8 @@
 use std::{
     io::{self},
     net::{Shutdown, TcpStream},
-    time::{Duration, Instant},
+    os::fd::AsRawFd,
+    time::Duration,
 };
 
 use crate::abi::{
@@ -20,21 +21,23 @@ use super::{
 
 const MAX_REQUESTS_PER_CONNECTION: usize = 100;
 const REQUESTS_PER_TURN: usize = 16;
+const MAX_PRESSURE_IDLE_PROBES: u8 = 16;
 const CONNECTION_IO_TIMEOUT: Duration = Duration::from_secs(5);
+const KEEP_ALIVE_IDLE_TIMEOUT: Duration = Duration::from_millis(100);
+const QUEUED_KEEP_ALIVE_WAIT: Duration = Duration::from_millis(1);
 const OVERLOAD_HEAD_TIMEOUT: Duration = Duration::from_millis(10);
 
 pub(super) struct Connection {
     stream: TcpStream,
     input: ConnectionInput,
     requests_completed: usize,
-    idle_since: Option<Instant>,
+    pressure_idle_probes: u8,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Turn {
     Complete,
     Resubmit,
-    Park,
 }
 
 impl Connection {
@@ -45,32 +48,33 @@ impl Connection {
             stream,
             input: ConnectionInput::new(),
             requests_completed: 0,
-            idle_since: None,
+            pressure_idle_probes: 0,
         })
     }
 
-    pub(super) fn handle_turn(&mut self, arena: &mut RequestArena) -> io::Result<Turn> {
-        if self.requests_completed != 0 && !self.input.has_complete_head() {
-            if !self.has_ready_input()? {
-                return if self
-                    .idle_since
-                    .is_some_and(|idle_since| idle_since.elapsed() >= CONNECTION_IO_TIMEOUT)
-                {
-                    Ok(Turn::Complete)
-                } else {
-                    Ok(Turn::Park)
-                };
-            }
-            self.idle_since = None;
-        }
+    pub(super) fn handle_turn(
+        &mut self,
+        arena: &mut RequestArena,
+        queued_work: bool,
+    ) -> io::Result<Turn> {
         for turn_index in 0..REQUESTS_PER_TURN {
+            if self.requests_completed != 0 && !self.input.has_complete_head() {
+                if self.has_ready_input(if queued_work {
+                    QUEUED_KEEP_ALIVE_WAIT
+                } else {
+                    KEEP_ALIVE_IDLE_TIMEOUT
+                })? {
+                    self.pressure_idle_probes = 0;
+                } else if queued_work && self.pressure_idle_probes < MAX_PRESSURE_IDLE_PROBES {
+                    self.pressure_idle_probes += 1;
+                    return Ok(Turn::Resubmit);
+                } else {
+                    return Ok(Turn::Complete);
+                }
+            }
             let turn = self.handle_request(arena)?;
             if turn == Turn::Complete {
                 return Ok(Turn::Complete);
-            }
-            if !self.input.has_complete_head() {
-                self.idle_since = Some(Instant::now());
-                return Ok(Turn::Park);
             }
             if turn_index + 1 == REQUESTS_PER_TURN {
                 return Ok(Turn::Resubmit);
@@ -79,17 +83,21 @@ impl Connection {
         unreachable!("a connection turn has at least one request slot")
     }
 
-    fn has_ready_input(&self) -> io::Result<bool> {
-        self.stream.set_nonblocking(true)?;
-        let result = self.stream.peek(&mut [0_u8; 1]);
-        let restore = self.stream.set_nonblocking(false);
-        restore?;
-        match result {
-            Ok(0) => Ok(false),
-            Ok(_) => Ok(true),
-            Err(error) if error.kind() == io::ErrorKind::WouldBlock => Ok(false),
-            Err(error) => Err(error),
+    fn has_ready_input(&self, timeout: Duration) -> io::Result<bool> {
+        let timeout_ms = i32::try_from(timeout.as_millis())
+            .map_err(|_| io::Error::other("connection readiness timeout overflow"))?;
+        let mut descriptor = libc::pollfd {
+            fd: self.stream.as_raw_fd(),
+            events: libc::POLLIN,
+            revents: 0,
+        };
+        // SAFETY: `descriptor` is valid for one element and the borrowed socket
+        // remains alive for the duration of this bounded readiness call.
+        let result = unsafe { libc::poll(&mut descriptor, 1, timeout_ms) };
+        if result < 0 {
+            return Err(io::Error::last_os_error());
         }
+        Ok(result != 0)
     }
 
     pub(super) fn into_stream(self) -> TcpStream {
@@ -296,11 +304,15 @@ mod tests {
         let mut connection = Connection::new(server).expect("configure connection");
         let mut arena = RequestArena::new(4096);
         assert_eq!(
-            connection.handle_turn(&mut arena).expect("first turn"),
+            connection
+                .handle_turn(&mut arena, false)
+                .expect("first turn"),
             Turn::Resubmit
         );
         assert_eq!(
-            connection.handle_turn(&mut arena).expect("second turn"),
+            connection
+                .handle_turn(&mut arena, false)
+                .expect("second turn"),
             Turn::Complete
         );
 
@@ -346,10 +358,11 @@ mod tests {
             1,
             2,
             |_| RequestArena::new(4096),
-            |arena, mut connection: Connection| match connection.handle_turn(arena) {
+            |arena, mut connection: Connection, queued_work| match connection
+                .handle_turn(arena, queued_work)
+            {
                 Ok(Turn::Complete) | Err(_) => JobControl::Complete,
                 Ok(Turn::Resubmit) => JobControl::Resubmit(connection),
-                Ok(Turn::Park) => JobControl::Park(connection),
             },
         )
         .expect("create HTTP worker pool");

@@ -29,11 +29,11 @@ pub fn serve() -> std::io::Result<()> {
         move |_| HttpWorker {
             request_arena: RequestArena::new(request_memory),
         },
-        |worker, mut connection: Connection| match connection.handle_turn(&mut worker.request_arena)
+        |worker, mut connection: Connection, queued_work| match connection
+            .handle_turn(&mut worker.request_arena, queued_work)
         {
             Ok(Turn::Complete) => JobControl::Complete,
             Ok(Turn::Resubmit) => JobControl::Resubmit(connection),
-            Ok(Turn::Park) => JobControl::Park(connection),
             Err(error) => {
                 eprintln!("request error: {error}");
                 JobControl::Complete
