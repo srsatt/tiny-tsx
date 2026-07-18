@@ -21,6 +21,7 @@
     "benchmark:hono-jsx-ssr-keepalive": "python3 benchmarks/scripts/run_static.py --workload hono-jsx-ssr --keep-alive",
     "benchmark:hono-dynamic-jsx": "python3 benchmarks/scripts/run_static.py --workload hono-dynamic-jsx --keep-alive",
     "benchmark:hono-route-param": "python3 benchmarks/scripts/run_static.py --workload hono-route-param --keep-alive",
+    "benchmark:hono-file-read": "python3 benchmarks/scripts/run_static.py --workload hono-file-read --keep-alive",
     "benchmark:hono-stream-text": "python3 benchmarks/scripts/run_static.py --workload hono-stream-text --keep-alive",
     "benchmark:hono-worker": "python3 benchmarks/scripts/run_static.py --workload hono-worker --keep-alive",
     "benchmark:hono-actor": "python3 benchmarks/scripts/run_static.py --workload hono-actor --keep-alive",

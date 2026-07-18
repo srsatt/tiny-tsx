@@ -152,6 +152,27 @@ WORKLOADS = {
             "--tsconfig-override", "benchmarks/bun/hono-runtime-tsconfig.json",
         ],
     },
+    "hono-file-read": {
+        "body": (ROOT / "vendor/hono-examples/serve-static/assets/my-file.txt").read_bytes(),
+        "content_type": "text/plain; charset=UTF-8",
+        "headers": {"x-powered-by": "Hono"},
+        "numeric_headers": [],
+        "path": "/my-file.txt",
+        "scope": "one request-time read of the pinned 21-byte Hono serve-static asset through a bounded file API and Hono text response; HTTP/1.1; connection close; localhost",
+        "limitation": "This measures repeated warm page-cache reads of one tiny immutable text file; it does not isolate filesystem syscalls, control the OS cache, or cover cold storage, large files, replacement, binary data, or writes.",
+        "tiny_entry": "examples/hono-static/server.ts",
+        "tiny_args": [
+            "--allow-read", str(ROOT / "vendor/hono-examples/serve-static/assets"),
+            "--alias", "hono=vendor/hono/src/index.ts",
+            "--api", "hono=tests/compat/hono/api.d.ts",
+            "--alias", "hono/powered-by=vendor/hono/src/middleware/powered-by/index.ts",
+            "--api", "hono/powered-by=tests/compat/hono/powered-by-api.d.ts",
+        ],
+        "bun_script": "benchmarks/bun/hono-file-read-server.ts",
+        "bun_args": [
+            "--tsconfig-override", "benchmarks/bun/hono-tsconfig.json",
+        ],
+    },
     "hono-stream-text": {
         "body": b"first\nsecond\nthird\n",
         "content_type": "text/plain; charset=UTF-8",

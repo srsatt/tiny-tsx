@@ -95,6 +95,25 @@ class StaticHarnessTest(unittest.TestCase):
             "benchmarks/bun/hono-route-param-server.ts",
         )
 
+    def test_file_workload_pins_the_asset_and_read_capability(self) -> None:
+        workload = WORKLOADS["hono-file-read"]
+        asset_root = Path(__file__).resolve().parents[2] / "vendor/hono-examples/serve-static/assets"
+
+        self.assertEqual(workload["path"], "/my-file.txt")
+        self.assertEqual(workload["body"], b"This is a sample file")
+        self.assertEqual(workload["headers"], {"x-powered-by": "Hono"})
+        self.assertEqual(
+            workload["tiny_entry"],
+            "examples/hono-static/server.ts",
+        )
+        read_option = workload["tiny_args"].index("--allow-read")
+        self.assertEqual(workload["tiny_args"][read_option + 1], str(asset_root))
+        self.assertIn("warm page-cache", workload["limitation"])
+        self.assertEqual(
+            workload["bun_script"],
+            "benchmarks/bun/hono-file-read-server.ts",
+        )
+
     def test_stream_workload_requires_chunked_framing(self) -> None:
         workload = WORKLOADS["hono-stream-text"]
         response = {
