@@ -23,8 +23,8 @@ const MAX_REQUESTS_PER_CONNECTION: usize = 100;
 const REQUESTS_PER_TURN: usize = 16;
 const MAX_PRESSURE_IDLE_PROBES: u8 = 16;
 const CONNECTION_IO_TIMEOUT: Duration = Duration::from_secs(5);
-const KEEP_ALIVE_IDLE_TIMEOUT: Duration = Duration::from_millis(100);
 const QUEUED_KEEP_ALIVE_WAIT: Duration = Duration::from_millis(1);
+const POST_PRESSURE_IDLE_WAIT: Duration = Duration::from_millis(100);
 const OVERLOAD_HEAD_TIMEOUT: Duration = Duration::from_millis(10);
 
 pub(super) struct Connection {
@@ -32,6 +32,8 @@ pub(super) struct Connection {
     input: ConnectionInput,
     requests_completed: usize,
     pressure_idle_probes: u8,
+    pressure_seen: bool,
+    single_worker: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -41,7 +43,7 @@ pub(super) enum Turn {
 }
 
 impl Connection {
-    pub(super) fn new(stream: TcpStream) -> io::Result<Self> {
+    pub(super) fn new(stream: TcpStream, worker_count: usize) -> io::Result<Self> {
         stream.set_read_timeout(Some(CONNECTION_IO_TIMEOUT))?;
         stream.set_write_timeout(Some(CONNECTION_IO_TIMEOUT))?;
         Ok(Self {
@@ -49,6 +51,8 @@ impl Connection {
             input: ConnectionInput::new(),
             requests_completed: 0,
             pressure_idle_probes: 0,
+            pressure_seen: false,
+            single_worker: worker_count == 1,
         })
     }
 
@@ -57,12 +61,16 @@ impl Connection {
         arena: &mut RequestArena,
         queued_work: bool,
     ) -> io::Result<Turn> {
+        self.pressure_seen |= queued_work;
         for turn_index in 0..REQUESTS_PER_TURN {
-            if self.requests_completed != 0 && !self.input.has_complete_head() {
+            if (self.single_worker || self.pressure_seen)
+                && self.requests_completed != 0
+                && !self.input.has_complete_head()
+            {
                 if self.has_ready_input(if queued_work {
                     QUEUED_KEEP_ALIVE_WAIT
                 } else {
-                    KEEP_ALIVE_IDLE_TIMEOUT
+                    POST_PRESSURE_IDLE_WAIT
                 })? {
                     self.pressure_idle_probes = 0;
                 } else if queued_work && self.pressure_idle_probes < MAX_PRESSURE_IDLE_PROBES {
@@ -301,7 +309,7 @@ mod tests {
             .write_all(&requests)
             .expect("send pipelined requests");
 
-        let mut connection = Connection::new(server).expect("configure connection");
+        let mut connection = Connection::new(server, 1).expect("configure connection");
         let mut arena = RequestArena::new(4096);
         assert_eq!(
             connection
@@ -367,12 +375,12 @@ mod tests {
         )
         .expect("create HTTP worker pool");
         assert!(
-            pool.try_submit(Connection::new(idle_server).expect("configure idle connection"))
+            pool.try_submit(Connection::new(idle_server, 1).expect("configure idle connection"))
                 .is_ok(),
             "submit idle connection",
         );
         assert!(
-            pool.try_submit(Connection::new(queued_server).expect("configure queued connection"))
+            pool.try_submit(Connection::new(queued_server, 1).expect("configure queued connection"))
                 .is_ok(),
             "submit queued connection",
         );

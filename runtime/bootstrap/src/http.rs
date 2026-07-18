@@ -51,7 +51,7 @@ pub fn serve() -> std::io::Result<()> {
                 // macOS may propagate the listener's nonblocking flag to an
                 // accepted socket. Request workers use bounded blocking I/O.
                 stream.set_nonblocking(false)?;
-                match Connection::new(stream) {
+                match Connection::new(stream, workers) {
                     Ok(connection) => {
                         if let Err(rejected) = pool.try_submit(connection) {
                             let mut rejected = rejected.into_inner().into_stream();
