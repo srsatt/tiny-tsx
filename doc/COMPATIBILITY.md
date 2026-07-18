@@ -805,13 +805,22 @@ focused route/middleware tests without replacing them.
 
 Closed static response headers now lower through a bounded native
 writer. The writer validates names and values, replaces names
-case-insensitively, and emits custom headers on the wire. The upstream
+case-insensitively, deletes them case-insensitively during closed AOT middleware
+execution, and emits custom headers on the wire. The upstream
 `poweredBy()` middleware uses this path to produce `X-Powered-By: Hono`. The
 response-time middleware uses a separate bounded runtime-formatted value path
-while preserving the same header validation and eight-entry limit. The
+while preserving the same header validation and sixteen-entry limit. The
 pinned WPT casing source is connected to native-derived ABI coverage, but is
 not yet executed as JavaScript. General Response and Headers construction
 remains pending.
+
+Pinned Hono `secureHeaders()` now executes through its unchanged TypeScript and
+published JavaScript factories. Default output, closed boolean/string
+overrides, disabled headers, and after-`next()` `X-Powered-By` deletion retain
+upstream middleware order across Apple HTTP, Linux assembly, and Bun/Hono. The
+fixed 16-header writer admits the 12-header combined route and rejects a
+seventeenth entry. CSP, permissions/reporting policy, nonce callbacks, and
+dynamic options remain compile-time boundaries.
 
 Closed records and dynamic maps are separate compiler concepts. A record has a
 known layout and may use direct field offsets; a map has runtime membership and

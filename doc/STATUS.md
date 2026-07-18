@@ -1038,10 +1038,17 @@ produces and serves a native Mach-O executable from the example TSX source.
   Bun throughput across concurrency 1–64.
 - Async/await entry handlers are accepted only when application initialization
   fully stages them. Native Promise/suspension semantics remain unimplemented.
-- Static `Response` headers lower into a bounded eight-entry native writer with
-  HTTP token/value validation, case-insensitive replacement, and wire emission.
+- Static `Response` headers lower into a bounded sixteen-entry native writer with
+  HTTP token/value validation, case-insensitive replacement/deletion, and wire emission.
   A pinned WPT `Headers.set()` casing source is tracked as native-derived
   evidence; the upstream JavaScript is not yet executed.
+- Pinned Hono `secureHeaders()` defaults and closed boolean/string overrides run
+  through the unchanged TypeScript and published JavaScript factory. Apple HTTP
+  and Bun/Hono prove middleware-order deletion of `X-Powered-By`; Linux arm64
+  assembles the 12-header route, exact-capacity tests reject a seventeenth
+  header, and the installed archive ships the default example. CSP,
+  permissions/reporting policies, nonce callbacks, and dynamic options remain
+  rejected.
 - Closed matching middleware can run around a static handler. The evaluator
   invokes upstream Hono's actual `poweredBy()` factory and async closure, applies
   its post-handler header effect, and a native E2E reproduces the selected

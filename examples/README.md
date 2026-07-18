@@ -17,6 +17,7 @@ The generated servers have no npm or JavaScript runtime dependency.
 | `hono-node-server/server.ts` | `tinytsx build hono-node-server/server.ts --output server --release` | Hono with the compatible `@hono/node-server` entry |
 | `hono-body-limit/server.ts` | `tinytsx build hono-body-limit/server.ts --output server --release` | Pinned Hono body limit with a closed 14-byte maximum and default rejection |
 | `hono-request-id/server.ts` | `tinytsx build hono-request-id/server.ts --output server --release` | Default Hono request ID validation, UUID fallback, and request-local reuse |
+| `hono-secure-headers/server.ts` | `tinytsx build hono-secure-headers/server.ts --output server --release` | Default pinned Hono security response headers |
 | `tiny-serve/server.ts` | `tinytsx build tiny-serve/server.ts --output server --release` | The same entry through Hono-neutral `tinytsx:serve` |
 | `hono-zod-openapi/server.ts` | `tinytsx build hono-zod-openapi/server.ts --output server --release` | Pinned `OpenAPIHono`, `createRoute`, and `z` path validation/document generation |
 | `hono-static/server.ts` | `tinytsx build hono-static/server.ts --allow-read "$PWD/hono-static/assets" --output server --release` | Capability-scoped UTF-8 file reads |

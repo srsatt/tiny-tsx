@@ -1003,6 +1003,16 @@ Web-API, status, and backlog documentation. Header storage remains a fixed
 per-response value disposed with the request; no queue saturation or GC test is
 applicable.
 
+The tracer is green. The unchanged TypeScript and published JavaScript factory
+execute through general closed-record/array operations, `Headers.set`, and the
+new case-insensitive `Headers.delete` effect. Defaults, disabled/overridden
+headers, and both `poweredBy` orderings match Bun/Hono on Apple native HTTP; the
+same 12-header route assembles for Linux. Compiler and runtime exact-capacity
+tests admit sixteen headers and reject the seventeenth. Manifest, docs matrix,
+reference script, package routing, and installed default example are release
+gates; CSP, permissions/reporting policy, nonce callbacks, and dynamic options
+remain rejected.
+
 ### P1 — Compatibility and language depth
 
 - [x] Promote remaining syntax-only Test262 cases only when their complete
@@ -1178,6 +1188,11 @@ applicable.
       and disconnect propagation.
 - [ ] Continue expanding the explicit upstream Hono behavior allowlist and
       example matrix; never replace it with a blanket compatibility claim.
+  - 2026-07-18: pinned `secureHeaders()` defaults and closed boolean/string
+    overrides now execute through the unchanged upstream factory. Apple HTTP,
+    Linux assembly, Bun/Hono, published JavaScript, installed-release, and
+    sixteen-header capacity evidence are gated; CSP, permissions/reporting,
+    nonce callbacks, and dynamic options remain outside the allowlist.
 
 ### P3 — Actors and persistence depth
 

@@ -14,7 +14,7 @@ The current boundary is:
 | --- | --- | --- |
 | `Request` | standard DOM declaration | borrowed method, path, raw query, and bounded body ABI views; allocation-free form-decoded query-name presence predicate; selected closed JSON fields |
 | `Response` | standard DOM declaration | bounded body writer, explicit status, optional HTML/text/JSON content-type IDs; closed `new Response(string or null, { status, headers })` AOT fast path |
-| `Headers` | standard DOM declaration | closed construction/cloning; bounded request-header borrowing and response-header storage with case-insensitive lookup/replacement; one request-local Request ID header |
+| `Headers` | standard DOM declaration | closed construction/cloning; bounded request-header borrowing and 16-entry response-header storage with case-insensitive lookup/replacement/deletion; one request-local Request ID header |
 | `fetch` | standard DOM declaration | one closed URL string; request-time GET; `.status` only; Apple system libcurl transport |
 | `URL` / `URLSearchParams` | standard DOM declaration | native WPT-only bounded ordered pairs, form decoding/serialization, mutation, lookup, and live query linkage for selected URL cases; application API pending |
 | `crypto.randomUUID()` | standard DOM declaration | request-time version-4 UUID for a prepared SQLite parameter or the default Hono Request ID policy |
@@ -31,6 +31,14 @@ TypeScript errors.
 Hono's application-facing types remain in `tests/compat/hono/api.d.ts`. That
 overlay narrows the imported package surface for application type checking but
 does not replace upstream runtime source or Web-standard declarations.
+
+The pinned `secureHeaders()` slice applies the upstream default header set or
+one closed record of boolean/string overrides and `removePoweredBy`. Its
+post-`next()` `Headers.set`/`delete` effects are evaluated in middleware order,
+then emitted through the fixed 16-entry response writer. The exact-capacity
+path is request-local fixed storage and requires no managed heap. CSP,
+permissions/reporting policies, nonce callbacks, dynamic options, and a
+seventeenth header are rejected rather than approximated.
 
 The exact basic-example `fetch('https://example.com/')` call is retained as a
 request-time expression. The runtime follows redirects, discards all response
