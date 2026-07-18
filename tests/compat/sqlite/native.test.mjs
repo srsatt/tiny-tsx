@@ -1,5 +1,14 @@
 import assert from "node:assert/strict";
-import {chmodSync, mkdtempSync, readFileSync, realpathSync, rmSync} from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  statSync,
+} from "node:fs";
 import {tmpdir} from "node:os";
 import path from "node:path";
 import {spawn, spawnSync} from "node:child_process";
@@ -14,6 +23,7 @@ const benchmarkTransactionEntry = path.join(
   repository,
   "benchmarks/tiny/hono-sqlite-transaction.ts",
 );
+const walBenchmarkEntry = path.join(repository, "benchmarks/tiny/hono-sqlite-wal.ts");
 
 test("serializes an in-memory SQLite owner and recovers from SQL errors", async context => {
   const directory = mkdtempSync(path.join(tmpdir(), "tinytsx-sqlite-native-"));
@@ -189,6 +199,89 @@ test("repeats the idempotent transaction benchmark with a non-empty row", async 
   }
 });
 
+test("persists WAL progress across contention, rollback, and restart", async context => {
+  const directory = mkdtempSync(path.join(tmpdir(), "tinytsx-sqlite-wal-native-"));
+  const stateDirectory = path.join(directory, "state");
+  const database = path.join(stateDirectory, "wal-load.db");
+  const binary = path.join(directory, "server");
+  const port = 39_497;
+  mkdirSync(stateDirectory, {mode: 0o700});
+  context.after(() => rmSync(directory, {recursive: true, force: true}));
+
+  const result = buildWalBenchmark(binary, port, stateDirectory);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const report = JSON.parse(readFileSync(`${binary}.build.json`, "utf8"));
+  assert.equal(report.sqliteDatabases, 2);
+  assert.deepEqual(report.permissions.read, [realpathSync(stateDirectory)]);
+  assert.deepEqual(report.permissions.write, [realpathSync(stateDirectory)]);
+
+  const first = spawn(binary, [], {stdio: ["ignore", "pipe", "pipe"]});
+  await waitForServer(port, first);
+  await assertGet(port, "/sqlite-wal/setup/0", 200, "ready");
+  await assertGet(port, "/sqlite-wal/setup/1", 200, "ready");
+  await assertGet(port, "/sqlite-wal/journal", 200, '{"journal":{"journal_mode":"wal"}}');
+  await Promise.all(Array.from({length: 32}, (_, index) =>
+    assertGet(port, `/sqlite-wal/${index % 2}`, 200, "committed")
+  ));
+  await assertGet(
+    port,
+    "/sqlite-wal/state",
+    200,
+    '{"state":{"committed":32,"rolledBack":0}}',
+  );
+  for (const file of [database, `${database}-wal`, `${database}-shm`]) {
+    assert.equal(existsSync(file), true, `${file} must exist while both owners are live`);
+    assert.ok(statSync(file).size > 0, `${file} must be non-empty`);
+  }
+  first.kill("SIGTERM");
+  await new Promise(resolve => first.once("exit", resolve));
+
+  const second = spawn(binary, [], {stdio: ["ignore", "pipe", "pipe"]});
+  context.after(() => second.kill("SIGTERM"));
+  await waitForServer(port, second);
+  await assertGet(port, "/sqlite-wal/setup/0", 200, "ready");
+  await assertGet(port, "/sqlite-wal/setup/1", 200, "ready");
+  await assertGet(
+    port,
+    "/sqlite-wal/state",
+    200,
+    '{"state":{"committed":32,"rolledBack":0}}',
+  );
+
+  const lock = holdWriteLock(database);
+  context.after(() => lock.kill("SIGTERM"));
+  await waitForOutput(lock, "locked");
+  await assertGet(port, "/sqlite-wal/0", 500, "internal server error");
+  lock.stdin.end();
+  await new Promise(resolve => lock.once("exit", resolve));
+  await assertGet(port, "/sqlite-wal/1", 200, "committed");
+  await assertGet(
+    port,
+    "/sqlite-wal/state",
+    200,
+    '{"state":{"committed":33,"rolledBack":0}}',
+  );
+});
+
+test("assembles both WAL database owners for Linux arm64", () => {
+  const result = spawnSync("cargo", [
+    "run", "-q", "-p", "tinytsx", "--", "check", walBenchmarkEntry,
+    "--emit-asm", "--target", "aarch64-unknown-linux-gnu",
+    "--alias", "hono=vendor/hono/src/index.ts",
+    "--api", "hono=tests/compat/hono/api.d.ts",
+    "--allow-read", repository,
+    "--allow-write", repository,
+  ], {cwd: repository, encoding: "utf8"});
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /Ltinytsx_sqlite_database_path_data_0/);
+  assert.match(result.stdout, /Ltinytsx_sqlite_database_path_data_1/);
+  assert.equal(result.stdout.match(/bl tinytsx_sqlite_transaction/g)?.length, 2);
+  const assembled = spawnSync("clang", [
+    "--target=aarch64-unknown-linux-gnu", "-x", "assembler", "-c", "-o", "/dev/null", "-",
+  ], {cwd: repository, input: result.stdout, encoding: "utf8"});
+  assert.equal(assembled.status, 0, assembled.stderr);
+});
+
 test("assembles the transaction benchmark ABI for Linux arm64", () => {
   const result = spawnSync("cargo", [
     "run", "-q", "-p", "tinytsx", "--", "check", benchmarkTransactionEntry,
@@ -300,6 +393,42 @@ function buildBenchmarkTransaction(binary, port) {
     "--alias", "hono=vendor/hono/src/index.ts",
     "--api", "hono=tests/compat/hono/api.d.ts",
   ], {cwd: repository, encoding: "utf8"});
+}
+
+function buildWalBenchmark(binary, port, directory) {
+  return spawnSync("cargo", [
+    "run", "-q", "-p", "tinytsx", "--", "build", walBenchmarkEntry,
+    "--output", binary,
+    "--port", String(port),
+    "--workers", "8",
+    "--alias", "hono=vendor/hono/src/index.ts",
+    "--api", "hono=tests/compat/hono/api.d.ts",
+    "--allow-read", directory,
+    "--allow-write", directory,
+  ], {cwd: repository, encoding: "utf8"});
+}
+
+function holdWriteLock(database) {
+  return spawn("python3", ["-c", [
+    "import sqlite3, sys",
+    "connection = sqlite3.connect(sys.argv[1], timeout=1)",
+    "connection.execute('BEGIN IMMEDIATE')",
+    "print('locked', flush=True)",
+    "sys.stdin.read()",
+    "connection.rollback()",
+    "connection.close()",
+  ].join("\n"), database], {stdio: ["pipe", "pipe", "pipe"]});
+}
+
+async function waitForOutput(process, expected) {
+  let output = "";
+  process.stdout.setEncoding("utf8");
+  for await (const chunk of process.stdout) {
+    output += chunk;
+    if (output.includes(expected)) return;
+    if (process.exitCode !== null) break;
+  }
+  throw new Error(`process exited before output ${JSON.stringify(expected)}: ${output}`);
 }
 
 async function assertResponse(port, pathname, status, body) {

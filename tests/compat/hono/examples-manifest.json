@@ -177,6 +177,19 @@
       "firstUnsupportedBoundary": "The callback is a zero-argument async block containing 1-16 awaited same-database Statement.run calls, with 64 aggregate parameters and 65536 aggregate SQL bytes; queries, result use, control flow, nested or mixed-database transactions, Database.exec steps, and an interactive transaction object are unsupported."
     },
     {
+      "id": "tinytsx-sqlite-wal-load",
+      "provenance": "tinytsx-local",
+      "entry": "benchmarks/tiny/hono-sqlite-wal.ts",
+      "imports": ["hono", "tinytsx:sqlite"],
+      "apis": ["Hono", "get", "Context.text", "Context.json", "Database", "Database.exec", "Database.prepare", "Database.transaction", "Statement.get"],
+      "intake": {"status": "pass", "evidence": "benchmarks/tests/test_run_static.py"},
+      "nativeCompile": {"appleArm64": "pass", "linuxArm64Assembly": "pass", "evidence": "tests/compat/sqlite/native.test.mjs"},
+      "httpBehavior": {"status": "pass", "evidence": "tests/compat/sqlite/native.test.mjs"},
+      "referenceBehavior": {"runtime": "Bun/Hono with two Worker-owned bun:sqlite connections", "status": "pass", "evidence": "tests/compat/sqlite/wal-reference.test.ts"},
+      "releaseGates": {"native": ["test:sqlite-native"], "reference": ["test:hono-sqlite-wal-reference"]},
+      "firstUnsupportedBoundary": "Two static owners may target one capability-scoped WAL file and run fixed savepoint-rollback transactions; failed full-transaction rollback load, more than two connections, request-derived SQL, arbitrary callbacks, cross-process writers, network filesystems, and crash or power-loss durability remain unsupported or unmeasured."
+    },
+    {
       "id": "upstream-blog",
       "provenance": "upstream-contract-with-tinytsx-adapter",
       "entry": "vendor/hono-examples/blog/src/index.ts",
