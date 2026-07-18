@@ -465,6 +465,61 @@ publish that tradeoff rather than claim a general performance improvement. The
 raw pairs and combined report are retained under
 `benchmarks/results/2026-07-18-m5-max-pressure-aware-15s-*`.
 
+#### Selected P1-P4 tracer — pinned Stytch-auth TODO backend
+
+Use the backend half of the pinned upstream Hono `stytch-auth` example at
+`vendor/hono-examples` commit
+`3b0b62875a0e1265763fea1c6388866d5697ef81`: unchanged `api/index.ts`,
+`api/TodoAPI.ts`, and `api/TodoService.ts`. The React/Vite browser application,
+Cloudflare deployment configuration, and live Stytch credentials are not part
+of this server-runtime tracer. Pin `@hono/stytch-auth` to the exact version
+declared by the upstream example before admitting any of its source behavior.
+
+Implement this as one vertical real-world slice rather than isolated syntax
+demos:
+
+1. **Intake and boundaries:** retain a machine-readable audit of the three
+   upstream modules and fail on source drift or a newly unresolved runtime
+   import. The initial audit must expose the current class, private method,
+   async/await, bounded-array, route-mount, authentication, resource-binding,
+   and JSON response requirements without claiming native success.
+2. **P1 language execution:** execute `TodoService.ts` without rewriting its
+   class shape. Admit request-local constructor instances, arrow-method fields,
+   one private method, direct async/await chains, and bounded arrays of closed
+   `{id, text, completed}` records with the exact `push`, `find`, `filter`, and
+   comparator `sort` calls used upstream. Values remain request-owned across
+   awaits; this tracer does not introduce unbounded arrays, escaping identity,
+   arbitrary classes, a general Promise scheduler, or a production GC.
+3. **P2 Hono/auth behavior:** execute the unchanged nested `/api` route graph,
+   CORS, selected JSON bodies, route parameters, session extraction, and local
+   versus remote authentication middleware order. Automated tests must use a
+   deterministic credential-free Stytch reference boundary and must not imply
+   general JWT, OAuth, remote fetch, Cloudflare, or `@hono/stytch-auth`
+   compatibility. Static asset mounting remains a separate file-adapter gate.
+4. **P3 persistence and ownership:** provide the statically named `TODOS`
+   binding through a bounded TinyTSX adapter backed by the existing SQLite and
+   actor ownership model. Prove per-user isolation, ordered read/modify/write,
+   restart persistence, rollback, saturation, denial, disposal, and later
+   recovery. Do not expose ambient Cloudflare bindings, unbounded KV values,
+   cross-process transactions, or distributed actors.
+5. **Native and package evidence:** require stable frontend/HIR failures,
+   Apple-arm64 success and bounded-failure HTTP paths, native Linux-arm64
+   execution, Bun/Hono reference behavior, manifest/declaration/package routing,
+   and extracted-archive execution before describing the tracer as supported.
+6. **P4 measured application:** after functional gates pass, run a controlled
+   authenticated create/list/complete/delete mix with fixed users and bounded
+   state. Retain response/state checks, startup, RSS, throughput, median/p99,
+   CPU, allocation/process counters, overload recovery, and TinyTSX/Bun raw
+   samples. The result applies only to this pinned adapter-backed workload.
+
+Keep commits reviewable in this order: pinned intake; request-owned class and
+array semantics; direct async execution; auth/Hono routing; actor/SQLite binding;
+native and installed-package gates; benchmark evidence; synchronized docs and
+fresh two-target release attestation. Any need for general heap identity,
+unbounded collection lifetime, arbitrary Promise reactions, or live external
+credentials stops the slice for an explicit memory/API decision instead of
+silently growing a JavaScript engine.
+
 #### Goal execution checkpoint — nested profile release slice
 
 This selected implementation goal is green through its functional, target,
