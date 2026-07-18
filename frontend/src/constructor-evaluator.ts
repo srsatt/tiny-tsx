@@ -3651,6 +3651,26 @@ function evaluateCall(
         ? UNDEFINED
         : {kind: "routeChoice", name: choiceName, cases, fallback};
     }
+    if (receiver.kind === "array" && name === "sort") {
+      const comparator = arguments_[0];
+      if (
+        arguments_.length !== 1
+        || comparator?.kind !== "closure"
+        || receiver.items.length > 16
+      ) {
+        return unknown("Array.sort requires one closed comparator and at most 16 items");
+      }
+      let failure: Value | undefined;
+      receiver.items.sort((left, right) => {
+        const compared = invokeClosure(evaluator, comparator, [left, right], instance);
+        if (compared.kind === "number" && Number.isFinite(compared.value)) {
+          return compared.value;
+        }
+        failure ??= unknown("Array.sort comparator did not return a finite number");
+        return 0;
+      });
+      return failure ?? receiver;
+    }
     if (receiver.kind === "instance" || receiver.kind === "record") {
       const callable = receiver.fields.get(name);
       if (callable?.kind === "closure") {
@@ -3688,6 +3708,15 @@ function evaluateCall(
     }
     if (receiver.kind === "string") {
       if (name === "toUpperCase") return {kind: "string", value: receiver.value.toUpperCase()};
+      if (name === "localeCompare") {
+        const compared = arguments_[0];
+        return arguments_.length === 1 && compared?.kind === "string"
+          ? {
+            kind: "number",
+            value: receiver.value === compared.value ? 0 : receiver.value < compared.value ? -1 : 1,
+          }
+          : unknown("String.localeCompare requires one closed string");
+      }
       if (name === "charAt") {
         const index = arguments_[0];
         return index?.kind === "number"

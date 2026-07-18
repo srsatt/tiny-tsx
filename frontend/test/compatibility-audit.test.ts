@@ -1184,6 +1184,98 @@ test("executes the unchanged TodoService constructor and async get field", () =>
   ]})));
 });
 
+test("executes the unchanged TodoService private set and delete fields", () => {
+  const entry = write("stytch-todo-service-delete.ts", `
+    import type {} from "@hono/stytch-auth";
+    import {Hono} from "hono";
+    import {todoService} from "stytch-todo-service";
+
+    const environment = ({
+      TODOS: {
+        get: async () => [
+          {id: "todo-3", text: "third", completed: true},
+          {id: "todo-2", text: "second", completed: false},
+          {id: "todo-1", text: "first", completed: false},
+        ],
+        put: async () => undefined,
+      },
+    } as unknown) as Env;
+
+    const app = new Hono();
+    app.delete("/todos", async context => {
+      const todos = await todoService(environment, "user-1").delete("todo-2");
+      return context.json({todos});
+    });
+    export default app;
+  `);
+
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    aliases: {
+      hono: path.join(repository, "vendor/hono/src/index.ts"),
+      "stytch-todo-service": path.join(
+        repository,
+        "vendor/hono-examples/stytch-auth/api/TodoService.ts",
+      ),
+    },
+    apiAliases: {
+      hono: path.join(repository, "tests/compat/hono/api.d.ts"),
+      "@hono/stytch-auth": path.join(repository, "tests/compat/stytch-auth/api.d.ts"),
+    },
+  });
+
+  assert.equal(hir.handlers[0]?.method, "DELETE");
+  assert.ok(hir.staticStrings.some(value => value.value === JSON.stringify({todos: [
+    {id: "todo-1", text: "first", completed: false},
+    {id: "todo-3", text: "third", completed: true},
+  ]})));
+});
+
+test("executes the unchanged TodoService find and record mutation", () => {
+  const entry = write("stytch-todo-service-complete.ts", `
+    import type {} from "@hono/stytch-auth";
+    import {Hono} from "hono";
+    import {todoService} from "stytch-todo-service";
+
+    const environment = ({
+      TODOS: {
+        get: async () => [
+          {id: "todo-2", text: "second", completed: false},
+          {id: "todo-1", text: "first", completed: false},
+        ],
+        put: async () => undefined,
+      },
+    } as unknown) as Env;
+
+    const app = new Hono();
+    app.post("/todos/complete", async context => {
+      const todos = await todoService(environment, "user-1").markCompleted("todo-2");
+      return context.json({todos});
+    });
+    export default app;
+  `);
+
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    aliases: {
+      hono: path.join(repository, "vendor/hono/src/index.ts"),
+      "stytch-todo-service": path.join(
+        repository,
+        "vendor/hono-examples/stytch-auth/api/TodoService.ts",
+      ),
+    },
+    apiAliases: {
+      hono: path.join(repository, "tests/compat/hono/api.d.ts"),
+      "@hono/stytch-auth": path.join(repository, "tests/compat/stytch-auth/api.d.ts"),
+    },
+  });
+
+  assert.ok(hir.staticStrings.some(value => value.value === JSON.stringify({todos: [
+    {id: "todo-1", text: "first", completed: false},
+    {id: "todo-2", text: "second", completed: true},
+  ]})));
+});
+
 test("traces a TinyTSX serve call as the application root and source port", () => {
   const file = write("served-application.ts", `
     import {serve as start} from "tinytsx:serve";
