@@ -1,0 +1,923 @@
+{
+  "schemaVersion": 2,
+  "timestamp": "2026-07-18T06:32:26+00:00",
+  "workload": "hono-sqlite-rollback",
+  "scope": "one capability-scoped on-disk WAL owner; every POST copies a fixed required idempotency header plus route/JSON values, inserts a payment, fails its second callback-transaction step on a pinned uniqueness conflict, rolls the whole transaction back, and returns the declared 500 response; HTTP/1.1; localhost",
+  "limitations": [
+    "The failure and recovery keys, JSON body, SQL, and uniqueness conflict are fixed; this does not measure conflict handling in application code, growing data, competing or cross-process writers, cancellation, arbitrary callbacks, crash durability, or network filesystems.",
+    "TinyTSX bounds each connection at 100 requests and reconnects; the Bun host may retain a connection longer."
+  ],
+  "responseDifferences": [],
+  "environment": {
+    "machine": "Model Name: MacBook Pro; Model Identifier: Mac17,6; Chip: Apple M5 Max; Total Number of Cores: 18 (6 Super and 12 Performance); Memory: 128 GB",
+    "os": "macOS 26.5.2",
+    "architecture": "arm64",
+    "rustVersion": "rustc 1.96.0 (ac68faa20 2026-05-25)",
+    "bunVersion": "1.3.13",
+    "ohaVersion": "oha 1.15.0",
+    "commit": "794ba22",
+    "dirty": false,
+    "powerAndBackgroundState": "not controlled"
+  },
+  "configuration": {
+    "runs": 3,
+    "startupRuns": 5,
+    "durationSeconds": 15,
+    "concurrency": [
+      8,
+      64
+    ],
+    "workers": 8,
+    "requestMemoryBytes": 262144,
+    "keepAlive": true,
+    "supportProcess": false,
+    "processSampleIntervalMs": 20,
+    "allocationInstrumentation": "disabled"
+  },
+  "correctness": {
+    "path": "/sqlite-rollback/fail/acme",
+    "loadPaths": [
+      "/sqlite-rollback/fail/acme"
+    ],
+    "statePaths": [
+      "/sqlite-rollback/state",
+      "/sqlite-rollback/journal"
+    ],
+    "statePostcondition": "every failed callback transaction leaves zero benchmark-key payment rows, a successful recovery transaction advances after every interval, journal mode is wal, and the live database/WAL/SHM files are non-empty",
+    "method": "POST",
+    "requestContentType": "application/json",
+    "requestBodyUtf8": "{\"amount\":7}",
+    "requestHeaders": {
+      "Idempotency-Key": "benchmark-key"
+    },
+    "status": 500,
+    "contentTypes": {
+      "tinytsx": "text/plain; charset=UTF-8",
+      "bun": "text/plain; charset=UTF-8"
+    },
+    "contentLength": 21,
+    "framings": {
+      "tinytsx": "21",
+      "bun": "21"
+    },
+    "bodyUtf8": "internal server error",
+    "headers": {},
+    "numericHeaders": []
+  },
+  "targets": {
+    "tinytsx": {
+      "artifactBytes": 2406432,
+      "runtimeExecutableBytes": 2406432,
+      "startupSamplesMs": [
+        469.522,
+        35.33775,
+        33.4645,
+        32.643875,
+        31.213708
+      ],
+      "idleRssSamplesBytes": [
+        8192000,
+        8208384,
+        8224768
+      ],
+      "postWarmupRssSamplesBytes": [
+        8421376,
+        8536064,
+        8437760
+      ],
+      "resourceSamples": [
+        {
+          "wallSeconds": 31.503591250046156,
+          "userCpuSeconds": 1.7322310416666664,
+          "systemCpuSeconds": 7.31658,
+          "cpuSeconds": 9.048811041666667,
+          "cpuUtilizationPercent": 28.723109596761955,
+          "peakRssBytes": 8650752,
+          "pageFaults": 30,
+          "pageIns": 0,
+          "copyOnWriteFaults": 0,
+          "machSyscalls": 166631,
+          "unixSyscalls": 2456712,
+          "contextSwitches": 150348,
+          "peakThreads": 17,
+          "openFileDescriptorsStart": 7,
+          "openFileDescriptorsPeak": 71,
+          "openFileDescriptorsEnd": 7,
+          "diskBytesRead": 0,
+          "diskBytesWritten": 110592,
+          "instructions": 23105688503,
+          "cycles": 20772782963
+        },
+        {
+          "wallSeconds": 31.47639845899539,
+          "userCpuSeconds": 1.737416625,
+          "systemCpuSeconds": 7.245776791666666,
+          "cpuSeconds": 8.983193416666666,
+          "cpuUtilizationPercent": 28.53945767769193,
+          "peakRssBytes": 8552448,
+          "pageFaults": 25,
+          "pageIns": 0,
+          "copyOnWriteFaults": 0,
+          "machSyscalls": 166041,
+          "unixSyscalls": 2448676,
+          "contextSwitches": 149795,
+          "peakThreads": 17,
+          "openFileDescriptorsStart": 7,
+          "openFileDescriptorsPeak": 59,
+          "openFileDescriptorsEnd": 7,
+          "diskBytesRead": 0,
+          "diskBytesWritten": 110592,
+          "instructions": 23003811542,
+          "cycles": 20579280945
+        },
+        {
+          "wallSeconds": 31.533901459013578,
+          "userCpuSeconds": 1.7270714583333333,
+          "systemCpuSeconds": 7.193462708333333,
+          "cpuSeconds": 8.920534166666666,
+          "cpuUtilizationPercent": 28.28871073330776,
+          "peakRssBytes": 8552448,
+          "pageFaults": 22,
+          "pageIns": 0,
+          "copyOnWriteFaults": 0,
+          "machSyscalls": 165256,
+          "unixSyscalls": 2436679,
+          "contextSwitches": 148499,
+          "peakThreads": 17,
+          "openFileDescriptorsStart": 7,
+          "openFileDescriptorsPeak": 56,
+          "openFileDescriptorsEnd": 7,
+          "diskBytesRead": 0,
+          "diskBytesWritten": 110592,
+          "instructions": 22891045385,
+          "cycles": 20406958843
+        }
+      ],
+      "allocationSamples": [],
+      "stateSamples": [
+        {
+          "run": 0,
+          "phase": "warmup",
+          "values": {
+            "partialRows": 0,
+            "committed": 2,
+            "journalMode": "wal",
+            "files": {
+              "database": {
+                "exists": true,
+                "bytes": 4096
+              },
+              "wal": {
+                "exists": true,
+                "bytes": 94792
+              },
+              "shm": {
+                "exists": true,
+                "bytes": 32768
+              }
+            }
+          }
+        },
+        {
+          "run": 0,
+          "phase": "8",
+          "values": {
+            "partialRows": 0,
+            "committed": 3,
+            "journalMode": "wal",
+            "files": {
+              "database": {
+                "exists": true,
+                "bytes": 4096
+              },
+              "wal": {
+                "exists": true,
+                "bytes": 115392
+              },
+              "shm": {
+                "exists": true,
+                "bytes": 32768
+              }
+            }
+          }
+        },
+        {
+          "run": 0,
+          "phase": "64",
+          "values": {
+            "partialRows": 0,
+            "committed": 4,
+            "journalMode": "wal",
+            "files": {
+              "database": {
+                "exists": true,
+                "bytes": 4096
+              },
+              "wal": {
+                "exists": true,
+                "bytes": 135992
+              },
+              "shm": {
+                "exists": true,
+                "bytes": 32768
+              }
+            }
+          }
+        },
+        {
+          "run": 1,
+          "phase": "warmup",
+          "values": {
+            "partialRows": 0,
+            "committed": 2,
+            "journalMode": "wal",
+            "files": {
+              "database": {
+                "exists": true,
+                "bytes": 4096
+              },
+              "wal": {
+                "exists": true,
+                "bytes": 94792
+              },
+              "shm": {
+                "exists": true,
+                "bytes": 32768
+              }
+            }
+          }
+        },
+        {
+          "run": 1,
+          "phase": "64",
+          "values": {
+            "partialRows": 0,
+            "committed": 3,
+            "journalMode": "wal",
+            "files": {
+              "database": {
+                "exists": true,
+                "bytes": 4096
+              },
+              "wal": {
+                "exists": true,
+                "bytes": 115392
+              },
+              "shm": {
+                "exists": true,
+                "bytes": 32768
+              }
+            }
+          }
+        },
+        {
+          "run": 1,
+          "phase": "8",
+          "values": {
+            "partialRows": 0,
+            "committed": 4,
+            "journalMode": "wal",
+            "files": {
+              "database": {
+                "exists": true,
+                "bytes": 4096
+              },
+              "wal": {
+                "exists": true,
+                "bytes": 135992
+              },
+              "shm": {
+                "exists": true,
+                "bytes": 32768
+              }
+            }
+          }
+        },
+        {
+          "run": 2,
+          "phase": "warmup",
+          "values": {
+            "partialRows": 0,
+            "committed": 2,
+            "journalMode": "wal",
+            "files": {
+              "database": {
+                "exists": true,
+                "bytes": 4096
+              },
+              "wal": {
+                "exists": true,
+                "bytes": 94792
+              },
+              "shm": {
+                "exists": true,
+                "bytes": 32768
+              }
+            }
+          }
+        },
+        {
+          "run": 2,
+          "phase": "8",
+          "values": {
+            "partialRows": 0,
+            "committed": 3,
+            "journalMode": "wal",
+            "files": {
+              "database": {
+                "exists": true,
+                "bytes": 4096
+              },
+              "wal": {
+                "exists": true,
+                "bytes": 115392
+              },
+              "shm": {
+                "exists": true,
+                "bytes": 32768
+              }
+            }
+          }
+        },
+        {
+          "run": 2,
+          "phase": "64",
+          "values": {
+            "partialRows": 0,
+            "committed": 4,
+            "journalMode": "wal",
+            "files": {
+              "database": {
+                "exists": true,
+                "bytes": 4096
+              },
+              "wal": {
+                "exists": true,
+                "bytes": 135992
+              },
+              "shm": {
+                "exists": true,
+                "bytes": 32768
+              }
+            }
+          }
+        }
+      ],
+      "throughput": {
+        "8": {
+          "samples": [
+            {
+              "requests_per_second": 610.9161903716639,
+              "success_rate": 1.0,
+              "p50_ms": 13.200750000000001,
+              "p95_ms": 15.162500000000001,
+              "p99_ms": 15.288334,
+              "max_ms": 20.261959,
+              "total_seconds": 15.006968459,
+              "status_codes": {
+                "500": 9168
+              }
+            },
+            {
+              "requests_per_second": 605.1680703249915,
+              "success_rate": 1.0,
+              "p50_ms": 13.328167,
+              "p95_ms": 15.182708,
+              "p99_ms": 16.541125,
+              "max_ms": 26.182292,
+              "total_seconds": 15.004096292,
+              "status_codes": {
+                "500": 9080
+              }
+            },
+            {
+              "requests_per_second": 597.8863408973766,
+              "success_rate": 1.0,
+              "p50_ms": 13.593499999999999,
+              "p95_ms": 15.193584,
+              "p99_ms": 17.388042,
+              "max_ms": 27.098,
+              "total_seconds": 15.012886875,
+              "status_codes": {
+                "500": 8976
+              }
+            }
+          ],
+          "median": {
+            "requests_per_second": 605.1680703249915,
+            "p50_ms": 13.328167,
+            "p95_ms": 15.182708,
+            "p99_ms": 16.541125,
+            "max_ms": 26.182292
+          }
+        },
+        "64": {
+          "samples": [
+            {
+              "requests_per_second": 4546.417115133859,
+              "success_rate": 1.0,
+              "p50_ms": 15.161042,
+              "p95_ms": 16.045417,
+              "p99_ms": 32.919208,
+              "max_ms": 49.94225,
+              "total_seconds": 15.018199666,
+              "status_codes": {
+                "500": 68279
+              }
+            },
+            {
+              "requests_per_second": 4544.967453562114,
+              "success_rate": 1.0,
+              "p50_ms": 15.288916,
+              "p95_ms": 16.052667,
+              "p99_ms": 34.1595,
+              "max_ms": 48.43175,
+              "total_seconds": 15.003627792,
+              "status_codes": {
+                "500": 68191
+              }
+            },
+            {
+              "requests_per_second": 4527.4919190796945,
+              "success_rate": 1.0,
+              "p50_ms": 15.129208,
+              "p95_ms": 16.071459,
+              "p99_ms": 38.278417000000005,
+              "max_ms": 59.135915999999995,
+              "total_seconds": 15.012947834,
+              "status_codes": {
+                "500": 67971
+              }
+            }
+          ],
+          "median": {
+            "requests_per_second": 4544.967453562114,
+            "p50_ms": 15.161042,
+            "p95_ms": 16.052667,
+            "p99_ms": 34.1595,
+            "max_ms": 49.94225
+          }
+        }
+      },
+      "firstLaunchMs": 469.522,
+      "startupMedianMs": 33.4645,
+      "idleRssMedianBytes": 8208384,
+      "postWarmupRssMedianBytes": 8437760,
+      "resourceMedian": {
+        "wallSeconds": 31.503591250046156,
+        "userCpuSeconds": 1.7322310416666664,
+        "systemCpuSeconds": 7.245776791666666,
+        "cpuSeconds": 8.983193416666666,
+        "cpuUtilizationPercent": 28.53945767769193,
+        "peakRssBytes": 8552448.0,
+        "pageFaults": 25.0,
+        "pageIns": 0.0,
+        "copyOnWriteFaults": 0.0,
+        "machSyscalls": 166041.0,
+        "unixSyscalls": 2448676.0,
+        "contextSwitches": 149795.0,
+        "peakThreads": 17.0,
+        "openFileDescriptorsStart": 7.0,
+        "openFileDescriptorsPeak": 59.0,
+        "openFileDescriptorsEnd": 7.0,
+        "diskBytesRead": 0.0,
+        "diskBytesWritten": 110592.0,
+        "instructions": 23003811542.0,
+        "cycles": 20579280945.0
+      },
+      "allocationMedian": {}
+    },
+    "bun": {
+      "artifactBytes": 3717,
+      "runtimeExecutableBytes": 63072928,
+      "startupSamplesMs": [
+        39.234,
+        24.908667,
+        25.721708,
+        20.7625,
+        25.700583
+      ],
+      "idleRssSamplesBytes": [
+        42041344,
+        41910272,
+        41926656
+      ],
+      "postWarmupRssSamplesBytes": [
+        79495168,
+        80199680,
+        78675968
+      ],
+      "resourceSamples": [
+        {
+          "wallSeconds": 31.465773458010517,
+          "userCpuSeconds": 18.997597,
+          "systemCpuSeconds": 12.299332416666665,
+          "cpuSeconds": 31.296929416666664,
+          "cpuUtilizationPercent": 99.46340412839632,
+          "peakRssBytes": 81002496,
+          "pageFaults": 2404,
+          "pageIns": 0,
+          "copyOnWriteFaults": 0,
+          "machSyscalls": 4942260,
+          "unixSyscalls": 18428891,
+          "contextSwitches": 61372,
+          "peakThreads": 16,
+          "openFileDescriptorsStart": 8,
+          "openFileDescriptorsPeak": 72,
+          "openFileDescriptorsEnd": 8,
+          "diskBytesRead": 0,
+          "diskBytesWritten": 110592,
+          "instructions": 386379241084,
+          "cycles": 128250876122
+        },
+        {
+          "wallSeconds": 31.46114791597938,
+          "userCpuSeconds": 19.051795875,
+          "systemCpuSeconds": 12.33320875,
+          "cpuSeconds": 31.385004625,
+          "cpuUtilizationPercent": 99.75797675538499,
+          "peakRssBytes": 81526784,
+          "pageFaults": 2444,
+          "pageIns": 0,
+          "copyOnWriteFaults": 0,
+          "machSyscalls": 5030121,
+          "unixSyscalls": 18644454,
+          "contextSwitches": 62152,
+          "peakThreads": 16,
+          "openFileDescriptorsStart": 8,
+          "openFileDescriptorsPeak": 72,
+          "openFileDescriptorsEnd": 8,
+          "diskBytesRead": 0,
+          "diskBytesWritten": 110592,
+          "instructions": 390316262112,
+          "cycles": 129090449494
+        },
+        {
+          "wallSeconds": 31.466994084010366,
+          "userCpuSeconds": 19.011624041666664,
+          "systemCpuSeconds": 12.286494583333331,
+          "cpuSeconds": 31.298118624999994,
+          "cpuUtilizationPercent": 99.46332510007308,
+          "peakRssBytes": 79937536,
+          "pageFaults": 2346,
+          "pageIns": 0,
+          "copyOnWriteFaults": 0,
+          "machSyscalls": 4956239,
+          "unixSyscalls": 18426022,
+          "contextSwitches": 61484,
+          "peakThreads": 16,
+          "openFileDescriptorsStart": 8,
+          "openFileDescriptorsPeak": 72,
+          "openFileDescriptorsEnd": 8,
+          "diskBytesRead": 0,
+          "diskBytesWritten": 110592,
+          "instructions": 386057997968,
+          "cycles": 128314160930
+        }
+      ],
+      "allocationSamples": [],
+      "stateSamples": [
+        {
+          "run": 0,
+          "phase": "warmup",
+          "values": {
+            "partialRows": 0,
+            "committed": 2,
+            "journalMode": "wal",
+            "files": {
+              "database": {
+                "exists": true,
+                "bytes": 4096
+              },
+              "wal": {
+                "exists": true,
+                "bytes": 94792
+              },
+              "shm": {
+                "exists": true,
+                "bytes": 32768
+              }
+            }
+          }
+        },
+        {
+          "run": 0,
+          "phase": "8",
+          "values": {
+            "partialRows": 0,
+            "committed": 3,
+            "journalMode": "wal",
+            "files": {
+              "database": {
+                "exists": true,
+                "bytes": 4096
+              },
+              "wal": {
+                "exists": true,
+                "bytes": 115392
+              },
+              "shm": {
+                "exists": true,
+                "bytes": 32768
+              }
+            }
+          }
+        },
+        {
+          "run": 0,
+          "phase": "64",
+          "values": {
+            "partialRows": 0,
+            "committed": 4,
+            "journalMode": "wal",
+            "files": {
+              "database": {
+                "exists": true,
+                "bytes": 4096
+              },
+              "wal": {
+                "exists": true,
+                "bytes": 135992
+              },
+              "shm": {
+                "exists": true,
+                "bytes": 32768
+              }
+            }
+          }
+        },
+        {
+          "run": 1,
+          "phase": "warmup",
+          "values": {
+            "partialRows": 0,
+            "committed": 2,
+            "journalMode": "wal",
+            "files": {
+              "database": {
+                "exists": true,
+                "bytes": 4096
+              },
+              "wal": {
+                "exists": true,
+                "bytes": 94792
+              },
+              "shm": {
+                "exists": true,
+                "bytes": 32768
+              }
+            }
+          }
+        },
+        {
+          "run": 1,
+          "phase": "64",
+          "values": {
+            "partialRows": 0,
+            "committed": 3,
+            "journalMode": "wal",
+            "files": {
+              "database": {
+                "exists": true,
+                "bytes": 4096
+              },
+              "wal": {
+                "exists": true,
+                "bytes": 115392
+              },
+              "shm": {
+                "exists": true,
+                "bytes": 32768
+              }
+            }
+          }
+        },
+        {
+          "run": 1,
+          "phase": "8",
+          "values": {
+            "partialRows": 0,
+            "committed": 4,
+            "journalMode": "wal",
+            "files": {
+              "database": {
+                "exists": true,
+                "bytes": 4096
+              },
+              "wal": {
+                "exists": true,
+                "bytes": 135992
+              },
+              "shm": {
+                "exists": true,
+                "bytes": 32768
+              }
+            }
+          }
+        },
+        {
+          "run": 2,
+          "phase": "warmup",
+          "values": {
+            "partialRows": 0,
+            "committed": 2,
+            "journalMode": "wal",
+            "files": {
+              "database": {
+                "exists": true,
+                "bytes": 4096
+              },
+              "wal": {
+                "exists": true,
+                "bytes": 94792
+              },
+              "shm": {
+                "exists": true,
+                "bytes": 32768
+              }
+            }
+          }
+        },
+        {
+          "run": 2,
+          "phase": "8",
+          "values": {
+            "partialRows": 0,
+            "committed": 3,
+            "journalMode": "wal",
+            "files": {
+              "database": {
+                "exists": true,
+                "bytes": 4096
+              },
+              "wal": {
+                "exists": true,
+                "bytes": 115392
+              },
+              "shm": {
+                "exists": true,
+                "bytes": 32768
+              }
+            }
+          }
+        },
+        {
+          "run": 2,
+          "phase": "64",
+          "values": {
+            "partialRows": 0,
+            "committed": 4,
+            "journalMode": "wal",
+            "files": {
+              "database": {
+                "exists": true,
+                "bytes": 4096
+              },
+              "wal": {
+                "exists": true,
+                "bytes": 135992
+              },
+              "shm": {
+                "exists": true,
+                "bytes": 32768
+              }
+            }
+          }
+        }
+      ],
+      "throughput": {
+        "8": {
+          "samples": [
+            {
+              "requests_per_second": 71849.22642513285,
+              "success_rate": 1.0,
+              "p50_ms": 0.126792,
+              "p95_ms": 0.157917,
+              "p99_ms": 0.208125,
+              "max_ms": 2.6094579999999996,
+              "total_seconds": 15.0035575,
+              "status_codes": {
+                "500": 1077994
+              }
+            },
+            {
+              "requests_per_second": 72353.70731975864,
+              "success_rate": 1.0,
+              "p50_ms": 0.126334,
+              "p95_ms": 0.156167,
+              "p99_ms": 0.213875,
+              "max_ms": 0.8105,
+              "total_seconds": 15.001705375,
+              "status_codes": {
+                "500": 1085429
+              }
+            },
+            {
+              "requests_per_second": 71802.17332992596,
+              "success_rate": 1.0,
+              "p50_ms": 0.127,
+              "p95_ms": 0.157291,
+              "p99_ms": 0.20900000000000002,
+              "max_ms": 2.609625,
+              "total_seconds": 15.002289625,
+              "status_codes": {
+                "500": 1077197
+              }
+            }
+          ],
+          "median": {
+            "requests_per_second": 71849.22642513285,
+            "p50_ms": 0.126792,
+            "p95_ms": 0.157291,
+            "p99_ms": 0.20900000000000002,
+            "max_ms": 2.6094579999999996
+          }
+        },
+        "64": {
+          "samples": [
+            {
+              "requests_per_second": 73868.63508842736,
+              "success_rate": 1.0,
+              "p50_ms": 0.815292,
+              "p95_ms": 1.0970419999999999,
+              "p99_ms": 1.658708,
+              "max_ms": 9.112375,
+              "total_seconds": 15.002727459,
+              "status_codes": {
+                "500": 1108231
+              }
+            },
+            {
+              "requests_per_second": 75066.06696429834,
+              "success_rate": 1.0,
+              "p50_ms": 0.806334,
+              "p95_ms": 1.062959,
+              "p99_ms": 1.630709,
+              "max_ms": 2.32175,
+              "total_seconds": 15.002770833,
+              "status_codes": {
+                "500": 1126199
+              }
+            },
+            {
+              "requests_per_second": 73923.42447663573,
+              "success_rate": 1.0,
+              "p50_ms": 0.816042,
+              "p95_ms": 1.090417,
+              "p99_ms": 1.656334,
+              "max_ms": 9.319833,
+              "total_seconds": 15.002416458,
+              "status_codes": {
+                "500": 1109030
+              }
+            }
+          ],
+          "median": {
+            "requests_per_second": 73923.42447663573,
+            "p50_ms": 0.815292,
+            "p95_ms": 1.090417,
+            "p99_ms": 1.656334,
+            "max_ms": 9.112375
+          }
+        }
+      },
+      "firstLaunchMs": 39.234,
+      "startupMedianMs": 25.700583,
+      "idleRssMedianBytes": 41926656,
+      "postWarmupRssMedianBytes": 79495168,
+      "resourceMedian": {
+        "wallSeconds": 31.465773458010517,
+        "userCpuSeconds": 19.011624041666664,
+        "systemCpuSeconds": 12.299332416666665,
+        "cpuSeconds": 31.298118624999994,
+        "cpuUtilizationPercent": 99.46340412839632,
+        "peakRssBytes": 81002496.0,
+        "pageFaults": 2404.0,
+        "pageIns": 0.0,
+        "copyOnWriteFaults": 0.0,
+        "machSyscalls": 4956239.0,
+        "unixSyscalls": 18428891.0,
+        "contextSwitches": 61484.0,
+        "peakThreads": 16.0,
+        "openFileDescriptorsStart": 8.0,
+        "openFileDescriptorsPeak": 72.0,
+        "openFileDescriptorsEnd": 8.0,
+        "diskBytesRead": 0.0,
+        "diskBytesWritten": 110592.0,
+        "instructions": 386379241084.0,
+        "cycles": 128314160930.0
+      },
+      "allocationMedian": {}
+    }
+  },
+  "comparisons": {
+    "8": {
+      "tinytsxToBunRps": 0.00842274997846468,
+      "tinytsxToBunP99": 79.14413875598086
+    },
+    "64": {
+      "tinytsxToBunRps": 0.06148210104901997,
+      "tinytsxToBunP99": 20.623557808992633
+    }
+  }
+}
