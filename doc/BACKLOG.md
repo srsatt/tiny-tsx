@@ -835,6 +835,45 @@ General JavaScript object identity, blanket Hono compatibility, distributed
 actors, production GC, and a new release tag remain out of scope unless
 explicitly promoted into a later goal.
 
+#### Selected P1/P2 tracer — bounded Hono context variables
+
+Use pinned Hono commit `b2ae3a2204a48ce15a26448fd746d39745eb1837`,
+unchanged implementation `src/context.ts`, and the `c.set() and c.get()` case in
+`src/context.test.ts` as the semantic provenance. Add one project-owned
+`tests/compat/hono/context-variables-smoke.ts` application whose matched custom
+middleware stores one closed primitive and whose parameterized route stores one
+request-derived string. The route must read both values through `Context.get()`
+and return their concatenation, proving that values cross the middleware/handler
+boundary but remain isolated to one request.
+
+Admit from 1 through 16 statically named context slots per route. Keys must be
+non-empty UTF-8 strings of at most 128 bytes. Values may be `undefined`, `null`,
+boolean, finite number, closed string, or an already-supported bounded
+request-time string expression. Repeated `set` replaces the prior value and a
+missing `get` returns `undefined`. Lower the closed graph to request-local AOT
+slots; do not allocate or expose a general JavaScript heap map. Preserve the
+existing request-ID middleware policy as one reserved compiler-owned context
+value rather than weakening its generator, length, or route-scope checks.
+
+Reject dynamic keys, more than 16 slots, oversized/empty keys, structured or
+escaping values, map identity, `new Map()` application values, iteration,
+`size`, `has`, `delete`, `clear`, arbitrary `Context.var`, and mutation after a
+response escapes. The tracer therefore advances Hono interoperability and the
+record-versus-map design, but does not complete the broad bounded-native-`Map`
+P1 item or imply general middleware/closure/async semantics.
+
+Require frontend tests for missing, replacement, request-derived, reserved-key,
+dynamic-key, key-bound, slot-bound, and structured-value behavior. Apple arm64
+must execute repeated and concurrent requests and prove that no value leaks
+between requests; Linux arm64 must assemble the same request-local response
+ABI. Run an unchanged Bun/Hono reference against the shared tracer. Update the
+shipped Hono declaration, example manifest, package gates, compatibility/status
+documentation, and release routing before checking any parent P1/P2 item.
+Because the slice has no owned native resource or queue, saturation is the
+compile-time 16-slot failure and disposal is request completion; native tests
+must prove recovery by serving a later valid request after rejected compilation
+is tested separately.
+
 ### P1 — Compatibility and language depth
 
 - [x] Promote remaining syntax-only Test262 cases only when their complete
