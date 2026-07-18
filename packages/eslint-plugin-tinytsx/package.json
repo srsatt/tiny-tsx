@@ -1,0 +1,59 @@
+{
+  "name": "eslint-plugin-tinytsx",
+  "version": "0.1.0-alpha.1",
+  "description": "ESLint rules for TinyTSX's ahead-of-time TypeScript and TSX syntax boundary",
+  "license": "MIT",
+  "author": "srsatt <srsatt@gmail.com>",
+  "type": "commonjs",
+  "main": "index.cjs",
+  "types": "index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "require": "./index.cjs",
+      "import": "./index.cjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.cjs",
+    "index.d.ts",
+    "rules",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "npm run typecheck && node --test test/*.test.cjs",
+    "typecheck": "tsc -p tsconfig.json",
+    "pack:check": "npm pack --dry-run"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/srsatt/tiny-tsx.git",
+    "directory": "packages/eslint-plugin-tinytsx"
+  },
+  "bugs": {
+    "url": "https://github.com/srsatt/tiny-tsx/issues"
+  },
+  "homepage": "https://github.com/srsatt/tiny-tsx#readme",
+  "keywords": [
+    "eslint",
+    "eslintplugin",
+    "eslint-plugin",
+    "typescript",
+    "tsx",
+    "aot",
+    "tinytsx"
+  ],
+  "peerDependencies": {
+    "eslint": ">=9 <11"
+  },
+  "devDependencies": {
+    "eslint": "10.7.0",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.64.0"
+  },
+  "engines": {
+    "node": ">=20.19.0"
+  }
+}
