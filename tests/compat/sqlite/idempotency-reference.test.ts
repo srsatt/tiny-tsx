@@ -20,6 +20,8 @@ const commitPayment = database.transaction(
 );
 const app = new Hono();
 
+app.onError((_error, context) => context.text("internal server error", 500));
+
 function requiredKey(context: Parameters<Parameters<typeof app.post>[1]>[0]): string | undefined {
   const key = context.req.header("Idempotency-Key");
   if (key === undefined || key.length === 0 || new TextEncoder().encode(key).length > 256) {
@@ -72,7 +74,7 @@ test("Bun and Hono match required-header commit, rollback, bounds, and recovery"
 
   expect(await post("/idempotency/fail/acme", "bun-rolled-back", 7)).toEqual({
     status: 500,
-    body: "Internal Server Error",
+    body: "internal server error",
   });
   expect(await get("/idempotency/payment/bun-rolled-back")).toEqual({
     status: 404,

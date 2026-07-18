@@ -12,6 +12,8 @@ const findPayment = database.prepare(
 const findAudit = database.prepare("SELECT key FROM payment_audit WHERE key = ?1");
 const app = new Hono();
 
+app.onError((_error, context) => context.text("internal server error", 500));
+
 app.post("/idempotency/schema", async context => {
   await database.exec(
     "CREATE TABLE IF NOT EXISTS payments (key TEXT PRIMARY KEY, account TEXT NOT NULL, amount INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS payment_audit (key TEXT PRIMARY KEY); INSERT OR IGNORE INTO payment_audit (key) VALUES ('blocked')",
