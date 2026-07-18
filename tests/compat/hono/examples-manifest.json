@@ -382,6 +382,21 @@
       "status": "audit-pass",
       "evidence": "tests/compat/hono/stytch-auth-intake.test.mjs"
     },
+    "compilerBoundary": {
+      "status": "diagnostic-pass",
+      "evidence": "tests/compat/hono/stytch-auth-intake.test.mjs",
+      "diagnostic": "TINY1103",
+      "runtimeAliases": {
+        "hono": "vendor/hono/src/index.ts",
+        "hono/cors": "vendor/hono/src/middleware/cors/index.ts",
+        "@hono/stytch-auth": "tests/compat/stytch-auth/node_modules/@hono/stytch-auth/dist/index.js"
+      },
+      "apiAliases": {
+        "hono": "tests/compat/hono/api.d.ts",
+        "hono/cors": "tests/compat/hono/cors-api.d.ts",
+        "@hono/stytch-auth": "tests/compat/stytch-auth/api.d.ts"
+      }
+    },
     "nativeCompile": {
       "status": "not-admitted"
     },

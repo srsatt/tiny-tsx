@@ -118,6 +118,32 @@ test("audits the complete backend graph with only the declared auth package unre
   assert.match(api, /Consumer\.authenticateSessionRemote\(\)/);
 });
 
+test("reaches the unchanged fluent backend entry through type-only overlays", () => {
+  const boundary = tracer.compilerBoundary;
+  const result = spawnSync(process.execPath, [
+    frontendCli,
+    tracer.entry,
+    ...Object.entries(boundary.runtimeAliases).flatMap(([specifier, target]) => [
+      "--alias", `${specifier}=${target}`,
+    ]),
+    ...Object.entries(boundary.apiAliases).flatMap(([specifier, target]) => [
+      "--api", `${specifier}=${target}`,
+    ]),
+  ], {
+    cwd: repository,
+    encoding: "utf8",
+    maxBuffer: 1024 * 1024,
+  });
+
+  assert.equal(result.status, 1, result.stderr || result.stdout);
+  assert.doesNotMatch(result.stderr, /\bTS\d{4}\b/);
+  assert.match(result.stderr, new RegExp(boundary.diagnostic));
+  assert.match(
+    result.stderr,
+    /entry module must export exactly one GET handler or one constructed default application/,
+  );
+});
+
 function runAudit(entry, extra = []) {
   const result = spawnSync(process.execPath, [
     frontendCli,
