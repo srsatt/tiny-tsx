@@ -345,9 +345,13 @@ produces and serves a native Mach-O executable from the example TSX source.
   workspace Clippy with warnings denied. The dirty-tree archive rehearsal
   produced Apple checksum
   `5324ec5464164f0ac2a0c560649e58dc7bc0db759af1fff9124487a2c6c4d241`.
-  This proves package reachability but is not a clean source attestation; the
-  current head still needs the normal clean Apple and native Linux release
-  reruns before release-candidate status.
+  This proves package reachability but is not a clean source attestation. A
+  subsequent clean Apple `release:verify` at commit
+  `66cec3f104fbaa9ba3aaab4473ef3ff36b815069` passes the complete suite and
+  produces a schema-v2 manifest with `dirty: false` plus checksum
+  `9134b383a70fca802fec7fa80ff3dfe4e04d8b396f2918f91347ffad1622a2bd`.
+  Native Linux must still verify that same commit before it is a two-target
+  release candidate; later source commits require fresh attestations.
 
 ### Bounded actor hard-reset cancellation (2026-07-17)
 

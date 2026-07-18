@@ -388,9 +388,11 @@ candidate. The bounded root one-for-one supervisor below has now landed through
 the public SDK/HIR/native path, Apple HTTP, Linux assembly, Bun/Hono reference,
 manifest, and installed-package gates. It deliberately does not widen into
 links, monitors, registries, dynamic children, arbitrary behaviors, or
-distribution. The current head still needs clean Apple and native Linux release
-reruns; the successful dirty-tree package rehearsal is reachability evidence,
-not a source attestation.
+distribution. Clean Apple `release:verify` is green at exact commit `66cec3f`
+with schema-v2 `dirty: false` checksum
+`9134b383a70fca802fec7fa80ff3dfe4e04d8b396f2918f91347ffad1622a2bd`.
+Native Linux still needs to verify that same commit; later source commits need
+fresh attestations on both targets.
 
 Do not reopen the completed alpha foundations as broad projects. File reading,
 SQLite, and local actors already have public bounded built-ins. Their next work
@@ -1183,10 +1185,61 @@ diagnostics including root/child overflow and escape rejection, HIR IDs and
 cross-reference tests, generated AArch64 configuration, bootstrap integration,
 shared runtime accounting, group termination, Apple HTTP, Linux assembly, and
 the Bun/Hono reference all pass. The Hono matrix routes its native/reference
-scripts through the release suite, and the dirty-tree archive rehearsal builds
-and executes the packaged example. That rehearsal is not a clean release
-attestation: repeat clean Apple and native Linux release verification at the
-same source commit before naming the next release candidate.
+scripts through the release suite, and the installed archive builds and
+executes the packaged example. Clean Apple release verification passes at
+`66cec3f`; native Linux verification at the same commit remains required before
+naming a two-target release candidate.
+
+#### Selected P1/P2/P3 tracer — bounded nested profile JSON
+
+Use pinned Hono commit `b2ae3a2204a48ce15a26448fd746d39745eb1837`
+and a project-owned packaged `examples/hono-nested-json/server.ts` application.
+Its `POST /profiles/:id` route accepts exactly this closed request shape:
+
+```ts
+interface ProfileInput {
+  profile: {
+    name: string;
+    preferences: {theme: string; alerts: boolean};
+  };
+  score: number | null;
+}
+```
+
+Admit static object-only paths with one through four segments, at most sixteen
+selected leaf paths per handler, non-empty UTF-8 segment names of at most 128
+bytes, at most 512 encoded path bytes, and primitive string/finite-number/
+boolean/null leaves. Reuse the existing 64 KiB body bound and cap any selected
+string leaf at 4 KiB. Intermediate arrays, leaf arrays/objects, dynamic or
+computed names, optional/defaulted fields, whole-object identity, mutation,
+destructuring/rest/spread, and paths that escape a handler remain unsupported.
+
+Lower a selected leaf path through one canonical HIR/static-string form used by
+both nested `Context.json()` responses and SQLite prepared parameters. Runtime
+JSON traversal must parse one valid object document, require every intermediate
+object and selected primitive leaf, preserve JSON string/number/boolean/null
+encoding, and return the existing bounded 400 for malformed, missing,
+wrong-shaped, non-finite, or exceeded input without poisoning keep-alive.
+
+The profile tracer owns an in-memory SQLite database with one user table and
+one preferences table. One bounded prepared callback transaction inserts the
+route ID plus nested name/score and nested theme/alerts leaves as a single
+owner message. A duplicate unique theme must fail the second step and prove the
+first insert rolled back; a later distinct request must commit successfully.
+`GET /profiles/:id` proves committed and missing state through the public query
+API. This promotes nested primitive request paths as SQLite values, not JSON
+columns, general structured bindings, or a dynamic object heap.
+
+Require frontend success plus stable failure diagnostics; HIR path/depth/count
+validation; bootstrap traversal and SQLite parameter tests; Apple native HTTP
+for success, malformed/missing/wrong-shape, second-step rollback, keep-alive
+recovery, and later reuse; Linux-arm64 assembly; an unchanged Bun/Hono
+reference with `bun:sqlite`; Hono manifest, package, and installed-release
+routing; synchronized compatibility/persistence/status docs; then add a
+response-checked P4 benchmark row before making performance claims. Do not
+widen this tracer to arrays, arbitrary schemas, JSON Schema/Zod validation,
+streaming bodies, multipart/form data, GC-backed objects, or general JavaScript
+property access.
 
 ### P1 — Compatibility and language depth
 
