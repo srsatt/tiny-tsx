@@ -1756,16 +1756,51 @@ pub unsafe extern "C" fn tinytsx_html_write_request_cookie(
         return INTERNAL_ERROR;
     }
     let request = unsafe { &*request };
+    let expected = unsafe { slice::from_raw_parts(expected, expected_len) };
+    let cookie = match unsafe { request_cookie_value(request, expected) } {
+        Ok(cookie) => cookie,
+        Err(status) => return status,
+    };
+    if let Some(cookie) = cookie {
+        return unsafe { write_cookie_value(writer, cookie) };
+    }
+    if fallback.is_null() {
+        unsafe { tinytsx_html_write_static(writer, b"undefined".as_ptr(), b"undefined".len()) }
+    } else {
+        unsafe { tinytsx_html_write_static(writer, fallback, fallback_len) }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tinytsx_request_cookie_present(
+    request: *const TinyRequest,
+    expected: *const u8,
+    expected_len: usize,
+) -> u32 {
+    if request.is_null() || expected.is_null() || expected_len == 0 {
+        return 0;
+    }
+    let request = unsafe { &*request };
+    let expected = unsafe { slice::from_raw_parts(expected, expected_len) };
+    u32::from(matches!(
+        unsafe { request_cookie_value(request, expected) },
+        Ok(Some(value)) if !value.is_empty()
+    ))
+}
+
+unsafe fn request_cookie_value<'a>(
+    request: &'a TinyRequest,
+    expected: &[u8],
+) -> Result<Option<&'a [u8]>, u32> {
     if request.headers.is_null() && request.header_count != 0 {
-        return INTERNAL_ERROR;
+        return Err(INTERNAL_ERROR);
     }
     let headers = unsafe { slice::from_raw_parts(request.headers, request.header_count) };
-    let expected = unsafe { slice::from_raw_parts(expected, expected_len) };
     for header in headers {
         if (header.name.ptr.is_null() && header.name.len != 0)
             || (header.value.ptr.is_null() && header.value.len != 0)
         {
-            return INTERNAL_ERROR;
+            return Err(INTERNAL_ERROR);
         }
         let name = unsafe { slice::from_raw_parts(header.name.ptr, header.name.len) };
         if !name.eq_ignore_ascii_case(b"cookie") {
@@ -1790,15 +1825,11 @@ pub unsafe extern "C" fn tinytsx_html_write_request_cookie(
             {
                 break;
             }
-            return unsafe { write_cookie_value(writer, cookie) };
+            return Ok(Some(cookie));
         }
         break;
     }
-    if fallback.is_null() {
-        unsafe { tinytsx_html_write_static(writer, b"undefined".as_ptr(), b"undefined".len()) }
-    } else {
-        unsafe { tinytsx_html_write_static(writer, fallback, fallback_len) }
-    }
+    Ok(None)
 }
 
 fn trim_cookie_whitespace(mut value: &[u8]) -> &[u8] {

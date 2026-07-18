@@ -1276,6 +1276,43 @@ test("executes the unchanged TodoService find and record mutation", () => {
   ]})));
 });
 
+test("lowers the pinned Stytch local-session middleware as a credential-free guard", () => {
+  const entry = path.join(repository, "tests/compat/hono/stytch-session-smoke.ts");
+
+  const hir = compileEntry(entry, {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    aliases: {
+      hono: path.join(repository, "vendor/hono/src/index.ts"),
+      "@hono/stytch-auth": path.join(
+        repository,
+        "tests/compat/stytch-auth/node_modules/@hono/stytch-auth/dist/index.js",
+      ),
+    },
+    apiAliases: {
+      hono: path.join(repository, "tests/compat/hono/api.d.ts"),
+      "@hono/stytch-auth": path.join(repository, "tests/compat/stytch-auth/api.d.ts"),
+    },
+  });
+
+  const handler = hir.handlers[0]!;
+  assert.equal(hir.staticStrings[handler.sessionAuthorization?.cookie ?? -1]?.value,
+    "stytch_session_jwt");
+  assert.equal(handler.sessionAuthorization?.mode, "local");
+  const rejected = handler.sessionAuthorization?.rejected.response;
+  assert.equal(rejected?.kind === "text" ? rejected.status : undefined, 401);
+  const localPrefix = hir.staticStrings.find(value => value.value === "local:")?.id;
+  assert.deepEqual(handler.response.kind === "text" ? handler.response.value : undefined, {
+    kind: "concat",
+    values: [{kind: "stringLiteral", string: localPrefix, span: handler.span}, {
+      kind: "requestCookie",
+      cookie: handler.sessionAuthorization?.cookie,
+      span: handler.span,
+    }],
+    span: handler.span,
+  });
+  assert.equal(hir.handlers[1]?.sessionAuthorization?.mode, "remote");
+});
+
 test("traces a TinyTSX serve call as the application root and source port", () => {
   const file = write("served-application.ts", `
     import {serve as start} from "tinytsx:serve";

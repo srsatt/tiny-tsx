@@ -1,20 +1,21 @@
 use super::{
+    BAD_REQUEST, CONTENT_TYPE_HTML, CONTENT_TYPE_NONE, CONTENT_TYPE_TEXT,
+    EMPTY_SQLITE_EXECUTE_RESULT, INTERNAL_ERROR, MAX_DYNAMIC_HEADER_BYTES, MAX_RESPONSE_HEADERS,
+    MAX_SQLITE_RESULTS, MAX_STREAM_CHUNKS, OK, OpenAiTransport, REQUEST_OOM, RequestArena,
+    TinyHeader, TinyResponseWriter, TinySqlParameter, TinySqliteExecuteResult, TinyStringView,
     decode_sqlite_parameters, render, request, request_with_body, request_with_headers,
     tinytsx_html_write_fetch_status, tinytsx_html_write_path_segment, tinytsx_html_write_path_tail,
     tinytsx_html_write_query_parameter, tinytsx_html_write_request_header,
     tinytsx_html_write_request_json_field, tinytsx_html_write_response_header,
     tinytsx_html_write_sqlite_changes, tinytsx_html_write_sqlite_last_insert_row_id,
     tinytsx_html_write_static, tinytsx_request_basic_auth_equals, tinytsx_request_body_length,
-    tinytsx_request_if_none_match, tinytsx_request_method_equals, tinytsx_request_path_equals,
-    tinytsx_request_path_matches, tinytsx_request_path_segment_min_length,
-    tinytsx_request_query_has, tinytsx_response_begin, tinytsx_response_header_elapsed_millis,
-    tinytsx_response_header_request_id, tinytsx_response_header_static,
-    tinytsx_response_stream_begin, tinytsx_response_stream_chunk_begin,
-    tinytsx_response_stream_chunk_end, tinytsx_response_stream_chunk_static, write_console_error,
-    OpenAiTransport, RequestArena, TinyHeader, TinyResponseWriter, TinySqlParameter,
-    TinySqliteExecuteResult, TinyStringView, BAD_REQUEST, CONTENT_TYPE_HTML, CONTENT_TYPE_NONE,
-    CONTENT_TYPE_TEXT, EMPTY_SQLITE_EXECUTE_RESULT, INTERNAL_ERROR, MAX_DYNAMIC_HEADER_BYTES,
-    MAX_RESPONSE_HEADERS, MAX_SQLITE_RESULTS, MAX_STREAM_CHUNKS, OK, REQUEST_OOM,
+    tinytsx_request_cookie_present, tinytsx_request_if_none_match, tinytsx_request_method_equals,
+    tinytsx_request_path_equals, tinytsx_request_path_matches,
+    tinytsx_request_path_segment_min_length, tinytsx_request_query_has, tinytsx_response_begin,
+    tinytsx_response_header_elapsed_millis, tinytsx_response_header_request_id,
+    tinytsx_response_header_static, tinytsx_response_stream_begin,
+    tinytsx_response_stream_chunk_begin, tinytsx_response_stream_chunk_end,
+    tinytsx_response_stream_chunk_static, write_console_error,
 };
 use std::{
     io::{Read, Write},
@@ -224,9 +225,10 @@ fn sqlite_parameters_generate_distinct_version_four_uuids() {
         assert_eq!(uuid.len(), 36);
         assert_eq!(&uuid[14..15], "4");
         assert!(matches!(&uuid[19..20], "8" | "9" | "a" | "b"));
-        assert!(uuid
-            .bytes()
-            .all(|byte| byte.is_ascii_hexdigit() || byte == b'-'));
+        assert!(
+            uuid.bytes()
+                .all(|byte| byte.is_ascii_hexdigit() || byte == b'-')
+        );
     }
 }
 
@@ -382,6 +384,35 @@ fn request_basic_auth_matches_the_configured_credentials() {
             tinytsx_request_basic_auth_equals(&request, b"hono".as_ptr(), 4, b"wrong".as_ptr(), 5)
         },
         0
+    );
+}
+
+#[test]
+fn request_cookie_presence_uses_the_same_bounded_parser_as_cookie_values() {
+    let cookie = TinyHeader {
+        name: TinyStringView::from_bytes(b"Cookie"),
+        value: TinyStringView::from_bytes(b"theme=dark; stytch_session_jwt=user%2D1; empty="),
+    };
+    let headers = [cookie];
+    let request = request_with_headers(b"GET", b"/session", &headers);
+
+    assert_eq!(
+        unsafe {
+            tinytsx_request_cookie_present(
+                &request,
+                b"stytch_session_jwt".as_ptr(),
+                b"stytch_session_jwt".len(),
+            )
+        },
+        1,
+    );
+    assert_eq!(
+        unsafe { tinytsx_request_cookie_present(&request, b"empty".as_ptr(), b"empty".len()) },
+        0,
+    );
+    assert_eq!(
+        unsafe { tinytsx_request_cookie_present(&request, b"missing".as_ptr(), b"missing".len()) },
+        0,
     );
 }
 
@@ -1139,9 +1170,11 @@ fn openai_chat_posts_json_and_decodes_the_assistant_text() {
     let request = peer.join().expect("join local provider");
     assert!(request.starts_with(b"POST /v1/chat/completions HTTP/1.1\r\n"));
     let authorization = b"Authorization: Bearer local-test-key\r\n";
-    assert!(request
-        .windows(authorization.len())
-        .any(|window| window.eq_ignore_ascii_case(authorization)));
+    assert!(
+        request
+            .windows(authorization.len())
+            .any(|window| window.eq_ignore_ascii_case(authorization))
+    );
     assert!(request.ends_with(body));
 }
 

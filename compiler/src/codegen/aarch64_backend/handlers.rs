@@ -289,6 +289,58 @@ pub(super) fn emit_handlers(assembly: &mut Emitter, program: &Program) -> Result
             asm_line!(assembly, "    b {return_label}");
             asm_line!(assembly, "{authorized_label}:");
         }
+        if let Some(authorization) = &handler.session_authorization {
+            let authorized_label = format!("Ltinytsx_handler_{index}_session_authorized");
+            asm_line!(assembly, "    ldr x0, [sp, #24]");
+            assembly.address(
+                "x1",
+                format_args!("Ltinytsx_string_{}", authorization.cookie),
+            );
+            emit_immediate(
+                assembly,
+                "x2",
+                program.static_strings[authorization.cookie].value.len() as u64,
+            );
+            assembly.call(format_args!("tinytsx_request_cookie_present"));
+            asm_line!(assembly, "    cbnz w0, {authorized_label}");
+            for string in &authorization.rejected.stderr {
+                assembly.address("x0", format_args!("Ltinytsx_string_{string}"));
+                emit_immediate(
+                    assembly,
+                    "x1",
+                    program.static_strings[*string].value.len() as u64,
+                );
+                assembly.call(format_args!("tinytsx_console_error_static"));
+            }
+            for (header_index, header) in authorization.rejected.headers.iter().enumerate() {
+                asm_line!(assembly, "    ldr x0, [sp, #16]");
+                assembly.address(
+                    "x1",
+                    format_args!(
+                        "Ltinytsx_handler_{index}_session_rejected_header_{header_index}_name"
+                    ),
+                );
+                emit_immediate(assembly, "x2", header.name.len() as u64);
+                assembly.address(
+                    "x3",
+                    format_args!(
+                        "Ltinytsx_handler_{index}_session_rejected_header_{header_index}_value"
+                    ),
+                );
+                emit_immediate(assembly, "x4", header.value.len() as u64);
+                assembly.call(format_args!("tinytsx_response_header_static"));
+                asm_line!(assembly, "    cbnz w0, {return_label}");
+            }
+            emit_handler_response(
+                assembly,
+                &authorization.rejected.response,
+                program,
+                return_label,
+                index,
+            )?;
+            asm_line!(assembly, "    b {return_label}");
+            asm_line!(assembly, "{authorized_label}:");
+        }
         if let Some(existence) = &handler.sqlite_existence {
             let present_label = format!("Ltinytsx_handler_{index}_sqlite_present");
             emit_parameters(assembly, program, &existence.parameters);

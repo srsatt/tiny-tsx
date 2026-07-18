@@ -386,7 +386,7 @@
       "status": "diagnostic-pass",
       "evidence": "tests/compat/hono/stytch-auth-intake.test.mjs",
       "diagnostic": "TINY1403",
-      "messageFragment": "route handler response is not closed (thrown)",
+      "messageFragment": "this.env.TODOS.get",
       "runtimeAliases": {
         "hono": "vendor/hono/src/index.ts",
         "hono/cors": "vendor/hono/src/middleware/cors/index.ts",
@@ -397,6 +397,15 @@
         "hono/cors": "tests/compat/hono/cors-api.d.ts",
         "@hono/stytch-auth": "tests/compat/stytch-auth/api.d.ts"
       }
+    },
+    "authAdapter": {
+      "status": "native-pass",
+      "evidence": "tests/compat/hono/stytch-session-native.test.mjs",
+      "cookie": "stytch_session_jwt",
+      "modes": ["local", "remote"],
+      "appleArm64": "pass",
+      "linuxArm64Assembly": "pass",
+      "boundary": "The credential-free adapter treats one non-empty bounded session cookie as the user_id. It does not validate JWTs, contact Stytch, or claim live @hono/stytch-auth compatibility."
     },
     "nativeCompile": {
       "status": "not-admitted"

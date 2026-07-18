@@ -107,6 +107,7 @@ export interface EvaluatedResponse {
   headers?: Array<{name: string; value: ResponseHeaderValue}>;
   stderr?: string[];
   basicAuthorization?: EvaluatedBasicAuthorization;
+  sessionAuthorization?: EvaluatedSessionAuthorization;
   requestId?: {headerName: string; maxLength: number};
   bodyLimit?: EvaluatedBodyLimit;
   entityTag?: EvaluatedEntityTag;
@@ -149,6 +150,12 @@ interface EvaluatedRouteChoice {
 
 export interface EvaluatedBasicAuthorization {
   credentials: Array<{username: string; password: string}>;
+  rejected: EvaluatedResponse;
+}
+
+export interface EvaluatedSessionAuthorization {
+  mode: "local" | "remote";
+  cookieName: string;
   rejected: EvaluatedResponse;
 }
 
@@ -622,6 +629,7 @@ function evaluateRouteHandler(
   context.fields.set("env", {kind: "environmentBindings"});
   context.fields.set("req", {kind: "request", routePattern, method: requestMethod});
   for (const middlewareHandler of middleware) {
+    applyStytchSessionMiddlewarePrelude(middlewareHandler, context);
     applyContextVariableMiddlewarePrelude(evaluator, middlewareHandler, context);
   }
   let response = invokeClosure(evaluator, handler, [context], context);
@@ -655,6 +663,12 @@ function evaluateRouteHandler(
     credentials: Array<{username: string; password: string}>;
     rejected: Value & {kind: "response"};
     rejectedStderr: string[];
+    protectedHeaders: Set<string>;
+  } | undefined;
+  let sessionAuthorization: {
+    mode: "local" | "remote";
+    cookieName: string;
+    rejected: Value & {kind: "response"};
     protectedHeaders: Set<string>;
   } | undefined;
   let bodyLimit: number | undefined;
@@ -760,6 +774,30 @@ function evaluateRouteHandler(
           continue;
         }
       }
+      const stytchAuthorization = closedStytchSessionAuthorization(middlewareHandler);
+      if (stytchAuthorization !== undefined) {
+        if (sessionAuthorization !== undefined) {
+          issue(
+            evaluator,
+            middlewareHandler.expression,
+            middlewareHandler.module,
+            "multiple Stytch session middleware policies on one route are not supported",
+          );
+          continue;
+        }
+        sessionAuthorization = {
+          ...stytchAuthorization,
+          rejected: {
+            kind: "response",
+            body: "Unauthenticated",
+            status: 401,
+            contentType: "text/plain;charset=UTF-8",
+            headers: new Map(),
+          },
+          protectedHeaders: new Set(response.headers.keys()),
+        };
+        continue;
+      }
       const issueCount = evaluator.issues.length;
       invokeClosure(
         evaluator,
@@ -806,6 +844,13 @@ function evaluateRouteHandler(
     for (const [name, header] of response.headers) {
       if (!basicAuthorization.protectedHeaders.has(name)) {
         basicAuthorization.rejected.headers.set(name, header);
+      }
+    }
+  }
+  if (sessionAuthorization !== undefined) {
+    for (const [name, header] of response.headers) {
+      if (!sessionAuthorization.protectedHeaders.has(name)) {
+        sessionAuthorization.rejected.headers.set(name, header);
       }
     }
   }
@@ -861,6 +906,15 @@ function evaluateRouteHandler(
           ),
         },
       }),
+    ...(sessionAuthorization === undefined
+      ? {}
+      : {
+        sessionAuthorization: {
+          mode: sessionAuthorization.mode,
+          cookieName: sessionAuthorization.cookieName,
+          rejected: evaluatedResponse(sessionAuthorization.rejected, []),
+        },
+      }),
     ...(bodyLimit === undefined
       ? {}
       : {
@@ -884,6 +938,37 @@ function evaluateRouteHandler(
         },
       }),
   };
+}
+
+function applyStytchSessionMiddlewarePrelude(
+  middleware: Value & {kind: "closure"},
+  context: Value & {kind: "instance"},
+): void {
+  const authorization = closedStytchSessionAuthorization(middleware);
+  if (authorization === undefined) return;
+  contextVariables(context).set("stytchSession", {
+    kind: "record",
+    fields: new Map([[
+      "user_id",
+      {kind: "requestCookie", name: authorization.cookieName},
+    ]]),
+  });
+}
+
+function closedStytchSessionAuthorization(
+  middleware: Value & {kind: "closure"},
+): {mode: "local" | "remote"; cookieName: string} | undefined {
+  const module = middleware.module.path.replaceAll("\\", "/");
+  if (
+    !module.endsWith("/@hono/stytch-auth/dist/index.js")
+    || middleware.environment.get("opts")?.kind !== "undefined"
+  ) return undefined;
+  const source = middleware.expression.getText(middleware.module.sourceFile);
+  if (!source.includes('c.set("stytchSession", session)')) return undefined;
+  const mode = source.includes("sessions.authenticateJwt(")
+    ? "local"
+    : source.includes("sessions.authenticate(") ? "remote" : undefined;
+  return mode === undefined ? undefined : {mode, cookieName: "stytch_session_jwt"};
 }
 
 function closedRequestId(

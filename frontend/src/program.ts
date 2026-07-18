@@ -7,6 +7,7 @@ import {
   evaluateApplicationConstructor,
   evaluateApplicationInitialization,
   type EvaluatedBasicAuthorization,
+  type EvaluatedSessionAuthorization,
   type EvaluatedEntityTag,
   type EvaluatedSqliteExistence,
   type EvaluatedResponse,
@@ -18,6 +19,7 @@ import {FunctionLowerer} from "./function-lowering.js";
 import type {
   Component,
   BasicAuthorization,
+  SessionAuthorization,
   ElapsedHeader,
   EntityTag,
   SqliteExistence,
@@ -419,6 +421,9 @@ function lowerApplicationInitialization(
     const basicAuthorization = response.basicAuthorization === undefined
       ? undefined
       : lowerBasicAuthorization(response.basicAuthorization, route.path, strings, workers, span);
+    const sessionAuthorization = response.sessionAuthorization === undefined
+      ? undefined
+      : lowerSessionAuthorization(response.sessionAuthorization, route.path, strings, workers, span);
     const bodyLimit = response.bodyLimit === undefined
       ? undefined
       : {
@@ -448,6 +453,7 @@ function lowerApplicationInitialization(
       path: route.path,
       ...responseHeaders,
       ...(basicAuthorization === undefined ? {} : {basicAuthorization}),
+      ...(sessionAuthorization === undefined ? {} : {sessionAuthorization}),
       ...(response.requestId === undefined
         ? {}
         : {requestId: {
@@ -587,6 +593,20 @@ function lowerBasicAuthorization(
 ): BasicAuthorization {
   return {
     credentials: authorization.credentials,
+    rejected: lowerGuardedResponse(authorization.rejected, routePath, strings, workers, span),
+  };
+}
+
+function lowerSessionAuthorization(
+  authorization: EvaluatedSessionAuthorization,
+  routePath: string,
+  strings: StringTable,
+  workers: WorkerTable,
+  span: SourceSpan,
+): SessionAuthorization {
+  return {
+    mode: authorization.mode,
+    cookie: strings.intern(authorization.cookieName),
     rejected: lowerGuardedResponse(authorization.rejected, routePath, strings, workers, span),
   };
 }

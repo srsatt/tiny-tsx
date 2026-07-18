@@ -347,6 +347,7 @@ export interface Handler {
   elapsedHeaders?: ElapsedHeader[];
   stderr?: number[];
   basicAuthorization?: BasicAuthorization;
+  sessionAuthorization?: SessionAuthorization;
   requestId?: RequestId;
   bodyLimit?: BodyLimit;
   entityTag?: EntityTag;
@@ -394,6 +395,12 @@ export interface ElapsedHeader {
 
 export interface BasicAuthorization {
   credentials: BasicCredential[];
+  rejected: GuardedResponse;
+}
+
+export interface SessionAuthorization {
+  mode: "local" | "remote";
+  cookie: number;
   rejected: GuardedResponse;
 }
 

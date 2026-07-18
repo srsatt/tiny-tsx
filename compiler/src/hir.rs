@@ -245,6 +245,8 @@ pub struct Handler {
     pub elapsed_headers: Vec<ElapsedHeader>,
     #[serde(default, rename = "basicAuthorization")]
     pub basic_authorization: Option<BasicAuthorization>,
+    #[serde(default, rename = "sessionAuthorization")]
+    pub session_authorization: Option<SessionAuthorization>,
     #[serde(default, rename = "requestId")]
     pub request_id: Option<RequestId>,
     #[serde(default, rename = "bodyLimit")]
@@ -298,6 +300,13 @@ pub struct ElapsedHeader {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct BasicAuthorization {
     pub credentials: Vec<BasicCredential>,
+    pub rejected: GuardedResponse,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct SessionAuthorization {
+    pub mode: String,
+    pub cookie: usize,
     pub rejected: GuardedResponse,
 }
 
@@ -683,6 +692,10 @@ impl Program {
                     .as_ref()
                     .is_some_and(|guard| response_uses_filesystem(&guard.rejected.response))
                 || handler
+                    .session_authorization
+                    .as_ref()
+                    .is_some_and(|guard| response_uses_filesystem(&guard.rejected.response))
+                || handler
                     .body_limit
                     .as_ref()
                     .is_some_and(|guard| response_uses_filesystem(&guard.rejected.response))
@@ -708,6 +721,9 @@ impl Program {
             if let Some(authorization) = &handler.basic_authorization {
                 collect_response_environment_ids(&authorization.rejected.response, &mut ids);
             }
+            if let Some(authorization) = &handler.session_authorization {
+                collect_response_environment_ids(&authorization.rejected.response, &mut ids);
+            }
             if let Some(limit) = &handler.body_limit {
                 collect_response_environment_ids(&limit.rejected.response, &mut ids);
             }
@@ -729,6 +745,10 @@ impl Program {
             response_uses_openai(&handler.response)
                 || handler
                     .basic_authorization
+                    .as_ref()
+                    .is_some_and(|guard| response_uses_openai(&guard.rejected.response))
+                || handler
+                    .session_authorization
                     .as_ref()
                     .is_some_and(|guard| response_uses_openai(&guard.rejected.response))
                 || handler
@@ -857,6 +877,42 @@ impl Program {
             if let Some(authorization) = &handler.basic_authorization {
                 if authorization.credentials.is_empty() {
                     return Err("Basic Authorization guard has no credentials".to_owned());
+                }
+                validate_response_headers(&authorization.rejected.headers, &[])?;
+                self.validate_stderr(&authorization.rejected.stderr)?;
+                self.validate_handler_response(&authorization.rejected.response, &handler.path)?;
+            }
+            if let Some(authorization) = &handler.session_authorization {
+                let Some(cookie) = self.static_strings.get(authorization.cookie) else {
+                    return Err(
+                        "session authorization references a missing cookie string".to_owned()
+                    );
+                };
+                if !matches!(authorization.mode.as_str(), "local" | "remote")
+                    || cookie.value.is_empty()
+                    || cookie.value.len() > 128
+                    || !cookie.value.bytes().all(|byte| {
+                        byte.is_ascii_alphanumeric()
+                            || matches!(
+                                byte,
+                                b'_' | b'!'
+                                    | b'#'
+                                    | b'$'
+                                    | b'%'
+                                    | b'&'
+                                    | b'\''
+                                    | b'*'
+                                    | b'.'
+                                    | b'^'
+                                    | b'`'
+                                    | b'|'
+                                    | b'~'
+                                    | b'+'
+                                    | b'-'
+                            )
+                    })
+                {
+                    return Err("session authorization is outside its bounded contract".to_owned());
                 }
                 validate_response_headers(&authorization.rejected.headers, &[])?;
                 self.validate_stderr(&authorization.rejected.stderr)?;
@@ -2248,6 +2304,9 @@ fn validate_numeric_for_loop(
 fn handler_responses(handler: &Handler) -> Vec<&HandlerResponse> {
     let mut responses = vec![&handler.response];
     if let Some(authorization) = &handler.basic_authorization {
+        responses.push(&authorization.rejected.response);
+    }
+    if let Some(authorization) = &handler.session_authorization {
         responses.push(&authorization.rejected.response);
     }
     if let Some(limit) = &handler.body_limit {
