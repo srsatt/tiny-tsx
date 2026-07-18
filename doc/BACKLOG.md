@@ -1076,6 +1076,39 @@ example builds and runs from the packaged resources, and a clean
 archives. The parent P1 item is therefore complete within the rejected
 boundaries above.
 
+#### Selected P3/P4 tracer — request-header SQLite idempotency and rollback
+
+Use a project-owned Hono payment/idempotency application as the next SQLite
+transaction/value-depth tracer. A statically named `Idempotency-Key` request
+header must flow through `Statement.run([value])` both directly and inside the
+already-bounded async callback transaction. The admitted header value is one
+through 256 bytes of valid UTF-8, is copied into the SQLite owner message before
+request disposal, and retains SQLite `TEXT` semantics. Missing, empty,
+oversized, invalid-UTF-8, dynamic-name, structured, optional/fallback, and
+escaping header values remain rejected or return a bounded 400 response; they
+must not silently bind the JavaScript string `"undefined"`.
+
+The tracer creates a payment row in the first callback step and an audit row in
+the second. A pinned uniqueness conflict in the second step must return the
+existing application 500 response, roll back the first insert, leave no partial
+row, and permit a later successful transaction on the same connection. Require
+frontend lowering and stable boundary tests, explicit HIR parameter validation,
+runtime ownership/decoding tests, Apple-arm64 native HTTP behavior, Linux-arm64
+assembly, a Bun/Hono reference with the same external contract, manifest and
+package routing, and synchronized persistence/compatibility/status/backlog
+documentation.
+
+After correctness is green, add a controlled disk/WAL failure-load workload
+that repeatedly triggers the same full-transaction rollback with a fixed valid
+header. Generalize the benchmark verifier to declare the expected 500 response
+without treating it as transport corruption, verify zero partial rows plus a
+successful recovery commit after every warm-up/load interval, and retain the
+normal three 15-second samples at concurrency 8 and 64 for TinyTSX and Bun.
+This promotes only required static-name request headers as SQLite values and
+failed-transaction load; query/cookie/environment values, arbitrary header
+expressions, conflict recovery in application code, cross-process writers,
+cancellation, and interactive transaction objects remain separate tracers.
+
 ### P1 — Compatibility and language depth
 
 - [x] Promote remaining syntax-only Test262 cases only when their complete
