@@ -5,17 +5,18 @@ Release: `0.1.0-alpha.1`
 Current decision: **NOT READY after the author-history rewrite.** Native Apple
 arm64 and native Linux arm64 both passed this contract before the rewrite, but
 all commit hashes changed and the retained schema-v2 manifests identify the
-now-unreachable pre-rewrite source. Regenerate both archives from one new clean
-commit before tagging. No tag has been created.
+now-unreachable pre-rewrite source. The compiler now also supports Intel macOS
+and Linux x86-64. Generate all four archives from one new clean commit before
+tagging. No tag has been created.
 
 This checklist prepares a release candidate; it does not create or push a tag.
 Run it from the exact commit intended for `v0.1.0-alpha.1`.
 
 The complete Stytch TODO slice has native Apple/Linux, installed-package, and
 response-checked benchmark evidence. That functional evidence remains valid,
-but the release source identity does not: promoting the rewritten history
-requires fresh clean Apple/Linux archives from the same new commit. The open
-gates are tracked in `doc/BACKLOG.md`.
+but the release source identity does not: promoting the rewritten history and
+the new x86-64 targets requires fresh clean archives from the same new commit.
+The open gates are tracked in `doc/BACKLOG.md`.
 
 ## Contract and source
 
@@ -44,6 +45,7 @@ release-runtime failures, installed examples, and archive smoke build.
 
 ```sh
 npm ci --prefix frontend
+npm ci --prefix examples
 npm run release:verify
 ```
 
@@ -51,18 +53,24 @@ npm run release:verify
       final exact-source candidate commit.
 - [ ] Linux arm64 has completed the clean `release:verify` contract on a native
       `ubuntu-24.04-arm` or equivalent host.
-- [ ] The exact release-candidate commit has completed both native jobs without
+- [ ] Intel macOS has completed the clean `release:verify` contract on a native
+      `macos-15-intel` or equivalent host.
+- [ ] Linux x86-64 has completed the clean `release:verify` contract on a native
+      `ubuntu-24.04` x86-64 or equivalent host.
+- [ ] The exact release-candidate commit has completed all four native jobs without
       generated tracked changes.
 
 ## Artifact inspection
 
-Perform these checks independently for both target names:
+Perform these checks independently for all four target names:
 
 - `aarch64-apple-darwin`
+- `x86_64-apple-darwin`
 - `aarch64-unknown-linux-gnu`
+- `x86_64-unknown-linux-gnu`
 
 ```sh
-target=aarch64-apple-darwin # repeat with aarch64-unknown-linux-gnu
+target=aarch64-apple-darwin # repeat with every target listed above
 base="dist/release/tinytsx-0.1.0-alpha.1-$target"
 commit=$(git rev-parse HEAD)
 test -f "$base.tar.gz"
@@ -83,11 +91,11 @@ tar -tzf "$base.tar.gz" | grep '/bin/tinytsx$'
 tar -tzf "$base.tar.gz" | grep '/lib/tinytsx/examples/README.md$'
 ```
 
-- [ ] Apple archive checksum, manifest, version output, installed layout, and
+- [ ] Both Apple archive checksums, manifests, version outputs, installed layouts, and
       outside-checkout HTTP smoke have been verified.
-- [ ] Linux archive checksum, manifest, version output, installed layout, and
+- [ ] Both Linux archive checksums, manifests, version outputs, installed layouts, and
       outside-checkout HTTP smoke have been verified.
-- [ ] Both artifact manifests identify the same source contract, HIR 2, runtime
+- [ ] All four artifact manifests identify the same source contract, HIR 2, runtime
       ABI 1, built-in schema 1, and pinned compatibility revisions.
 
 The generated archive checksums belong in the uploaded `.sha256` files and
@@ -99,13 +107,13 @@ document would change the archive being attested.
 Before tagging, confirm all of the following:
 
 - [ ] Every exact-source alpha exit gate in `doc/BACKLOG.md` is checked.
-- [ ] Both native archives are collected together with their `.sha256` and
+- [ ] All four native archives are collected together with their `.sha256` and
       manifest files.
 - [x] The limitations in `doc/ALPHA.md` match the shipped compiler diagnostics
       and executable tests.
 - [x] No release note claims general TypeScript, ECMAScript, Node, Bun, Deno,
       Web API, Hono, actor, SQLite, AI SDK, or GC compatibility.
-- [ ] The release commit is clean and is the commit verified by both native
+- [ ] The release commit is clean and is the commit verified by all four native
       jobs.
 
 Only after this section is green may a separate release action create

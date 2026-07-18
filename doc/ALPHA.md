@@ -1,7 +1,7 @@
 # TinyTSX 0.1.0-alpha.1
 
 This developer preview compiles the allowlisted server-side TypeScript/Hono
-matrix into an AArch64 native HTTP server without a JavaScript engine in the
+matrix into an ARM64 or x86-64 native HTTP server without a JavaScript engine in the
 produced application.
 
 The archive contains `bin/tinytsx`, read-only compiler resources, documentation,
@@ -18,11 +18,12 @@ revisions. Run `tinytsx --list-builtins` for the exact standard-library surface
 and bounds. `doc/COMPATIBILITY.md` is the supported Hono/Web/language matrix;
 `doc/STANDARD_LIBRARY.md`, `doc/PERSISTENCE.md`, and `doc/ACTORS.md` define
 capabilities, ownership, limits, and known gaps. `doc/RELEASE_CHECKLIST.md`
-defines the two-target verification and no-go conditions for tagging.
+defines the four-target verification and no-go conditions for tagging.
 
-Apple-arm64 archives must execute on Apple arm64. Linux-arm64 archives must be
-built and executed on Linux arm64; cross-assembled ELF output from macOS is not
-a substitute. No x86 native target is claimed in this alpha.
+Apple ARM64 and Intel archives must execute on their matching macOS runners;
+Linux ARM64 and x86-64 archives must be built and executed on matching native
+Linux userspace. Cross-assembled output and Rosetta smoke tests are useful
+development evidence, but do not replace the four native release jobs.
 
 On-disk SQLite paths are scoped to matching canonical read/write roots. Current
 post-alpha runtime hardening additionally requires a service-owned protected
@@ -85,7 +86,7 @@ arenas, HTTP/application executors have fixed queues, saturation is recoverable,
 and no feature relies on a garbage collector or finalizer.
 
 Known non-goals include general TypeScript/ECMAScript, arbitrary npm execution,
-Node/Deno/Bun compatibility, blanket Hono/Web API support, x86 targets, dynamic
+Node/Deno/Bun compatibility, blanket Hono/Web API support, other native targets, dynamic
 SQLite values/results, general actors, WebSockets, compression, JWT/JWK,
 subprocesses, sockets, and a managed heap. The exact first unsupported boundary
 for each admitted Hono documentation row lives in

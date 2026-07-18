@@ -2,7 +2,7 @@
 
 TinyTSX is an ahead-of-time compiler for a deliberately restricted subset of
 TypeScript, TSX, and Hono. It turns supported backend applications into small
-native ARM64 HTTP servers with bounded resources and no JavaScript engine in
+native ARM64 or x86-64 HTTP servers with bounded resources and no JavaScript engine in
 the generated executable.
 
 > TypeScript syntax. First-class TSX. Native machine code. Bounded request
@@ -20,9 +20,10 @@ package environment. TinyTSX explores a different trade-off for small backend
 services:
 
 - familiar TypeScript, TSX, and selected Hono APIs at development time;
-- statically compiled AArch64 application code at runtime;
+- statically compiled ARM64 or x86-64 application code at runtime;
 - no V8, JavaScriptCore, QuickJS, JIT, or runtime JS parser;
 - bounded request arenas, queues, actor mailboxes, and database results;
+- an event-driven connection reactor backed by fixed reusable executors;
 - default-deny environment, filesystem, and persistence capabilities;
 - one native executable with no npm runtime dependency;
 - approximately 6–9 MiB warm RSS in the current benchmark matrix.
@@ -94,18 +95,22 @@ boundary.
 | Target | Status |
 | --- | --- |
 | Apple Silicon / `aarch64-apple-darwin` | Native build and execution |
+| Intel macOS / `x86_64-apple-darwin` | Native build and execution |
 | Linux ARM64 / `aarch64-unknown-linux-gnu` | Native build and execution |
-| macOS-to-Linux cross-host output | Assembly inspection only |
-| x86-64, Windows, iOS, WebAssembly | Not supported as application targets |
+| Linux x86-64 / `x86_64-unknown-linux-gnu` | Native build and execution |
+| Other cross-host combinations | Assembly inspection only |
+| Windows, iOS, WebAssembly | Not supported as application targets |
 
-Final linking and execution require a host matching the selected target.
+Final linking normally requires a matching host. Apple Silicon can also link
+the Intel macOS target when Rust's `x86_64-apple-darwin` standard library is
+installed; the resulting binary runs through Rosetta 2.
 
 ## Build from source
 
 ### Prerequisites
 
-- an Apple Silicon Mac with Xcode Command Line Tools, or a native Linux ARM64
-  host with Clang and libcurl development files;
+- macOS with Xcode Command Line Tools, or Linux with Clang and libcurl
+  development files, on ARM64 or x86-64;
 - a recent Node.js and npm installation;
 - a recent stable Rust toolchain with Cargo;
 - Git with submodule support.
@@ -183,7 +188,7 @@ Common build options include:
 --request-memory <bytes>   Per-request arena size
 --release                  Optimized runtime build
 --emit-hir                 Retain typed HIR JSON
---emit-asm                 Retain generated AArch64 assembly
+--emit-asm                 Retain generated target assembly
 --alias <specifier=path>   Runtime source alias
 --api <specifier=path>     Declaration overlay
 --binding <name=value>     Explicit native resource binding
@@ -361,7 +366,7 @@ The alpha does not provide:
 - general SQLite callbacks, values, or concurrent connection semantics;
 - distributed actors;
 - live Stytch, JWT/JWK, or OAuth integration;
-- x86-64 or Windows targets.
+- Windows and other unlisted native targets.
 
 The detailed compatibility table is the source of truth:
 [`doc/COMPATIBILITY.md`](doc/COMPATIBILITY.md).

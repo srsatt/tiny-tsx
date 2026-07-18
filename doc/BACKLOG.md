@@ -40,8 +40,10 @@ for unsupported behavior.
 The alpha profiles are:
 
 - native Apple arm64 build and execution;
+- native Intel macOS build and execution;
 - native Linux arm64 build and execution;
-- cross-host AArch64 assembly inspection only;
+- native Linux x86-64 build and execution;
+- other cross-host assembly inspection only;
 - arena-only request memory with no managed heap;
 - pinned upstream Hono source, not a compiler-owned Hono replacement;
 - built-in TinyTSX backend modules with no npm runtime dependency.
@@ -57,7 +59,7 @@ for the later Stytch-TODO source before the author-history rewrite, and both
 extracted archives passed the installed example and bounded-failure suite. The
 rewrite changed every commit hash, so those manifests and checksums are now
 historical evidence rather than taggable artifacts. A new candidate must repeat
-both native gates from one clean rewritten-history commit.
+all four native gates from one clean rewritten-history commit.
 
 Acceptance criteria are, in order:
 
@@ -1957,6 +1959,19 @@ general AOT/JIT claim.
     basic control, this fixes single-worker starvation but reduces control
     throughput and raises aggregate CPU, so it is retained as a bounded
     correctness/stability tradeoff rather than a speedup.
+  - 2026-07-19: the bounded descriptor reactor removes idle keep-alive sockets
+    from HTTP executors and wakes at most one executor per ready descriptor.
+    A response-checked eight-worker, three-run, five-second preview records the
+    static, actor, and in-memory SQLite controls at concurrency 8/64. At 64,
+    TinyTSX reaches 63,892/56,770/55,586 requests per second and
+    2.246/2.454/2.414 ms p99, versus Bun at
+    194,801/105,911/147,225 requests per second and
+    0.601/1.231/0.829 ms p99. Warm RSS is 6.59/6.89/8.09 MiB versus
+    Bun at 36.12/109.28/69.78 MiB. Compared with the prior pressure-aware
+    controls, the reactor removes the 12–16 ms concurrency-64 tail cliff, but
+    the descriptor handoff consumes substantially more CPU and does not close
+    the throughput gap. These five-second reports are directional evidence,
+    not a replacement for the sustained release matrix.
 
 ### P5 — Research tracks outside the release critical path
 
@@ -1988,6 +2003,11 @@ general AOT/JIT claim.
 - [x] Implement reusable assembly macros, shared AArch64 lowering, and thin
       Mach-O/ELF dialect adapters with byte-stable Apple output and
       assembler-verified Linux output.
+- [x] Add shared portable lowering for Intel macOS and Linux x86-64, covering
+      the closed example corpus's functions, request-time values, filesystem,
+      environment, SQLite, workers, and actors. Intel Mach-O executes under
+      Rosetta, Linux x86-64 executes as an ELF server, and the release matrix
+      produces all four native archives.
 - [x] Record TinyTSX/Bun startup, RSS, throughput, latency, worker, streaming,
       JSX, Hono, and provider benchmark evidence with stated limitations.
 - [x] Define memory-lifetime/GC decision gates and a separate bounded no-WASI

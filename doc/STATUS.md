@@ -1,6 +1,6 @@
 # Implementation status
 
-Last updated: 2026-07-18
+Last updated: 2026-07-19
 
 ## Current state
 
@@ -9,8 +9,8 @@ complete, including native Apple/Linux, installed-archive, bounded-failure, and
 measured-load evidence. The repository's author-history rewrite preserved the
 verified trees but changed every commit hash, so the old schema-v2 artifact
 manifests no longer identify a reachable release source. Fresh clean Apple and
-Linux release verification at one rewritten-history commit remains open before
-tagging.
+Linux verification for ARM64 and x86-64 at one rewritten-history commit remains
+open before tagging.
 
 ## Alpha implementation evidence
 
@@ -1611,19 +1611,43 @@ rtk npm run benchmark:hono-jsx-ssr
 
 ## Active slice
 
-The pinned Stytch-auth TODO tracer is complete through P1-P4 functional,
-package, Apple installed-archive, and measured-load evidence. Its measured tail
-latency and syscall/context-switch pressure remain optimization inputs, not
-release blockers. The open release gate is native Linux-arm64 execution from an
-extracted archive followed by clean Apple/Linux archives from the same final
-source commit. Live Stytch credentials and broader JavaScript compatibility are
-not part of that gate.
+Intel macOS and Linux x86-64 share a portable generated-C lowering path and emit
+real target assembly. The closed examples cover scalar functions,
+conditionals, loops, exceptions, Hono request-time rendering, capabilities,
+SQLite, workers, and actors. Intel Mach-O apps execute under Rosetta and a
+Linux x86-64 ELF server executes in native x86-64 userspace. Four native
+release jobs cover Apple/Linux and ARM64/x86-64.
+
+The reusable event worker pool now separates descriptor readiness from fixed
+executors. One bounded `poll` reactor owns sleeping descriptors; executors only
+receive ready jobs. HTTP preserves connection/parser state, pipelined input,
+the sixteen-request turn, overload admission, request limits, panic containment,
+and graceful shutdown. A one-executor regression proves an idle keep-alive
+connection cannot occupy the executor ahead of a second ready connection. The
+reactor wakes one executor per newly ready descriptor to avoid a condvar
+broadcast herd.
+
+At source `ce2200a`, response-checked eight-worker previews retain three
+five-second samples at concurrency 8/64 for static, actor, and in-memory SQLite
+routes. At concurrency 64, TinyTSX records 63,892/56,770/55,586 requests per
+second, 2.246/2.454/2.414 ms p99, and 6.59/6.89/8.09 MiB warm RSS. Bun records
+194,801/105,911/147,225 requests per second, 0.601/1.231/0.829 ms p99, and
+36.12/109.28/69.78 MiB warm RSS. The reactor removes the earlier 12–16 ms
+high-concurrency tail cliff, but TinyTSX still spends roughly five to six CPU
+cores on this eight-executor configuration. The next performance boundary is
+the per-response reactor/executor handoff, not missing JIT optimization.
+Evidence is retained in
+`benchmarks/results/2026-07-19-m5-max-event-reactor-5s-*-keepalive-w8.*`.
+
+Portable handler guards now lower both Basic credentials and the pinned
+credential-free session-cookie boundary. An Intel Mach-O server returns 401
+without the required cookie and 200 with it. Release CI installs the example
+dependency graph before running the assembler-backed x86 integration tests.
 
 ## Resume point
 
-Run the current TODO intake, native, Bun reference, benchmark, and installed
-release gates. Then execute the extracted archive on a native Linux-arm64 host,
-retaining its checksum, schema-v2 manifest, version report, and HTTP/failure
-evidence. Once Linux is green, repeat clean Apple and Linux release verification
-at one source commit and update the tag-ready checklist without creating or
-moving the tag.
+Finish the four-target native release run from the final documentation commit.
+Then profile and reduce the per-response reactor/executor handoff without
+reintroducing idle-connection pinning; evaluate platform-native readiness
+backends (`kqueue`/`epoll`), executor affinity, and a bounded hot-connection
+fast path before rerunning the full sustained TinyTSX/Bun matrix.
