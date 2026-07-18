@@ -42,6 +42,17 @@ class ReportingTest(unittest.TestCase):
         self.assertIn("| Global allocator | 20 | 2 | 4.00 KiB |", markdown)
         self.assertIn("no allocation ratio is claimed", markdown)
 
+    def test_bounds_large_response_body_previews(self) -> None:
+        raw = self._raw()
+        raw["correctness"]["bodyUtf8"] = "x" * 1_000
+        raw["correctness"]["contentLength"] = 1_000
+
+        markdown = render_markdown(summarize(raw))
+
+        self.assertIn("Body: 1,000 UTF-8 bytes; SHA-256", markdown)
+        self.assertIn("Body preview:", markdown)
+        self.assertNotIn("x" * 200, markdown)
+
     @staticmethod
     def _raw() -> dict:
         sample = {

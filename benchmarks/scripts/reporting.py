@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import statistics
 from typing import Any
 
@@ -111,7 +113,7 @@ def render_markdown(result: dict[str, Any]) -> str:
         "## Response contract",
         "",
         f"- Status: {result['correctness']['status']}",
-        f"- Body: `{result['correctness']['bodyUtf8']}` ({result['correctness']['contentLength']} bytes)",
+        *_response_body_lines(result["correctness"]),
         f"- TinyTSX Content-Type: `{result['correctness']['contentTypes']['tinytsx']}`",
         f"- Bun Content-Type: `{result['correctness']['contentTypes']['bun']}`",
         f"- TinyTSX framing: `{result['correctness']['framings']['tinytsx']}`",
@@ -150,6 +152,20 @@ def render_markdown(result: dict[str, Any]) -> str:
         ]
     )
     return "\n".join(lines)
+
+
+def _response_body_lines(correctness: dict[str, Any]) -> list[str]:
+    body = str(correctness["bodyUtf8"])
+    length = int(correctness["contentLength"])
+    if length <= 256:
+        return [f"- Body: `{json.dumps(body, ensure_ascii=False)}` ({length} bytes)"]
+
+    digest = hashlib.sha256(body.encode()).hexdigest()
+    preview = json.dumps(body[:160], ensure_ascii=False)
+    return [
+        f"- Body: {length:,} UTF-8 bytes; SHA-256 `{digest}`",
+        f"- Body preview: `{preview}...`",
+    ]
 
 
 def _footprint_row(label: str, target: dict[str, Any]) -> str:
