@@ -33,6 +33,7 @@ pub fn serve() -> std::io::Result<()> {
         {
             Ok(Turn::Complete) => JobControl::Complete,
             Ok(Turn::Resubmit) => JobControl::Resubmit(connection),
+            Ok(Turn::Park) => JobControl::Park(connection),
             Err(error) => {
                 eprintln!("request error: {error}");
                 JobControl::Complete

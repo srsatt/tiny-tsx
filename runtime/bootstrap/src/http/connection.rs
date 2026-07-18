@@ -1,7 +1,7 @@
 use std::{
     io::{self},
     net::{Shutdown, TcpStream},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use crate::abi::{
@@ -27,12 +27,14 @@ pub(super) struct Connection {
     stream: TcpStream,
     input: ConnectionInput,
     requests_completed: usize,
+    idle_since: Option<Instant>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Turn {
     Complete,
     Resubmit,
+    Park,
 }
 
 impl Connection {
@@ -43,20 +45,51 @@ impl Connection {
             stream,
             input: ConnectionInput::new(),
             requests_completed: 0,
+            idle_since: None,
         })
     }
 
     pub(super) fn handle_turn(&mut self, arena: &mut RequestArena) -> io::Result<Turn> {
+        if self.requests_completed != 0 && !self.input.has_complete_head() {
+            if !self.has_ready_input()? {
+                return if self
+                    .idle_since
+                    .is_some_and(|idle_since| idle_since.elapsed() >= CONNECTION_IO_TIMEOUT)
+                {
+                    Ok(Turn::Complete)
+                } else {
+                    Ok(Turn::Park)
+                };
+            }
+            self.idle_since = None;
+        }
         for turn_index in 0..REQUESTS_PER_TURN {
             let turn = self.handle_request(arena)?;
             if turn == Turn::Complete {
                 return Ok(Turn::Complete);
+            }
+            if !self.input.has_complete_head() {
+                self.idle_since = Some(Instant::now());
+                return Ok(Turn::Park);
             }
             if turn_index + 1 == REQUESTS_PER_TURN {
                 return Ok(Turn::Resubmit);
             }
         }
         unreachable!("a connection turn has at least one request slot")
+    }
+
+    fn has_ready_input(&self) -> io::Result<bool> {
+        self.stream.set_nonblocking(true)?;
+        let result = self.stream.peek(&mut [0_u8; 1]);
+        let restore = self.stream.set_nonblocking(false);
+        restore?;
+        match result {
+            Ok(0) => Ok(false),
+            Ok(_) => Ok(true),
+            Err(error) if error.kind() == io::ErrorKind::WouldBlock => Ok(false),
+            Err(error) => Err(error),
+        }
     }
 
     pub(super) fn into_stream(self) -> TcpStream {
@@ -230,8 +263,11 @@ pub(super) fn write_overload_response(stream: &mut TcpStream) -> io::Result<()> 
 mod tests {
     use std::{
         io::{Read, Write},
-        net::{TcpListener, TcpStream},
+        net::{Shutdown, TcpListener, TcpStream},
+        time::Duration,
     };
+
+    use tinytsx_runtime_worker::{JobControl, WorkerPool};
 
     use crate::abi::RequestArena;
 
@@ -285,5 +321,55 @@ mod tests {
             16
         );
         assert!(responses.ends_with(b"Connection: close\r\n\r\n"));
+    }
+
+    #[test]
+    fn queued_connection_runs_before_idle_keep_alive_wait() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind test listener");
+        let address = listener.local_addr().expect("listener address");
+        let mut idle_client = TcpStream::connect(address).expect("connect idle client");
+        let (idle_server, _) = listener.accept().expect("accept idle connection");
+        let mut queued_client = TcpStream::connect(address).expect("connect queued client");
+        let (queued_server, _) = listener.accept().expect("accept queued connection");
+        queued_client
+            .set_read_timeout(Some(Duration::from_secs(1)))
+            .expect("bound queued response wait");
+
+        idle_client
+            .write_all(b"GET /idle HTTP/1.1\r\nHost: localhost\r\n\r\n")
+            .expect("send idle keep-alive request");
+        queued_client
+            .write_all(b"GET /queued HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
+            .expect("send queued request");
+
+        let pool = WorkerPool::new_resumable(
+            1,
+            2,
+            |_| RequestArena::new(4096),
+            |arena, mut connection: Connection| match connection.handle_turn(arena) {
+                Ok(Turn::Complete) | Err(_) => JobControl::Complete,
+                Ok(Turn::Resubmit) => JobControl::Resubmit(connection),
+                Ok(Turn::Park) => JobControl::Park(connection),
+            },
+        )
+        .expect("create HTTP worker pool");
+        assert!(
+            pool.try_submit(Connection::new(idle_server).expect("configure idle connection"))
+                .is_ok(),
+            "submit idle connection",
+        );
+        assert!(
+            pool.try_submit(Connection::new(queued_server).expect("configure queued connection"))
+                .is_ok(),
+            "submit queued connection",
+        );
+
+        let mut response = Vec::new();
+        let queued_result = queued_client.read_to_end(&mut response);
+        let _ = idle_client.shutdown(Shutdown::Both);
+        pool.join();
+
+        queued_result.expect("queued response must not wait for idle keep-alive timeout");
+        assert!(response.starts_with(b"HTTP/1.1 200"));
     }
 }

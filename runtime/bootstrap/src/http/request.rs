@@ -51,6 +51,10 @@ impl ConnectionInput {
         }
     }
 
+    pub(super) fn has_complete_head(&self) -> bool {
+        request_head_end(&self.bytes).is_some()
+    }
+
     pub(super) fn read_body(
         &mut self,
         stream: &mut impl Read,
@@ -243,6 +247,18 @@ mod tests {
             .expect("read second head")
             .expect("second request");
         assert!(second.starts_with(b"GET /second"));
+    }
+
+    #[test]
+    fn distinguishes_complete_pipelined_heads_from_partial_input() {
+        let mut partial = ConnectionInput::new();
+        partial
+            .bytes
+            .extend_from_slice(b"GET /next HTTP/1.1\r\nHost: x\r\n");
+        assert!(!partial.has_complete_head());
+
+        partial.bytes.extend_from_slice(b"\r\n");
+        assert!(partial.has_complete_head());
     }
 
     fn bytes(view: crate::abi::TinyStringView) -> Vec<u8> {
