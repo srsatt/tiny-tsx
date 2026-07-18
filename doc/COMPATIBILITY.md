@@ -940,8 +940,29 @@ panic reinitialization, isolation from another actor, and termination when the
 window is exhausted. Apple Hono HTTP proves two failures reset state 1 to 0 and
 a third terminates the actor; Linux arm64 assembles the same configuration.
 This does not evaluate general failure branches or add persistence recovery,
-backoff, manual restart, supervisors, links, monitors, registries, snapshots,
-or distributed actors.
+backoff, manual restart, links, monitors, registries, snapshots, or distributed
+actors. Root supervision is the separate bounded shape below.
+
+The bounded root-supervision slice adds a distinct module-initialization value:
+`supervise({strategy: "oneForOne", maxRestarts, withinMs})`. It can only be
+passed as `ActorOptions.supervisor` to the exact fallible counter specialization;
+it cannot escape, expose methods, combine with actor-local restart or
+persistence, or supervise the value mailbox. Frontend diagnostics and Rust HIR
+validation independently enforce one static strategy, restart bounds of 1–16
+within 1–60,000 milliseconds, canonical supervisor IDs, at most eight roots,
+at most sixteen children per root, and valid child cross-references.
+
+The native runtime represents the root as shared restart-window accounting and
+weak child registrations over the existing fixed application executor. A panic
+within capacity reruns only that child's initializer. Exhaustion terminates all
+children registered to that root and cancels their queued replies, without
+affecting an actor outside the group. The project-owned Hono tracer proves the
+complete two-child/outside-actor sequence on Apple arm64; Linux arm64 assembles
+the generated supervisor/child ABI; Bun/Hono runs an independent reference;
+and the installed archive builds and executes the packaged source. This is not
+general Erlang/OTP behavior: nesting, dynamic children, alternate strategies,
+child specs, manual restart/backoff, links, monitors, registries, snapshots,
+remote nodes, and distributed identity remain outside the contract.
 
 ## Compatibility order
 

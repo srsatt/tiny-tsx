@@ -180,13 +180,22 @@ One exact non-persistent counter behavior may throw on a closed integer
 sentinel and declare `restart: {maxRestarts, withinMs}`. The bounds are 1–16
 restarts in a 1–60,000 ms rolling window. An admitted failure resets only that
 actor to its declared initial state; exceeding the intensity terminates it and
-cancels queued replies. Persistent recovery, backoff, manual restart,
-supervision, links, monitors, and registries are not implemented.
+cancels queued replies.
 
-Dynamic request-derived messages, arbitrary behaviors, general supervision, value
-identity/transfer, and general persistence are not native. The optional
+The same fallible behavior may instead join one static root created by
+`supervise({strategy: "oneForOne", maxRestarts, withinMs})`. A program has at
+most eight roots and sixteen children per root. The root shares its rolling
+restart budget across its children, resets only the failed child while capacity
+remains, and terminates that root's complete child group when exhausted.
+Actors outside the group remain usable. A supervised child cannot also select
+local restart or persistence. Supervisors expose no mailbox or status API and
+cannot be nested or created dynamically. Backoff, manual restart, alternate
+strategies, links, monitors, and registries are not implemented.
+
+Dynamic request-derived messages, arbitrary behaviors, general supervision,
+value identity/transfer, and general persistence are not native. The optional
 SQLite-backed counter persistence specialization has process-restart evidence;
 value-mailbox persistence is rejected.
 
 Post-alpha candidates are path utilities, signals, subprocesses, raw sockets,
-binary filesystem APIs, remote actors, and actor supervision trees.
+binary filesystem APIs, remote actors, and broader actor supervision trees.

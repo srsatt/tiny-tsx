@@ -108,7 +108,7 @@ MiB warm RSS, peaks at 6.75 MiB, and returns from 68 descriptors to 4. The Bun
 reference uses eight OS Workers and records 120.77 MiB warm RSS plus a 703.77
 MiB median peak. Those are complete-process implementation comparisons, not
 isolated per-actor allocation or scheduling costs. The tracer does not add a
-runtime actor registry, dynamic identity, supervision, or persistence.
+runtime actor registry, dynamic identity, dynamic supervision, or persistence.
 
 ## Bounded restart policy
 
@@ -135,12 +135,13 @@ actor and cancels its queued replies.
 This is panic containment plus reinitialization for the exact source shape
 above, not evaluation of arbitrary actor code. Persistence is rejected because
 its recovery source and disk/memory reconciliation require a separate policy.
-There is no backoff, manual restart, supervisor, child hierarchy, link, monitor,
-registry, snapshot, or distributed identity.
+There is no backoff or manual restart in this actor-local policy. A separate
+bounded root supervisor is available below; links, monitors, registries,
+snapshots, and distributed identity remain unsupported.
 
-## Selected bounded supervision tracer
+## Bounded root supervision
 
-The next admitted actor slice is a static root one-for-one supervisor for the
+The admitted supervision slice is a static root one-for-one supervisor for the
 same exact fallible counter behavior:
 
 ```ts
@@ -154,13 +155,11 @@ const left = spawn(fallibleCounter, 10, {supervisor: root});
 const right = spawn(fallibleCounter, 100, {supervisor: root});
 ```
 
-This is a selected implementation contract, not part of the shipped API until
-its SDK, frontend, HIR, runtime, native/reference, package, and release gates
-are green. The supervisor value is created at module initialization and is only
-accepted as a `supervisor` option for statically known fallible counter
-children. It shares one rolling 1–16 restart budget and 1–60,000 millisecond
-window across at most sixteen children. A program may declare at most eight
-root supervisors.
+The supervisor value is created at module initialization and is only accepted
+as a `supervisor` option for statically known fallible counter children. It
+shares one rolling 1–16 restart budget and 1–60,000 millisecond window across
+at most sixteen children. A program may declare at most eight root
+supervisors. `tinytsx --list-builtins` publishes both limits.
 
 When a child handler panics, that caller receives the existing internal-error
 envelope. While restart capacity remains, only the failed child reruns its
@@ -169,7 +168,7 @@ after shared intensity exhaustion terminates every child in that root failure
 domain and cancels their queued replies. Actors outside the supervisor remain
 usable. A supervised child cannot also select local restart or persistence.
 
-The selected API deliberately exposes no supervisor mailbox or status query.
+The bounded API deliberately exposes no supervisor mailbox or status query.
 Nested/dynamic supervisors and children, alternate strategies, child specs,
 manual restart, backoff, links, monitors, registries, snapshots, remote nodes,
 and distributed identity remain unsupported.
@@ -235,6 +234,16 @@ from state 1 to its declared state 0. A third failure inside the 60-second
 window exhausts the intensity and terminates only that actor. Apple native HTTP
 checks the complete sequence and Linux arm64 assembles the restart
 configuration functions.
+
+`examples/hono-actors/supervision.ts` proves one shared root across two
+fallible counters plus an ordinary outside counter. Apple native HTTP mutates
+both children, proves independent one-for-one resets for the first two
+failures, exhausts the shared budget with the third, observes both children
+terminated, and continues using the outside actor. Linux arm64 assembles the
+supervisor/child ABI, Bun/Hono runs the same external sequence, and the
+installed-release gate builds and executes the packaged example. Deterministic
+worker-runtime tests separately expire the rolling window without adding a
+timing-sensitive HTTP case.
 
 Before actors can carry general request-derived application state, TinyTSX
 still needs a runtime expression/value representation for dynamic messages;

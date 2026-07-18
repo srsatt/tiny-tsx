@@ -67,7 +67,8 @@ The protected backend modules are:
   timeout;
 - `tinytsx:actors`: compile-time counter actors with 1–64 mailbox entries,
   optional SQLite-backed counter persistence, and one bounded non-persistent
-  restart-intensity form;
+  restart-intensity form or static one-for-one root supervision across at most
+  sixteen fallible children per root and eight roots per program;
 - `tinytsx:serve`: one compile-time fetch application and closed port.
 
 Environment and filesystem/database access are default-deny. Use
@@ -109,8 +110,8 @@ Use `tinytsx:serve` instead of `@hono/node-server` when the application wants
 the same native server entrypoint without the Hono package namespace.
 
 Focused examples for both entrypoints, Body Limit, Request ID,
-`@hono/zod-openapi`, file reads, SQLite, and local/persistent actors ship in
-`$TINYTSX_HOME/examples`.
+`@hono/zod-openapi`, file reads, SQLite, and local, supervised, and persistent
+actors ship in `$TINYTSX_HOME/examples`.
 Copy that directory to a writable project and follow its `README.md`; the
 archive release gate runs those sources against their pinned npm packages
 before publication. See the capability documents before granting files,

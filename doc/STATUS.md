@@ -304,8 +304,8 @@ produces and serves a native Mach-O executable from the example TSX source.
 - Apple native HTTP proves two failures reset state 1 to 0 and the third failure
   terminates the actor. Linux-arm64 assembly carries the failure sentinel,
   restart count, and window. Persistence recovery, backoff, manual restart,
-  supervision, links, monitors, registries, and snapshots remain explicit
-  boundaries.
+  links, monitors, registries, and snapshots remain explicit boundaries; the
+  later bounded-root section records the admitted supervision shape.
 - Verification: 124 frontend tests, 20 worker tests, 60 bootstrap tests, 180
   Rust workspace tests, Hono intake 8/8, actor native/assembly 8/8, the focused
   built-in manifest test, and workspace Clippy with warnings denied. A
@@ -313,6 +313,41 @@ produces and serves a native Mach-O executable from the example TSX source.
   tests and produced the smoke-verified alpha archive with SHA-256
   `44f8cab4f6669614a0aec5ec94bac7370b66b50e0f210bc1edb859e4c13ce1c5`;
   the final tag-ready package still requires a clean source tree.
+
+### Bounded root actor supervision (2026-07-18)
+
+- `tinytsx:actors` now exposes an opaque module-scope
+  `supervise({strategy: "oneForOne", maxRestarts, withinMs})` value for the
+  existing fallible counter specialization. The SDK, built-in manifest,
+  frontend evaluator, HIR, generated AArch64 configuration, bootstrap ABI, and
+  build report share limits of eight roots, sixteen children per root, 1–16
+  restarts, and a 1–60,000 millisecond rolling window.
+- Stable `TINY1520` diagnostics reject dynamic/invalid policies, ordinary or
+  persistent children, actor-local restart plus supervision, escaped values,
+  forged references, a ninth root, and a seventeenth child. Rust HIR tests
+  independently reject missing supervisor references, empty/oversized child
+  groups, local restart, and persistence.
+- The reusable worker runtime keeps weak child registrations and one shared
+  restart window. It reinitializes only the failed child while capacity remains;
+  exhaustion terminates the complete registered group and queued replies while
+  leaving outside actors usable. A deterministic test separately proves rolling
+  window expiry.
+- `examples/hono-actors/supervision.ts` mutates two supervised counters and one
+  outside counter, proves two independent child resets, exhausts the shared
+  budget on the third failure, observes both children terminated, and continues
+  using the outside actor. Apple native HTTP and Linux assembly pass in the
+  12/12 actor suite. An independent Bun/Hono reference passes 1/1 with 28
+  expectations; Hono intake passes 8/8; the packaged installed example executes
+  the same failure domain.
+- Verification: frontend tests 142/142, Rust workspace tests 198/198, compiler
+  HIR tests 12/12, worker tests 22/22, bootstrap tests 65/65, release-mode
+  worker/SQLite/bootstrap tests 22/10/65, installed release tests 4/4, and
+  workspace Clippy with warnings denied. The dirty-tree archive rehearsal
+  produced Apple checksum
+  `5324ec5464164f0ac2a0c560649e58dc7bc0db759af1fff9124487a2c6c4d241`.
+  This proves package reachability but is not a clean source attestation; the
+  current head still needs the normal clean Apple and native Linux release
+  reruns before release-candidate status.
 
 ### Bounded actor hard-reset cancellation (2026-07-17)
 
@@ -328,7 +363,7 @@ produces and serves a native Mach-O executable from the example TSX source.
 - The internal disconnect status closes the dead HTTP connection without a
   response write. General `AbortSignal`, clean-close propagation, message
   retraction, cancellation of other built-ins, restart beyond the exact
-  fallible-counter policy, and supervision remain explicit boundaries.
+  fallible-counter policy, and general supervision remain explicit boundaries.
 - Verification: 18 worker tests, 60 bootstrap tests, 178 Rust workspace tests,
   actor native/assembly 6/6 across Apple arm64 and Linux arm64, and workspace
   Clippy with warnings denied.
@@ -742,9 +777,10 @@ produces and serves a native Mach-O executable from the example TSX source.
   tracer covers increment/decrement, tell-before-ask ordering, repeated stop, a
   recoverable post-stop request, Apple-arm64 execution, and Linux-arm64
   assembly. Later post-alpha evidence below adds copied closed values, idle
-  scale, and hot-mailbox fairness. Timeout, supervision, dynamic messages, and
-  general behavior persistence remain open; a separate SQLite-backed
-  specialization proves counter persistence across restart.
+  scale, hot-mailbox fairness, bounded timeout/restart, and static root
+  supervision. Dynamic messages and general behavior persistence remain open;
+  a separate SQLite-backed specialization proves counter persistence across
+  restart.
 - The SQLite foundation is pinned and reproducible: the focused
   `tinytsx-runtime-sqlite` crate uses `rusqlite` 0.40.1, bundled
   `libsqlite3-sys` 0.38.1, and the SQLite 3.53.2 amalgamation. Its bounded core
@@ -1347,7 +1383,8 @@ produces and serves a native Mach-O executable from the example TSX source.
 - Lifecycle tests now pin active-finish/queued-cancel stop semantics and prove
   that dropping a reply detaches the caller without canceling an accepted FIFO
   message. Panic containment and later recovery remain generic runtime
-  guarantees; timeout, restart, and supervision APIs are still absent.
+  guarantees. Timeout, restart, and supervision APIs were still absent at this
+  checkpoint and are recorded in later sections.
 
 ### Bounded copied actor values (2026-07-17)
 

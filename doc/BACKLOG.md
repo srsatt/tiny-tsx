@@ -384,12 +384,13 @@ including 141/141 frontend tests, native/reference/workspace suites, installed
 examples and failure paths, archive smoke, source attestation, and checksum.
 The Linux archive still attests an earlier commit, so a native Linux rerun at
 the same current source remains required before this head is called a release
-candidate. The selected feature tracer is now the bounded root one-for-one
-supervisor below. Its reusable worker-runtime substrate and deterministic
-restart-window tests have landed; the public SDK/HIR/native path and release
-evidence remain in progress. It must not widen into links, monitors,
-registries, dynamic children, arbitrary behaviors, or distribution; the native
-Linux release rerun remains a separate release-hygiene gate.
+candidate. The bounded root one-for-one supervisor below has now landed through
+the public SDK/HIR/native path, Apple HTTP, Linux assembly, Bun/Hono reference,
+manifest, and installed-package gates. It deliberately does not widen into
+links, monitors, registries, dynamic children, arbitrary behaviors, or
+distribution. The current head still needs clean Apple and native Linux release
+reruns; the successful dirty-tree package rehearsal is reachability evidence,
+not a source attestation.
 
 Do not reopen the completed alpha foundations as broad projects. File reading,
 SQLite, and local actors already have public bounded built-ins. Their next work
@@ -402,10 +403,7 @@ The groomed candidates, in recommended dependency order, are:
 1. **SQLite transaction/value depth:** add only the prepared/callback
    transaction and dynamic value forms required by a selected application while
    retaining single-owner, non-interleaving execution.
-2. **Bounded actor supervision:** finish the selected two-child one-for-one
-   tracer through the public SDK, HIR, native ABI, package, and release gates;
-   keep links, monitors, registries, persistence, and distribution separate.
-3. **Release-stability evidence:** finish the named P4 workload families and a
+2. **Release-stability evidence:** finish the named P4 workload families and a
    longer controlled TinyTSX/Bun run only after the selected functional slice
    is green. A new release candidate remains a separate explicitly selected
    goal.
@@ -1142,7 +1140,7 @@ marker. A clean Apple release rerun at `9fbc605` passes and produces checksum
 Treat this as current Apple release evidence only; the Linux archive must still
 be regenerated from the same current source before release-candidate status.
 
-#### Selected P3 tracer — bounded root one-for-one supervisor (in progress 2026-07-18)
+#### Selected P3 tracer — bounded root one-for-one supervisor (landed 2026-07-18)
 
 Add one reusable `tinytsx:actors` supervision primitive around the existing
 fallible counter behavior. The public source shape is a module-scope
@@ -1180,14 +1178,15 @@ API, cannot be nested or dynamically created, and do not add `oneForAll`,
 process aliases, persistence snapshots, remote nodes, or distributed identity.
 Those require separate tracers after this one is green.
 
-Implementation checkpoint: the generic application supervisor, shared rolling
-restart accounting, weak child registration, one-for-one state reinitialization,
-group termination on exhaustion, and outside-actor isolation are landed in the
-worker runtime with deterministic tests. This checkpoint is infrastructure, not
-completion of the public tracer. Keep this item open until the SDK declaration,
-frontend validation, HIR cross-references, native Apple HTTP behavior, Linux
-assembly, Bun/Hono reference, manifest/package/installed routing, synchronized
-documentation, and release-proportional verification are all green.
+The tracer is green. SDK and built-in-manifest declarations, stable frontend
+diagnostics including root/child overflow and escape rejection, HIR IDs and
+cross-reference tests, generated AArch64 configuration, bootstrap integration,
+shared runtime accounting, group termination, Apple HTTP, Linux assembly, and
+the Bun/Hono reference all pass. The Hono matrix routes its native/reference
+scripts through the release suite, and the dirty-tree archive rehearsal builds
+and executes the packaged example. That rehearsal is not a clean release
+attestation: repeat clean Apple and native Linux release verification at the
+same source commit before naming the next release candidate.
 
 ### P1 — Compatibility and language depth
 
@@ -1397,14 +1396,14 @@ documentation, and release-proportional verification are all green.
   - 2026-07-17: stop is explicitly active-finish/queued-cancel, and abandoning
     a reply detaches only the waiter without retracting accepted FIFO effects.
     Generic runtime tests also prove isolated state, panic containment with a
-    later successful message, and cross-actor parallelism. Deadlines/timeouts,
-    restart policy, and supervision remain open.
+    later successful message, and cross-actor parallelism. General
+    deadlines/cancellation and broader supervision remain open.
   - 2026-07-17: `ask(message, {timeoutMs})` now accepts a static 1–60,000 ms
     deadline across the SDK, HIR, Apple/Linux code generation, and runtime. A
     deterministic blocked-handler test proves timeout detaches the waiter
     without retracting the accepted FIFO message; the public Hono tracer proves
-    a successful bounded ask. Clean-close/general-signal cancellation, restart
-    policy, and supervision remain open after the hard-reset slice below.
+    a successful bounded ask. Clean-close/general-signal cancellation and
+    broader supervision remain open after the hard-reset slice below.
   - 2026-07-17: a hard client reset now detaches an `actor.ask()` HTTP waiter at
     the next 10-millisecond socket-error poll without retracting its accepted
     mailbox message. The one-worker SQLite-backed tracer holds an external write
@@ -1412,8 +1411,8 @@ documentation, and release-proportional verification are all green.
     lock is released, then observes the detached increment. Generic worker tests
     pin cancelled and timed-out waiters; Apple HTTP and Linux assembly remain in
     `test:actors-native`. Clean TCP half-close, arbitrary `AbortSignal` sources,
-    cancellation of SQLite/fetch/file operations, message retraction, restart,
-    and supervision remain outside this tracer.
+    cancellation of SQLite/fetch/file operations, message retraction, and
+    broader supervision remain outside this tracer.
   - 2026-07-17: the source tree now admits one exact non-persistent counter
     behavior whose first statement throws a closed `Error` for one
     compile-time integer sentinel, followed by the existing checked counter
@@ -1426,16 +1425,16 @@ documentation, and release-proportional verification are all green.
     unsupported forms. The named Hono tracer executes on Apple arm64 and
     assembles for Linux arm64, and the SDK, manifest, and compatibility docs pin
     the same boundary. Persistent restart recovery, backoff, manual restart,
-    supervision, links, monitors, registries, snapshots, and distributed
-    identity remain separate.
-  - 2026-07-18: the reusable worker-runtime substrate for a static root
-    one-for-one supervisor is landed. It shares a bounded rolling restart budget
-    across registered children, reinitializes only the failed child while the
-    budget remains, terminates the group when it is exhausted, and leaves actors
-    outside the group usable. The public `supervise(...)` source contract,
-    compiler/native integration, Hono behavior, packaging, and release evidence
-    remain open under the selected tracer above, so this broad item stays
-    unchecked.
+    broader supervision, links, monitors, registries, snapshots, and
+    distributed identity remain separate.
+  - 2026-07-18: the static root one-for-one supervisor is landed through the
+    public `supervise(...)` source contract, compiler/native ABI, Apple/Linux
+    behavior, Bun/Hono reference, and installed-package gate. It shares a
+    bounded rolling restart budget across registered children, reinitializes
+    only the failed child while the budget remains, terminates the group when
+    exhausted, and leaves outside actors usable. General timeouts/cancellation,
+    drain variants, arbitrary behaviors, nested/dynamic trees, and observation
+    APIs remain open, so this broad item stays unchecked.
 - [x] Measure 1,000 and 10,000 idle/local actors, publish bytes per actor and
       thread count, and prove cross-actor parallelism and fairness under a hot
       mailbox before raising the documented actor-count limit.
