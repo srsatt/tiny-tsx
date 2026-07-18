@@ -573,7 +573,7 @@ descriptors to 4. The raw evidence is the adjacent
 `benchmarks/results/2026-07-17-m5-max-sustained-15s-hono-large-file-keepalive-w8.*`
 pair; the result is limited to this exact warm-cache payload shape.
 
-#### Selected next P4 tracer — upstream compact/pretty JSON branch pair
+#### Selected P4 tracer — upstream compact/pretty JSON branch pair (landed 2026-07-18)
 
 Add paired `hono-json-compact` and `hono-json-pretty` workloads using the
 unchanged pinned 34-module `vendor/hono-examples/basic/src/index.ts` application
@@ -597,6 +597,17 @@ two-space formatted serialization of one closed four-record array. It does not
 measure dynamic JSON collections, request-body decoding, arbitrary query-value
 comparison, mixed/randomized branch traffic, large JSON, replacers, cycles, or
 general middleware branching.
+
+The pair is green. The harness test pins both branches and the shared complete
+source; Apple arm64 executes the Bun-captured 129-byte compact and 202-byte
+pretty responses; the complete graph assembles for Linux arm64; and all 24
+target/concurrency samples have success rate 1.0. At concurrency 8/64, TinyTSX
+reaches 0.37x/0.61x Bun on compact JSON and 0.44x/0.79x on pretty JSON. Pretty
+formatting lowers TinyTSX throughput by 2.1%/0.3% relative to compact and Bun by
+19.4%/23.2%. Every TinyTSX run returns from 68 peak descriptors to 4. The raw
+evidence is the adjacent
+`benchmarks/results/2026-07-18-m5-max-sustained-15s-hono-json-{compact,pretty}-keepalive-w8.*`
+pairs; no dynamic-collection or arbitrary-query claim is made.
 
 Before implementing the next tracer, its selected goal must be copied into the
 active goal with: its exact tracer/source revision; admitted and rejected
@@ -895,6 +906,13 @@ explicitly promoted into a later goal.
     its concurrency-64 p99 remains worse at 22.030 ms versus 5.104 ms. Responses
     above 32 KiB, streaming/range/compression behavior, and the other workload
     families remain open, so this broad item stays unchecked.
+  - 2026-07-18: the unchanged upstream compact/pretty JSON pair adds the
+    query-absent and query-present branches for one closed four-record array.
+    All six 15-second samples per branch pass. Pretty formatting changes
+    TinyTSX throughput by -2.1%/-0.3% at concurrency 8/64 versus Bun at
+    -19.4%/-23.2%. Dynamic collections, arbitrary query values, request JSON,
+    randomized branch mixes, and the other workload families remain open, so
+    this broad item stays unchecked.
 - [x] Add CPU, syscall, allocation, peak-RSS, and first-launch instrumentation.
   - 2026-07-17: the macOS harness samples whole-process CPU time, Unix/Mach
     syscalls, context switches, faults, threads, open-file-descriptor
@@ -905,7 +923,7 @@ explicitly promoted into a later goal.
     binaries do not include them, and no Bun allocation ratio is claimed.
 - [x] Run controlled longer-duration comparisons before publishing performance
       claims and optimize only from profiles.
-  - 2026-07-17: the eight-workload sustained matrix retains three 15-second
+  - 2026-07-18: the ten-workload sustained matrix retains three 15-second
     samples at concurrency 8 and 64 for both targets, alternates target and
     concurrency order, disables allocator instrumentation, and preserves all
     raw response-checked samples. It supports claims only for those exact
