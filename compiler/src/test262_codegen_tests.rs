@@ -7,8 +7,9 @@ use crate::{
     hir::SourceSpan,
     target::Target,
     test262_hir::{
-        NumericOperand, NumericSubtractionOperation, PrimitiveComparison, PrimitiveExpression,
-        PrimitiveIdentityCheck, PrimitiveNumber, Test262Assertion, Test262Program,
+        MapOperation, MapPrimitive, MapSpecialNumber, NumericOperand, NumericSubtractionOperation,
+        PrimitiveComparison, PrimitiveExpression, PrimitiveIdentityCheck, PrimitiveNumber,
+        Test262Assertion, Test262Program,
     },
 };
 
@@ -269,6 +270,129 @@ fn emits_and_assembles_special_primitive_identity_checks_for_linux() {
 }
 
 #[test]
+fn emits_and_assembles_bounded_map_operations_for_linux() {
+    let mut program = program(Target::LinuxArm64);
+    program.assertions = vec![Test262Assertion::MapProgram {
+        capacity: 16,
+        maps: 1,
+        operations: vec![
+            MapOperation::Reset {
+                map: 0,
+                span: span(),
+            },
+            MapOperation::Set {
+                map: 0,
+                key: MapPrimitive::NumberSpecial {
+                    value: MapSpecialNumber::NegativeZero,
+                },
+                value: MapPrimitive::Number { value: 42 },
+                span: span(),
+            },
+            MapOperation::AssertGet {
+                map: 0,
+                key: MapPrimitive::Number { value: 0 },
+                expected: MapPrimitive::Number { value: 42 },
+                span: span(),
+            },
+            MapOperation::Set {
+                map: 0,
+                key: MapPrimitive::NumberSpecial {
+                    value: MapSpecialNumber::Nan,
+                },
+                value: MapPrimitive::String {
+                    value: "present".to_owned(),
+                },
+                span: span(),
+            },
+            MapOperation::AssertHas {
+                map: 0,
+                key: MapPrimitive::NumberSpecial {
+                    value: MapSpecialNumber::Nan,
+                },
+                expected: true,
+                span: span(),
+            },
+            MapOperation::AssertDelete {
+                map: 0,
+                key: MapPrimitive::NumberSpecial {
+                    value: MapSpecialNumber::Nan,
+                },
+                expected: true,
+                span: span(),
+            },
+            MapOperation::AssertSize {
+                map: 0,
+                expected: 1,
+                span: span(),
+            },
+        ],
+        span: span(),
+    }];
+
+    let assembly = emit(&program, Target::LinuxArm64).unwrap();
+    assert!(assembly.contains("sub sp, sp, #656"));
+    assert!(assembly.contains("Ltinytsx_test262_map_0_1_set_scan:"));
+    assert!(assembly.contains("fcmp d0, d1"));
+    assert!(assembly.contains("str xzr, [x11]"));
+
+    let mut child = Command::new("clang")
+        .args([
+            "--target=aarch64-unknown-linux-gnu",
+            "-x",
+            "assembler",
+            "-c",
+            "-o",
+            "/dev/null",
+            "-",
+        ])
+        .stdin(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn clang");
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(assembly.as_bytes())
+        .expect("write generated assembly");
+    let output = child.wait_with_output().expect("wait for clang");
+    assert!(
+        output.status.success(),
+        "clang rejected generated Map assembly: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+fn rejects_a_seventeenth_live_map_entry() {
+    let mut program = program(Target::LinuxArm64);
+    let mut operations = vec![MapOperation::Reset {
+        map: 0,
+        span: span(),
+    }];
+    operations.extend((0..17).map(|value| MapOperation::Set {
+        map: 0,
+        key: MapPrimitive::Number { value },
+        value: MapPrimitive::Undefined,
+        span: span(),
+    }));
+    operations.push(MapOperation::AssertSize {
+        map: 0,
+        expected: 16,
+        span: span(),
+    });
+    program.assertions = vec![Test262Assertion::MapProgram {
+        capacity: 16,
+        maps: 1,
+        operations,
+        span: span(),
+    }];
+
+    let error = emit(&program, Target::LinuxArm64).unwrap_err();
+    assert!(error.contains("exceeds sixteen live entries"));
+}
+
+#[test]
 fn emits_runtime_numeric_binding_loads_and_subtraction() {
     let mut program = program(Target::LinuxArm64);
     program.assertions = vec![Test262Assertion::NumericSubtractionProgram {
@@ -348,7 +472,9 @@ fn emits_portable_host_clock_calls_for_date_now() {
     assert!(apple_assembly.contains("bl _clock_gettime"));
     assert!(apple_assembly.contains("stp x29, x30, [sp, #-16]!"));
     assert!(apple_assembly.contains("ldp x29, x30, [sp], #16"));
-    assert!(emit(&linux, Target::LinuxArm64)
-        .unwrap()
-        .contains("bl clock_gettime"));
+    assert!(
+        emit(&linux, Target::LinuxArm64)
+            .unwrap()
+            .contains("bl clock_gettime")
+    );
 }

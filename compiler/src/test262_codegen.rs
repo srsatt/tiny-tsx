@@ -1,9 +1,10 @@
-use std::fmt::Write;
+use std::{collections::BTreeMap, fmt::Write};
 
 use crate::target::Target;
 use crate::test262_hir::{
-    ArrayUnshiftOperation, NumericOperand, NumericSubtractionOperation, PrimitiveComparison,
-    PrimitiveExpression, PrimitiveIdentityCheck, PrimitiveNumber, Test262Assertion, Test262Program,
+    ArrayUnshiftOperation, MapOperation, MapPrimitive, MapSpecialNumber, NumericOperand,
+    NumericSubtractionOperation, PrimitiveComparison, PrimitiveExpression, PrimitiveIdentityCheck,
+    PrimitiveNumber, Test262Assertion, Test262Program,
 };
 
 const ARRAY_STACK_BYTES: usize = 144;
@@ -11,6 +12,10 @@ const ARRAY_DATA_OFFSET: usize = 16;
 const SPREAD_SOURCE_OFFSET: usize = 16;
 const SPREAD_ARGUMENTS_OFFSET: usize = 80;
 const NUMERIC_STACK_BYTES: usize = 128;
+const MAP_CAPACITY: usize = 16;
+const MAP_ENTRY_BYTES: usize = 40;
+const MAP_SIZE_OFFSET: usize = MAP_CAPACITY * MAP_ENTRY_BYTES;
+const MAP_STACK_BYTES: usize = MAP_SIZE_OFFSET + 16;
 
 pub fn emit(program: &Test262Program, target: Target) -> Result<String, String> {
     program.validate()?;
@@ -146,6 +151,9 @@ pub fn emit(program: &Test262Program, target: Target) -> Result<String, String> 
             Test262Assertion::PrimitiveIdentityProgram { checks, .. } => {
                 emit_primitive_identity_program(&mut assembly, index, checks)
             }
+            Test262Assertion::MapProgram {
+                maps, operations, ..
+            } => emit_map_program(&mut assembly, index, *maps, operations),
         }
     }
     writeln!(assembly, "    mov w0, #0").unwrap();
@@ -220,6 +228,374 @@ pub fn emit(program: &Test262Program, target: Target) -> Result<String, String> 
         }
     }
     Ok(assembly)
+}
+
+fn emit_map_program(
+    assembly: &mut String,
+    assertion_index: usize,
+    maps: usize,
+    operations: &[MapOperation],
+) {
+    let stack_bytes = maps * MAP_STACK_BYTES;
+    let strings = map_string_codes(operations);
+    let fail = format!("Ltinytsx_test262_map_{assertion_index}_fail");
+    let done = format!("Ltinytsx_test262_map_{assertion_index}_done");
+    writeln!(assembly, "    sub sp, sp, #{stack_bytes}").unwrap();
+
+    for (operation_index, operation) in operations.iter().enumerate() {
+        let scope = format!("{assertion_index}_{operation_index}");
+        match operation {
+            MapOperation::Reset { map, .. } | MapOperation::Clear { map, .. } => {
+                emit_map_clear(assembly, *map, &scope);
+            }
+            MapOperation::Set {
+                map, key, value, ..
+            } => emit_map_set(assembly, *map, key, value, &strings, &scope, &fail),
+            MapOperation::Delete { map, key, .. } => {
+                emit_map_delete(assembly, *map, key, None, &strings, &scope, &fail);
+            }
+            MapOperation::AssertSize { map, expected, .. } => {
+                writeln!(
+                    assembly,
+                    "    ldr x9, [sp, #{}]",
+                    map_offset(*map) + MAP_SIZE_OFFSET
+                )
+                .unwrap();
+                emit_immediate(assembly, "x10", *expected as u64);
+                writeln!(assembly, "    cmp x9, x10").unwrap();
+                writeln!(assembly, "    b.ne {fail}").unwrap();
+            }
+            MapOperation::AssertGet {
+                map, key, expected, ..
+            } => emit_map_get_assertion(assembly, *map, key, expected, &strings, &scope, &fail),
+            MapOperation::AssertHas {
+                map, key, expected, ..
+            } => emit_map_has_assertion(assembly, *map, key, *expected, &strings, &scope, &fail),
+            MapOperation::AssertDelete {
+                map, key, expected, ..
+            } => emit_map_delete(
+                assembly,
+                *map,
+                key,
+                Some(*expected),
+                &strings,
+                &scope,
+                &fail,
+            ),
+        }
+    }
+
+    writeln!(assembly, "    b {done}").unwrap();
+    writeln!(assembly, "{fail}:").unwrap();
+    writeln!(assembly, "    add sp, sp, #{stack_bytes}").unwrap();
+    writeln!(assembly, "    b Ltinytsx_test262_fail").unwrap();
+    writeln!(assembly, "{done}:").unwrap();
+    writeln!(assembly, "    add sp, sp, #{stack_bytes}").unwrap();
+}
+
+fn emit_map_clear(assembly: &mut String, map: usize, scope: &str) {
+    let loop_label = format!("Ltinytsx_test262_map_{scope}_clear");
+    writeln!(assembly, "    add x11, sp, #{}", map_offset(map)).unwrap();
+    emit_immediate(assembly, "x12", MAP_CAPACITY as u64);
+    writeln!(assembly, "{loop_label}:").unwrap();
+    writeln!(assembly, "    str xzr, [x11], #{MAP_ENTRY_BYTES}").unwrap();
+    writeln!(assembly, "    subs x12, x12, #1").unwrap();
+    writeln!(assembly, "    b.ne {loop_label}").unwrap();
+    writeln!(
+        assembly,
+        "    str xzr, [sp, #{}]",
+        map_offset(map) + MAP_SIZE_OFFSET
+    )
+    .unwrap();
+}
+
+fn emit_map_set(
+    assembly: &mut String,
+    map: usize,
+    key: &MapPrimitive,
+    value: &MapPrimitive,
+    strings: &BTreeMap<String, u64>,
+    scope: &str,
+    fail: &str,
+) {
+    let scan = format!("Ltinytsx_test262_map_{scope}_set_scan");
+    let remember_empty = format!("Ltinytsx_test262_map_{scope}_set_empty");
+    let next = format!("Ltinytsx_test262_map_{scope}_set_next");
+    let found = format!("Ltinytsx_test262_map_{scope}_set_found");
+    let insert = format!("Ltinytsx_test262_map_{scope}_set_insert");
+    let store = format!("Ltinytsx_test262_map_{scope}_set_store");
+    let done = format!("Ltinytsx_test262_map_{scope}_set_done");
+    emit_map_primitive(assembly, key, strings, "x9", "x10");
+    writeln!(assembly, "    add x11, sp, #{}", map_offset(map)).unwrap();
+    writeln!(assembly, "    mov x12, #0").unwrap();
+    writeln!(assembly, "    mov x13, #0").unwrap();
+    writeln!(assembly, "{scan}:").unwrap();
+    writeln!(assembly, "    ldr x14, [x11]").unwrap();
+    writeln!(assembly, "    cbz x14, {remember_empty}").unwrap();
+    emit_map_key_compare(assembly, scope, "set", &found, &next);
+    writeln!(assembly, "{remember_empty}:").unwrap();
+    writeln!(assembly, "    cmp x13, #0").unwrap();
+    writeln!(assembly, "    csel x13, x11, x13, eq").unwrap();
+    writeln!(assembly, "{next}:").unwrap();
+    writeln!(assembly, "    add x11, x11, #{MAP_ENTRY_BYTES}").unwrap();
+    writeln!(assembly, "    add x12, x12, #1").unwrap();
+    writeln!(assembly, "    cmp x12, #{MAP_CAPACITY}").unwrap();
+    writeln!(assembly, "    b.ne {scan}").unwrap();
+    writeln!(assembly, "    cbz x13, {fail}").unwrap();
+    writeln!(assembly, "    mov x11, x13").unwrap();
+    writeln!(assembly, "    b {insert}").unwrap();
+    writeln!(assembly, "{found}:").unwrap();
+    writeln!(assembly, "    b {store}").unwrap();
+    writeln!(assembly, "{insert}:").unwrap();
+    writeln!(assembly, "    mov x14, #1").unwrap();
+    writeln!(assembly, "    str x14, [x11]").unwrap();
+    writeln!(assembly, "    str x9, [x11, #8]").unwrap();
+    writeln!(assembly, "    str x10, [x11, #16]").unwrap();
+    writeln!(
+        assembly,
+        "    ldr x14, [sp, #{}]",
+        map_offset(map) + MAP_SIZE_OFFSET
+    )
+    .unwrap();
+    writeln!(assembly, "    add x14, x14, #1").unwrap();
+    writeln!(
+        assembly,
+        "    str x14, [sp, #{}]",
+        map_offset(map) + MAP_SIZE_OFFSET
+    )
+    .unwrap();
+    writeln!(assembly, "{store}:").unwrap();
+    emit_map_primitive(assembly, value, strings, "x14", "x15");
+    writeln!(assembly, "    str x14, [x11, #24]").unwrap();
+    writeln!(assembly, "    str x15, [x11, #32]").unwrap();
+    writeln!(assembly, "{done}:").unwrap();
+}
+
+fn emit_map_get_assertion(
+    assembly: &mut String,
+    map: usize,
+    key: &MapPrimitive,
+    expected: &MapPrimitive,
+    strings: &BTreeMap<String, u64>,
+    scope: &str,
+    fail: &str,
+) {
+    let found = format!("Ltinytsx_test262_map_{scope}_get_found");
+    let missing = format!("Ltinytsx_test262_map_{scope}_get_missing");
+    let compare = format!("Ltinytsx_test262_map_{scope}_get_compare");
+    emit_map_find(assembly, map, key, strings, scope, "get", &found, &missing);
+    writeln!(assembly, "{found}:").unwrap();
+    writeln!(assembly, "    ldr x9, [x11, #24]").unwrap();
+    writeln!(assembly, "    ldr x10, [x11, #32]").unwrap();
+    writeln!(assembly, "    b {compare}").unwrap();
+    writeln!(assembly, "{missing}:").unwrap();
+    writeln!(assembly, "    mov x9, #0").unwrap();
+    writeln!(assembly, "    mov x10, #0").unwrap();
+    writeln!(assembly, "{compare}:").unwrap();
+    emit_map_primitive(assembly, expected, strings, "x14", "x15");
+    emit_map_same_value(assembly, scope, "get_value", fail);
+}
+
+fn emit_map_has_assertion(
+    assembly: &mut String,
+    map: usize,
+    key: &MapPrimitive,
+    expected: bool,
+    strings: &BTreeMap<String, u64>,
+    scope: &str,
+    fail: &str,
+) {
+    let found = format!("Ltinytsx_test262_map_{scope}_has_found");
+    let missing = format!("Ltinytsx_test262_map_{scope}_has_missing");
+    let compare = format!("Ltinytsx_test262_map_{scope}_has_compare");
+    emit_map_find(assembly, map, key, strings, scope, "has", &found, &missing);
+    writeln!(assembly, "{found}:").unwrap();
+    writeln!(assembly, "    mov x9, #1").unwrap();
+    writeln!(assembly, "    b {compare}").unwrap();
+    writeln!(assembly, "{missing}:").unwrap();
+    writeln!(assembly, "    mov x9, #0").unwrap();
+    writeln!(assembly, "{compare}:").unwrap();
+    writeln!(assembly, "    cmp x9, #{}", usize::from(expected)).unwrap();
+    writeln!(assembly, "    b.ne {fail}").unwrap();
+}
+
+fn emit_map_delete(
+    assembly: &mut String,
+    map: usize,
+    key: &MapPrimitive,
+    expected: Option<bool>,
+    strings: &BTreeMap<String, u64>,
+    scope: &str,
+    fail: &str,
+) {
+    let found = format!("Ltinytsx_test262_map_{scope}_delete_found");
+    let missing = format!("Ltinytsx_test262_map_{scope}_delete_missing");
+    let compare = format!("Ltinytsx_test262_map_{scope}_delete_compare");
+    let done = format!("Ltinytsx_test262_map_{scope}_delete_done");
+    emit_map_find(
+        assembly, map, key, strings, scope, "delete", &found, &missing,
+    );
+    writeln!(assembly, "{found}:").unwrap();
+    writeln!(assembly, "    str xzr, [x11]").unwrap();
+    writeln!(
+        assembly,
+        "    ldr x14, [sp, #{}]",
+        map_offset(map) + MAP_SIZE_OFFSET
+    )
+    .unwrap();
+    writeln!(assembly, "    sub x14, x14, #1").unwrap();
+    writeln!(
+        assembly,
+        "    str x14, [sp, #{}]",
+        map_offset(map) + MAP_SIZE_OFFSET
+    )
+    .unwrap();
+    writeln!(assembly, "    mov x9, #1").unwrap();
+    writeln!(assembly, "    b {compare}").unwrap();
+    writeln!(assembly, "{missing}:").unwrap();
+    writeln!(assembly, "    mov x9, #0").unwrap();
+    writeln!(assembly, "{compare}:").unwrap();
+    if let Some(expected) = expected {
+        writeln!(assembly, "    cmp x9, #{}", usize::from(expected)).unwrap();
+        writeln!(assembly, "    b.ne {fail}").unwrap();
+    }
+    writeln!(assembly, "{done}:").unwrap();
+}
+
+#[allow(clippy::too_many_arguments)]
+fn emit_map_find(
+    assembly: &mut String,
+    map: usize,
+    key: &MapPrimitive,
+    strings: &BTreeMap<String, u64>,
+    scope: &str,
+    operation: &str,
+    found: &str,
+    missing: &str,
+) {
+    let scan = format!("Ltinytsx_test262_map_{scope}_{operation}_scan");
+    let next = format!("Ltinytsx_test262_map_{scope}_{operation}_next");
+    emit_map_primitive(assembly, key, strings, "x9", "x10");
+    writeln!(assembly, "    add x11, sp, #{}", map_offset(map)).unwrap();
+    writeln!(assembly, "    mov x12, #0").unwrap();
+    writeln!(assembly, "{scan}:").unwrap();
+    writeln!(assembly, "    ldr x13, [x11]").unwrap();
+    writeln!(assembly, "    cbz x13, {next}").unwrap();
+    emit_map_key_compare(assembly, scope, operation, found, &next);
+    writeln!(assembly, "{next}:").unwrap();
+    writeln!(assembly, "    add x11, x11, #{MAP_ENTRY_BYTES}").unwrap();
+    writeln!(assembly, "    add x12, x12, #1").unwrap();
+    writeln!(assembly, "    cmp x12, #{MAP_CAPACITY}").unwrap();
+    writeln!(assembly, "    b.ne {scan}").unwrap();
+    writeln!(assembly, "    b {missing}").unwrap();
+}
+
+fn emit_map_key_compare(
+    assembly: &mut String,
+    scope: &str,
+    operation: &str,
+    equal: &str,
+    different: &str,
+) {
+    let number = format!("Ltinytsx_test262_map_{scope}_{operation}_number");
+    writeln!(assembly, "    ldr x14, [x11, #8]").unwrap();
+    writeln!(assembly, "    cmp x9, x14").unwrap();
+    writeln!(assembly, "    b.ne {different}").unwrap();
+    writeln!(assembly, "    ldr x15, [x11, #16]").unwrap();
+    writeln!(assembly, "    cmp x9, #3").unwrap();
+    writeln!(assembly, "    b.eq {number}").unwrap();
+    writeln!(assembly, "    cmp x10, x15").unwrap();
+    writeln!(assembly, "    b.eq {equal}").unwrap();
+    writeln!(assembly, "    b {different}").unwrap();
+    writeln!(assembly, "{number}:").unwrap();
+    writeln!(assembly, "    fmov d0, x10").unwrap();
+    writeln!(assembly, "    fmov d1, x15").unwrap();
+    writeln!(assembly, "    fcmp d0, d1").unwrap();
+    writeln!(assembly, "    b.eq {equal}").unwrap();
+    writeln!(assembly, "    fcmp d0, d0").unwrap();
+    writeln!(assembly, "    b.vc {different}").unwrap();
+    writeln!(assembly, "    fcmp d1, d1").unwrap();
+    writeln!(assembly, "    b.vs {equal}").unwrap();
+    writeln!(assembly, "    b {different}").unwrap();
+}
+
+fn emit_map_same_value(assembly: &mut String, scope: &str, operation: &str, fail: &str) {
+    let number = format!("Ltinytsx_test262_map_{scope}_{operation}_number");
+    let done = format!("Ltinytsx_test262_map_{scope}_{operation}_done");
+    writeln!(assembly, "    cmp x9, x14").unwrap();
+    writeln!(assembly, "    b.ne {fail}").unwrap();
+    writeln!(assembly, "    cmp x9, #3").unwrap();
+    writeln!(assembly, "    b.eq {number}").unwrap();
+    writeln!(assembly, "    cmp x10, x15").unwrap();
+    writeln!(assembly, "    b.ne {fail}").unwrap();
+    writeln!(assembly, "    b {done}").unwrap();
+    writeln!(assembly, "{number}:").unwrap();
+    writeln!(assembly, "    cmp x10, x15").unwrap();
+    writeln!(assembly, "    b.eq {done}").unwrap();
+    writeln!(assembly, "    fmov d0, x10").unwrap();
+    writeln!(assembly, "    fmov d1, x15").unwrap();
+    writeln!(assembly, "    fcmp d0, d0").unwrap();
+    writeln!(assembly, "    b.vc {fail}").unwrap();
+    writeln!(assembly, "    fcmp d1, d1").unwrap();
+    writeln!(assembly, "    b.vc {fail}").unwrap();
+    writeln!(assembly, "{done}:").unwrap();
+}
+
+fn emit_map_primitive(
+    assembly: &mut String,
+    value: &MapPrimitive,
+    strings: &BTreeMap<String, u64>,
+    tag_register: &str,
+    payload_register: &str,
+) {
+    let (tag, payload) = match value {
+        MapPrimitive::Undefined => (0, 0),
+        MapPrimitive::Null => (1, 0),
+        MapPrimitive::Boolean { value } => (2, u64::from(*value)),
+        MapPrimitive::Number { value } => (3, (*value as f64).to_bits()),
+        MapPrimitive::NumberSpecial { value } => (
+            3,
+            match value {
+                MapSpecialNumber::NegativeZero => (-0.0f64).to_bits(),
+                MapSpecialNumber::Nan => f64::NAN.to_bits(),
+                MapSpecialNumber::PositiveInfinity => f64::INFINITY.to_bits(),
+                MapSpecialNumber::NegativeInfinity => f64::NEG_INFINITY.to_bits(),
+            },
+        ),
+        MapPrimitive::String { value } => (4, strings[value]),
+        MapPrimitive::Symbol { id, .. } => (5, u64::from(*id)),
+    };
+    emit_immediate(assembly, tag_register, tag);
+    emit_immediate(assembly, payload_register, payload);
+}
+
+fn map_string_codes(operations: &[MapOperation]) -> BTreeMap<String, u64> {
+    let mut strings = BTreeMap::new();
+    for operation in operations {
+        let values: Vec<&MapPrimitive> = match operation {
+            MapOperation::Set { key, value, .. } => vec![key, value],
+            MapOperation::Delete { key, .. }
+            | MapOperation::AssertHas { key, .. }
+            | MapOperation::AssertDelete { key, .. } => vec![key],
+            MapOperation::AssertGet { key, expected, .. } => vec![key, expected],
+            MapOperation::Reset { .. }
+            | MapOperation::Clear { .. }
+            | MapOperation::AssertSize { .. } => Vec::new(),
+        };
+        for value in values {
+            if let MapPrimitive::String { value } = value {
+                strings.insert(value.clone(), 0);
+            }
+        }
+    }
+    for (index, code) in strings.values_mut().enumerate() {
+        *code = index as u64 + 1;
+    }
+    strings
+}
+
+fn map_offset(map: usize) -> usize {
+    map * MAP_STACK_BYTES
 }
 
 fn emit_primitive_identity_program(

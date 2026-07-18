@@ -110,6 +110,92 @@ pub enum Test262Assertion {
         checks: Vec<PrimitiveIdentityCheck>,
         span: SourceSpan,
     },
+    MapProgram {
+        capacity: usize,
+        maps: usize,
+        operations: Vec<MapOperation>,
+        span: SourceSpan,
+    },
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum MapPrimitive {
+    Undefined,
+    Null,
+    Boolean {
+        value: bool,
+    },
+    Number {
+        value: i64,
+    },
+    NumberSpecial {
+        value: MapSpecialNumber,
+    },
+    String {
+        value: String,
+    },
+    Symbol {
+        id: u32,
+        #[serde(default)]
+        description: Option<String>,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum MapSpecialNumber {
+    NegativeZero,
+    Nan,
+    PositiveInfinity,
+    NegativeInfinity,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum MapOperation {
+    Reset {
+        map: usize,
+        span: SourceSpan,
+    },
+    Set {
+        map: usize,
+        key: MapPrimitive,
+        value: MapPrimitive,
+        span: SourceSpan,
+    },
+    Delete {
+        map: usize,
+        key: MapPrimitive,
+        span: SourceSpan,
+    },
+    Clear {
+        map: usize,
+        span: SourceSpan,
+    },
+    AssertSize {
+        map: usize,
+        expected: usize,
+        span: SourceSpan,
+    },
+    AssertGet {
+        map: usize,
+        key: MapPrimitive,
+        expected: MapPrimitive,
+        span: SourceSpan,
+    },
+    AssertHas {
+        map: usize,
+        key: MapPrimitive,
+        expected: bool,
+        span: SourceSpan,
+    },
+    AssertDelete {
+        map: usize,
+        key: MapPrimitive,
+        expected: bool,
+        span: SourceSpan,
+    },
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -345,10 +431,141 @@ impl Test262Program {
                 Test262Assertion::PrimitiveIdentityProgram { checks, .. } => {
                     validate_primitive_identity(checks)?;
                 }
+                Test262Assertion::MapProgram {
+                    capacity,
+                    maps,
+                    operations,
+                    ..
+                } => validate_map_program(*capacity, *maps, operations)?,
                 _ => {}
             }
         }
         Ok(())
+    }
+}
+
+fn validate_map_program(
+    capacity: usize,
+    maps: usize,
+    operations: &[MapOperation],
+) -> Result<(), String> {
+    if capacity != 16 || maps == 0 || maps > 4 || operations.is_empty() || operations.len() > 256 {
+        return Err("Test262 Map requires capacity 16, 1-4 maps, and 1-256 operations".to_owned());
+    }
+    let mut initialized = vec![false; maps];
+    let mut entries = vec![Vec::<MapPrimitive>::new(); maps];
+    let mut assertions = 0usize;
+    for operation in operations {
+        let map = match operation {
+            MapOperation::Reset { map, .. }
+            | MapOperation::Set { map, .. }
+            | MapOperation::Delete { map, .. }
+            | MapOperation::Clear { map, .. }
+            | MapOperation::AssertSize { map, .. }
+            | MapOperation::AssertGet { map, .. }
+            | MapOperation::AssertHas { map, .. }
+            | MapOperation::AssertDelete { map, .. } => *map,
+        };
+        if map >= maps {
+            return Err("Test262 Map operation references a missing map".to_owned());
+        }
+        if !matches!(operation, MapOperation::Reset { .. }) && !initialized[map] {
+            return Err("Test262 Map operation precedes map initialization".to_owned());
+        }
+        match operation {
+            MapOperation::Reset { .. } => {
+                initialized[map] = true;
+                entries[map].clear();
+            }
+            MapOperation::Set { key, value, .. } => {
+                validate_map_primitive(key)?;
+                validate_map_primitive(value)?;
+                if !entries[map]
+                    .iter()
+                    .any(|candidate| map_keys_equal(candidate, key))
+                {
+                    if entries[map].len() == capacity {
+                        return Err("Test262 Map exceeds sixteen live entries".to_owned());
+                    }
+                    entries[map].push(key.clone());
+                }
+            }
+            MapOperation::Delete { key, .. } | MapOperation::AssertDelete { key, .. } => {
+                validate_map_primitive(key)?;
+                if let Some(index) = entries[map]
+                    .iter()
+                    .position(|candidate| map_keys_equal(candidate, key))
+                {
+                    entries[map].remove(index);
+                }
+                if matches!(operation, MapOperation::AssertDelete { .. }) {
+                    assertions += 1;
+                }
+            }
+            MapOperation::Clear { .. } => entries[map].clear(),
+            MapOperation::AssertSize { expected, .. } => {
+                if *expected > capacity {
+                    return Err("Test262 Map size assertion exceeds capacity".to_owned());
+                }
+                assertions += 1;
+            }
+            MapOperation::AssertGet { key, expected, .. } => {
+                validate_map_primitive(key)?;
+                validate_map_primitive(expected)?;
+                assertions += 1;
+            }
+            MapOperation::AssertHas { key, .. } => {
+                validate_map_primitive(key)?;
+                assertions += 1;
+            }
+        }
+    }
+    if assertions == 0 {
+        return Err("Test262 Map program requires an assertion".to_owned());
+    }
+    Ok(())
+}
+
+fn validate_map_primitive(value: &MapPrimitive) -> Result<(), String> {
+    match value {
+        MapPrimitive::String { value } if value.len() > 256 => {
+            Err("Test262 Map string exceeds 256 bytes".to_owned())
+        }
+        MapPrimitive::Symbol { id, description }
+            if *id >= 16
+                || description
+                    .as_ref()
+                    .is_some_and(|description| description.len() > 256) =>
+        {
+            Err("Test262 Map symbol exceeds its ID or description limit".to_owned())
+        }
+        _ => Ok(()),
+    }
+}
+
+fn map_keys_equal(left: &MapPrimitive, right: &MapPrimitive) -> bool {
+    match (left, right) {
+        (
+            MapPrimitive::Number { value: 0 },
+            MapPrimitive::NumberSpecial {
+                value: MapSpecialNumber::NegativeZero,
+            },
+        )
+        | (
+            MapPrimitive::NumberSpecial {
+                value: MapSpecialNumber::NegativeZero,
+            },
+            MapPrimitive::Number { value: 0 },
+        ) => true,
+        (
+            MapPrimitive::NumberSpecial {
+                value: MapSpecialNumber::Nan,
+            },
+            MapPrimitive::NumberSpecial {
+                value: MapSpecialNumber::Nan,
+            },
+        ) => true,
+        _ => left == right,
     }
 }
 
