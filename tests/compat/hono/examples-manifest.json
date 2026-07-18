@@ -229,6 +229,19 @@
       "firstUnsupportedBoundary": "Two static owners may target one capability-scoped WAL file and run fixed savepoint-rollback transactions; failed full-transaction rollback load, more than two connections, request-derived SQL, arbitrary callbacks, cross-process writers, network filesystems, and crash or power-loss durability remain unsupported or unmeasured."
     },
     {
+      "id": "tinytsx-sqlite-idempotency",
+      "provenance": "tinytsx-local",
+      "entry": "tests/compat/sqlite/idempotency-smoke.ts",
+      "imports": ["hono", "tinytsx:sqlite"],
+      "apis": ["Hono", "get", "post", "Context.req.header", "Context.req.json", "Context.req.param", "Context.text", "Context.json", "Database", "Database.exec", "Database.prepare", "Database.transaction(callback)", "Statement.run", "Statement.get"],
+      "intake": {"status": "pass", "evidence": "frontend/test/compatibility-audit.test.ts"},
+      "nativeCompile": {"appleArm64": "pass", "linuxArm64Assembly": "pass", "evidence": "tests/compat/sqlite/native.test.mjs"},
+      "httpBehavior": {"status": "pass", "evidence": "tests/compat/sqlite/native.test.mjs"},
+      "referenceBehavior": {"runtime": "Bun/Hono with bun:sqlite", "status": "pass", "evidence": "tests/compat/sqlite/idempotency-reference.test.ts"},
+      "releaseGates": {"native": ["test:sqlite-native"], "reference": ["test:hono-sqlite-idempotency-reference"]},
+      "firstUnsupportedBoundary": "A required statically named request header contributes a copied 1-256-byte UTF-8 TEXT value to prepared writes and bounded callback transactions; missing, empty, oversized, invalid-UTF-8, dynamic-name, fallback, structured, escaping, query/cookie/environment, and arbitrary expression values are unsupported."
+    },
+    {
       "id": "upstream-blog",
       "provenance": "upstream-contract-with-tinytsx-adapter",
       "entry": "vendor/hono-examples/blog/src/index.ts",

@@ -42,6 +42,7 @@ test("records the example matrix with executable evidence and boundaries", () =>
     "tinytsx-sqlite-owner",
     "tinytsx-sqlite-callback-transaction",
     "tinytsx-sqlite-wal-load",
+    "tinytsx-sqlite-idempotency",
     "upstream-blog",
     "tinytsx-actors-messages",
     "tinytsx-actors-restart",
