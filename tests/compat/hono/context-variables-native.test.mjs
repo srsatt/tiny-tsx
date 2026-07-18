@@ -23,6 +23,7 @@ test("executes isolated bounded Hono context variables natively", async context 
     "run", "-q", "-p", "tinytsx", "--", "build", entry,
     "--output", binary,
     "--port", String(port),
+    "--workers", "8",
     ...hono,
   ], {cwd: repository, encoding: "utf8"});
   assert.equal(built.status, 0, built.stderr || built.stdout);
@@ -40,7 +41,16 @@ test("executes isolated bounded Hono context variables natively", async context 
     body: `ctx:${value}:absent`,
   })));
 
-  const recovered = await fetch(`http://127.0.0.1:${port}/context/recovered`);
+  const varResponses = await Promise.all(values.map(async value => {
+    const response = await fetch(`http://127.0.0.1:${port}/context-var/${value}`);
+    return {status: response.status, body: await response.text()};
+  }));
+  assert.deepEqual(varResponses, values.map(value => ({
+    status: 200,
+    body: `ctx:${value}:absent`,
+  })));
+
+  const recovered = await fetch(`http://127.0.0.1:${port}/context-var/recovered`);
   assert.equal(recovered.status, 200);
   assert.equal(await recovered.text(), "ctx:recovered:absent");
 });
