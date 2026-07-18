@@ -689,6 +689,35 @@ Every run returns from 68 peak descriptors to 4. The adjacent
 `benchmarks/results/2026-07-18-m5-max-sustained-15s-hono-json-body-keepalive-w8.*`
 pair retains the exact request contract; broader dynamic JSON remains open.
 
+#### Selected P2 tracer — invalid UTF-8 form decoding (pinned 2026-07-18)
+
+Use Web Platform Tests revision
+`08e168922e0c0d42250335a40e679fa5123489df`, unchanged source
+`url/urlencoded-parser.any.js`, as the parser provenance. Admit the four
+`URLSearchParams` rows proving that `%FE%FF` and `%FF%FE` become two U+FFFD
+replacement characters, an incomplete `%C2` becomes one replacement, and
+`%C2x` becomes U+FFFD followed by `x`. Execute an equivalent project-owned
+derived case through the native WPT compiler because the upstream file's
+top-level table and `Request.formData()`/`Response.formData()` branches are
+outside the bounded WPT frontend.
+
+Implement replacement in the portable, fixed-capacity WPT form decoder after
+`+` and percent decoding and before URLSearchParams storage. Valid UTF-8,
+malformed percent escapes, order, duplicate names, and existing serialization
+must remain unchanged. Expansion must fail at the existing 256-byte component
+limit rather than write partial state. This does not add application-facing
+`URLSearchParams`, `Request.formData()`, `Response.formData()`, `TextDecoder`,
+dynamic input, iteration, or object identity.
+
+Keep Hono route and query decoding separate: pinned Hono revision
+`b2ae3a2204a48ce15a26448fd746d39745eb1837` deliberately preserves an
+undecodable percent group such as `%A4%A2`, so this tracer must not change the
+request-path ABI. Require the unchanged upstream WPT digest, frontend lowering
+coverage, Apple-arm64 native execution of the derived replacement case, a
+Linux-arm64 compile check for the portable runtime, the complete existing WPT
+allowlist, and synchronized compatibility/Web API/status documentation before
+checking the P2 item.
+
 Before implementing the next tracer, its selected goal must be copied into the
 active goal with: its exact tracer/source revision; admitted and rejected
 boundaries; Apple execution and Linux-arm64 evidence; failure, saturation, and
