@@ -426,6 +426,32 @@ test("requires matching read/write capabilities for an on-disk SQLite owner", ()
   }]);
 });
 
+test("lowers two independent SQLite owners for one WAL file", () => {
+  const hir = compileEntry(path.join(repository, "benchmarks/tiny/hono-sqlite-wal.ts"), {
+    sdkPath: path.join(repository, "sdk/index.d.ts"),
+    aliases: {hono: path.join(repository, "vendor/hono/src/index.ts")},
+    apiAliases: {hono: path.join(repository, "tests/compat/hono/api.d.ts")},
+    allowedReadRoots: [directory],
+    allowedWriteRoots: [directory],
+  });
+
+  assert.deepEqual(hir.sqliteDatabases, [
+    {id: 0, path: path.join(directory, "wal-load.db")},
+    {id: 1, path: path.join(directory, "wal-load.db")},
+  ]);
+  const first = hir.handlers.find(handler => handler.path === "/sqlite-wal/0");
+  const second = hir.handlers.find(handler => handler.path === "/sqlite-wal/1");
+  assert.equal(first?.sqliteActions?.[0]?.kind, "transaction");
+  assert.equal(first?.sqliteActions?.[0]?.database, 0);
+  assert.equal(second?.sqliteActions?.[0]?.kind, "transaction");
+  assert.equal(second?.sqliteActions?.[0]?.database, 1);
+  const action = first?.sqliteActions?.[0];
+  assert.match(
+    action?.kind === "transaction" ? hir.staticStrings[action.sql]?.value ?? "" : "",
+    /SAVEPOINT rollback_probe.*ROLLBACK TO rollback_probe.*UPDATE benchmark_state/s,
+  );
+});
+
 test("requires an explicit read root for filesystem access", () => {
   const entry = write("fs-capability.ts", `
     import {readTextFile} from "tinytsx:fs";
