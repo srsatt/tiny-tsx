@@ -410,6 +410,34 @@ The groomed candidates, in recommended dependency order, are:
    is green. A new release candidate remains a separate explicitly selected
    goal.
 
+#### Next-goal handoff — nested profile release slice
+
+This is the selected next implementation goal, but this backlog checkpoint is
+planning only. Do not treat uncommitted experiments as landed evidence and do
+not start or resume implementation until the goal is explicitly set. Once
+selected, execute the slice in this order:
+
+1. **P1/P2 — canonical nested request values:** prove the bounded path model in
+   frontend, HIR, response, and SQLite-parameter tests before widening the
+   runtime surface.
+2. **P3 — atomic profile persistence:** run the packaged Hono profile tracer
+   through one owner-serialized callback transaction and prove rollback plus
+   later connection reuse.
+3. **Release integration:** add Apple native HTTP, Linux-arm64 assembly,
+   unchanged Bun/Hono reference, manifest, package, and installed-archive
+   gates for the same application contract.
+4. **P4 — measured workload:** only after functional and failure gates are
+   green, add the response-checked nested-profile transaction workload to the
+   existing controlled TinyTSX/Bun harness.
+5. **Candidate decision:** synchronize compatibility, persistence, status, and
+   performance documents, then decide separately whether the resulting commit
+   should become a release candidate. Tagging remains a distinct action.
+
+Keep the work reviewable as small commits: bounded path representation and
+validation; native traversal; profile persistence and rollback; target/package
+gates; benchmark evidence; documentation. Each commit must keep already-landed
+top-level request JSON and SQLite behavior green.
+
 #### Selected tracer — bounded prepared transaction callback (landed 2026-07-17)
 
 The next P3 slice is the project-owned
@@ -1240,6 +1268,25 @@ response-checked P4 benchmark row before making performance claims. Do not
 widen this tracer to arrays, arbitrary schemas, JSON Schema/Zod validation,
 streaming bodies, multipart/form data, GC-backed objects, or general JavaScript
 property access.
+
+Acceptance checklist:
+
+- [ ] One canonical bounded path representation is shared by response and
+      SQLite lowering, with stable diagnostics for depth, segment, encoded-size,
+      selected-leaf-count, and unsupported-shape failures.
+- [ ] Bootstrap/runtime tests prove nested primitive traversal, exact JSON
+      encoding, SQLite parameter conversion, bounded failures, and request
+      recovery without regressing top-level fields.
+- [ ] The packaged Hono profile application proves commit, missing lookup,
+      second-step rollback, keep-alive recovery, and later successful reuse.
+- [ ] Apple native HTTP, Linux-arm64 assembly, unchanged Bun/Hono reference,
+      Hono manifest, package, and installed-archive gates all exercise the same
+      source-level contract.
+- [ ] A response-checked TinyTSX/Bun workload records startup, RSS, throughput,
+      median/p99 latency, CPU/process counters, success rate, and resource
+      recovery with the tracer limitations stated beside the result.
+- [ ] `doc/COMPATIBILITY.md`, `doc/PERSISTENCE.md`, `doc/STATUS.md`, and this
+      backlog agree on the landed surface and remaining exclusions.
 
 ### P1 — Compatibility and language depth
 
