@@ -922,6 +922,46 @@ access styles and a later recovery request; Linux arm64 assembles the same ABI,
 and Bun/Hono passes the shared source. The existing manifest/native/reference
 release gates cover the expanded API without adding a map object.
 
+#### Selected P1 tracer — special numbers and constant symbols
+
+Use pinned Test262 commit `f2d1435644797268dca1f7988cad5a4e89ccd8d2`
+and execute these four unchanged programs in native mode:
+
+- `test/harness/assert-samevalue-nan.js`;
+- `test/harness/assert-notsamevalue-zeros.js`;
+- `test/built-ins/Infinity/S15.1.1.2_A1.js`;
+- `test/built-ins/Symbol/uniqueness.js`.
+
+Their complete assertions must prove SameValue treats two `NaN` values as the
+same, distinguishes `+0` from `-0`, classifies positive infinity as a number
+that is neither finite nor `NaN` and equals `Number.POSITIVE_INFINITY`, and
+gives every direct `Symbol(description?)` call a unique identity even when the
+description repeats.
+
+Add explicit HIR constant tags for negative zero, `NaN`, positive/negative
+infinity, and compile-time symbols instead of allowing JSON serialization to
+collapse them to `0` or `null`. A symbol carries a canonical compile-time ID and
+an optional closed UTF-8 description of at most 256 bytes. Repeated references
+to one staged binding retain its ID; separate `Symbol()` calls receive distinct
+IDs. Extend `examples/staged-constants/server.tsx` with top-level and nested
+values proving all number tags plus shared and distinct symbols reach
+deterministic read-only native data.
+
+This slice admits constant construction, identity comparison in the four
+Test262 programs, and tagged materialization only. It does not admit symbol
+boxing, registry/well-known symbols, symbol property keys, descriptions at
+runtime, coercion, enumeration, arithmetic with non-finite values, special
+numbers in JSON/SQLite/actors, or general application symbol operations.
+
+Require frontend staging/lowering tests, Rust HIR validation and byte-encoding
+tests, Apple-arm64 execution of all four complete Test262 programs and the
+staged-constant HTTP example, Linux-arm64 code-generation/assembly evidence,
+allowlist/intake/package routing, and synchronized constant-data,
+compatibility/status/backlog documentation. Reject oversized descriptions and
+malformed/out-of-range symbol tags; the compile-time source-size ceiling is the
+applicable saturation boundary, while disposal is not applicable to immutable
+read-only constants.
+
 ### P1 — Compatibility and language depth
 
 - [x] Promote remaining syntax-only Test262 cases only when their complete
