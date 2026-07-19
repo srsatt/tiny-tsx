@@ -303,11 +303,8 @@ fn write_report(
     let filesystem = compilation.program.uses_filesystem();
     let actors = compilation.program.uses_actors();
     let sqlite = compilation.program.uses_sqlite();
-    let application_pool = !compilation.program.workers.is_empty()
-        || provider_transport
-        || filesystem
-        || actors
-        || sqlite;
+    let application_pool =
+        !compilation.program.workers.is_empty() || provider_transport || actors || sqlite;
     let mut runtime_features = vec![
         "http1",
         "bounded-writer",
@@ -406,7 +403,6 @@ fn print_summary(
         usize::from(
             !compilation.program.workers.is_empty()
                 || provider_transport
-                || filesystem
                 || actors
                 || sqlite
         ) * options.workers,
