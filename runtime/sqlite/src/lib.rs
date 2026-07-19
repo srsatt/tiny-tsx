@@ -79,7 +79,8 @@ pub fn todo_operation(
         .unchecked_transaction()
         .map_err(|error| Error::sqlite(ErrorKind::Sql, error))?;
     transaction
-        .execute_batch(TODO_SCHEMA)
+        .prepare_cached(TODO_SCHEMA)
+        .and_then(|mut statement| statement.execute([]))
         .map_err(|error| Error::sqlite(ErrorKind::Sql, error))?;
     match operation {
         TodoOperation::List => {}
@@ -87,21 +88,20 @@ pub fn todo_operation(
             if id.is_empty() || id.len() > 128 || text.len() > 4096 {
                 return Err(Error::bounded(ErrorKind::Sql));
             }
-            let count: i64 = transaction
-                .query_row(
-                    "SELECT count(*) FROM _tinytsx_todos WHERE user_id = ?1",
-                    [user],
-                    |row| row.get(0),
-                )
+            let mut statement = transaction
+                .prepare_cached("SELECT count(*) FROM _tinytsx_todos WHERE user_id = ?1")
+                .map_err(|error| Error::sqlite(ErrorKind::Sql, error))?;
+            let count: i64 = statement
+                .query_row([user], |row| row.get(0))
                 .map_err(|error| Error::sqlite(ErrorKind::Sql, error))?;
             if count >= 16 {
                 return Err(Error::bounded(ErrorKind::TooManyRows));
             }
             transaction
-                .execute(
+                .prepare_cached(
                     "INSERT INTO _tinytsx_todos (user_id, id, text, completed) VALUES (?1, ?2, ?3, 0)",
-                    (user, id, text),
                 )
+                .and_then(|mut statement| statement.execute((user, id, text)))
                 .map_err(|error| Error::sqlite(ErrorKind::Sql, error))?;
         }
         TodoOperation::Complete { id } => {
@@ -109,10 +109,10 @@ pub fn todo_operation(
                 return Err(Error::bounded(ErrorKind::Sql));
             }
             transaction
-                .execute(
+                .prepare_cached(
                     "UPDATE _tinytsx_todos SET completed = 1 WHERE sequence = (SELECT sequence FROM _tinytsx_todos WHERE user_id = ?1 AND id = ?2 ORDER BY sequence LIMIT 1)",
-                    (user, id),
                 )
+                .and_then(|mut statement| statement.execute((user, id)))
                 .map_err(|error| Error::sqlite(ErrorKind::Sql, error))?;
         }
         TodoOperation::Delete { id } => {
@@ -120,16 +120,14 @@ pub fn todo_operation(
                 return Err(Error::bounded(ErrorKind::Sql));
             }
             transaction
-                .execute(
-                    "DELETE FROM _tinytsx_todos WHERE user_id = ?1 AND id = ?2",
-                    (user, id),
-                )
+                .prepare_cached("DELETE FROM _tinytsx_todos WHERE user_id = ?1 AND id = ?2")
+                .and_then(|mut statement| statement.execute((user, id)))
                 .map_err(|error| Error::sqlite(ErrorKind::Sql, error))?;
         }
     }
 
     let mut statement = transaction
-        .prepare("SELECT id, text, completed FROM _tinytsx_todos WHERE user_id = ?1 ORDER BY completed, id, sequence LIMIT 17")
+        .prepare_cached("SELECT id, text, completed FROM _tinytsx_todos WHERE user_id = ?1 ORDER BY completed, id, sequence LIMIT 17")
         .map_err(|error| Error::sqlite(ErrorKind::Sql, error))?;
     let mut rows = statement
         .query([user])
@@ -359,8 +357,11 @@ pub fn execute(
     parameters: &[SqlValue],
 ) -> Result<ExecuteResult, Error> {
     validate_input(sql, parameters)?;
-    let changes = connection
-        .execute(sql, params_from_iter(parameters))
+    let mut statement = connection
+        .prepare_cached(sql)
+        .map_err(|error| Error::sqlite(ErrorKind::Sql, error))?;
+    let changes = statement
+        .execute(params_from_iter(parameters))
         .map_err(|error| Error::sqlite(ErrorKind::Sql, error))?;
     let last_insert_row_id = (changes != 0).then(|| connection.last_insert_rowid());
     Ok(ExecuteResult {
@@ -419,8 +420,11 @@ pub fn execute_prepared_transaction(
         .unchecked_transaction()
         .map_err(|error| Error::sqlite(ErrorKind::Sql, error))?;
     for step in steps {
-        transaction
-            .execute(&step.sql, params_from_iter(&step.parameters))
+        let mut statement = transaction
+            .prepare_cached(&step.sql)
+            .map_err(|error| Error::sqlite(ErrorKind::Sql, error))?;
+        statement
+            .execute(params_from_iter(&step.parameters))
             .map_err(|error| Error::sqlite(ErrorKind::Sql, error))?;
     }
     transaction
@@ -439,7 +443,7 @@ pub fn query(
     let max_rows = max_rows.min(MAX_ROWS);
     let max_bytes = max_bytes.min(MAX_RESULT_BYTES);
     let mut statement = connection
-        .prepare(sql)
+        .prepare_cached(sql)
         .map_err(|error| Error::sqlite(ErrorKind::Sql, error))?;
     let columns = statement
         .column_names()
@@ -485,46 +489,90 @@ pub fn query_json(
     parameters: &[SqlValue],
     mode: QueryMode,
 ) -> Result<Vec<u8>, Error> {
+    validate_input(sql, parameters)?;
     let max_rows = if mode == QueryMode::First {
         1
     } else {
         MAX_ROWS
     };
-    let result = query(connection, sql, parameters, max_rows, MAX_RESULT_BYTES)?;
-    let mut output = Vec::new();
+    let mut statement = connection
+        .prepare_cached(sql)
+        .map_err(|error| Error::sqlite(ErrorKind::Sql, error))?;
+    let column_keys = statement
+        .column_names()
+        .into_iter()
+        .map(|column| {
+            let mut key = Vec::with_capacity(column.len() + 3);
+            write_json_string(&mut key, column);
+            key.push(b':');
+            key
+        })
+        .collect::<Vec<_>>();
+    let mut rows = statement
+        .query(params_from_iter(parameters))
+        .map_err(|error| Error::sqlite(ErrorKind::Sql, error))?;
+    let mut output = Vec::with_capacity(256);
     if mode == QueryMode::All {
         output.push(b'[');
     }
-    let rows = if mode == QueryMode::First {
-        result.rows.into_iter().take(1).collect::<Vec<_>>()
-    } else {
-        result.rows
-    };
-    if mode == QueryMode::First && rows.is_empty() {
-        output.extend_from_slice(b"null");
-    }
-    for (row_index, row) in rows.iter().enumerate() {
-        if row_index != 0 {
+    let mut row_count = 0;
+    while let Some(row) = rows
+        .next()
+        .map_err(|error| Error::sqlite(ErrorKind::Sql, error))?
+    {
+        if row_count == max_rows {
+            return Err(Error::bounded(ErrorKind::TooManyRows));
+        }
+        if row_count != 0 {
             output.push(b',');
         }
         output.push(b'{');
-        for (column_index, (column, value)) in result.columns.iter().zip(row).enumerate() {
+        for (column_index, key) in column_keys.iter().enumerate() {
             if column_index != 0 {
                 output.push(b',');
             }
-            write_json_string(&mut output, column);
-            output.push(b':');
-            write_json_value(&mut output, value);
+            output.extend_from_slice(key);
+            let value = row
+                .get_ref(column_index)
+                .map_err(|error| Error::sqlite(ErrorKind::Sql, error))?;
+            write_json_value_ref(&mut output, value)?;
             if output.len() > MAX_RESULT_BYTES {
                 return Err(Error::bounded(ErrorKind::ResultTooLarge));
             }
         }
         output.push(b'}');
+        row_count += 1;
+    }
+    if mode == QueryMode::First && row_count == 0 {
+        output.extend_from_slice(b"null");
     }
     if mode == QueryMode::All {
         output.push(b']');
     }
     Ok(output)
+}
+
+fn write_json_value_ref(output: &mut Vec<u8>, value: ValueRef<'_>) -> Result<(), Error> {
+    match value {
+        ValueRef::Null => output.extend_from_slice(b"null"),
+        ValueRef::Integer(value) => output.extend_from_slice(value.to_string().as_bytes()),
+        ValueRef::Real(value) if value.is_finite() => {
+            output.extend_from_slice(value.to_string().as_bytes());
+        }
+        ValueRef::Real(_) => return Err(Error::bounded(ErrorKind::NonFiniteNumber)),
+        ValueRef::Text(value) => write_json_string(output, &String::from_utf8_lossy(value)),
+        ValueRef::Blob(value) => {
+            output.push(b'[');
+            for (index, byte) in value.iter().enumerate() {
+                if index != 0 {
+                    output.push(b',');
+                }
+                output.extend_from_slice(byte.to_string().as_bytes());
+            }
+            output.push(b']');
+        }
+    }
+    Ok(())
 }
 
 fn validate_input(sql: &str, parameters: &[SqlValue]) -> Result<(), Error> {
@@ -560,25 +608,6 @@ fn value_bytes(value: &SqlValue) -> usize {
         SqlValue::Integer(_) | SqlValue::Real(_) => 8,
         SqlValue::Text(value) => value.len(),
         SqlValue::Blob(value) => value.len(),
-    }
-}
-
-fn write_json_value(output: &mut Vec<u8>, value: &SqlValue) {
-    match value {
-        SqlValue::Null => output.extend_from_slice(b"null"),
-        SqlValue::Integer(value) => output.extend_from_slice(value.to_string().as_bytes()),
-        SqlValue::Real(value) => output.extend_from_slice(value.to_string().as_bytes()),
-        SqlValue::Text(value) => write_json_string(output, value),
-        SqlValue::Blob(value) => {
-            output.push(b'[');
-            for (index, byte) in value.iter().enumerate() {
-                if index != 0 {
-                    output.push(b',');
-                }
-                output.extend_from_slice(byte.to_string().as_bytes());
-            }
-            output.push(b']');
-        }
     }
 }
 

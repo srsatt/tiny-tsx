@@ -6,4 +6,4 @@ license.workspace = true
 
 [dependencies]
 libc = "=0.2.186"
-rusqlite = { version = "=0.40.1", default-features = false, features = ["bundled"] }
+rusqlite = { version = "=0.40.1", default-features = false, features = ["bundled", "cache"] }
