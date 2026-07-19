@@ -177,6 +177,18 @@ The harness builds a stripped release TinyTSX executable, alternates target orde
 between runs, warms each process, and retains every sample. It writes adjacent
 JSON and Markdown reports under `benchmarks/results/`.
 
+Core HTTP release candidates must also satisfy the machine-readable budget:
+
+```bash
+python3 benchmarks/scripts/performance_gate.py benchmarks/results/<report>.json
+```
+
+The gate requires the TinyTSX startup and warm-RSS medians to stay at or below
+half of Bun, its artifact to stay at or below 700 KiB, and its median throughput
+to meet or exceed Bun at concurrency 8 and 64. P99 must stay below 3 ms or within
+2x of Bun. The absolute-or-relative latency rule prevents sub-millisecond timer
+noise from rejecting an otherwise fast result.
+
 Workloads with a `paths` contract give `oha` a temporary URL file whose routes
 must have the same status, headers, framing, and body. The multi-actor workload
 uses this to cycle all eight tell routes. Its raw report also retains each
