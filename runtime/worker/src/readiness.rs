@@ -46,7 +46,7 @@ impl<J: Send + 'static> EventWorkerPool<J> {
         S: Send + 'static,
         Initialize: Fn(usize) -> S + Send + Sync + 'static,
         Descriptor: Fn(&J) -> RawFd + Send + Sync + 'static,
-        Handle: Fn(&mut S, J) -> EventControl<J> + Send + Sync + 'static,
+        Handle: Fn(&mut S, J, bool) -> EventControl<J> + Send + Sync + 'static,
     {
         if worker_count == 0 {
             return Err(io::Error::new(
@@ -85,8 +85,10 @@ impl<J: Send + 'static> EventWorkerPool<J> {
                 .name(format!("tinytsx-event-worker-{index}"))
                 .spawn(move || {
                     let mut state = initialize(index);
-                    while let Some(job) = worker_shared.take_ready() {
-                        let outcome = catch_unwind(AssertUnwindSafe(|| handle(&mut state, job)));
+                    while let Some((job, contended)) = worker_shared.take_ready(worker_count) {
+                        let outcome = catch_unwind(AssertUnwindSafe(|| {
+                            handle(&mut state, job, contended)
+                        }));
                         worker_shared.finish(outcome.unwrap_or(EventControl::Complete));
                     }
                 }) {
@@ -190,11 +192,11 @@ impl<J> Shared<J> {
         Ok(())
     }
 
-    fn take_ready(&self) -> Option<J> {
+    fn take_ready(&self, worker_count: usize) -> Option<(J, bool)> {
         let mut state = lock(&self.state);
         loop {
             if let Some(job) = state.ready.pop_front() {
-                return Some(job);
+                return Some((job, state.live > worker_count));
             }
             if state.closed {
                 return None;
@@ -362,10 +364,12 @@ mod tests {
             2,
             |_| (),
             |stream: &UnixStream| std::os::fd::AsRawFd::as_raw_fd(stream),
-            move |_, mut stream: UnixStream| {
+            move |_, mut stream: UnixStream, contended| {
                 let mut byte = [0_u8; 1];
                 stream.read_exact(&mut byte).expect("read ready byte");
-                completed_tx.send(byte[0]).expect("report ready job");
+                completed_tx
+                    .send((byte[0], contended))
+                    .expect("report ready job");
                 EventControl::Complete
             },
         )
@@ -377,7 +381,10 @@ mod tests {
             .write_all(b"x")
             .expect("make second socket ready");
 
-        assert_eq!(completed_rx.recv_timeout(Duration::from_secs(1)), Ok(b'x'));
+        assert_eq!(
+            completed_rx.recv_timeout(Duration::from_secs(1)),
+            Ok((b'x', true))
+        );
         pool.join();
     }
 }

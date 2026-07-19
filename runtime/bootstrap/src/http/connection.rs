@@ -22,6 +22,7 @@ use super::{
 const MAX_REQUESTS_PER_CONNECTION: usize = 100;
 const REQUESTS_PER_TURN: usize = 16;
 const CONNECTION_IO_TIMEOUT: Duration = Duration::from_secs(5);
+const LOCAL_KEEP_ALIVE_WAIT: Duration = Duration::from_millis(1);
 const OVERLOAD_HEAD_TIMEOUT: Duration = Duration::from_millis(10);
 
 pub(super) struct Connection {
@@ -52,13 +53,16 @@ impl Connection {
         &mut self,
         arena: &mut RequestArena,
         response_head: &mut Vec<u8>,
+        contended: bool,
     ) -> io::Result<Turn> {
         for turn_index in 0..REQUESTS_PER_TURN {
             let turn = self.handle_request(arena, response_head)?;
             if turn == Turn::Complete {
                 return Ok(Turn::Complete);
             }
-            if !self.input.has_complete_head() {
+            let input_ready = self.input.has_complete_head()
+                || (!contended && self.has_ready_input(LOCAL_KEEP_ALIVE_WAIT)?);
+            if !input_ready {
                 return Ok(Turn::WaitReadable);
             }
             if turn_index + 1 == REQUESTS_PER_TURN {
@@ -70,6 +74,27 @@ impl Connection {
 
     pub(super) fn descriptor(&self) -> std::os::fd::RawFd {
         self.stream.as_raw_fd()
+    }
+
+    fn has_ready_input(&self, timeout: Duration) -> io::Result<bool> {
+        let timeout_ms = i32::try_from(timeout.as_millis())
+            .map_err(|_| io::Error::other("connection readiness timeout overflow"))?;
+        let mut descriptor = libc::pollfd {
+            fd: self.descriptor(),
+            events: libc::POLLIN,
+            revents: 0,
+        };
+        loop {
+            // SAFETY: the descriptor and borrowed socket remain valid for this call.
+            let result = unsafe { libc::poll(&mut descriptor, 1, timeout_ms) };
+            if result >= 0 {
+                return Ok(result != 0);
+            }
+            let error = io::Error::last_os_error();
+            if error.kind() != io::ErrorKind::Interrupted {
+                return Err(error);
+            }
+        }
     }
 
     pub(super) fn into_stream(self) -> TcpStream {
@@ -292,13 +317,13 @@ mod tests {
         let mut response_head = Vec::new();
         assert_eq!(
             connection
-                .handle_turn(&mut arena, &mut response_head)
+                .handle_turn(&mut arena, &mut response_head, false)
                 .expect("first turn"),
             Turn::Ready
         );
         assert_eq!(
             connection
-                .handle_turn(&mut arena, &mut response_head)
+                .handle_turn(&mut arena, &mut response_head, false)
                 .expect("second turn"),
             Turn::Complete
         );
@@ -346,11 +371,11 @@ mod tests {
             2,
             |_| (RequestArena::new(4096), Vec::new()),
             Connection::descriptor,
-            |(arena, response_head), mut connection: Connection| {
-                match connection.handle_turn(arena, response_head) {
-                Ok(Turn::Complete) | Err(_) => EventControl::Complete,
-                Ok(Turn::Ready) => EventControl::Ready(connection),
-                Ok(Turn::WaitReadable) => EventControl::WaitReadable(connection),
+            |(arena, response_head), mut connection: Connection, contended| {
+                match connection.handle_turn(arena, response_head, contended) {
+                    Ok(Turn::Complete) | Err(_) => EventControl::Complete,
+                    Ok(Turn::Ready) => EventControl::Ready(connection),
+                    Ok(Turn::WaitReadable) => EventControl::WaitReadable(connection),
                 }
             },
         )

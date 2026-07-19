@@ -37,9 +37,10 @@ pub fn serve() -> std::io::Result<()> {
             response_head: Vec::with_capacity(1024),
         },
         Connection::descriptor,
-        |worker, mut connection: Connection| match connection.handle_turn(
+        |worker, mut connection: Connection, contended| match connection.handle_turn(
             &mut worker.request_arena,
             &mut worker.response_head,
+            contended,
         ) {
             Ok(Turn::Complete) => EventControl::Complete,
             Ok(Turn::Ready) => EventControl::Ready(connection),
