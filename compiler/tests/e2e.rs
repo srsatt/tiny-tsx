@@ -210,27 +210,36 @@ fn worker_pool_keeps_connections_alive_and_recovers_after_saturation() {
     assert!(body_pipeline_response.contains("404 Not FoundHTTP/1.1 200 OK\r\n"));
     assert!(body_pipeline_response.ends_with("This is /hello"));
 
-    let mut bounded = connect_with_retry(port);
-    bounded
+    let mut long_lived = connect_with_retry(port);
+    long_lived
         .set_read_timeout(Some(Duration::from_secs(2)))
-        .expect("set bounded connection timeout");
+        .expect("set long-lived connection timeout");
     let mut requests = Vec::new();
     for _ in 0..100 {
         requests.extend_from_slice(b"GET / HTTP/1.1\r\nHost: localhost\r\n\r\n");
     }
-    bounded
-        .write_all(&requests)
-        .expect("send bounded keep-alive requests");
-    let mut bounded_response = String::new();
-    bounded
-        .read_to_string(&mut bounded_response)
-        .expect("read bounded keep-alive responses");
-    assert_eq!(occurrences(&bounded_response, "HTTP/1.1 200 OK\r\n"), 100);
-    assert_eq!(
-        occurrences(&bounded_response, "Connection: keep-alive\r\n"),
-        99
+    requests.extend_from_slice(
+        b"GET / HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
     );
-    assert_eq!(occurrences(&bounded_response, "Connection: close\r\n"), 1);
+    long_lived
+        .write_all(&requests)
+        .expect("send long-lived keep-alive requests");
+    let mut long_lived_response = String::new();
+    long_lived
+        .read_to_string(&mut long_lived_response)
+        .expect("read long-lived keep-alive responses");
+    assert_eq!(
+        occurrences(&long_lived_response, "HTTP/1.1 200 OK\r\n"),
+        101
+    );
+    assert_eq!(
+        occurrences(&long_lived_response, "Connection: keep-alive\r\n"),
+        100
+    );
+    assert_eq!(
+        occurrences(&long_lived_response, "Connection: close\r\n"),
+        1
+    );
 
     let mut malformed = connect_with_retry(port);
     malformed

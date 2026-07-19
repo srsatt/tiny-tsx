@@ -461,11 +461,11 @@ class StaticHarnessTest(unittest.TestCase):
             "tests/compat/ai/hono-local-provider-smoke.ts",
         )
 
-    def test_keep_alive_scope_records_the_bounded_reconnect_policy(self) -> None:
+    def test_keep_alive_scope_does_not_report_a_request_cap(self) -> None:
         workload = WORKLOADS["hono-jsx-ssr"]
 
         self.assertIn("keep-alive", benchmark_scope(workload, True))
-        self.assertTrue(
+        self.assertFalse(
             any("100 requests" in value for value in benchmark_limitations(workload, True))
         )
 

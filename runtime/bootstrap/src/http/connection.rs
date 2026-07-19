@@ -20,7 +20,6 @@ use super::{
     },
 };
 
-const MAX_REQUESTS_PER_CONNECTION: usize = 100;
 const REQUESTS_PER_TURN: usize = 16;
 const CONNECTION_IO_TIMEOUT: Duration = Duration::from_secs(5);
 const LOCAL_KEEP_ALIVE_WAIT: Duration = Duration::from_millis(1);
@@ -29,7 +28,6 @@ const OVERLOAD_HEAD_TIMEOUT: Duration = Duration::from_millis(10);
 pub(super) struct Connection {
     stream: TcpStream,
     input: ConnectionInput,
-    requests_completed: usize,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -46,7 +44,6 @@ impl Connection {
         Ok(Self {
             stream,
             input: ConnectionInput::new(),
-            requests_completed: 0,
         })
     }
 
@@ -156,9 +153,7 @@ impl Connection {
         if response.application_status == CLIENT_DISCONNECTED {
             return Ok(Turn::Complete);
         }
-        let can_reuse = http11
-            && !parsed.connection_close
-            && self.requests_completed + 1 < MAX_REQUESTS_PER_CONNECTION;
+        let can_reuse = http11 && !parsed.connection_close;
         let mut directive = if can_reuse {
             ConnectionDirective::KeepAlive
         } else {
@@ -252,7 +247,6 @@ impl Connection {
             }
         };
         result?;
-        self.requests_completed += 1;
         if directive == ConnectionDirective::Close {
             stream.shutdown(Shutdown::Write)?;
             Ok(Turn::Complete)

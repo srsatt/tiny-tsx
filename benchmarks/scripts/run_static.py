@@ -1361,10 +1361,6 @@ def benchmark_limitations(
     keep_alive: bool,
 ) -> list[str]:
     limitations = [str(workload["limitation"])]
-    if keep_alive:
-        limitations.append(
-            "TinyTSX bounds each connection at 100 requests and reconnects; the Bun host may retain a connection longer."
-        )
     return limitations
 
 
