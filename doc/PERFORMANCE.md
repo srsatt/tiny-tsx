@@ -1,8 +1,57 @@
 # Performance evidence and roadmap
 
-Last updated: 2026-07-18
+Last updated: 2026-07-19
 
 ## Current conclusion
+
+The performance regression is resolved for the core HTTP path. Actors are not
+part of request dispatch: they remain an opt-in standard-library facility, and
+the HTTP server now owns connections in descriptor shards, retains hot
+connections locally, coalesces response writes, and links only host facilities
+used by the compiled program.
+
+The current sustained comparison uses the normal one-worker TinyTSX default,
+one Bun server process, keep-alive, three five-second samples, and concurrency
+8/64. This is the fair CPU-bound configuration on the measured M5 Max; forcing
+eight native HTTP workers onto these tiny closed routes reduces throughput due
+to scheduler and cache contention.
+
+| Workload | Tiny/Bun startup | Tiny/Bun warm RSS | RPS c8 | RPS c64 | p99 c8 | p99 c64 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Complete Hono basic | 13.13 / 26.75 ms | 6.03 / 123.61 MiB | 159,254 / 133,619 | 207,084 / 150,446 | 0.084 / 0.108 ms | 0.537 / 0.896 ms |
+| Closed Hono JSX SSR | 11.93 / 26.37 ms | 1.89 / 123.78 MiB | 158,740 / 99,255 | 207,873 / 102,656 | 0.084 / 0.218 ms | 0.513 / 1.184 ms |
+
+Both reports pass `benchmarks/scripts/performance_gate.py`. The complete basic
+binary is 493.28 KiB and includes its external-Fetch route; the closed JSX
+binary is 491.62 KiB. Raw evidence is retained in
+`2026-07-19-m5-max-perf-recovery-hono-{basic,jsx}-keepalive-w1.{json,md}`.
+
+The one-second Hono-basic worker curve at concurrency 64 is 206k/175k/149k/129k
+requests per second for 1/2/4/8 workers. `--workers` is therefore a workload
+knob, not a generally useful core-count setting. Start at one for closed
+CPU-bound routes; add workers only when measurement shows blocking I/O or
+substantial request computation benefits.
+
+Optional paths are improved but not all are at parity. Isolating the filesystem
+feature and pre-opening allowed roots reduced the 21-byte file binary from
+2.31 MiB to 560 KiB, warm RSS from 6.86 MiB to about 2.8 MiB, and Unix syscalls
+from 3.49M to 1.91M in the eight-worker preview. Throughput reached 0.93x/0.92x
+Bun at concurrency 8/64. SQLite now uses rusqlite's prepared-statement cache and
+streams rows directly to JSON, but the empty-query preview reaches 0.53x/0.70x
+Bun because two synchronous calls still cross the generic application mailbox.
+
+The 256 KiB arena remains a reservation, not committed RSS: the minimal closed
+server touches only the response pages it uses and stays at 1.89 MiB warm.
+Reducing the default would narrow useful response headroom without a measured
+resident-memory win, so arena sizing stays configurable via `--request-memory`.
+
+The next performance targets are the optional-path boundaries: fuse or directly
+own repeated SQLite operations, introduce request continuations so one HTTP
+reactor can overlap file/provider waits, and evaluate `kqueue`/`epoll` batching.
+Publication-grade claims still require longer samples, controlled power state,
+another machine, and ideally a separate load-generator host.
+
+## Historical eight-worker baseline
 
 TinyTSX is compelling for deployment and resident footprint, but the sustained
 eight-worker keep-alive matrix does not show throughput or tail-latency parity
@@ -55,7 +104,7 @@ the exception: TinyTSX reaches 1.30x Bun at concurrency 8 and 1.78x at 64.
 TinyTSX's concurrency-64 p99 remains higher on every route at 9.575–108.839 ms
 versus Bun at 0.736–13.504 ms; the WAL contention route sets both maxima.
 
-The honest current claim is:
+The historical conclusion at that checkpoint was:
 
 - **yes for footprint:** TinyTSX stays at 6.30–8.86 MiB warm RSS; Bun uses
   7.3x–24.6x as much across the sixteen workloads;
@@ -554,6 +603,5 @@ run both cover that correction. Raw reports are
     and repeated days/machines. Publish no general performance claim before
     these gates pass.
 
-The next performance tasks are route/response-size coverage, normalized
-CPU/syscall profiling, and longer controlled runs. The accepted three-route
-result is still not publication-grade evidence.
+The current tasks and accepted results are summarized at the top of this file;
+the historical roadmap below is retained to explain the optimization sequence.

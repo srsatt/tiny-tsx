@@ -324,6 +324,25 @@ Do not tag `0.1.0-alpha.1` until all of these are true:
 
 ## Ordered post-alpha backlog
 
+### Performance follow-up after the core recovery
+
+The core path now passes the startup, RSS, throughput, and p99 gate on sustained
+Hono basic and JSX comparisons. Remaining work is ordered by measured cost:
+
+- [ ] Replace generic synchronous SQLite application-mailbox round trips with
+      a profiled database-owner protocol that can fuse prepared operations
+      without weakening serialization or backpressure.
+- [ ] Add resumable request continuations for file and provider waits so one
+      HTTP reactor can overlap blocking host operations without raising the
+      HTTP worker count.
+- [ ] Evaluate batched `kqueue`/`epoll` readiness behind the descriptor-shard
+      interface, retaining `poll` as the portable baseline.
+- [ ] Rerun dynamic JSX, file, SQLite, actor, transaction, and AI workloads with
+      a measured worker policy instead of assuming eight workers is universally
+      faster.
+- [ ] Perform publication-grade 30–60 second validation on multiple machines,
+      under controlled power state, with a separate load-generator host.
+
 ### Next development milestone — real-world server stability
 
 This implementation milestone is complete for the bounded pinned Stytch-auth

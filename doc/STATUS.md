@@ -1662,7 +1662,38 @@ portable C output executes the selected upstream cases on x86 release hosts.
 ## Resume point
 
 Finish the four-target native release run from the final documentation commit.
-Then profile and reduce the per-response reactor/executor handoff without
-reintroducing idle-connection pinning; evaluate platform-native readiness
-backends (`kqueue`/`epoll`), executor affinity, and a bounded hot-connection
-fast path before rerunning the full sustained TinyTSX/Bun matrix.
+The core performance recovery is complete. After the release run, profile the
+remaining optional SQLite/file/provider owner boundaries, add resumable host-I/O
+continuations, then evaluate platform-native readiness batching before rerunning
+the broader sustained matrix.
+
+## 2026-07-19 performance recovery
+
+- Actors remain opt-in standard-library state owners and are absent from core
+  HTTP dispatch. Descriptor shards own their connections, and uncontended
+  keep-alive sockets remain local for a bounded turn.
+- Listener readiness uses `poll`; request/parser/header storage is reused;
+  response heads and bodies use one vectored write; healthy connections no
+  longer reconnect after 100 requests.
+- Generated runtime features are selected per program. Minimal Hono JSX is
+  about 492 KiB, and file-only applications no longer link SQLite or curl.
+- Filesystem roots are pre-opened directory capabilities. `openat` with
+  `O_NOFOLLOW` cuts the 21-byte file preview's Unix calls from 3.49M to 1.91M
+  and raises c64 throughput from 61.5k to 71.9k requests/s.
+- SQLite uses rusqlite's prepared cache and streams rows directly to JSON. The
+  empty-query preview moves only slightly because the synchronous owner mailbox
+  is now the dominant cost.
+- The 256 KiB request arena remains configurable. Demand paging keeps the
+  closed server at 1.89 MiB warm RSS, so shrinking the default has no measured
+  RSS benefit and would reduce response headroom.
+- Hono basic c64 throughput is approximately 206k/175k/149k/129k requests/s for
+  1/2/4/8 workers. One is the correct closed-route default; extra workers are a
+  workload-specific blocking/compute knob.
+- Sustained one-worker Hono basic records 13.13ms startup, 6.03 MiB warm RSS,
+  159,254/207,084 requests/s, and 0.084/0.537ms p99 at c8/c64. Bun records
+  26.75ms, 123.61 MiB, 133,619/150,446 requests/s, and 0.108/0.896ms.
+- Sustained closed JSX records 11.93ms startup, 1.89 MiB warm RSS,
+  158,740/207,873 requests/s, and 0.084/0.513ms p99. Bun records 26.37ms,
+  123.78 MiB, 99,255/102,656 requests/s, and 0.218/1.184ms.
+- Both reports pass `benchmarks/scripts/performance_gate.py`; evidence lives in
+  `benchmarks/results/2026-07-19-m5-max-perf-recovery-hono-{basic,jsx}-keepalive-w1.*`.

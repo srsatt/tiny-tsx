@@ -79,6 +79,8 @@ TinyTSX uses the worker count selected with `--workers`; the harness uses
 connection-close by default and enables persistent connections with
 `--keep-alive` for both targets. The JSX root is closed and rendered at AOT
 time; request-selected post behavior is tested but is not the throughput target.
+One worker is the default and the measured optimum for closed CPU-bound routes;
+larger counts are workload experiments, not an automatic core-count setting.
 
 ## Prerequisites
 
@@ -154,13 +156,11 @@ These runs still create a new connection per request. Use them as the initial
 worker/RSS baseline, not as evidence of scheduler scaling; rerun after
 keep-alive removes most accept/connect/close work from the measured path.
 
-Append `--keep-alive` to run the persistent-connection matrix. TinyTSX closes
-each connection after 100 requests. A hot connection runs at most sixteen
-requests per turn. Under queue pressure it uses bounded one-millisecond
-readiness probes; a single-worker or previously pressured connection waits 100
-milliseconds for idle reuse, while an uncontended multi-worker connection keeps
-the five-second bound. The harness records that reconnect policy as a limitation
-beside Bun's host behavior.
+Append `--keep-alive` to run the persistent-connection matrix. A hot connection
+runs at most sixteen requests per turn and remains healthy until the peer closes
+or the five-second idle timeout expires. Descriptor shards own waiting sockets;
+an uncontended connection may use a bounded one-millisecond local readiness
+probe before returning to its shard.
 
 A shorter exploratory run is useful during development:
 
@@ -188,6 +188,11 @@ half of Bun, its artifact to stay at or below 700 KiB, and its median throughput
 to meet or exceed Bun at concurrency 8 and 64. P99 must stay below 3 ms or within
 2x of Bun. The absolute-or-relative latency rule prevents sub-millisecond timer
 noise from rejecting an otherwise fast result.
+
+The current core evidence is the sustained one-worker pair
+`2026-07-19-m5-max-perf-recovery-hono-{basic,jsx}-keepalive-w1.*`. Both pass the
+gate. Use these as the release-candidate control before consulting the retained
+eight-worker historical matrices below.
 
 Workloads with a `paths` contract give `oha` a temporary URL file whose routes
 must have the same status, headers, framing, and body. The multi-actor workload

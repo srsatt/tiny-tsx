@@ -26,7 +26,8 @@ services:
 - an event-driven connection reactor backed by fixed reusable executors;
 - default-deny environment, filesystem, and persistence capabilities;
 - one native executable with no npm runtime dependency;
-- approximately 6–9 MiB warm RSS in the current benchmark matrix.
+- approximately 1.9 MiB warm RSS for the closed Hono JSX target and 6 MiB for
+  the complete Hono basic target with external Fetch linked.
 
 The compiler rejects reachable behavior outside its supported subset instead
 of falling back to interpretation.
@@ -200,6 +201,10 @@ Common build options include:
 `tinytsx run` combines compilation and execution for development. Every build
 also writes a machine-readable `<output>.build.json` report.
 
+The default `--workers 1` is intentional. It is fastest for the measured closed
+CPU-bound Hono routes; increase it only after a blocking-I/O or compute-heavy
+workload shows a benefit.
+
 ## ESLint syntax preflight
 
 The repository includes `eslint-plugin-tinytsx` for fast editor feedback
@@ -279,23 +284,19 @@ container isolation.
 
 ## Performance
 
-The current results support a footprint claim, not a general speed claim.
+The current response-checked M5 Max comparison uses one TinyTSX worker, one Bun
+server process, keep-alive, and three five-second samples:
 
-The response-checked Stytch TODO benchmark uses eight TinyTSX workers and
-bounded create/list/complete/delete cycles:
+| Workload | Warm RSS, Tiny/Bun | RPS c8, Tiny/Bun | RPS c64, Tiny/Bun | p99 c64, Tiny/Bun |
+| --- | ---: | ---: | ---: | ---: |
+| Complete Hono basic | 6.03 / 123.61 MiB | 159,254 / 133,619 | 207,084 / 150,446 | 0.537 / 0.896 ms |
+| Closed Hono JSX SSR | 1.89 / 123.78 MiB | 158,740 / 99,255 | 207,873 / 102,656 | 0.513 / 1.184 ms |
 
-| Metric | TinyTSX | Bun |
-| --- | ---: | ---: |
-| Warm RSS | 8.16 MiB | 66.38 MiB |
-| Throughput, concurrency 8 | 15,905 req/s | 23,359 req/s |
-| Throughput, concurrency 64 | 17,367 req/s | 23,049 req/s |
-| p99, concurrency 8 | 1.624 ms | 0.939 ms |
-| p99, concurrency 64 | 50.026 ms | 8.365 ms |
-
-Across the wider sustained matrix, TinyTSX generally uses much less resident
-memory but often has lower throughput, higher CPU/syscall pressure, and worse
-tail latency than Bun. One large warm-cache response is faster in the current
-measurements, while failure-heavy SQLite rollback is substantially slower.
+Startup medians are 13.13ms versus Bun's 26.75ms for basic and 11.93ms versus
+26.37ms for JSX. Both reports pass the repository's core performance gate.
+This supports a strong claim for the exact AOT-closed applications, not a
+general AOT-versus-JIT claim. Request-time file reads are close but still below
+Bun, and SQLite/actor mailbox paths remain explicit optimization targets.
 
 See [`doc/PERFORMANCE.md`](doc/PERFORMANCE.md) and
 [`benchmarks/README.md`](benchmarks/README.md) for protocols, raw reports, and

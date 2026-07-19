@@ -99,3 +99,14 @@ that instruction selection and runtime ABI lowering are shared, while sections,
 symbol prefixes, visibility, and address relocations vary by object format.
 Those differences use a closed Apple/ELF dialect rather than a speculative
 general target trait. A future non-AArch64 target gets a separate backend.
+
+## D-013: Keep HTTP ownership separate and specialize linked facilities
+
+Actors remain an opt-in standard-library abstraction and never mediate the core
+HTTP request pipeline. HTTP descriptor shards own their connections and reuse a
+hot connection locally; actor, SQLite, provider, and filesystem execution keep
+their explicit ownership boundaries. The compiler links only facilities
+reached by the program, including independent network and filesystem features.
+One HTTP worker remains the default because it is fastest for measured closed
+routes; `--workers` is a workload-specific concurrency knob, not an automatic
+core-count setting.
