@@ -3,7 +3,8 @@ use super::{
     EMPTY_SQLITE_EXECUTE_RESULT, INTERNAL_ERROR, MAX_DYNAMIC_HEADER_BYTES, MAX_RESPONSE_HEADERS,
     MAX_SQLITE_RESULTS, MAX_STREAM_CHUNKS, OK, OpenAiTransport, REQUEST_OOM, RequestArena,
     TinyHeader, TinyResponseWriter, TinySqlParameter, TinySqliteExecuteResult, TinyStringView,
-    decode_sqlite_parameters, render, request, request_with_body, request_with_headers,
+    decode_sqlite_parameters, relocate_writer_view, render, request, request_with_body,
+    request_with_headers,
     tinytsx_html_write_fetch_status, tinytsx_html_write_path_segment, tinytsx_html_write_path_tail,
     tinytsx_html_write_query_parameter, tinytsx_html_write_request_header,
     tinytsx_html_write_request_json_field, tinytsx_html_write_response_header,
@@ -1075,6 +1076,31 @@ fn response_headers_format_elapsed_milliseconds_in_writer_storage() {
     assert_eq!(view(&writer.headers[0].name), b"X-Response-Time");
     assert_eq!(view(&writer.headers[0].value), b"42ms");
     assert_eq!(writer.dynamic_header_cursor, 4);
+}
+
+#[test]
+fn rendered_header_views_relocate_from_writer_storage_to_the_request_arena() {
+    let source = *b"prefix-value";
+    let destination = source;
+    let mut dynamic = TinyStringView::from_bytes(&source[7..]);
+    let mut static_view = TinyStringView::from_bytes(b"static");
+
+    relocate_writer_view(
+        &mut dynamic,
+        source.as_ptr() as usize,
+        source.len(),
+        destination.as_ptr(),
+    );
+    relocate_writer_view(
+        &mut static_view,
+        source.as_ptr() as usize,
+        source.len(),
+        destination.as_ptr(),
+    );
+
+    assert_eq!(dynamic.ptr, destination[7..].as_ptr());
+    assert_eq!(view(&dynamic), b"value");
+    assert_eq!(view(&static_view), b"static");
 }
 
 #[test]

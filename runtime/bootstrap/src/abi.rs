@@ -3117,12 +3117,16 @@ fn valid_header_value(value: &[u8]) -> bool {
 
 pub struct RequestArena {
     output: Vec<u8>,
+    response_headers: [TinyHeader; MAX_RESPONSE_HEADERS],
+    dynamic_header_bytes: [u8; MAX_DYNAMIC_HEADER_BYTES],
 }
 
 impl RequestArena {
     pub fn new(capacity: usize) -> Self {
         Self {
             output: vec![0_u8; capacity],
+            response_headers: [EMPTY_HEADER; MAX_RESPONSE_HEADERS],
+            dynamic_header_bytes: [0; MAX_DYNAMIC_HEADER_BYTES],
         }
     }
 }
@@ -3132,7 +3136,7 @@ pub struct RenderedResponse<'a> {
     pub http_status: u16,
     pub content_type: u16,
     pub body: &'a [u8],
-    pub headers: Vec<(Vec<u8>, Vec<u8>)>,
+    pub headers: &'a [TinyHeader],
     streaming: bool,
     stream_chunk_count: usize,
     stream_chunks: [TinyStringView; MAX_STREAM_CHUNKS],
@@ -3184,26 +3188,42 @@ pub fn render<'a>(request: &TinyRequest, arena: &'a mut RequestArena) -> Rendere
     // for the duration of the call.
     let status = unsafe { tinytsx_handle_get(request, &mut writer) };
     let written = writer.cursor as usize - writer.start as usize;
-    let headers = writer.headers[..writer.header_count]
-        .iter()
-        .map(|header| {
-            // SAFETY: Generated response headers point at immutable static data.
-            let name = unsafe { slice::from_raw_parts(header.name.ptr, header.name.len) }.to_vec();
-            // SAFETY: Generated response headers point at immutable static data.
-            let value =
-                unsafe { slice::from_raw_parts(header.value.ptr, header.value.len) }.to_vec();
-            (name, value)
-        })
-        .collect();
+    let dynamic_length = writer.dynamic_header_cursor;
+    arena.dynamic_header_bytes[..dynamic_length]
+        .copy_from_slice(&writer.dynamic_header_bytes[..dynamic_length]);
+    arena.response_headers[..writer.header_count]
+        .copy_from_slice(&writer.headers[..writer.header_count]);
+    let source = writer.dynamic_header_bytes.as_ptr() as usize;
+    let destination = arena.dynamic_header_bytes.as_ptr();
+    for header in &mut arena.response_headers[..writer.header_count] {
+        relocate_writer_view(&mut header.name, source, dynamic_length, destination);
+        relocate_writer_view(&mut header.value, source, dynamic_length, destination);
+    }
     RenderedResponse {
         application_status: status,
         http_status: writer.http_status,
         content_type: writer.content_type,
         body: &arena.output[..written],
-        headers,
+        headers: &arena.response_headers[..writer.header_count],
         streaming: writer.streaming != 0,
         stream_chunk_count: writer.stream_chunk_count,
         stream_chunks: writer.stream_chunks,
+    }
+}
+
+fn relocate_writer_view(
+    view: &mut TinyStringView,
+    source: usize,
+    source_length: usize,
+    destination: *const u8,
+) {
+    let pointer = view.ptr as usize;
+    let Some(end) = pointer.checked_add(view.len) else {
+        return;
+    };
+    if pointer >= source && end <= source + source_length {
+        // SAFETY: the validated source range maps one-to-one onto the copied arena storage.
+        view.ptr = unsafe { destination.add(pointer - source) };
     }
 }
 

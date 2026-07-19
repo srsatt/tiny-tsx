@@ -5,7 +5,7 @@ use std::{
 
 use crate::abi::{
     CONTENT_TYPE_HTML, CONTENT_TYPE_JSON, CONTENT_TYPE_NONE, CONTENT_TYPE_RESPONSE_TEXT,
-    CONTENT_TYPE_STREAM_TEXT, CONTENT_TYPE_TEXT,
+    CONTENT_TYPE_STREAM_TEXT, CONTENT_TYPE_TEXT, TinyHeader, TinyStringView,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -38,7 +38,7 @@ pub(super) fn write_response(
     status: u16,
     content_type: u16,
     body: &[u8],
-    headers: &[(Vec<u8>, Vec<u8>)],
+    headers: &[TinyHeader],
     connection: ConnectionDirective,
 ) -> io::Result<()> {
     write_response_head(
@@ -59,7 +59,7 @@ pub(super) fn write_stream_response<'a>(
     status: u16,
     content_type: u16,
     chunks: impl IntoIterator<Item = &'a [u8]>,
-    headers: &[(Vec<u8>, Vec<u8>)],
+    headers: &[TinyHeader],
     connection: ConnectionDirective,
 ) -> io::Result<()> {
     write_response_head(
@@ -90,7 +90,7 @@ fn write_response_head(
     head: &mut Vec<u8>,
     status: u16,
     content_type: u16,
-    headers: &[(Vec<u8>, Vec<u8>)],
+    headers: &[TinyHeader],
     connection: ConnectionDirective,
     framing: BodyFraming,
 ) -> io::Result<()> {
@@ -122,10 +122,12 @@ fn write_response_head(
         };
         write!(head, "Content-Type: {content_type}\r\n")?;
     }
-    for (name, value) in headers {
+    for header in headers {
+        let name = view_bytes(header, header.name);
         if is_framing_header(name) {
             continue;
         }
+        let value = view_bytes(header, header.value);
         head.write_all(name)?;
         head.write_all(b": ")?;
         head.write_all(value)?;
@@ -140,6 +142,14 @@ fn write_response_head(
         BodyFraming::Chunked => head.write_all(b"Transfer-Encoding: chunked\r\n")?,
     }
     write!(head, "Connection: {connection}\r\n\r\n")
+}
+
+fn view_bytes(_header: &TinyHeader, view: TinyStringView) -> &[u8] {
+    if view.len == 0 {
+        return &[];
+    }
+    // SAFETY: response header views point at generated static data or the live request arena.
+    unsafe { std::slice::from_raw_parts(view.ptr, view.len) }
 }
 
 fn write_all_vectored(stream: &mut impl Write, slices: &[IoSlice<'_>]) -> io::Result<()> {
@@ -174,7 +184,9 @@ mod tests {
     use std::io::{self, IoSlice, Write};
 
     use super::{ConnectionDirective, write_response, write_stream_response};
-    use crate::abi::{CONTENT_TYPE_NONE, CONTENT_TYPE_STREAM_TEXT};
+    use crate::abi::{
+        CONTENT_TYPE_NONE, CONTENT_TYPE_STREAM_TEXT, TinyHeader, TinyStringView,
+    };
 
     #[test]
     fn response_selects_keep_alive_or_close() {
@@ -199,7 +211,7 @@ mod tests {
             302,
             CONTENT_TYPE_NONE,
             b"",
-            &[(b"Location".to_vec(), b"/".to_vec())],
+            &[header(b"Location", b"/")],
             ConnectionDirective::Close,
         )
         .expect("write close response");
@@ -218,7 +230,7 @@ mod tests {
             200,
             CONTENT_TYPE_STREAM_TEXT,
             [b"first\n".as_slice(), b"second\n".as_slice()],
-            &[(b"Transfer-Encoding".to_vec(), b"invalid-duplicate".to_vec())],
+            &[header(b"Transfer-Encoding", b"invalid-duplicate")],
             ConnectionDirective::KeepAlive,
         )
         .expect("write stream response");
@@ -286,5 +298,12 @@ mod tests {
         haystack
             .windows(needle.len())
             .any(|window| window == needle)
+    }
+
+    fn header(name: &'static [u8], value: &'static [u8]) -> TinyHeader {
+        TinyHeader {
+            name: TinyStringView::from_bytes(name),
+            value: TinyStringView::from_bytes(value),
+        }
     }
 }

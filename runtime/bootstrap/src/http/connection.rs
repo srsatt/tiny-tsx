@@ -167,7 +167,7 @@ impl Connection {
                 response.http_status,
                 response.content_type,
                 response.stream_chunks(),
-                &response.headers,
+                response.headers,
                 directive,
             ),
             OK => write_response(
@@ -176,7 +176,7 @@ impl Connection {
                 response.http_status,
                 response.content_type,
                 response.body,
-                &response.headers,
+                response.headers,
                 directive,
             ),
             REQUEST_OOM => {

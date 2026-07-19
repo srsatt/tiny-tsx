@@ -52,7 +52,7 @@ impl<J: Send + 'static> EventWorkerPool<J> {
         handle: Handle,
     ) -> io::Result<Self>
     where
-        S: Send + 'static,
+        S: 'static,
         Initialize: Fn(usize) -> S + Send + Sync + 'static,
         Descriptor: Fn(&J) -> RawFd + Send + Sync + 'static,
         Handle: Fn(&mut S, J, bool) -> EventControl<J> + Send + Sync + 'static,
