@@ -532,9 +532,11 @@ where
                 RestartDecision::NotConfigured
             };
             drop(state);
-            let _ = message.sender.send(result);
             if matches!(restart, RestartDecision::Exhausted) {
                 self.terminate();
+            }
+            let _ = message.sender.send(result);
+            if matches!(restart, RestartDecision::Exhausted) {
                 return;
             }
             processed += 1;
