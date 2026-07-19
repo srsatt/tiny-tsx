@@ -3,7 +3,7 @@ mod allocation_metrics;
 #[cfg(feature = "application")]
 mod application;
 mod environment;
-#[cfg(feature = "application")]
+#[cfg(feature = "filesystem")]
 mod filesystem;
 mod http;
 mod random;
@@ -22,9 +22,9 @@ fn main() {
             std::process::exit(1);
         }
     }
-    #[cfg(feature = "application")]
+    #[cfg(feature = "filesystem")]
     {
-        match filesystem::initialize() {
+        match filesystem::initialize(abi::configured_workers()) {
             Ok(count) if count > 0 => println!("Filesystem read roots: {count}"),
             Ok(_) => {}
             Err(error) => {
@@ -37,15 +37,14 @@ fn main() {
     {
         let workers = abi::configured_workers();
         match application::initialize(workers) {
-            Ok((logical_workers, provider_transport, filesystem))
+            Ok((logical_workers, provider_transport))
                 if logical_workers > 0
                     || provider_transport
-                    || filesystem
                     || abi::configured_actors() > 0
                     || abi::configured_sqlite_databases() > 0 =>
             {
                 println!(
-                    "Application workers: {workers}; logical workers: {logical_workers}; actors: {}; SQLite databases: {}; provider transport: {}; filesystem: {}",
+                    "Application workers: {workers}; logical workers: {logical_workers}; actors: {}; SQLite databases: {}; provider transport: {}",
                     abi::configured_actors(),
                     abi::configured_sqlite_databases(),
                     if provider_transport {
@@ -53,7 +52,6 @@ fn main() {
                     } else {
                         "disabled"
                     },
-                    if filesystem { "enabled" } else { "disabled" },
                 );
             }
             Ok(_) => {}

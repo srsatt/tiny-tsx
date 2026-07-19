@@ -30,8 +30,12 @@ fn request_arena_reuses_one_bounded_output_allocation() {
     let mut arena = RequestArena::new(128);
     let start = arena.output.as_ptr();
 
-    drop(render(&request, &mut arena));
-    drop(render(&request, &mut arena));
+    {
+        let _response = render(&request, &mut arena);
+    }
+    {
+        let _response = render(&request, &mut arena);
+    }
 
     assert_eq!(arena.output.as_ptr(), start);
     assert_eq!(arena.output.len(), 128);

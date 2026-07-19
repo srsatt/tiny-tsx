@@ -254,7 +254,9 @@ unsafe extern "C" {
         pointer: *mut *const u8,
         length: *mut usize,
     ) -> u32;
+    #[cfg(feature = "filesystem")]
     pub fn tinytsx_config_read_roots() -> usize;
+    #[cfg(feature = "filesystem")]
     pub fn tinytsx_config_read_root(
         index: usize,
         pointer: *mut *const u8,
@@ -358,12 +360,12 @@ unsafe extern "C" fn tinytsx_config_environment_variable(
     INTERNAL_ERROR
 }
 
-#[cfg(not(feature = "generated"))]
+#[cfg(all(feature = "filesystem", not(feature = "generated")))]
 unsafe extern "C" fn tinytsx_config_read_roots() -> usize {
     0
 }
 
-#[cfg(not(feature = "generated"))]
+#[cfg(all(feature = "filesystem", not(feature = "generated")))]
 unsafe extern "C" fn tinytsx_config_read_root(
     _index: usize,
     _pointer: *mut *const u8,
@@ -2154,7 +2156,7 @@ pub unsafe extern "C" fn tinytsx_html_write_environment_variable(
     }
 }
 
-#[cfg(feature = "application")]
+#[cfg(feature = "filesystem")]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn tinytsx_html_write_file_text(
     writer: *mut TinyResponseWriter,
@@ -2167,7 +2169,7 @@ pub unsafe extern "C" fn tinytsx_html_write_file_text(
     }
     // SAFETY: Generated file paths point at immutable static data.
     let path = unsafe { slice::from_raw_parts(path, path_len) };
-    match crate::application::read_file(path, max_bytes) {
+    match crate::filesystem::read_text(path, max_bytes) {
         Ok(value) => unsafe { tinytsx_html_write_static(writer, value.as_ptr(), value.len()) },
         Err(status) => {
             // SAFETY: the writer was validated above.
@@ -3336,11 +3338,13 @@ pub fn configured_environment_variable(index: usize) -> Result<Vec<u8>, u32> {
     Ok(unsafe { slice::from_raw_parts(pointer, length) }.to_vec())
 }
 
+#[cfg(feature = "filesystem")]
 pub fn configured_read_roots() -> usize {
     // SAFETY: The generated object always provides the configuration function.
     unsafe { tinytsx_config_read_roots() }
 }
 
+#[cfg(feature = "filesystem")]
 pub fn configured_read_root(index: usize) -> Result<Vec<u8>, u32> {
     let mut pointer = ptr::null();
     let mut length = 0;
