@@ -243,6 +243,31 @@ fn emits_request_guards_and_headers() {
         name: "X-Response-Time".to_owned(),
         suffix: "ms".to_owned(),
     });
+    program.handlers[0]
+        .parameter_validations
+        .push(crate::hir::ParameterValidation {
+            name: "id".to_owned(),
+            segment: 1,
+            min_length: 3,
+            rejected: crate::hir::GuardedResponse {
+                headers: Vec::new(),
+                stderr: Vec::new(),
+                response: crate::hir::HandlerResponse::Text {
+                    value: crate::hir::ValueExpression::StringLiteral {
+                        string: 0,
+                        span: crate::hir::SourceSpan {
+                            file: "server.ts".to_owned(),
+                            line: 1,
+                            column: 1,
+                            end_line: 1,
+                            end_column: 2,
+                        },
+                    },
+                    status: 400,
+                    content_type: Some("application/json".to_owned()),
+                },
+            },
+        });
     program.handlers[0].request_id = Some(crate::hir::RequestId {
         header: 1,
         max_length: 255,
@@ -275,6 +300,7 @@ fn emits_request_guards_and_headers() {
     assert!(assembly.contains("tinytsx_response_header_request_id"));
     assert!(assembly.contains("tinytsx_response_header_static"));
     assert!(assembly.contains("tinytsx_response_header_elapsed_millis"));
+    assert!(assembly.contains("tinytsx_request_path_segment_min_length"));
     assert!(assembly.contains("X-Response-Time"));
 }
 

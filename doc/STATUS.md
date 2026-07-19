@@ -1648,6 +1648,9 @@ complete/delete calls; Intel native HTTP proves denial, empty list, and create.
 Portable elapsed-response headers retain one start/end clock sample around the
 handler and add the generated suffix; the complete pinned Hono basic app returns
 `X-Response-Time: 0ms` from an Intel binary.
+Portable route-parameter minimum-length guards now preserve their bounded
+rejection response; the pinned Zod/OpenAPI app returns its exact 400 error for
+`/users/x` and exact 200 user JSON for `/users/1212121` on Intel.
 The standalone Test262 conformance runner remains an explicit ARM64-only direct
 assembly backend and is skipped, with a reported reason, by x86 release hosts.
 
