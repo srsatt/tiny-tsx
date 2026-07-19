@@ -1,13 +1,15 @@
+#![cfg_attr(not(feature = "application"), allow(dead_code))]
+
 use std::{
     cell::Cell,
-    ffi::c_void,
     io::{self, Write},
     net::TcpStream,
-    os::raw::{c_char, c_long},
     ptr, slice,
-    sync::OnceLock,
     time::{SystemTime, UNIX_EPOCH},
 };
+
+#[cfg(feature = "application")]
+use std::{ffi::c_void, os::raw::{c_char, c_long}, sync::OnceLock};
 
 use crate::environment::{self, SnapshotValue};
 
@@ -31,26 +33,45 @@ pub const MAX_DYNAMIC_HEADER_BYTES: usize = 256;
 pub const MAX_STREAM_CHUNKS: usize = 16;
 pub const MAX_SQLITE_RESULTS: usize = 16;
 
+#[cfg(feature = "application")]
 const MAX_FETCH_URL_BYTES: usize = 2048;
+#[cfg(feature = "application")]
 const MAX_PROVIDER_AUTHORIZATION_BYTES: usize = 1024;
+#[cfg(feature = "application")]
 const MAX_PROVIDER_BODY_BYTES: usize = 8192;
+#[cfg(feature = "application")]
 const MAX_PROVIDER_RESPONSE_BYTES: usize = 262_144;
+#[cfg(feature = "application")]
 const CURLOPT_URL: u32 = 10_002;
+#[cfg(feature = "application")]
 const CURLOPT_WRITEDATA: u32 = 10_001;
+#[cfg(feature = "application")]
 const CURLOPT_WRITEFUNCTION: u32 = 20_011;
+#[cfg(feature = "application")]
 const CURLOPT_POST: u32 = 47;
+#[cfg(feature = "application")]
 const CURLOPT_POSTFIELDS: u32 = 10_015;
+#[cfg(feature = "application")]
 const CURLOPT_POSTFIELDSIZE: u32 = 60;
+#[cfg(feature = "application")]
 const CURLOPT_HTTPHEADER: u32 = 10_023;
+#[cfg(feature = "application")]
 const CURLOPT_FOLLOWLOCATION: u32 = 52;
+#[cfg(feature = "application")]
 const CURLOPT_NOSIGNAL: u32 = 99;
+#[cfg(feature = "application")]
 const CURLOPT_TIMEOUT_MS: u32 = 155;
+#[cfg(feature = "application")]
 const CURLINFO_RESPONSE_CODE: u32 = 0x20_0002;
+#[cfg(feature = "application")]
 const CURL_GLOBAL_DEFAULT: c_long = 3;
+#[cfg(feature = "application")]
 const CURLE_OK: i32 = 0;
 
+#[cfg(feature = "application")]
 type CurlWriteCallback = unsafe extern "C" fn(*mut c_char, usize, usize, *mut c_void) -> usize;
 
+#[cfg(feature = "application")]
 #[link(name = "curl")]
 unsafe extern "C" {
     fn curl_global_init(flags: c_long) -> i32;
@@ -63,6 +84,7 @@ unsafe extern "C" {
     fn curl_slist_free_all(list: *mut c_void);
 }
 
+#[cfg(feature = "application")]
 static CURL_READY: OnceLock<bool> = OnceLock::new();
 
 thread_local! {
@@ -90,10 +112,12 @@ fn client_reset() -> bool {
     })
 }
 
+#[cfg(feature = "application")]
 pub(crate) struct OpenAiTransport {
     handle: *mut c_void,
 }
 
+#[cfg(feature = "application")]
 impl Default for OpenAiTransport {
     fn default() -> Self {
         Self {
@@ -104,8 +128,10 @@ impl Default for OpenAiTransport {
 
 // SAFETY: a transport is owned by one logical application worker. Its mutex
 // prevents simultaneous use when the worker is scheduled on another executor.
+#[cfg(feature = "application")]
 unsafe impl Send for OpenAiTransport {}
 
+#[cfg(feature = "application")]
 impl Drop for OpenAiTransport {
     fn drop(&mut self) {
         if !self.handle.is_null() {
@@ -422,6 +448,10 @@ unsafe extern "C" fn tinytsx_actor_persistence_key(
 unsafe extern "C" fn tinytsx_worker_operation(_worker: usize) -> u32 {
     0
 }
+
+#[cfg(feature = "application")]
+mod application_abi {
+use super::*;
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn tinytsx_worker_call_static(
@@ -1077,7 +1107,7 @@ pub unsafe extern "C" fn tinytsx_sqlite_query_exists_params(
     }
 }
 
-unsafe fn decode_sqlite_parameters(
+pub(super) unsafe fn decode_sqlite_parameters(
     request: *const TinyRequest,
     parameters: *const TinySqlParameter,
     parameter_count: usize,
@@ -1244,6 +1274,14 @@ fn write_worker_reply(writer: *mut TinyResponseWriter, worker: usize, input: &[u
         }
     }
 }
+
+}
+
+#[cfg(all(test, feature = "application"))]
+use application_abi::{
+    decode_sqlite_parameters, tinytsx_html_write_sqlite_changes,
+    tinytsx_html_write_sqlite_last_insert_row_id,
+};
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn tinytsx_html_write_static(
@@ -2116,6 +2154,7 @@ pub unsafe extern "C" fn tinytsx_html_write_environment_variable(
     }
 }
 
+#[cfg(feature = "application")]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn tinytsx_html_write_file_text(
     writer: *mut TinyResponseWriter,
@@ -2138,6 +2177,7 @@ pub unsafe extern "C" fn tinytsx_html_write_file_text(
     }
 }
 
+#[cfg(feature = "application")]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn tinytsx_html_write_fetch_status(
     writer: *mut TinyResponseWriter,
@@ -2160,6 +2200,7 @@ pub unsafe extern "C" fn tinytsx_html_write_fetch_status(
     unsafe { tinytsx_html_write_static(writer, status.as_ptr(), status.len()) }
 }
 
+#[cfg(feature = "application")]
 #[repr(C)]
 struct CurlBodyCapture {
     start: *mut u8,
@@ -2168,6 +2209,7 @@ struct CurlBodyCapture {
     overflow: bool,
 }
 
+#[cfg(feature = "application")]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn tinytsx_html_write_openai_chat_text(
     writer: *mut TinyResponseWriter,
@@ -2213,6 +2255,7 @@ pub unsafe extern "C" fn tinytsx_html_write_openai_chat_text(
     }
 }
 
+#[cfg(feature = "application")]
 impl OpenAiTransport {
     pub(crate) fn perform(
         &mut self,
@@ -2333,6 +2376,7 @@ impl OpenAiTransport {
     }
 }
 
+#[cfg(feature = "application")]
 unsafe extern "C" fn capture_provider_body(
     bytes: *mut c_char,
     size: usize,
@@ -2361,18 +2405,21 @@ unsafe extern "C" fn capture_provider_body(
     total
 }
 
+#[cfg(feature = "application")]
 fn openai_chat_content(response: &[u8]) -> Option<&[u8]> {
     let choices = find_bytes(response, b"\"choices\"")?;
     let message = choices + find_bytes(&response[choices..], b"\"message\"")?;
     json_string_field(&response[message..], b"content")
 }
 
+#[cfg(feature = "application")]
 fn find_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
     haystack
         .windows(needle.len())
         .position(|candidate| candidate == needle)
 }
 
+#[cfg(feature = "application")]
 fn json_string_field<'a>(object: &'a [u8], key: &[u8]) -> Option<&'a [u8]> {
     let mut pattern = Vec::with_capacity(key.len() + 2);
     pattern.push(b'"');
@@ -2406,6 +2453,7 @@ fn json_string_field<'a>(object: &'a [u8], key: &[u8]) -> Option<&'a [u8]> {
     None
 }
 
+#[cfg(feature = "application")]
 fn decode_json_string_in_place(
     destination: *mut u8,
     encoded_offset: usize,
@@ -2492,6 +2540,7 @@ fn decode_json_string_in_place(
     Some(output)
 }
 
+#[cfg(feature = "application")]
 fn parse_hex_quad(bytes: &[u8]) -> Option<u16> {
     bytes.iter().try_fold(0_u16, |value, byte| {
         let digit = match byte {
@@ -2504,6 +2553,7 @@ fn parse_hex_quad(bytes: &[u8]) -> Option<u16> {
     })
 }
 
+#[cfg(feature = "application")]
 fn fetch_response_status(url: &[u8]) -> Option<u16> {
     if url.contains(&0)
         || !*CURL_READY.get_or_init(|| {
@@ -2541,6 +2591,7 @@ fn fetch_response_status(url: &[u8]) -> Option<u16> {
     }
 }
 
+#[cfg(feature = "application")]
 unsafe extern "C" fn discard_fetch_body(
     _bytes: *mut c_char,
     size: usize,

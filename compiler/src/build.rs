@@ -121,6 +121,7 @@ pub fn execute(options: &Options) -> Result<PathBuf, String> {
         &root,
         &temporary,
         &object_path,
+        &compilation,
         options.release,
         options.target,
     )?;
@@ -183,12 +184,13 @@ fn link_runtime(
     root: &Path,
     temporary: &Path,
     object: &Path,
+    compilation: &Compilation,
     release: bool,
     target: Target,
 ) -> Result<PathBuf, String> {
     let target_directory = temporary.join("target");
     let mut command = Command::new("cargo");
-    let runtime_features = runtime_cargo_features();
+    let runtime_features = runtime_cargo_features(compilation);
     command
         .arg("rustc")
         .arg("--manifest-path")
@@ -200,6 +202,7 @@ fn link_runtime(
             "tinytsx-runtime-bootstrap",
             "--features",
             &runtime_features,
+            "--no-default-features",
         ])
         .arg("--target-dir")
         .arg(&target_directory)
@@ -223,12 +226,22 @@ fn link_runtime(
         .join("tinytsx-runtime-bootstrap"))
 }
 
-fn runtime_cargo_features() -> String {
-    if allocation_metrics_requested() {
-        "generated,allocation-metrics".to_owned()
-    } else {
-        "generated".to_owned()
+fn runtime_cargo_features(compilation: &Compilation) -> String {
+    let program = &compilation.program;
+    let application = !program.workers.is_empty()
+        || program.uses_openai_transport()
+        || program.uses_network_transport()
+        || program.uses_filesystem()
+        || program.uses_actors()
+        || program.uses_sqlite();
+    let mut features = vec!["generated"];
+    if application {
+        features.push("application");
     }
+    if allocation_metrics_requested() {
+        features.push("allocation-metrics");
+    }
+    features.join(",")
 }
 
 fn allocation_metrics_requested() -> bool {
@@ -282,6 +295,7 @@ fn write_report(
         .map_err(|error| format!("could not inspect {}: {error}", output.display()))?
         .len();
     let provider_transport = compilation.program.uses_openai_transport();
+    let network_transport = compilation.program.uses_network_transport();
     let filesystem = compilation.program.uses_filesystem();
     let actors = compilation.program.uses_actors();
     let sqlite = compilation.program.uses_sqlite();
@@ -296,8 +310,13 @@ fn write_report(
         "bounded-worker-pool",
         "keep-alive",
         "bounded-response-streaming",
-        "bounded-application-worker-pool",
     ];
+    if application_pool {
+        runtime_features.push("bounded-application-worker-pool");
+    }
+    if network_transport {
+        runtime_features.push("bounded-network-transport");
+    }
     if provider_transport {
         runtime_features.push("bounded-provider-transport");
     }

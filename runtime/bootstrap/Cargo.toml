@@ -9,11 +9,13 @@ name = "tinytsx-runtime-bootstrap"
 path = "src/main.rs"
 
 [features]
+default = ["application"]
 generated = []
 allocation-metrics = []
+application = ["dep:tinytsx-runtime-sqlite"]
 
 [dependencies]
 libc = "=0.2.186"
 serde_json = "=1.0.150"
-tinytsx-runtime-sqlite = { path = "../sqlite" }
+tinytsx-runtime-sqlite = { path = "../sqlite", optional = true }
 tinytsx-runtime-worker = { path = "../worker" }

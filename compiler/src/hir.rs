@@ -801,6 +801,36 @@ impl Program {
         })
     }
 
+    pub fn uses_network_transport(&self) -> bool {
+        self.handlers.iter().any(|handler| {
+            response_uses_network(&handler.response)
+                || handler
+                    .basic_authorization
+                    .as_ref()
+                    .is_some_and(|guard| response_uses_network(&guard.rejected.response))
+                || handler
+                    .session_authorization
+                    .as_ref()
+                    .is_some_and(|guard| response_uses_network(&guard.rejected.response))
+                || handler
+                    .body_limit
+                    .as_ref()
+                    .is_some_and(|guard| response_uses_network(&guard.rejected.response))
+                || handler
+                    .entity_tag
+                    .as_ref()
+                    .is_some_and(|guard| response_uses_network(&guard.not_modified.response))
+                || handler
+                    .sqlite_existence
+                    .as_ref()
+                    .is_some_and(|guard| response_uses_network(&guard.missing.response))
+                || handler
+                    .parameter_validations
+                    .iter()
+                    .any(|guard| response_uses_network(&guard.rejected.response))
+        })
+    }
+
     pub fn validate(&self) -> Result<(), String> {
         if self.version != 2 {
             return Err(format!(
@@ -2948,6 +2978,63 @@ fn expression_uses_openai(expression: &ValueExpression) -> bool {
             ..
         } => expression_uses_openai(when_present) || expression_uses_openai(when_absent),
         ValueExpression::WorkerCall { input, .. } => expression_uses_openai(input),
+        _ => false,
+    }
+}
+
+fn response_uses_network(response: &HandlerResponse) -> bool {
+    match response {
+        HandlerResponse::Html { .. } => false,
+        HandlerResponse::Text { value, .. } => expression_uses_network(value),
+        HandlerResponse::Stream { chunks, .. } => chunks.iter().any(expression_uses_network),
+    }
+}
+
+fn expression_uses_network(expression: &ValueExpression) -> bool {
+    match expression {
+        ValueExpression::FetchStatus { .. } | ValueExpression::OpenAiChatText { .. } => true,
+        ValueExpression::Concat { values, .. } => values.iter().any(expression_uses_network),
+        ValueExpression::DirectCall { arguments, .. } => {
+            arguments.iter().any(expression_uses_network)
+        }
+        ValueExpression::StringEqualConditional {
+            left,
+            right,
+            when_equal,
+            when_not_equal,
+            ..
+        }
+        | ValueExpression::NumericEqualConditional {
+            left,
+            right,
+            when_equal,
+            when_not_equal,
+            ..
+        }
+        | ValueExpression::BooleanEqualConditional {
+            left,
+            right,
+            when_equal,
+            when_not_equal,
+            ..
+        } => [left, right, when_equal, when_not_equal]
+            .into_iter()
+            .any(|value| expression_uses_network(value)),
+        ValueExpression::NumericBinary { left, right, .. } => {
+            expression_uses_network(left) || expression_uses_network(right)
+        }
+        ValueExpression::ThrowValue { value, .. } => expression_uses_network(value),
+        ValueExpression::TryCatch {
+            try_value,
+            catch_value,
+            ..
+        } => expression_uses_network(try_value) || expression_uses_network(catch_value),
+        ValueExpression::QueryConditional {
+            when_present,
+            when_absent,
+            ..
+        } => expression_uses_network(when_present) || expression_uses_network(when_absent),
+        ValueExpression::WorkerCall { input, .. } => expression_uses_network(input),
         _ => false,
     }
 }
