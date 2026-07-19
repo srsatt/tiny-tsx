@@ -6,30 +6,39 @@ use std::{
         unix::net::UnixStream,
     },
     panic::{AssertUnwindSafe, catch_unwind},
-    sync::{Arc, Condvar, Mutex, MutexGuard},
+    sync::{
+        Arc,
+        atomic::{AtomicBool, AtomicUsize, Ordering},
+        mpsc::{self, Receiver, SyncSender, TrySendError},
+    },
     thread::{self, JoinHandle},
 };
 
 use super::SubmitError;
 
+const JOBS_PER_CYCLE: usize = 64;
+
 /// The disposition of a descriptor-backed job after one executor turn.
 pub enum EventControl<J> {
     /// The job is finished and releases its bounded admission slot.
     Complete,
-    /// The job has buffered work and should rotate through the ready queue.
+    /// The job has buffered work and should rotate through the local ready queue.
     Ready(J),
-    /// The job should sleep in the reactor until its descriptor is readable.
+    /// The job should sleep in its shard until its descriptor is readable.
     WaitReadable(J),
 }
 
-/// A bounded pool that separates descriptor readiness from job execution.
+/// A bounded set of connection-owning I/O shards.
 ///
-/// One reactor thread owns sleeping jobs. Fixed executor threads only receive
-/// ready jobs, so idle descriptors do not consume executor capacity.
+/// Each native thread owns its waiting descriptors, ready queue, and caller
+/// state. Submissions cross one bounded channel and wake descriptor; ordinary
+/// readiness and resubmission never cross a global reactor or mutex.
 pub struct EventWorkerPool<J> {
-    shared: Arc<Shared<J>>,
-    executors: Vec<JoinHandle<()>>,
-    reactor: Option<JoinHandle<()>>,
+    shards: Vec<ShardSender<J>>,
+    threads: Vec<JoinHandle<()>>,
+    closed: Arc<AtomicBool>,
+    live: Arc<AtomicUsize>,
+    next_shard: AtomicUsize,
     worker_count: usize,
     capacity: usize,
 }
@@ -60,73 +69,121 @@ impl<J: Send + 'static> EventWorkerPool<J> {
                 "event job capacity must be greater than zero",
             ));
         }
-        let (wake_read, wake_write) = UnixStream::pair()?;
-        wake_read.set_nonblocking(true)?;
-        wake_write.set_nonblocking(true)?;
-        let shared = Arc::new(Shared::new(capacity, wake_write));
-        let descriptor = Arc::new(descriptor);
-        let reactor = {
-            let shared = Arc::clone(&shared);
-            let descriptor = Arc::clone(&descriptor);
-            Some(
-                thread::Builder::new()
-                    .name("tinytsx-reactor".to_owned())
-                    .spawn(move || reactor_loop(shared, descriptor, wake_read))?,
-            )
-        };
+
+        let closed = Arc::new(AtomicBool::new(false));
+        let live = Arc::new(AtomicUsize::new(0));
         let initialize = Arc::new(initialize);
+        let descriptor = Arc::new(descriptor);
         let handle = Arc::new(handle);
-        let mut executors = Vec::with_capacity(worker_count);
+        let channel_capacity = capacity.div_ceil(worker_count).max(1);
+        let mut shards = Vec::with_capacity(worker_count);
+        let mut threads = Vec::with_capacity(worker_count);
+
         for index in 0..worker_count {
-            let worker_shared = Arc::clone(&shared);
-            let initialize = Arc::clone(&initialize);
-            let handle = Arc::clone(&handle);
-            match thread::Builder::new()
-                .name(format!("tinytsx-event-worker-{index}"))
+            let (sender, receiver) = mpsc::sync_channel(channel_capacity);
+            let (wake_read, wake_write) = UnixStream::pair()?;
+            wake_read.set_nonblocking(true)?;
+            wake_write.set_nonblocking(true)?;
+            let shard_closed = Arc::clone(&closed);
+            let shard_live = Arc::clone(&live);
+            let shard_initialize = Arc::clone(&initialize);
+            let shard_descriptor = Arc::clone(&descriptor);
+            let shard_handle = Arc::clone(&handle);
+            let spawn = thread::Builder::new()
+                .name(format!("tinytsx-io-shard-{index}"))
                 .spawn(move || {
-                    let mut state = initialize(index);
-                    while let Some((job, contended)) = worker_shared.take_ready(worker_count) {
-                        let outcome = catch_unwind(AssertUnwindSafe(|| {
-                            handle(&mut state, job, contended)
-                        }));
-                        worker_shared.finish(outcome.unwrap_or(EventControl::Complete));
-                    }
-                }) {
-                Ok(thread) => executors.push(thread),
+                    let mut state = shard_initialize(index);
+                    shard_loop(
+                        &mut state,
+                        receiver,
+                        wake_read,
+                        ShardRuntime {
+                            closed: shard_closed,
+                            live: shard_live,
+                            worker_count,
+                            descriptor: shard_descriptor,
+                            handle: shard_handle,
+                        },
+                    );
+                });
+            match spawn {
+                Ok(thread) => {
+                    shards.push(ShardSender { sender, wake_write });
+                    threads.push(thread);
+                }
                 Err(error) => {
-                    shared.close();
-                    join_threads(&mut executors);
-                    if let Some(reactor) = reactor {
-                        let _ = reactor.join();
-                    }
+                    closed.store(true, Ordering::Release);
+                    wake_shards(&shards);
+                    join_threads(&mut threads);
                     return Err(error);
                 }
             }
         }
+
         Ok(Self {
-            shared,
-            executors,
-            reactor,
+            shards,
+            threads,
+            closed,
+            live,
+            next_shard: AtomicUsize::new(0),
             worker_count,
             capacity,
         })
     }
 
-    /// Registers a live job without assigning it to an executor until readable.
+    /// Registers a live descriptor with one shard without blocking.
     pub fn try_wait(&self, job: J) -> Result<(), SubmitError<J>> {
-        self.shared.try_wait(job)
+        if self.closed.load(Ordering::Acquire) {
+            return Err(SubmitError::Closed(job));
+        }
+        if self
+            .live
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |live| {
+                (live < self.capacity).then_some(live + 1)
+            })
+            .is_err()
+        {
+            return Err(SubmitError::Full(job));
+        }
+        if self.closed.load(Ordering::Acquire) {
+            self.live.fetch_sub(1, Ordering::AcqRel);
+            return Err(SubmitError::Closed(job));
+        }
+
+        let start = self.next_shard.fetch_add(1, Ordering::Relaxed) % self.shards.len();
+        let mut job = job;
+        let mut disconnected = false;
+        for offset in 0..self.shards.len() {
+            let shard = &self.shards[(start + offset) % self.shards.len()];
+            match shard.sender.try_send(job) {
+                Ok(()) => {
+                    shard.wake();
+                    return Ok(());
+                }
+                Err(TrySendError::Full(returned)) => job = returned,
+                Err(TrySendError::Disconnected(returned)) => {
+                    disconnected = true;
+                    job = returned;
+                }
+            }
+        }
+        self.live.fetch_sub(1, Ordering::AcqRel);
+        if disconnected || self.closed.load(Ordering::Acquire) {
+            Err(SubmitError::Closed(job))
+        } else {
+            Err(SubmitError::Full(job))
+        }
     }
 
     pub fn close(&self) {
-        self.shared.close();
+        if !self.closed.swap(true, Ordering::AcqRel) {
+            wake_shards(&self.shards);
+        }
     }
 
     pub fn join(mut self) {
         self.close();
-        if let Some(reactor) = self.reactor.take() {
-            let _ = reactor.join();
-        }
-        join_threads(&mut self.executors);
+        join_threads(&mut self.threads);
     }
 
     pub fn worker_count(&self) -> usize {
@@ -140,112 +197,30 @@ impl<J: Send + 'static> EventWorkerPool<J> {
 
 impl<J> Drop for EventWorkerPool<J> {
     fn drop(&mut self) {
-        self.shared.close();
-        if let Some(reactor) = self.reactor.take() {
-            let _ = reactor.join();
+        if !self.closed.swap(true, Ordering::AcqRel) {
+            wake_shards(&self.shards);
         }
-        join_threads(&mut self.executors);
+        join_threads(&mut self.threads);
     }
 }
 
-struct Shared<J> {
-    state: Mutex<State<J>>,
-    ready: Condvar,
-    capacity: usize,
+struct ShardSender<J> {
+    sender: SyncSender<J>,
     wake_write: UnixStream,
 }
 
-struct State<J> {
-    ready: VecDeque<J>,
-    waiting: Vec<J>,
-    live: usize,
-    closed: bool,
+struct ShardRuntime<Descriptor, Handle> {
+    closed: Arc<AtomicBool>,
+    live: Arc<AtomicUsize>,
+    worker_count: usize,
+    descriptor: Arc<Descriptor>,
+    handle: Arc<Handle>,
 }
 
-impl<J> Shared<J> {
-    fn new(capacity: usize, wake_write: UnixStream) -> Self {
-        Self {
-            state: Mutex::new(State {
-                ready: VecDeque::with_capacity(capacity),
-                waiting: Vec::with_capacity(capacity),
-                live: 0,
-                closed: false,
-            }),
-            ready: Condvar::new(),
-            capacity,
-            wake_write,
-        }
-    }
-
-    fn try_wait(&self, job: J) -> Result<(), SubmitError<J>> {
-        let mut state = lock(&self.state);
-        if state.closed {
-            return Err(SubmitError::Closed(job));
-        }
-        if state.live == self.capacity {
-            return Err(SubmitError::Full(job));
-        }
-        state.live += 1;
-        state.waiting.push(job);
-        drop(state);
-        self.wake();
-        Ok(())
-    }
-
-    fn take_ready(&self, worker_count: usize) -> Option<(J, bool)> {
-        let mut state = lock(&self.state);
-        loop {
-            if let Some(job) = state.ready.pop_front() {
-                return Some((job, state.live > worker_count));
-            }
-            if state.closed {
-                return None;
-            }
-            state = self
-                .ready
-                .wait(state)
-                .unwrap_or_else(|error| error.into_inner());
-        }
-    }
-
-    fn finish(&self, control: EventControl<J>) {
-        let mut wake = false;
-        let mut state = lock(&self.state);
-        match control {
-            EventControl::Complete => state.live -= 1,
-            EventControl::Ready(job) if !state.closed => {
-                state.ready.push_back(job);
-                self.ready.notify_one();
-            }
-            EventControl::WaitReadable(job) if !state.closed => {
-                state.waiting.push(job);
-                wake = true;
-            }
-            EventControl::Ready(_) | EventControl::WaitReadable(_) => state.live -= 1,
-        }
-        drop(state);
-        if wake {
-            self.wake();
-        }
-    }
-
-    fn close(&self) {
-        let mut state = lock(&self.state);
-        if state.closed {
-            return;
-        }
-        state.closed = true;
-        let waiting = state.waiting.len();
-        state.waiting.clear();
-        state.live -= waiting;
-        self.ready.notify_all();
-        drop(state);
-        self.wake();
-    }
-
+impl<J> ShardSender<J> {
     fn wake(&self) {
         let byte = [1_u8];
-        // SAFETY: the stream owns this descriptor for the lifetime of `Shared`.
+        // SAFETY: the stream owns this descriptor for the lifetime of the shard.
         let _ = unsafe {
             libc::write(
                 self.wake_write.as_raw_fd(),
@@ -256,39 +231,39 @@ impl<J> Shared<J> {
     }
 }
 
-fn reactor_loop<J, Descriptor>(
-    shared: Arc<Shared<J>>,
-    descriptor: Arc<Descriptor>,
+fn shard_loop<J, S, Descriptor, Handle>(
+    state: &mut S,
+    receiver: Receiver<J>,
     wake_read: UnixStream,
+    runtime: ShardRuntime<Descriptor, Handle>,
 ) where
     J: Send + 'static,
     Descriptor: Fn(&J) -> RawFd + Send + Sync + 'static,
+    Handle: Fn(&mut S, J, bool) -> EventControl<J> + Send + Sync + 'static,
 {
-    loop {
-        let mut descriptors = {
-            let state = lock(&shared.state);
-            if state.closed {
-                break;
-            }
-            let mut descriptors = Vec::with_capacity(state.waiting.len() + 1);
-            descriptors.push(libc::pollfd {
-                fd: wake_read.as_raw_fd(),
-                events: libc::POLLIN,
-                revents: 0,
-            });
-            descriptors.extend(state.waiting.iter().map(|job| libc::pollfd {
-                fd: descriptor(job),
-                events: libc::POLLIN,
-                revents: 0,
-            }));
-            descriptors
-        };
-        // SAFETY: `descriptors` is a valid mutable pollfd array for this call.
+    let mut waiting = Vec::new();
+    let mut ready = VecDeque::new();
+    let mut descriptors = Vec::new();
+
+    while !runtime.closed.load(Ordering::Acquire) {
+        descriptors.clear();
+        descriptors.push(libc::pollfd {
+            fd: wake_read.as_raw_fd(),
+            events: libc::POLLIN,
+            revents: 0,
+        });
+        descriptors.extend(waiting.iter().map(|job| libc::pollfd {
+            fd: (runtime.descriptor)(job),
+            events: libc::POLLIN,
+            revents: 0,
+        }));
+        let timeout = if ready.is_empty() { -1 } else { 0 };
+        // SAFETY: `descriptors` remains a valid mutable poll array for this call.
         let result = unsafe {
             libc::poll(
                 descriptors.as_mut_ptr(),
                 descriptors.len() as libc::nfds_t,
-                -1,
+                timeout,
             )
         };
         if result < 0 {
@@ -299,41 +274,57 @@ fn reactor_loop<J, Descriptor>(
         }
         if descriptors[0].revents != 0 {
             drain_wake(wake_read.as_raw_fd());
+            drain_inbox(&receiver, &mut waiting);
         }
-        let mut state = lock(&shared.state);
-        if state.closed {
+        if runtime.closed.load(Ordering::Acquire) {
             break;
         }
-        let mut newly_ready = 0;
         for index in (1..descriptors.len()).rev() {
-            if descriptors[index].revents != 0 && index - 1 < state.waiting.len() {
-                let job = state.waiting.swap_remove(index - 1);
-                state.ready.push_back(job);
-                newly_ready += 1;
+            if descriptors[index].revents != 0 {
+                ready.push_back(waiting.swap_remove(index - 1));
             }
         }
-        // Wake at most one executor per descriptor that became ready. A
-        // broadcast creates a thundering herd when one keep-alive socket wakes
-        // while several executor threads are asleep.
-        for _ in 0..newly_ready {
-            shared.ready.notify_one();
+
+        for _ in 0..JOBS_PER_CYCLE {
+            let Some(job) = ready.pop_front() else {
+                break;
+            };
+            let contended = runtime.live.load(Ordering::Acquire) > runtime.worker_count;
+            let outcome = catch_unwind(AssertUnwindSafe(|| {
+                (runtime.handle)(state, job, contended)
+            }));
+            match outcome.unwrap_or(EventControl::Complete) {
+                EventControl::Complete => {
+                    runtime.live.fetch_sub(1, Ordering::AcqRel);
+                }
+                EventControl::Ready(job) => ready.push_back(job),
+                EventControl::WaitReadable(job) => waiting.push(job),
+            }
         }
+    }
+}
+
+fn drain_inbox<J>(receiver: &Receiver<J>, waiting: &mut Vec<J>) {
+    while let Ok(job) = receiver.try_recv() {
+        waiting.push(job);
+    }
+}
+
+fn wake_shards<J>(shards: &[ShardSender<J>]) {
+    for shard in shards {
+        shard.wake();
     }
 }
 
 fn drain_wake(descriptor: RawFd) {
     let mut bytes = [0_u8; 64];
     loop {
-        // SAFETY: `bytes` is writable and the descriptor is the reactor's stream.
+        // SAFETY: `bytes` is writable and the descriptor is the shard's stream.
         let read = unsafe { libc::read(descriptor, bytes.as_mut_ptr().cast(), bytes.len()) };
         if read <= 0 {
             break;
         }
     }
-}
-
-fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
-    mutex.lock().unwrap_or_else(|error| error.into_inner())
 }
 
 fn join_threads(threads: &mut Vec<JoinHandle<()>>) {
@@ -352,9 +343,10 @@ mod tests {
     };
 
     use super::{EventControl, EventWorkerPool};
+    use crate::SubmitError;
 
     #[test]
-    fn an_idle_descriptor_does_not_occupy_the_only_executor() {
+    fn an_idle_descriptor_does_not_occupy_the_only_shard() {
         let (idle_server, _idle_client) = UnixStream::pair().expect("create idle socket pair");
         let (ready_server, mut ready_client) =
             UnixStream::pair().expect("create ready socket pair");
@@ -385,6 +377,24 @@ mod tests {
             completed_rx.recv_timeout(Duration::from_secs(1)),
             Ok((b'x', true))
         );
+        pool.join();
+    }
+
+    #[test]
+    fn admission_is_bounded_before_a_descriptor_becomes_ready() {
+        let (accepted, _accepted_peer) = UnixStream::pair().expect("accepted pair");
+        let (rejected, _rejected_peer) = UnixStream::pair().expect("rejected pair");
+        let pool = EventWorkerPool::new(
+            1,
+            1,
+            |_| (),
+            |stream: &UnixStream| std::os::fd::AsRawFd::as_raw_fd(stream),
+            |_, _stream, _| EventControl::Complete,
+        )
+        .expect("create event worker pool");
+
+        assert!(pool.try_wait(accepted).is_ok());
+        assert!(matches!(pool.try_wait(rejected), Err(SubmitError::Full(_))));
         pool.join();
     }
 }
