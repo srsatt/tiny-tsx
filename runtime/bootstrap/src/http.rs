@@ -19,6 +19,7 @@ const ACCEPT_POLL_TIMEOUT_MS: i32 = 100;
 
 struct HttpWorker {
     request_arena: RequestArena,
+    response_head: Vec<u8>,
 }
 
 pub fn serve() -> std::io::Result<()> {
@@ -33,10 +34,13 @@ pub fn serve() -> std::io::Result<()> {
         queue_capacity,
         move |_| HttpWorker {
             request_arena: RequestArena::new(request_memory),
+            response_head: Vec::with_capacity(1024),
         },
         Connection::descriptor,
-        |worker, mut connection: Connection| match connection.handle_turn(&mut worker.request_arena)
-        {
+        |worker, mut connection: Connection| match connection.handle_turn(
+            &mut worker.request_arena,
+            &mut worker.response_head,
+        ) {
             Ok(Turn::Complete) => EventControl::Complete,
             Ok(Turn::Ready) => EventControl::Ready(connection),
             Ok(Turn::WaitReadable) => EventControl::WaitReadable(connection),

@@ -48,9 +48,13 @@ impl Connection {
         })
     }
 
-    pub(super) fn handle_turn(&mut self, arena: &mut RequestArena) -> io::Result<Turn> {
+    pub(super) fn handle_turn(
+        &mut self,
+        arena: &mut RequestArena,
+        response_head: &mut Vec<u8>,
+    ) -> io::Result<Turn> {
         for turn_index in 0..REQUESTS_PER_TURN {
-            let turn = self.handle_request(arena)?;
+            let turn = self.handle_request(arena, response_head)?;
             if turn == Turn::Complete {
                 return Ok(Turn::Complete);
             }
@@ -72,7 +76,11 @@ impl Connection {
         self.stream
     }
 
-    fn handle_request(&mut self, arena: &mut RequestArena) -> io::Result<Turn> {
+    fn handle_request(
+        &mut self,
+        arena: &mut RequestArena,
+        response_head: &mut Vec<u8>,
+    ) -> io::Result<Turn> {
         let stream = &mut self.stream;
         let input = &mut self.input;
         let head = match input.read_head(stream) {
@@ -80,35 +88,35 @@ impl Connection {
             Ok(None) => return Ok(Turn::Complete),
             Err(error) if is_timeout(&error) => return Ok(Turn::Complete),
             Err(_) => {
-                write_terminal_response(stream, 400, b"bad request")?;
+                write_terminal_response(stream, response_head, 400, b"bad request")?;
                 return Ok(Turn::Complete);
             }
         };
         let Some((method, target, version)) = parse_request_line(&head) else {
-            write_terminal_response(stream, 400, b"bad request")?;
+            write_terminal_response(stream, response_head, 400, b"bad request")?;
             return Ok(Turn::Complete);
         };
         if !matches!(method, b"GET" | b"POST" | b"PUT" | b"DELETE" | b"OPTIONS") {
-            write_terminal_response(stream, 405, b"method not allowed")?;
+            write_terminal_response(stream, response_head, 405, b"method not allowed")?;
             return Ok(Turn::Complete);
         }
 
         let Some(parsed) = parse_request_headers(&head) else {
-            write_terminal_response(stream, 400, b"bad request")?;
+            write_terminal_response(stream, response_head, 400, b"bad request")?;
             return Ok(Turn::Complete);
         };
         if parsed.transfer_encoded {
-            write_terminal_response(stream, 400, b"unsupported transfer encoding")?;
+            write_terminal_response(stream, response_head, 400, b"unsupported transfer encoding")?;
             return Ok(Turn::Complete);
         }
         if parsed.content_length > MAX_REQUEST_BODY {
-            write_terminal_response(stream, 413, b"request body too large")?;
+            write_terminal_response(stream, response_head, 413, b"request body too large")?;
             return Ok(Turn::Complete);
         }
         let body = match input.read_body(stream, parsed.content_length) {
             Ok(body) => body,
             Err(_) => {
-                write_terminal_response(stream, 400, b"bad request")?;
+                write_terminal_response(stream, response_head, 400, b"bad request")?;
                 return Ok(Turn::Complete);
             }
         };
@@ -130,6 +138,7 @@ impl Connection {
         let result = match response.application_status {
             OK if response.is_streaming() => write_stream_response(
                 stream,
+                response_head,
                 response.http_status,
                 response.content_type,
                 response.stream_chunks(),
@@ -138,6 +147,7 @@ impl Connection {
             ),
             OK => write_response(
                 stream,
+                response_head,
                 response.http_status,
                 response.content_type,
                 response.body,
@@ -148,6 +158,7 @@ impl Connection {
                 directive = ConnectionDirective::Close;
                 write_response(
                     stream,
+                    response_head,
                     503,
                     CONTENT_TYPE_TEXT,
                     b"request memory exhausted",
@@ -159,6 +170,7 @@ impl Connection {
                 directive = ConnectionDirective::Close;
                 write_response(
                     stream,
+                    response_head,
                     503,
                     CONTENT_TYPE_TEXT,
                     b"application worker overloaded",
@@ -168,6 +180,7 @@ impl Connection {
             }
             BAD_REQUEST => write_response(
                 stream,
+                response_head,
                 400,
                 CONTENT_TYPE_TEXT,
                 b"bad request",
@@ -176,6 +189,7 @@ impl Connection {
             ),
             NOT_FOUND => write_response(
                 stream,
+                response_head,
                 404,
                 CONTENT_TYPE_TEXT,
                 b"404 Not Found",
@@ -186,6 +200,7 @@ impl Connection {
                 directive = ConnectionDirective::Close;
                 write_response(
                     stream,
+                    response_head,
                     500,
                     CONTENT_TYPE_TEXT,
                     b"internal server error",
@@ -197,6 +212,7 @@ impl Connection {
                 directive = ConnectionDirective::Close;
                 write_response(
                     stream,
+                    response_head,
                     500,
                     CONTENT_TYPE_TEXT,
                     b"unknown application status",
@@ -219,8 +235,10 @@ impl Connection {
 pub(super) fn write_overload_response(stream: &mut TcpStream) -> io::Result<()> {
     stream.set_read_timeout(Some(OVERLOAD_HEAD_TIMEOUT))?;
     let _ = ConnectionInput::new().read_head(stream);
+    let mut response_head = Vec::with_capacity(256);
     write_response(
         stream,
+        &mut response_head,
         503,
         CONTENT_TYPE_TEXT,
         b"server overloaded",
@@ -271,12 +289,17 @@ mod tests {
 
         let mut connection = Connection::new(server).expect("configure connection");
         let mut arena = RequestArena::new(4096);
+        let mut response_head = Vec::new();
         assert_eq!(
-            connection.handle_turn(&mut arena).expect("first turn"),
+            connection
+                .handle_turn(&mut arena, &mut response_head)
+                .expect("first turn"),
             Turn::Ready
         );
         assert_eq!(
-            connection.handle_turn(&mut arena).expect("second turn"),
+            connection
+                .handle_turn(&mut arena, &mut response_head)
+                .expect("second turn"),
             Turn::Complete
         );
 
@@ -321,12 +344,14 @@ mod tests {
         let pool = EventWorkerPool::new(
             1,
             2,
-            |_| RequestArena::new(4096),
+            |_| (RequestArena::new(4096), Vec::new()),
             Connection::descriptor,
-            |arena, mut connection: Connection| match connection.handle_turn(arena) {
+            |(arena, response_head), mut connection: Connection| {
+                match connection.handle_turn(arena, response_head) {
                 Ok(Turn::Complete) | Err(_) => EventControl::Complete,
                 Ok(Turn::Ready) => EventControl::Ready(connection),
                 Ok(Turn::WaitReadable) => EventControl::WaitReadable(connection),
+                }
             },
         )
         .expect("create HTTP worker pool");
