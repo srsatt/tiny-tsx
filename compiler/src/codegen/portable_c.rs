@@ -1,6 +1,8 @@
 use std::fmt::Write;
 
-use crate::hir::{HandlerResponse, HtmlOp, Program, ValueExpression};
+use crate::hir::{
+    HandlerResponse, HtmlOp, Program, TodoArgument, TodoOperation, TodoUser, ValueExpression,
+};
 
 use super::Options;
 
@@ -40,6 +42,11 @@ pub(super) fn emit(program: &Program, options: &Options) -> Result<String, Strin
          extern tiny_u32 tinytsx_html_write_query_parameter(void *, const void *, const tiny_u8 *, tiny_usize, const tiny_u8 *, tiny_usize, tiny_u32);\n\
          extern tiny_u32 tinytsx_request_query_has(const void *, const tiny_u8 *, tiny_usize);\n\
          extern tiny_u32 tinytsx_html_write_openai_chat_text(void *, const tiny_u8 *, tiny_usize, const tiny_u8 *, tiny_usize, const tiny_u8 *, tiny_usize);\n",
+    );
+    source.push_str(
+        "extern tiny_u32 tinytsx_todo_store_list_json(void *, const void *, tiny_usize, tiny_u32, const tiny_u8 *, tiny_usize);\n\
+         extern tiny_u32 tinytsx_todo_store_add_json(void *, const void *, tiny_usize, tiny_u32, const tiny_u8 *, tiny_usize, const tiny_u8 *, tiny_usize);\n\
+         extern tiny_u32 tinytsx_todo_store_mutation_json(void *, const void *, tiny_usize, tiny_u32, const tiny_u8 *, tiny_usize, tiny_u32, tiny_usize);\n",
     );
     sqlite::emit_declarations(&mut source);
     application::emit_declarations(&mut source);
@@ -717,6 +724,37 @@ fn emit_text_expression(
             ..
         } => {
             sqlite::emit_query(source, indent, *database, *sql, mode, parameters, program);
+        }
+        ValueExpression::TodoStore {
+            database,
+            operation,
+            user,
+            argument,
+            ..
+        } => {
+            let (user_kind, user_string) = match user {
+                TodoUser::StaticString { string } => (0, *string),
+                TodoUser::RequestCookie { cookie } => (1, *cookie),
+            };
+            let user_length = program.static_strings[user_string].value.len();
+            let call = match (operation, argument) {
+                (TodoOperation::List, None) => format!(
+                    "tinytsx_todo_store_list_json(writer, request, {database}, {user_kind}, tinytsx_string_{user_string}, {user_length})"
+                ),
+                (TodoOperation::Add, Some(TodoArgument::RequestJsonField { field })) => format!(
+                    "tinytsx_todo_store_add_json(writer, request, {database}, {user_kind}, tinytsx_string_{user_string}, {user_length}, tinytsx_string_{field}, {})",
+                    program.static_strings[*field].value.len(),
+                ),
+                (
+                    TodoOperation::Complete | TodoOperation::Delete,
+                    Some(TodoArgument::RouteParameter { segment }),
+                ) => format!(
+                    "tinytsx_todo_store_mutation_json(writer, request, {database}, {user_kind}, tinytsx_string_{user_string}, {user_length}, {}, {segment})",
+                    u32::from(matches!(operation, TodoOperation::Delete)),
+                ),
+                _ => return Err("invalid TODO store operation".to_owned()),
+            };
+            emit_write_call(source, indent, &call);
         }
         ValueExpression::ActorCall {
             actor,

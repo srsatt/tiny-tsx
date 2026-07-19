@@ -367,6 +367,67 @@ fn emits_basic_authorization_for_both_x86_targets() {
 }
 
 #[test]
+fn emits_todo_store_operations_for_both_x86_targets() {
+    for target in [Target::LinuxX86_64, Target::MacosX86_64] {
+        for (operation, argument, expected) in [
+            (crate::hir::TodoOperation::List, None, "tinytsx_todo_store_list_json"),
+            (
+                crate::hir::TodoOperation::Add,
+                Some(crate::hir::TodoArgument::RequestJsonField { field: 2 }),
+                "tinytsx_todo_store_add_json",
+            ),
+            (
+                crate::hir::TodoOperation::Complete,
+                Some(crate::hir::TodoArgument::RouteParameter { segment: 1 }),
+                "tinytsx_todo_store_mutation_json",
+            ),
+            (
+                crate::hir::TodoOperation::Delete,
+                Some(crate::hir::TodoArgument::RouteParameter { segment: 1 }),
+                "tinytsx_todo_store_mutation_json",
+            ),
+        ] {
+            let mut program = dynamic_program(target);
+            program.static_strings.extend([
+                crate::hir::StaticString {
+                    id: 1,
+                    value: "user-1".to_owned(),
+                },
+                crate::hir::StaticString {
+                    id: 2,
+                    value: "text".to_owned(),
+                },
+            ]);
+            program.sqlite_databases.push(crate::hir::SqliteDatabase {
+                id: 0,
+                path: ":memory:".to_owned(),
+            });
+            program.handlers[0].response = crate::hir::HandlerResponse::Text {
+                value: crate::hir::ValueExpression::TodoStore {
+                    database: 0,
+                    operation,
+                    user: crate::hir::TodoUser::StaticString { string: 1 },
+                    argument,
+                    span: crate::hir::SourceSpan {
+                        file: "server.ts".to_owned(),
+                        line: 1,
+                        column: 1,
+                        end_line: 1,
+                        end_column: 2,
+                    },
+                },
+                status: 200,
+                content_type: Some("application/json".to_owned()),
+            };
+
+            let assembly = emit(&program, target, Options::default())
+                .expect("emit x86-64 TODO store operation");
+            assert!(assembly.contains(expected));
+        }
+    }
+}
+
+#[test]
 fn emits_portable_scalar_functions() {
     for target in [Target::LinuxX86_64, Target::MacosX86_64] {
         let assembly = emit(&function_program(target), target, Options::default())
