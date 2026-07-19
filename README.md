@@ -371,6 +371,10 @@ The alpha does not provide:
 The detailed compatibility table is the source of truth:
 [`doc/COMPATIBILITY.md`](doc/COMPATIBILITY.md).
 
+The standalone `tinytsx test262` allowlist runner still emits direct ARM64
+assembly and is not part of x86-64 application-target support. Its intake/HIR
+tests remain portable; native Test262 execution is skipped on x86-64 hosts.
+
 ## Development
 
 Useful verification commands:

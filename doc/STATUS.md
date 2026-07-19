@@ -1643,6 +1643,10 @@ Portable handler guards now lower both Basic credentials and the pinned
 credential-free session-cookie boundary. An Intel Mach-O server returns 401
 without the required cookie and 200 with it. Release CI installs the example
 dependency graph before running the assembler-backed x86 integration tests.
+The same portable response path lowers the bounded Stytch TODO store list/add/
+complete/delete calls; Intel native HTTP proves denial, empty list, and create.
+The standalone Test262 conformance runner remains an explicit ARM64-only direct
+assembly backend and is skipped, with a reported reason, by x86 release hosts.
 
 ## Resume point
 

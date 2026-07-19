@@ -85,6 +85,11 @@ stable diagnostic catalog in `doc/STANDARD_LIBRARY.md`. Requests use bounded
 arenas, HTTP/application executors have fixed queues, saturation is recoverable,
 and no feature relies on a garbage collector or finalizer.
 
+The application compiler supports all four native targets listed above. The
+separate `tinytsx test262` conformance runner remains ARM64-only because it has
+its own direct assembly backend; x86 release jobs retain intake/HIR coverage
+and skip only native execution of those standalone cases.
+
 Known non-goals include general TypeScript/ECMAScript, arbitrary npm execution,
 Node/Deno/Bun compatibility, blanket Hono/Web API support, other native targets, dynamic
 SQLite values/results, general actors, WebSockets, compression, JWT/JWK,

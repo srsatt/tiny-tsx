@@ -11,13 +11,16 @@ const directory = path.dirname(fileURLToPath(import.meta.url));
 const repository = path.resolve(directory, "../../..");
 const manifest = JSON.parse(fs.readFileSync(path.join(directory, "allowlist.json"), "utf8"));
 const nativeCases = manifest.cases.filter(testCase => testCase.mode === "native");
+const nativeRunnerSupported = process.arch === "arm64";
 
 test("contains at least one native Test262 case", () => {
   assert.ok(nativeCases.length > 0);
 });
 
 for (const testCase of nativeCases) {
-  test(`executes ${testCase.path} as native code`, () => {
+  test(`executes ${testCase.path} as native code`, {
+    skip: nativeRunnerSupported ? false : "the Test262 native runner is ARM64-only",
+  }, () => {
     const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "tinytsx-test262-native-"));
     const binary = path.join(temporary, "case");
     try {
