@@ -55,6 +55,14 @@ impl ConnectionInput {
         request_head_end(&self.bytes).is_some()
     }
 
+    pub(super) fn recycle_head(&mut self, mut head: Vec<u8>) {
+        head.clear();
+        if !self.bytes.is_empty() {
+            head.extend_from_slice(&self.bytes);
+        }
+        self.bytes = head;
+    }
+
     pub(super) fn read_body(
         &mut self,
         stream: &mut impl Read,
@@ -81,7 +89,6 @@ impl ConnectionInput {
 }
 
 pub(super) struct ParsedHeaders {
-    pub(super) headers: Vec<TinyHeader>,
     pub(super) content_length: usize,
     pub(super) connection_close: bool,
     pub(super) transfer_encoded: bool,
@@ -102,9 +109,12 @@ pub(super) fn parse_request_line(request: &[u8]) -> Option<(&[u8], &[u8], &[u8])
     Some((method, target, version))
 }
 
-pub(super) fn parse_request_headers(request: &[u8]) -> Option<ParsedHeaders> {
+pub(super) fn parse_request_headers(
+    request: &[u8],
+    headers: &mut Vec<TinyHeader>,
+) -> Option<ParsedHeaders> {
     let first_line_end = request.windows(2).position(|window| window == b"\r\n")?;
-    let mut headers = Vec::new();
+    headers.clear();
     let mut content_length = None;
     let mut connection_close = false;
     let mut transfer_encoded = false;
@@ -138,7 +148,6 @@ pub(super) fn parse_request_headers(request: &[u8]) -> Option<ParsedHeaders> {
         });
     }
     Some(ParsedHeaders {
-        headers,
         content_length: content_length.unwrap_or(0),
         connection_close,
         transfer_encoded,
@@ -208,11 +217,12 @@ mod tests {
     #[test]
     fn parses_borrowed_headers_and_transport_metadata() {
         let request = b"GET / HTTP/1.1\r\nHost: localhost\r\nUser-Agent: tiny-client/1.0\r\nContent-Length: 12\r\nConnection: upgrade, Close\r\n\r\n";
-        let parsed = parse_request_headers(request).expect("valid headers");
+        let mut headers = Vec::new();
+        let parsed = parse_request_headers(request, &mut headers).expect("valid headers");
 
-        assert_eq!(parsed.headers.len(), 4);
-        assert_eq!(bytes(parsed.headers[1].name), b"User-Agent");
-        assert_eq!(bytes(parsed.headers[1].value), b"tiny-client/1.0");
+        assert_eq!(headers.len(), 4);
+        assert_eq!(bytes(headers[1].name), b"User-Agent");
+        assert_eq!(bytes(headers[1].value), b"tiny-client/1.0");
         assert_eq!(parsed.content_length, 12);
         assert!(parsed.connection_close);
         assert!(!parsed.transfer_encoded);
@@ -222,11 +232,18 @@ mod tests {
     fn rejects_duplicate_or_invalid_content_lengths() {
         assert!(
             parse_request_headers(
-                b"POST / HTTP/1.1\r\nContent-Length: 1\r\nContent-Length: 1\r\n\r\n"
+                b"POST / HTTP/1.1\r\nContent-Length: 1\r\nContent-Length: 1\r\n\r\n",
+                &mut Vec::new(),
             )
             .is_none()
         );
-        assert!(parse_request_headers(b"POST / HTTP/1.1\r\nContent-Length: -1\r\n\r\n").is_none());
+        assert!(
+            parse_request_headers(
+                b"POST / HTTP/1.1\r\nContent-Length: -1\r\n\r\n",
+                &mut Vec::new(),
+            )
+            .is_none()
+        );
     }
 
     #[test]
@@ -247,6 +264,26 @@ mod tests {
             .expect("read second head")
             .expect("second request");
         assert!(second.starts_with(b"GET /second"));
+    }
+
+    #[test]
+    fn recycles_the_request_head_allocation_between_keep_alive_requests() {
+        let mut input = ConnectionInput::new();
+        let mut first_stream = Cursor::new(b"GET /first HTTP/1.1\r\nHost: x\r\n\r\n");
+        let first = input
+            .read_head(&mut first_stream)
+            .expect("read first head")
+            .expect("first head");
+        let allocation = first.as_ptr();
+        input.recycle_head(first);
+
+        let mut second_stream = Cursor::new(b"GET /second HTTP/1.1\r\nHost: x\r\n\r\n");
+        let second = input
+            .read_head(&mut second_stream)
+            .expect("read second head")
+            .expect("second head");
+
+        assert_eq!(second.as_ptr(), allocation);
     }
 
     #[test]

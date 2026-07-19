@@ -230,13 +230,15 @@ fn runtime_cargo_features(compilation: &Compilation) -> String {
     let program = &compilation.program;
     let application = !program.workers.is_empty()
         || program.uses_openai_transport()
-        || program.uses_network_transport()
         || program.uses_filesystem()
         || program.uses_actors()
         || program.uses_sqlite();
     let mut features = vec!["generated"];
     if application {
         features.push("application");
+    }
+    if program.uses_network_transport() {
+        features.push("network");
     }
     if allocation_metrics_requested() {
         features.push("allocation-metrics");

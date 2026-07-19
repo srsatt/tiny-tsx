@@ -9,10 +9,11 @@ name = "tinytsx-runtime-bootstrap"
 path = "src/main.rs"
 
 [features]
-default = ["application"]
+default = ["application", "network"]
 generated = []
 allocation-metrics = []
-application = ["dep:tinytsx-runtime-sqlite"]
+application = ["dep:tinytsx-runtime-sqlite", "network"]
+network = []
 
 [dependencies]
 libc = "=0.2.186"

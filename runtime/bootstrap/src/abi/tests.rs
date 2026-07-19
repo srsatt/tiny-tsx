@@ -3,8 +3,8 @@ use super::{
     EMPTY_SQLITE_EXECUTE_RESULT, INTERNAL_ERROR, MAX_DYNAMIC_HEADER_BYTES, MAX_RESPONSE_HEADERS,
     MAX_SQLITE_RESULTS, MAX_STREAM_CHUNKS, OK, OpenAiTransport, REQUEST_OOM, RequestArena,
     TinyHeader, TinyResponseWriter, TinySqlParameter, TinySqliteExecuteResult, TinyStringView,
-    decode_sqlite_parameters, relocate_writer_view, render, request, request_with_body,
-    request_with_headers,
+    copy_request_header_view, decode_sqlite_parameters, relocate_writer_view, render, request,
+    request_with_body, request_with_headers,
     tinytsx_html_write_fetch_status, tinytsx_html_write_path_segment, tinytsx_html_write_path_tail,
     tinytsx_html_write_query_parameter, tinytsx_html_write_request_header,
     tinytsx_html_write_request_json_field, tinytsx_html_write_response_header,
@@ -1101,6 +1101,23 @@ fn rendered_header_views_relocate_from_writer_storage_to_the_request_arena() {
     assert_eq!(dynamic.ptr, destination[7..].as_ptr());
     assert_eq!(view(&dynamic), b"value");
     assert_eq!(view(&static_view), b"static");
+}
+
+#[test]
+fn request_derived_response_headers_move_into_reusable_arena_storage() {
+    let request_value = *b"request-id";
+    let request_header = TinyHeader {
+        name: TinyStringView::from_bytes(b"X-Request-Id"),
+        value: TinyStringView::from_bytes(&request_value),
+    };
+    let mut response_value = request_header.value;
+    let mut storage = Vec::with_capacity(request_value.len());
+
+    copy_request_header_view(&mut response_value, &[request_header], &mut storage);
+
+    assert_eq!(view(&response_value), b"request-id");
+    assert_eq!(response_value.ptr, storage.as_ptr());
+    assert_ne!(response_value.ptr, request_value.as_ptr());
 }
 
 #[test]

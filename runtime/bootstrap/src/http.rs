@@ -10,7 +10,9 @@ use std::{
 
 use tinytsx_runtime_worker::{EventControl, EventWorkerPool};
 
-use crate::abi::{RequestArena, configured_port, configured_request_memory, configured_workers};
+use crate::abi::{
+    RequestArena, TinyHeader, configured_port, configured_request_memory, configured_workers,
+};
 use crate::shutdown;
 use connection::{Connection, Turn, write_overload_response};
 
@@ -19,6 +21,7 @@ const ACCEPT_POLL_TIMEOUT_MS: i32 = 100;
 
 struct HttpWorker {
     request_arena: RequestArena,
+    request_headers: Vec<TinyHeader>,
     response_head: Vec<u8>,
 }
 
@@ -34,11 +37,13 @@ pub fn serve() -> std::io::Result<()> {
         queue_capacity,
         move |_| HttpWorker {
             request_arena: RequestArena::new(request_memory),
+            request_headers: Vec::with_capacity(16),
             response_head: Vec::with_capacity(1024),
         },
         Connection::descriptor,
         |worker, mut connection: Connection, contended| match connection.handle_turn(
             &mut worker.request_arena,
+            &mut worker.request_headers,
             &mut worker.response_head,
             contended,
         ) {

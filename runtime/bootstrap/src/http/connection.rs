@@ -8,6 +8,7 @@ use std::{
 use crate::abi::{
     APPLICATION_OVERLOAD, BAD_REQUEST, CLIENT_DISCONNECTED, CONTENT_TYPE_TEXT, INTERNAL_ERROR,
     NOT_FOUND, OK, RENDER_ERROR, REQUEST_OOM, RequestArena, render_with_client, request_with_body,
+    TinyHeader,
 };
 
 use super::{
@@ -52,11 +53,12 @@ impl Connection {
     pub(super) fn handle_turn(
         &mut self,
         arena: &mut RequestArena,
+        request_headers: &mut Vec<TinyHeader>,
         response_head: &mut Vec<u8>,
         contended: bool,
     ) -> io::Result<Turn> {
         for turn_index in 0..REQUESTS_PER_TURN {
-            let turn = self.handle_request(arena, response_head)?;
+            let turn = self.handle_request(arena, request_headers, response_head)?;
             if turn == Turn::Complete {
                 return Ok(Turn::Complete);
             }
@@ -104,6 +106,7 @@ impl Connection {
     fn handle_request(
         &mut self,
         arena: &mut RequestArena,
+        request_headers: &mut Vec<TinyHeader>,
         response_head: &mut Vec<u8>,
     ) -> io::Result<Turn> {
         let stream = &mut self.stream;
@@ -126,7 +129,7 @@ impl Connection {
             return Ok(Turn::Complete);
         }
 
-        let Some(parsed) = parse_request_headers(&head) else {
+        let Some(parsed) = parse_request_headers(&head, request_headers) else {
             write_terminal_response(stream, response_head, 400, b"bad request")?;
             return Ok(Turn::Complete);
         };
@@ -146,12 +149,14 @@ impl Connection {
             }
         };
 
-        let request = request_with_body(method, target, &parsed.headers, &body);
+        let request = request_with_body(method, target, request_headers, &body);
         let response = render_with_client(&request, arena, stream);
+        let http11 = version == b"HTTP/1.1";
+        input.recycle_head(head);
         if response.application_status == CLIENT_DISCONNECTED {
             return Ok(Turn::Complete);
         }
-        let can_reuse = version == b"HTTP/1.1"
+        let can_reuse = http11
             && !parsed.connection_close
             && self.requests_completed + 1 < MAX_REQUESTS_PER_CONNECTION;
         let mut directive = if can_reuse {
@@ -314,16 +319,17 @@ mod tests {
 
         let mut connection = Connection::new(server).expect("configure connection");
         let mut arena = RequestArena::new(4096);
+        let mut request_headers = Vec::new();
         let mut response_head = Vec::new();
         assert_eq!(
             connection
-                .handle_turn(&mut arena, &mut response_head, false)
+                .handle_turn(&mut arena, &mut request_headers, &mut response_head, false)
                 .expect("first turn"),
             Turn::Ready
         );
         assert_eq!(
             connection
-                .handle_turn(&mut arena, &mut response_head, false)
+                .handle_turn(&mut arena, &mut request_headers, &mut response_head, false)
                 .expect("second turn"),
             Turn::Complete
         );
@@ -369,10 +375,10 @@ mod tests {
         let pool = EventWorkerPool::new(
             1,
             2,
-            |_| (RequestArena::new(4096), Vec::new()),
+            |_| (RequestArena::new(4096), Vec::new(), Vec::new()),
             Connection::descriptor,
-            |(arena, response_head), mut connection: Connection, contended| {
-                match connection.handle_turn(arena, response_head, contended) {
+            |(arena, request_headers, response_head), mut connection: Connection, contended| {
+                match connection.handle_turn(arena, request_headers, response_head, contended) {
                     Ok(Turn::Complete) | Err(_) => EventControl::Complete,
                     Ok(Turn::Ready) => EventControl::Ready(connection),
                     Ok(Turn::WaitReadable) => EventControl::WaitReadable(connection),

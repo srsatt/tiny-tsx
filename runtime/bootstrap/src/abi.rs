@@ -8,7 +8,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-#[cfg(feature = "application")]
+#[cfg(feature = "network")]
 use std::{ffi::c_void, os::raw::{c_char, c_long}, sync::OnceLock};
 
 use crate::environment::{self, SnapshotValue};
@@ -33,7 +33,7 @@ pub const MAX_DYNAMIC_HEADER_BYTES: usize = 256;
 pub const MAX_STREAM_CHUNKS: usize = 16;
 pub const MAX_SQLITE_RESULTS: usize = 16;
 
-#[cfg(feature = "application")]
+#[cfg(feature = "network")]
 const MAX_FETCH_URL_BYTES: usize = 2048;
 #[cfg(feature = "application")]
 const MAX_PROVIDER_AUTHORIZATION_BYTES: usize = 1024;
@@ -41,11 +41,11 @@ const MAX_PROVIDER_AUTHORIZATION_BYTES: usize = 1024;
 const MAX_PROVIDER_BODY_BYTES: usize = 8192;
 #[cfg(feature = "application")]
 const MAX_PROVIDER_RESPONSE_BYTES: usize = 262_144;
-#[cfg(feature = "application")]
+#[cfg(feature = "network")]
 const CURLOPT_URL: u32 = 10_002;
 #[cfg(feature = "application")]
 const CURLOPT_WRITEDATA: u32 = 10_001;
-#[cfg(feature = "application")]
+#[cfg(feature = "network")]
 const CURLOPT_WRITEFUNCTION: u32 = 20_011;
 #[cfg(feature = "application")]
 const CURLOPT_POST: u32 = 47;
@@ -55,23 +55,23 @@ const CURLOPT_POSTFIELDS: u32 = 10_015;
 const CURLOPT_POSTFIELDSIZE: u32 = 60;
 #[cfg(feature = "application")]
 const CURLOPT_HTTPHEADER: u32 = 10_023;
-#[cfg(feature = "application")]
+#[cfg(feature = "network")]
 const CURLOPT_FOLLOWLOCATION: u32 = 52;
-#[cfg(feature = "application")]
+#[cfg(feature = "network")]
 const CURLOPT_NOSIGNAL: u32 = 99;
-#[cfg(feature = "application")]
+#[cfg(feature = "network")]
 const CURLOPT_TIMEOUT_MS: u32 = 155;
-#[cfg(feature = "application")]
+#[cfg(feature = "network")]
 const CURLINFO_RESPONSE_CODE: u32 = 0x20_0002;
-#[cfg(feature = "application")]
+#[cfg(feature = "network")]
 const CURL_GLOBAL_DEFAULT: c_long = 3;
-#[cfg(feature = "application")]
+#[cfg(feature = "network")]
 const CURLE_OK: i32 = 0;
 
-#[cfg(feature = "application")]
+#[cfg(feature = "network")]
 type CurlWriteCallback = unsafe extern "C" fn(*mut c_char, usize, usize, *mut c_void) -> usize;
 
-#[cfg(feature = "application")]
+#[cfg(feature = "network")]
 #[link(name = "curl")]
 unsafe extern "C" {
     fn curl_global_init(flags: c_long) -> i32;
@@ -84,7 +84,7 @@ unsafe extern "C" {
     fn curl_slist_free_all(list: *mut c_void);
 }
 
-#[cfg(feature = "application")]
+#[cfg(feature = "network")]
 static CURL_READY: OnceLock<bool> = OnceLock::new();
 
 thread_local! {
@@ -2177,7 +2177,7 @@ pub unsafe extern "C" fn tinytsx_html_write_file_text(
     }
 }
 
-#[cfg(feature = "application")]
+#[cfg(feature = "network")]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn tinytsx_html_write_fetch_status(
     writer: *mut TinyResponseWriter,
@@ -2553,7 +2553,7 @@ fn parse_hex_quad(bytes: &[u8]) -> Option<u16> {
     })
 }
 
-#[cfg(feature = "application")]
+#[cfg(feature = "network")]
 fn fetch_response_status(url: &[u8]) -> Option<u16> {
     if url.contains(&0)
         || !*CURL_READY.get_or_init(|| {
@@ -2591,7 +2591,7 @@ fn fetch_response_status(url: &[u8]) -> Option<u16> {
     }
 }
 
-#[cfg(feature = "application")]
+#[cfg(feature = "network")]
 unsafe extern "C" fn discard_fetch_body(
     _bytes: *mut c_char,
     size: usize,
@@ -3119,6 +3119,7 @@ pub struct RequestArena {
     output: Vec<u8>,
     response_headers: [TinyHeader; MAX_RESPONSE_HEADERS],
     dynamic_header_bytes: [u8; MAX_DYNAMIC_HEADER_BYTES],
+    request_header_bytes: Vec<u8>,
 }
 
 impl RequestArena {
@@ -3127,6 +3128,7 @@ impl RequestArena {
             output: vec![0_u8; capacity],
             response_headers: [EMPTY_HEADER; MAX_RESPONSE_HEADERS],
             dynamic_header_bytes: [0; MAX_DYNAMIC_HEADER_BYTES],
+            request_header_bytes: Vec::with_capacity(256),
         }
     }
 }
@@ -3195,9 +3197,33 @@ pub fn render<'a>(request: &TinyRequest, arena: &'a mut RequestArena) -> Rendere
         .copy_from_slice(&writer.headers[..writer.header_count]);
     let source = writer.dynamic_header_bytes.as_ptr() as usize;
     let destination = arena.dynamic_header_bytes.as_ptr();
+    let request_headers = if request.header_count == 0 {
+        &[][..]
+    } else {
+        // SAFETY: the request header table remains alive for the duration of rendering.
+        unsafe { slice::from_raw_parts(request.headers, request.header_count) }
+    };
+    let borrowed_bytes = arena.response_headers[..writer.header_count]
+        .iter()
+        .flat_map(|header| [header.name, header.value])
+        .filter(|view| request_headers.iter().any(|header| view_within_header(*view, header)))
+        .map(|view| view.len)
+        .sum();
+    arena.request_header_bytes.clear();
+    arena.request_header_bytes.reserve(borrowed_bytes);
     for header in &mut arena.response_headers[..writer.header_count] {
         relocate_writer_view(&mut header.name, source, dynamic_length, destination);
         relocate_writer_view(&mut header.value, source, dynamic_length, destination);
+        copy_request_header_view(
+            &mut header.name,
+            request_headers,
+            &mut arena.request_header_bytes,
+        );
+        copy_request_header_view(
+            &mut header.value,
+            request_headers,
+            &mut arena.request_header_bytes,
+        );
     }
     RenderedResponse {
         application_status: status,
@@ -3209,6 +3235,39 @@ pub fn render<'a>(request: &TinyRequest, arena: &'a mut RequestArena) -> Rendere
         stream_chunk_count: writer.stream_chunk_count,
         stream_chunks: writer.stream_chunks,
     }
+}
+
+fn copy_request_header_view(
+    view: &mut TinyStringView,
+    request_headers: &[TinyHeader],
+    storage: &mut Vec<u8>,
+) {
+    if !request_headers
+        .iter()
+        .any(|header| view_within_header(*view, header))
+    {
+        return;
+    }
+    let offset = storage.len();
+    // SAFETY: containment in a validated request header proves this view is readable.
+    storage.extend_from_slice(unsafe { slice::from_raw_parts(view.ptr, view.len) });
+    // SAFETY: aggregate capacity was reserved before any view was copied.
+    view.ptr = unsafe { storage.as_ptr().add(offset) };
+}
+
+fn view_within_header(view: TinyStringView, header: &TinyHeader) -> bool {
+    [header.name, header.value]
+        .into_iter()
+        .any(|candidate| view_within(view, candidate))
+}
+
+fn view_within(view: TinyStringView, owner: TinyStringView) -> bool {
+    let start = view.ptr as usize;
+    let owner_start = owner.ptr as usize;
+    matches!(
+        (start.checked_add(view.len), owner_start.checked_add(owner.len)),
+        (Some(end), Some(owner_end)) if start >= owner_start && end <= owner_end
+    )
 }
 
 fn relocate_writer_view(
