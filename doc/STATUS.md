@@ -1645,6 +1645,9 @@ without the required cookie and 200 with it. Release CI installs the example
 dependency graph before running the assembler-backed x86 integration tests.
 The same portable response path lowers the bounded Stytch TODO store list/add/
 complete/delete calls; Intel native HTTP proves denial, empty list, and create.
+Portable elapsed-response headers retain one start/end clock sample around the
+handler and add the generated suffix; the complete pinned Hono basic app returns
+`X-Response-Time: 0ms` from an Intel binary.
 The standalone Test262 conformance runner remains an explicit ARM64-only direct
 assembly backend and is skipped, with a reported reason, by x86 release hosts.
 

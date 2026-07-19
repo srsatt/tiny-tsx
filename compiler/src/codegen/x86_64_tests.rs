@@ -239,6 +239,10 @@ fn emits_request_guards_and_headers() {
         name: "X-Frame-Options".to_owned(),
         value: "DENY".to_owned(),
     });
+    program.handlers[0].elapsed_headers.push(crate::hir::ElapsedHeader {
+        name: "X-Response-Time".to_owned(),
+        suffix: "ms".to_owned(),
+    });
     program.handlers[0].request_id = Some(crate::hir::RequestId {
         header: 1,
         max_length: 255,
@@ -270,6 +274,8 @@ fn emits_request_guards_and_headers() {
     assert!(assembly.contains("tinytsx_request_body_length"));
     assert!(assembly.contains("tinytsx_response_header_request_id"));
     assert!(assembly.contains("tinytsx_response_header_static"));
+    assert!(assembly.contains("tinytsx_response_header_elapsed_millis"));
+    assert!(assembly.contains("X-Response-Time"));
 }
 
 #[test]

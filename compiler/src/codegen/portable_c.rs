@@ -24,6 +24,8 @@ pub(super) fn emit(program: &Program, options: &Options) -> Result<String, Strin
          extern tiny_u32 tinytsx_request_basic_auth_equals(const void *, const tiny_u8 *, tiny_usize, const tiny_u8 *, tiny_usize);\n\
          extern tiny_u32 tinytsx_request_cookie_present(const void *, const tiny_u8 *, tiny_usize);\n\
          extern void tinytsx_console_error_static(const tiny_u8 *, tiny_usize);\n\
+         extern tiny_u64 tinytsx_date_now_millis(void);\n\
+         extern tiny_u32 tinytsx_response_header_elapsed_millis(void *, const tiny_u8 *, tiny_usize, tiny_u64, tiny_u64, const tiny_u8 *, tiny_usize);\n\
          extern tiny_u32 tinytsx_response_begin(void *, tiny_u16, tiny_u16);\n\
          extern tiny_u32 tinytsx_response_stream_begin(void *);\n\
          extern tiny_u32 tinytsx_response_stream_chunk_static(void *, const tiny_u8 *, tiny_usize);\n\
@@ -134,6 +136,18 @@ fn emit_data(source: &mut String, program: &Program, options: &Options) {
                 source,
                 &format!("tinytsx_handler_{index}_header_{header_index}_value"),
                 header.value.as_bytes(),
+            );
+        }
+        for (header_index, header) in handler.elapsed_headers.iter().enumerate() {
+            emit_bytes(
+                source,
+                &format!("tinytsx_handler_{index}_elapsed_{header_index}_name"),
+                header.name.as_bytes(),
+            );
+            emit_bytes(
+                source,
+                &format!("tinytsx_handler_{index}_elapsed_{header_index}_suffix"),
+                header.suffix.as_bytes(),
             );
         }
         if let Some(limit) = &handler.body_limit {
@@ -411,6 +425,10 @@ fn emit_handler(source: &mut String, program: &Program) -> Result<(), String> {
             emit_response(source, &existence.missing.response, program, "      ")?;
             source.push_str("      }\n    }\n");
         }
+        if !handler.elapsed_headers.is_empty() {
+            source.push_str("    tiny_u64 started_at = tinytsx_date_now_millis();\n");
+        }
+        emit_console_errors(source, &handler.stderr, program, "    ");
         sqlite::emit_actions(source, &handler.sqlite_actions, program, "    ")?;
         application::emit_actor_actions(source, &handler.actor_actions, program, "    ");
         if let Some(request_id) = &handler.request_id {
@@ -438,7 +456,27 @@ fn emit_handler(source: &mut String, program: &Program) -> Result<(), String> {
             )
             .unwrap();
         }
-        emit_response(source, &handler.response, program, "    ")?;
+        if handler.elapsed_headers.is_empty() {
+            emit_response(source, &handler.response, program, "    ")?;
+        } else {
+            emit_response_mode(source, &handler.response, program, "    ", false)?;
+            source.push_str("    tiny_u64 ended_at = tinytsx_date_now_millis();\n");
+            for (header_index, header) in handler.elapsed_headers.iter().enumerate() {
+                writeln!(
+                    source,
+                    "    tiny_u32 elapsed_header_status_{header_index} = tinytsx_response_header_elapsed_millis(writer, tinytsx_handler_{index}_elapsed_{header_index}_name, {}, started_at, ended_at, tinytsx_handler_{index}_elapsed_{header_index}_suffix, {});",
+                    header.name.len(),
+                    header.suffix.len(),
+                )
+                .unwrap();
+                writeln!(
+                    source,
+                    "    if (elapsed_header_status_{header_index} != 0) return elapsed_header_status_{header_index};"
+                )
+                .unwrap();
+            }
+            source.push_str("    return status;\n");
+        }
         source.push_str("  }\n");
     }
     source.push_str("  return 5;\n}\n");
@@ -462,6 +500,16 @@ fn emit_response(
     program: &Program,
     indent: &str,
 ) -> Result<(), String> {
+    emit_response_mode(source, response, program, indent, true)
+}
+
+fn emit_response_mode(
+    source: &mut String,
+    response: &HandlerResponse,
+    program: &Program,
+    indent: &str,
+    terminal: bool,
+) -> Result<(), String> {
     match response {
         HandlerResponse::Html { component } => {
             writeln!(
@@ -470,11 +518,13 @@ fn emit_response(
             )
             .unwrap();
             writeln!(source, "{indent}if (status != 0) return status;").unwrap();
-            writeln!(
-                source,
-                "{indent}return tinytsx_component_{component}(request, writer);"
-            )
-            .unwrap();
+            writeln!(source, "{indent}status = tinytsx_component_{component}(request, writer);")
+                .unwrap();
+            if terminal {
+                writeln!(source, "{indent}return status;").unwrap();
+            } else {
+                writeln!(source, "{indent}if (status != 0) return status;").unwrap();
+            }
         }
         HandlerResponse::Text {
             value,
@@ -485,7 +535,9 @@ fn emit_response(
             writeln!(source, "{indent}tiny_u32 status = tinytsx_response_begin(writer, {status}, {content_type});").unwrap();
             writeln!(source, "{indent}if (status != 0) return status;").unwrap();
             emit_text_expression(source, value, program, indent)?;
-            writeln!(source, "{indent}return status;").unwrap();
+            if terminal {
+                writeln!(source, "{indent}return status;").unwrap();
+            }
         }
         HandlerResponse::Stream {
             chunks,
@@ -526,7 +578,9 @@ fn emit_response(
                     writeln!(source, "{indent}if (status != 0) return status;").unwrap();
                 }
             }
-            writeln!(source, "{indent}return status;").unwrap();
+            if terminal {
+                writeln!(source, "{indent}return status;").unwrap();
+            }
         }
     }
     Ok(())
