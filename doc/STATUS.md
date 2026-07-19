@@ -1656,6 +1656,8 @@ pinned Hono basic route returns its generated ETag and a matching Intel request
 returns 304 with an empty body.
 The standalone Test262 conformance runner remains an explicit ARM64-only direct
 assembly backend and is skipped, with a reported reason, by x86 release hosts.
+The WPT conformance runner now accepts all four native target triples; its
+portable C output executes the selected upstream cases on x86 release hosts.
 
 ## Resume point
 

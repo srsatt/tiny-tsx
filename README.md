@@ -374,6 +374,8 @@ The detailed compatibility table is the source of truth:
 The standalone `tinytsx test262` allowlist runner still emits direct ARM64
 assembly and is not part of x86-64 application-target support. Its intake/HIR
 tests remain portable; native Test262 execution is skipped on x86-64 hosts.
+The standalone `tinytsx wpt` runner emits portable C and executes on all four
+supported native targets.
 
 ## Development
 
