@@ -268,6 +268,27 @@ fn emits_request_guards_and_headers() {
                 },
             },
         });
+    program.handlers[0].entity_tag = Some(crate::hir::EntityTag {
+        value: "W/\"tinytsx\"".to_owned(),
+        not_modified: crate::hir::GuardedResponse {
+            headers: Vec::new(),
+            stderr: Vec::new(),
+            response: crate::hir::HandlerResponse::Text {
+                value: crate::hir::ValueExpression::StringLiteral {
+                    string: 0,
+                    span: crate::hir::SourceSpan {
+                        file: "server.ts".to_owned(),
+                        line: 1,
+                        column: 1,
+                        end_line: 1,
+                        end_column: 2,
+                    },
+                },
+                status: 304,
+                content_type: None,
+            },
+        },
+    });
     program.handlers[0].request_id = Some(crate::hir::RequestId {
         header: 1,
         max_length: 255,
@@ -301,6 +322,7 @@ fn emits_request_guards_and_headers() {
     assert!(assembly.contains("tinytsx_response_header_static"));
     assert!(assembly.contains("tinytsx_response_header_elapsed_millis"));
     assert!(assembly.contains("tinytsx_request_path_segment_min_length"));
+    assert!(assembly.contains("tinytsx_request_if_none_match"));
     assert!(assembly.contains("X-Response-Time"));
 }
 

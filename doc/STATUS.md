@@ -1651,6 +1651,9 @@ handler and add the generated suffix; the complete pinned Hono basic app returns
 Portable route-parameter minimum-length guards now preserve their bounded
 rejection response; the pinned Zod/OpenAPI app returns its exact 400 error for
 `/users/x` and exact 200 user JSON for `/users/1212121` on Intel.
+Portable ETag guards compare `If-None-Match` through the shared runtime ABI; the
+pinned Hono basic route returns its generated ETag and a matching Intel request
+returns 304 with an empty body.
 The standalone Test262 conformance runner remains an explicit ARM64-only direct
 assembly backend and is skipped, with a reported reason, by x86 release hosts.
 

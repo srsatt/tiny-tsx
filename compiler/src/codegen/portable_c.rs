@@ -24,6 +24,7 @@ pub(super) fn emit(program: &Program, options: &Options) -> Result<String, Strin
          extern tiny_u32 tinytsx_request_basic_auth_equals(const void *, const tiny_u8 *, tiny_usize, const tiny_u8 *, tiny_usize);\n\
          extern tiny_u32 tinytsx_request_cookie_present(const void *, const tiny_u8 *, tiny_usize);\n\
          extern tiny_u32 tinytsx_request_path_segment_min_length(const void *, tiny_usize, tiny_usize);\n\
+         extern tiny_u32 tinytsx_request_if_none_match(const void *, const tiny_u8 *, tiny_usize);\n\
          extern void tinytsx_console_error_static(const tiny_u8 *, tiny_usize);\n\
          extern tiny_u64 tinytsx_date_now_millis(void);\n\
          extern tiny_u32 tinytsx_response_header_elapsed_millis(void *, const tiny_u8 *, tiny_usize, tiny_u64, tiny_u64, const tiny_u8 *, tiny_usize);\n\
@@ -163,6 +164,18 @@ fn emit_data(source: &mut String, program: &Program, options: &Options) {
                 source,
                 &format!("tinytsx_handler_{index}_validation_{validation_index}"),
                 &validation.rejected.headers,
+            );
+        }
+        if let Some(entity_tag) = &handler.entity_tag {
+            emit_bytes(
+                source,
+                &format!("tinytsx_handler_{index}_etag"),
+                entity_tag.value.as_bytes(),
+            );
+            emit_guard_header_data(
+                source,
+                &format!("tinytsx_handler_{index}_not_modified"),
+                &entity_tag.not_modified.headers,
             );
         }
         if let Some(authorization) = &handler.basic_authorization {
@@ -398,6 +411,23 @@ fn emit_handler(source: &mut String, program: &Program) -> Result<(), String> {
                 "      ",
             );
             emit_response(source, &validation.rejected.response, program, "      ")?;
+            source.push_str("    }\n");
+        }
+        if let Some(entity_tag) = &handler.entity_tag {
+            writeln!(
+                source,
+                "    if (tinytsx_request_if_none_match(request, tinytsx_handler_{index}_etag, {})) {{",
+                entity_tag.value.len(),
+            )
+            .unwrap();
+            emit_console_errors(source, &entity_tag.not_modified.stderr, program, "      ");
+            emit_guard_headers(
+                source,
+                &format!("tinytsx_handler_{index}_not_modified"),
+                &entity_tag.not_modified.headers,
+                "      ",
+            );
+            emit_response(source, &entity_tag.not_modified.response, program, "      ")?;
             source.push_str("    }\n");
         }
         if let Some(authorization) = &handler.basic_authorization {
