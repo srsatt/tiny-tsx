@@ -5,6 +5,8 @@ import {execFileSync} from "node:child_process";
 import {test} from "node:test";
 import {fileURLToPath} from "node:url";
 
+import {profiles} from "../../../tools/test-plan.mjs";
+
 const repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const manifest = JSON.parse(readFileSync(
   path.join(repository, "tests/compat/hono/examples-manifest.json"),
@@ -70,13 +72,12 @@ test("records the example matrix with executable evidence and boundaries", () =>
 });
 
 test("makes every alpha example gate reachable from release verification", () => {
-  assert.match(releaseSource, /run\("npm", \["test"\]\)/);
-  const directReleaseScripts = [
-    "test",
+  assert.match(releaseSource, /run\("npm", \["run", "test:release"\]\)/);
+  const reachable = new Set([
+    ...profiles.release,
     ...[...releaseSource.matchAll(/run\("npm", \["run", "([^"]+)"\]/g)]
       .map(match => match[1]),
-  ];
-  const reachable = reachableScripts(directReleaseScripts, workspace.scripts);
+  ]);
 
   for (const row of manifest.matrix) {
     assert.ok(row.releaseGates.native.length > 0, `${row.id} has no native release gate`);
@@ -162,16 +163,3 @@ test("pins the complete jsx-ssr source graph and behavior targets", () => {
   ]);
   assert.equal(jsxSsr.behavior.missingPost.status, 404);
 });
-
-function reachableScripts(roots, scripts) {
-  const reachable = new Set();
-  const queue = [...roots];
-  while (queue.length > 0) {
-    const script = queue.shift();
-    if (reachable.has(script)) continue;
-    assert.equal(typeof scripts[script], "string", `release invokes missing script ${script}`);
-    reachable.add(script);
-    for (const match of scripts[script].matchAll(/npm run ([\w:-]+)/g)) queue.push(match[1]);
-  }
-  return reachable;
-}

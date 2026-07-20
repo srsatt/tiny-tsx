@@ -20,9 +20,7 @@ const sourceDirty = sourceStatus !== "";
 if (target === undefined) fail(`release archives require a supported native host, got ${process.platform}/${process.arch}`);
 if (!allowDirty) {
   if (sourceDirty) fail(`release verification requires a clean tree:\n${sourceStatus}`);
-  run("npm", ["test"]);
-  run("npm", ["run", "test:zod-openapi-reference"]);
-  run("npm", ["run", "test:zod-openapi"]);
+  run("npm", ["run", "test:release"]);
   const generated = run("git", ["status", "--porcelain"], {encoding: "utf8"}).stdout.trim();
   if (generated !== "") fail(`release suites changed tracked files:\n${generated}`);
 }
