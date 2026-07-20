@@ -173,6 +173,7 @@ SQLite, actor, and Stytch TODO examples with their exact build commands.
 tinytsx check <entry.tsx> [options]
 tinytsx build <entry.tsx> [options]
 tinytsx run <entry.tsx> [options]
+tinytsx dev <entry.tsx> [options] [--restart-timeout-ms 2000]
 tinytsx test262 <case.js> [--output path]
 tinytsx wpt <case.js> [--output path]
 tinytsx --list-builtins
@@ -198,8 +199,14 @@ Common build options include:
 --allow-write <root>       Permit database writes
 ```
 
-`tinytsx run` combines compilation and execution for development. Every build
-also writes a machine-readable `<output>.build.json` report.
+`tinytsx run` performs one build and starts it. `tinytsx dev` keeps the
+TypeScript frontend and native runtime cache warm, watches the reachable module
+graph, and replaces the child server after a successful rebuild. A failed edit
+leaves the last known-good server running. SQLite and files survive a reload;
+actors, workers, connections, and other process-local state restart. Every
+successful reload reports frontend, code generation, assembly, link, shutdown,
+startup, and total edit-to-listening time. Every build also writes a
+machine-readable `<output>.build.json` report.
 
 The default `--workers 1` is intentional. It is fastest for the measured closed
 CPU-bound Hono routes; increase it only after a blocking-I/O or compute-heavy

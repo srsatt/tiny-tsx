@@ -110,3 +110,18 @@ reached by the program, including independent network and filesystem features.
 One HTTP worker remains the default because it is fastest for measured closed
 routes; `--workers` is a workload-specific concurrency knob, not an automatic
 core-count setting.
+
+## D-014: Development uses cached AOT hot restart
+
+`tinytsx dev` remains an ahead-of-time compiler. It keeps the TypeScript
+frontend session and Cargo runtime artifacts warm, regenerates the complete
+application object, and links a generation-specific executable. The previous
+child continues serving while compilation runs; an invalid edit never replaces
+it. A successful edit gracefully restarts the process, so explicit external
+persistence survives while process-local actors, workers, and connections do
+not.
+
+Development mode does not load dynamic libraries, patch native functions, run
+JavaScript in the application process, or preserve values across code
+generations. Stable-listener proxying and module-level native object reuse need
+separate evidence and remain post-beta.

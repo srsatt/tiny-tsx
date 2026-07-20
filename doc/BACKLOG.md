@@ -114,7 +114,7 @@ clean commit after the author-history rewrite; then create `v0.1.0-alpha.1`
 from that exact attested commit. Do not reuse the pre-rewrite artifacts or move
 the tag to later implementation work.
 
-The goal is complete only when:
+The alpha release handoff is complete only when:
 
 - `npm run release:verify` passes from clean Apple- and Linux-arm64 checkouts at
   the same source commit;
@@ -123,6 +123,37 @@ The goal is complete only when:
 - repeated control, actor, and SQLite benchmark artifacts plus the final
   checklist are committed, while the tag is deliberately left for a separate
   release action.
+
+## Beta critical path
+
+The next version is `0.1.0-beta.1`, gated by the separate
+`tinytsx-air-quality` application and a real Bun comparison. Work remains
+ordered by the application tracer rather than general JavaScript breadth.
+
+### B1 — Incremental development loop
+
+- [x] Add `tinytsx dev` with a persistent TypeScript frontend session, reused
+      TypeScript program, project-local Cargo cache, and generation-specific
+      native executables.
+- [x] Watch transitive source files and their parent directories, including
+      recovery when a previously missing imported module is created.
+- [x] Keep the last known-good child serving after a compiler error and replace
+      it only after the next successful native build.
+- [x] Bound graceful restart with `--restart-timeout-ms` and clean up the child
+      and frontend session on termination.
+- [x] Wait for candidate listener readiness and restart the last known-good
+      executable if candidate initialization fails.
+- [ ] Publish per-stage frontend, HIR, assembly, link, shutdown, startup, and
+      edit-to-listening timings for simple and pinned Hono applications.
+
+### B2 — Backend platform proof
+
+- [ ] Add deploy-time read-only SQLite bindings.
+- [ ] Add deterministic embedded binary asset stores for Vite output.
+- [ ] Admit the bounded Hono query/numeric parameter slice required by the
+      history API without application-owned declaration overlays.
+- [ ] Build and deploy `tinytsx-air-quality` as a separate repository, then
+      require its functional and TinyTSX/Bun performance gates before beta.
 
 ## Alpha critical path
 

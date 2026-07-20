@@ -1,6 +1,6 @@
 # Implementation status
 
-Last updated: 2026-07-19
+Last updated: 2026-07-20
 
 ## Current state
 
@@ -11,6 +11,25 @@ verified trees but changed every commit hash, so the old schema-v2 artifact
 manifests no longer identify a reachable release source. Fresh clean Apple and
 Linux verification for ARM64 and x86-64 at one rewritten-history commit remains
 open before tagging.
+
+## Beta development loop (2026-07-20)
+
+- `tinytsx dev` now keeps one TypeScript frontend process alive, reuses its
+  previous `ts.Program`, and stores Cargo artifacts under the application's
+  untracked `.tinytsx/cache` directory. Repeated edits still regenerate the
+  whole validated application object; no dynamic code loading is introduced.
+- The public integration tracer edits a transitive module, observes a changed
+  HTTP response, introduces and recovers from a type error while the old server
+  remains live, and creates a previously missing imported module without
+  touching the importer again.
+- A second tracer moves a Hono candidate to an occupied port, requires dev mode
+  to observe the missing listener-ready signal, and proves that it restores the
+  previous generation before accepting another successful edit.
+- Warm simple-app reloads are bounded at 1.5 seconds in the integration gate;
+  each successful reload now reports frontend, code generation, assembly,
+  link, shutdown, startup, and end-to-end milliseconds. The beta performance
+  report must still publish repeated medians and the pinned Hono result before
+  the backlog timing item is complete.
 
 ## Alpha implementation evidence
 
