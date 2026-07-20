@@ -255,8 +255,18 @@ names reject. A project-owned Hono tracer commits header/route/JSON values,
 forces a second-step uniqueness failure, proves the first insert is absent, and
 then reuses the connection. Apple native HTTP, Linux-arm64 assembly, and a
 Bun/Hono `bun:sqlite` reference gate the contract. This does not admit optional
-headers, fallbacks, query/cookie/environment parameters, structured values, or
+headers, header fallbacks, cookie/environment parameters, structured values, or
 arbitrary request expressions.
+
+Beta adds static-name Hono query parameters to prepared SQLite calls. A query
+must have a closed string fallback; its decoded value is copied as SQLite text.
+`Number(query ?? fallback)` is a separately tagged integer parameter with a
+safe-integer fallback and strict bounded decimal decoding. Invalid UTF-8,
+malformed decimal text, and values outside JavaScript's safe integer domain
+return 400. Apple native HTTP and deterministic Linux-arm64 assembly cover text,
+fallback, integer, malformed, and bounded history reads. Dynamic names, query
+enumeration/arrays, floating-point query conversion, and general request-time
+numeric expressions remain unsupported.
 
 The bounded request-body slice retains at most 64 KiB and recognizes
 `await c.req.json()` when statically selected primitive leaves flow into a

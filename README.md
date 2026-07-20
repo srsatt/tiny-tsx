@@ -313,6 +313,12 @@ every generated process. Missing, duplicate, unknown, relative, absent, or
 unsafe bindings fail before the HTTP listener opens. Read-only statements expose
 only `all()` and `get()`; write operations fail compilation.
 
+A prepared call may bind `context.req.query("since") ?? "0"` as bounded text.
+Wrapping that exact form in `Number(...)` binds a JavaScript-safe signed integer,
+which is useful for timestamp and row-limit parameters. Names and fallbacks are
+compile-time-known; malformed, oversized, invalid-UTF-8, or unsafe integer input
+returns 400 rather than reaching SQLite.
+
 To embed a Vite output directory, name the store in source and bind its bytes at
 build time:
 

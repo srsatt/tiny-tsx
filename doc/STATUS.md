@@ -58,6 +58,17 @@ open before tagging.
 - Build reports expose embedded store, file, and byte totals. Asset bytes are
   never read from the deployment filesystem.
 
+## Beta Hono history parameters (2026-07-20)
+
+- A static `context.req.query("since") ?? "0"` now binds decoded UTF-8 text to
+  prepared SQLite without interpolation or a project-local Hono overlay.
+- `Number(context.req.query("limit") ?? "256")` lowers as a distinct bounded
+  signed-integer parameter. Missing input uses the compiled fallback; malformed
+  or unsafe-integer input returns 400 and leaves the read-only owner reusable.
+- The Apple native history route covers text filtering, numeric limits,
+  fallback, and rejection. The same generated parameter forms assemble for
+  Linux ARM64. The ESLint preflight accepts the complete beta source shape.
+
 ## Alpha implementation evidence
 
 ### Pinned Stytch-auth TODO backend (2026-07-18)

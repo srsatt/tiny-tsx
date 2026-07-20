@@ -14,6 +14,15 @@ finite text streaming, and the admitted JSX slice. Core Hono, Context,
 HonoRequest, routing, middleware composition, validation, presets, and Node.js
 startup remain `partial` because only their listed tracers compile.
 
+The beta history tracer promotes one additional existing Hono request surface:
+`context.req.query("name") ?? "fallback"` may flow directly into a prepared
+SQLite parameter. A static non-empty name is limited to 128 UTF-8 bytes and the
+decoded value/fallback to 256 bytes. `Number(...)` around that exact expression
+binds a signed integer when the fallback and request value are JavaScript-safe
+integers. Missing values use the compiled fallback; malformed UTF-8, malformed
+integers, overflow, or exceeded bounds return 400. This is not a general query
+object, dynamic key, floating-point parser, or arbitrary numeric expression.
+
 The official-doc review pulls only two new middleware capabilities into the
 alpha critical path:
 

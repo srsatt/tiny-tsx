@@ -67,7 +67,9 @@ field contains SQLite's connection-local last-insert row ID. A prepared call
 accepts at most 16 selected values from named route parameters, UUID generation,
 a bounded static primitive path in a closed request JSON object, a required
 statically named request header, or compile-time string, safe-integer,
-finite-real, boolean, and null literals.
+finite-real, boolean, and null literals. Beta also admits a static-name Hono
+query parameter with a closed string fallback and `Number(...)` over that exact
+shape as a safe-integer parameter.
 Parameters use SQLite binding rather than SQL interpolation.
 
 Each handler is limited to 16 SQLite actions and therefore 16 stable result
