@@ -98,7 +98,13 @@ export const tasks = [
   {id: "test:test262-native", dependencies: native, commands: [nodeTests("tests/compat/test262/native.test.mjs")]},
   {id: "test:wpt-intake", commands: [nodeTests("tests/compat/wpt/intake.test.mjs")]},
   {id: "test:wpt-native", dependencies: native, commands: [nodeTests("tests/compat/wpt/native.test.mjs")]},
-  {id: "test:benchmarks", commands: [command("python3", "-m", "unittest", "discover", "-s", "benchmarks/tests", "-p", "test_*.py")]},
+  {
+    id: "test:benchmarks",
+    commands: [
+      nodeTests("benchmarks/tests/dev_runner.test.mjs"),
+      command("python3", "-m", "unittest", "discover", "-s", "benchmarks/tests", "-p", "test_*.py"),
+    ],
+  },
   {id: "test:wasm", resources: ["cargo-target"], commands: [command("cargo", "test", "-p", "tinytsx-runtime-wasm", "--features", "interpreter")]},
   {
     id: "test:workspace",
