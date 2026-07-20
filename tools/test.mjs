@@ -127,7 +127,7 @@ async function runTask(task) {
   for (const specification of task.commands) {
     const expanded = expandCommand(specification);
     log.write(`$ ${[expanded.command, ...expanded.args].join(" ")}\n`);
-    outcome = await runCommand(expanded, log);
+    outcome = await runCommand(expanded, log, task.timeoutMs ?? 10 * 60_000);
     if (outcome.code !== 0 || outcome.signal !== null) break;
   }
   await new Promise(resolve => log.end(resolve));
@@ -142,25 +142,42 @@ async function runTask(task) {
   return {id: task.id, ok, durationMs, code: outcome.code, signal: outcome.signal};
 }
 
-function runCommand(specification, log) {
+function runCommand(specification, log, timeoutMs) {
   return new Promise(resolve => {
     const child = spawn(specification.command, specification.args, {
       cwd: root,
-      env: {...process.env, TINYTSX_TEST_RUNNER: "1"},
+      env: {...process.env, TINYTSX_TEST_RUNNER: "1", ...specification.env},
       detached: process.platform !== "win32",
       stdio: ["ignore", "pipe", "pipe"],
     });
+    let settled = false;
+    let timedOut = false;
+    let killTimer;
     children.add(child);
     child.stdout.pipe(log, {end: false});
     child.stderr.pipe(log, {end: false});
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      log.write(`\nTimed out after ${formatDuration(timeoutMs)}\n`);
+      terminate(child, "SIGTERM");
+      killTimer = setTimeout(() => terminate(child, "SIGKILL"), 2_000);
+      killTimer.unref();
+    }, timeoutMs);
+    timeout.unref();
+    const finish = result => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      clearTimeout(killTimer);
+      children.delete(child);
+      resolve({...result, timedOut});
+    };
     child.once("error", error => {
       log.write(`${error.stack ?? error}\n`);
-      children.delete(child);
-      resolve({code: 1, signal: null});
+      finish({code: 1, signal: null});
     });
     child.once("exit", (code, signal) => {
-      children.delete(child);
-      resolve({code: code ?? 1, signal});
+      finish({code: code ?? 1, signal});
     });
   });
 }
@@ -182,7 +199,7 @@ function terminate(child, signal) {
 function expandCommand(specification) {
   const args = [...(specification.args ?? [])];
   for (const pattern of specification.globs ?? []) args.push(...expandGlob(pattern));
-  return {command: specification.command, args};
+  return {command: specification.command, args, env: specification.env};
 }
 
 function expandGlob(pattern) {

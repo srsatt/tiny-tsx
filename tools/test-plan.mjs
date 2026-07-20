@@ -100,7 +100,15 @@ export const tasks = [
   {id: "test:wpt-native", dependencies: native, commands: [nodeTests("tests/compat/wpt/native.test.mjs")]},
   {id: "test:benchmarks", commands: [command("python3", "-m", "unittest", "discover", "-s", "benchmarks/tests", "-p", "test_*.py")]},
   {id: "test:wasm", resources: ["cargo-target"], commands: [command("cargo", "test", "-p", "tinytsx-runtime-wasm", "--features", "interpreter")]},
-  {id: "test:workspace", dependencies: frontend, resources: ["cargo-target"], commands: [command("cargo", "test", "--workspace")]},
+  {
+    id: "test:workspace",
+    dependencies: frontend,
+    resources: ["cargo-workspace-target"],
+    commands: [{
+      ...command("cargo", "test", "--workspace"),
+      env: {CARGO_TARGET_DIR: ".tinytsx/cache/test-runner/workspace-target"},
+    }],
+  },
   {
     id: "test:zod-openapi-reference",
     dependencies: ["setup:zod"],
