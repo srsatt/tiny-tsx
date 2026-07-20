@@ -98,3 +98,9 @@ test("allows the complete workspace suite to finish on slower native runners", (
   const workspace = releaseTasks.find(task => task.id === "test:workspace");
   assert.equal(workspace.timeoutMs, 20 * 60_000);
 });
+
+test("isolates the frontend suite on slower native runners", () => {
+  const frontend = releaseTasks.find(task => task.id === "test:frontend");
+  assert.equal(frontend.exclusive, true);
+  assert.equal(frontend.timeoutMs, 20 * 60_000);
+});

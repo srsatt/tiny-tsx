@@ -41,6 +41,8 @@ export const tasks = [
   {
     id: "test:frontend",
     dependencies: [...frontend, "setup:node-server", "setup:stytch"],
+    exclusive: true,
+    timeoutMs: 20 * 60_000,
     commands: [{command: "node", args: ["--test"], globs: ["frontend/dist/test/*.test.js"]}],
   },
   {id: "test:dev", dependencies: native, exclusive: true, commands: [{command: "node", args: ["--test"], globs: ["tests/dev/*.test.mjs"]}]},
