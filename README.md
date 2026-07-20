@@ -194,6 +194,7 @@ Common build options include:
 --alias <specifier=path>   Runtime source alias
 --api <specifier=path>     Declaration overlay
 --binding <name=value>     Explicit native resource binding
+--bind <name=/abs/path>    Runtime value for run/dev deploy-time bindings
 --allow-env <name>         Permit one environment value
 --allow-read <root>        Permit filesystem/database reads
 --allow-write <root>       Permit database writes
@@ -262,7 +263,7 @@ TinyTSX exposes a small protected backend API rather than emulating Node.js:
 | --- | --- |
 | `tinytsx:env` | Immutable, explicitly permitted startup environment values |
 | `tinytsx:fs` | Capability-scoped bounded UTF-8 file reads |
-| `tinytsx:sqlite` | Single-owner bounded SQLite operations and transactions |
+| `tinytsx:sqlite` | Single-owner bounded SQLite operations, transactions, and deploy-time read-only databases |
 | `tinytsx:actors` | Lightweight local actors on a fixed native executor pool |
 | `tinytsx:serve` | Hono-neutral native HTTP entrypoint |
 
@@ -282,12 +283,33 @@ TinyTSX is designed around explicit bounds rather than a general managed heap:
 - actor mailboxes and copied messages have fixed limits;
 - SQLite owners serialize access and bound parameters, rows, and result bytes;
 - filesystem, database, and environment access is denied unless granted at
-  compile time;
+  compile time; deploy-time read-only database paths must also be bound before
+  the listener starts;
 - unsupported dynamic lifetime or identity requirements fail compilation.
 
 This model reduces runtime state, but it is not an operating-system sandbox.
 Deploy the generated executable with normal process, filesystem, network, and
 container isolation.
+
+For a database owned by another service, declare only its capability name at
+build time and supply the absolute path at deployment:
+
+```ts
+import {openReadonlyDatabase} from "tinytsx:sqlite";
+
+const database = openReadonlyDatabase("AIR_DB");
+const readings = database.prepare("SELECT recorded_at, co2 FROM readings");
+```
+
+```sh
+tinytsx build server.ts --binding AIR_DB=sqlite-ro --output dist/server
+./dist/server --bind AIR_DB=/srv/air/readings.db
+```
+
+`tinytsx run` and `tinytsx dev` accept the same `--bind` pair and forward it to
+every generated process. Missing, duplicate, unknown, relative, absent, or
+unsafe bindings fail before the HTTP listener opens. Read-only statements expose
+only `all()` and `get()`; write operations fail compilation.
 
 ## Performance
 

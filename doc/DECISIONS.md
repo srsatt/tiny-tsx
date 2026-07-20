@@ -125,3 +125,17 @@ Development mode does not load dynamic libraries, patch native functions, run
 JavaScript in the application process, or preserve values across code
 generations. Stable-listener proxying and module-level native object reuse need
 separate evidence and remain post-beta.
+
+## D-015: External SQLite uses named deploy-time read-only bindings
+
+Databases owned by another service are not embedded as host paths during
+compilation. Source calls `openReadonlyDatabase` with a static name, compilation
+declares that name as `sqlite-ro`, and deployment supplies one absolute path via
+`--bind`. The process validates every declared name and opens every target
+read-only before the HTTP listener starts.
+
+This is separate from the existing read/write `Database` capability. The
+read-only type exposes prepared `all`/`get` queries but no mutation API, and the
+runtime still applies the service-owned, no-follow SQLite path policy. Dynamic
+binding lookup, optional bindings, path defaults, database creation, and
+write escalation are outside the beta contract.

@@ -9,6 +9,7 @@ SCD41 collector database through a deploy-time read-only binding.
 1. `tinytsx dev` provides cached AOT compilation and last-known-good hot
    restart after source edits.
 2. `tinytsx:sqlite` opens an explicitly bound database read-only at deployment.
+   This slice is implemented and covered by host HTTP plus Linux ARM64 assembly.
 3. `tinytsx:assets` embeds and serves a bounded Vite output directory.
 4. The pinned Hono source supports the query parsing and prepared parameters
    required by the air-quality history API without project-local overlays.

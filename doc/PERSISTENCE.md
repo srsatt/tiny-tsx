@@ -15,6 +15,16 @@ The runtime core currently owns the following release bounds:
 - busy timeout: one second;
 - values: null, signed 64-bit integer, finite `f64`, UTF-8 text, and bytes.
 
+Beta adds an external-owner path distinct from writable persistence. Source
+uses `openReadonlyDatabase("AIR_DB")`, the compiler requires
+`--binding AIR_DB=sqlite-ro`, and deployment supplies
+`--bind AIR_DB=/absolute/path`. The path is never embedded in the build. All
+declared bindings are validated and opened before HTTP starts; missing,
+duplicate, unknown, relative, absent, or unsafe targets terminate the process.
+SQLite opens the existing file with read-only and no-follow flags, enables
+query-only mode, and never creates it. Prepared statements expose bounded
+`all`/`get` queries only; mutation APIs are rejected during compilation.
+
 The pinned Stytch TODO tracer also exposes one compiler-recognized
 `--binding TODOS=sqlite-kv:<path>` adapter. One application worker owns one
 SQLite connection and executes each list, add, complete, or delete as a single

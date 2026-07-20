@@ -31,6 +31,20 @@ open before tagging.
   report must still publish repeated medians and the pinned Hono result before
   the backlog timing item is complete.
 
+## Beta read-only SQLite bindings (2026-07-20)
+
+- `openReadonlyDatabase("AIR_DB")` requires the compile-time declaration
+  `--binding AIR_DB=sqlite-ro`; undeclared names and write methods fail with a
+  stable built-in diagnostic.
+- The generated binary accepts `--bind AIR_DB=/absolute/path`; `tinytsx run`
+  and `tinytsx dev` forward the same pair to every child. Missing, duplicate,
+  unknown, relative, absent, and unsafe bindings terminate before listening.
+- The runtime opens an existing service-owned database with SQLite read-only,
+  no-follow, and query-only flags. It never creates a missing binding target.
+- Native HTTP reads a seeded four-column sensor row, while Linux ARM64 assembly
+  verifies the named-binding ABI. The complete earlier writable SQLite native
+  suite remains green.
+
 ## Alpha implementation evidence
 
 ### Pinned Stytch-auth TODO backend (2026-07-18)

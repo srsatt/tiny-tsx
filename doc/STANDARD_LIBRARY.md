@@ -52,6 +52,7 @@ The compiler reserves `TINY1500`–`TINY1599` for built-in diagnostics:
 - `TINY1510`: invalid static SQLite path;
 - `TINY1511`: missing or invalid SQLite write capability;
 - `TINY1512`: unsupported SQLite operation, argument shape, or exceeded limit;
+- `TINY1513`: invalid, missing, or undeclared read-only SQLite binding;
 - `TINY1520`: unsupported actor spawn behavior, persistence, or capacity;
 - `TINY1521`: unsupported actor-reference operation or message.
 
@@ -98,6 +99,15 @@ promote arbitrary KV names, values, methods, iteration, expiration, metadata,
 cross-process transactions, or dynamic binding lookup. Unsupported binding
 forms fail compilation; runtime capacity and SQLite failures remain recoverable
 and do not poison the owner.
+
+`--binding AIR_DB=sqlite-ro` declares a database supplied by deployment rather
+than compiled into the executable. `openReadonlyDatabase("AIR_DB")` returns a
+single-owner database whose prepared statements expose `all` and `get` only.
+The generated executable requires `--bind AIR_DB=/absolute/path`; `run` and
+`dev` forward that value. Every expected binding must appear exactly once, and
+unknown names, relative paths, missing files, unsafe ownership/link state, or a
+failed SQLite read-only open terminate before HTTP starts. The runtime cannot
+create or mutate the bound database.
 
 ## Alpha modules
 
