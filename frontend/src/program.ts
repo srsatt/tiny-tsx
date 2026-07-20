@@ -686,6 +686,16 @@ function lowerSqliteParameters(
     switch (parameter.kind) {
       case "routeParameter":
         return {kind: "routeParameter" as const, segment: routeParameterSegment(routePath, parameter.name)};
+      case "queryParameter": {
+        const queryLength = Buffer.byteLength(parameter.name, "utf8");
+        const fallbackLength = Buffer.byteLength(parameter.fallback, "utf8");
+        return {
+          kind: "queryParameter" as const,
+          string: strings.intern(parameter.name + parameter.fallback),
+          queryLength,
+          fallbackLength,
+        };
+      }
       case "requestJsonField":
         return {kind: "requestJsonField" as const, field: strings.intern(encodeRequestJsonPath(parameter.path))};
       case "requestHeader":
@@ -928,14 +938,7 @@ function lowerRuntimeString(
           database: part.statement.database.id,
           sql: strings.intern(part.statement.sql),
           mode: part.mode,
-          parameters: part.parameters.map(parameter => parameter.kind === "routeParameter"
-            ? {kind: "routeParameter" as const, segment: routeParameterSegment(routePath, parameter.name)}
-            : parameter.kind === "requestJsonField"
-              ? {
-                  kind: "requestJsonField" as const,
-                  field: strings.intern(encodeRequestJsonPath(parameter.path)),
-                }
-              : {kind: "randomUuid" as const}),
+          parameters: lowerSqliteParameters(part.parameters, routePath, strings),
           span,
         };
       }

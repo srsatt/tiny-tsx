@@ -21,6 +21,8 @@ test("requires and serves a deploy-time read-only SQLite binding", async context
     "db = sqlite3.connect(sys.argv[1])",
     "db.execute('CREATE TABLE readings (recorded_at INTEGER, co2 INTEGER, temperature REAL, humidity REAL)')",
     "db.execute('INSERT INTO readings VALUES (100, 612, 21.5, 43.25)')",
+    "db.execute('INSERT INTO readings VALUES (200, 620, 21.75, 43.5)')",
+    "db.execute('INSERT INTO readings VALUES (300, 630, 22.0, 44.0)')",
     "db.commit()",
   ].join("\n"), database], {encoding: "utf8"});
   assert.equal(seeded.status, 0, seeded.stderr);
@@ -48,8 +50,22 @@ test("requires and serves a deploy-time read-only SQLite binding", async context
   const response = await fetch(`http://127.0.0.1:${port}/readings`);
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), {
-    readings: [{recorded_at: 100, co2: 612, temperature: 21.5, humidity: 43.25}],
+    readings: [
+      {recorded_at: 100, co2: 612, temperature: 21.5, humidity: 43.25},
+      {recorded_at: 200, co2: 620, temperature: 21.75, humidity: 43.5},
+      {recorded_at: 300, co2: 630, temperature: 22, humidity: 44},
+    ],
   });
+
+  const history = await fetch(`http://127.0.0.1:${port}/history?since=200`);
+  assert.equal(history.status, 200);
+  assert.deepEqual(await history.json(), {
+    readings: [{recorded_at: 200, co2: 620}, {recorded_at: 300, co2: 630}],
+  });
+
+  const fallback = await fetch(`http://127.0.0.1:${port}/history`);
+  assert.equal(fallback.status, 200);
+  assert.equal((await fallback.json()).readings.length, 3);
 });
 
 test("assembles the read-only binding ABI for Linux arm64", () => {

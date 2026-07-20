@@ -1248,6 +1248,27 @@ pub(super) unsafe fn decode_sqlite_parameters(
                     String::from_utf8(value.to_vec()).map_err(|_| BAD_REQUEST)?,
                 ));
             }
+            10 => {
+                let query_len = parameter.value & 0xffff_ffff;
+                let fallback_len = parameter.value >> 32;
+                let total_len = query_len.checked_add(fallback_len).ok_or(INTERNAL_ERROR)?;
+                if query_len == 0
+                    || query_len > 128
+                    || fallback_len > 256
+                    || parameter.pointer.is_null()
+                {
+                    return Err(INTERNAL_ERROR);
+                }
+                // SAFETY: Generated query parameters point at one validated static name/fallback pair.
+                let static_value = unsafe { slice::from_raw_parts(parameter.pointer, total_len) };
+                let (name, fallback) = static_value.split_at(query_len);
+                // SAFETY: The request and its query view remain valid during dispatch.
+                let value = unsafe { decoded_request_query_parameter(&*request, name) }?
+                    .unwrap_or_else(|| fallback.to_vec());
+                output.push(tinytsx_runtime_sqlite::SqlValue::Text(
+                    String::from_utf8(value).map_err(|_| BAD_REQUEST)?,
+                ));
+            }
             _ => return Err(INTERNAL_ERROR),
         }
     }
@@ -1709,6 +1730,52 @@ fn form_urlencoded_name_equals(encoded: &[u8], expected: &[u8]) -> bool {
         expected_index += 1;
     }
     expected_index == expected.len()
+}
+
+unsafe fn decoded_request_query_parameter(
+    request: &TinyRequest,
+    expected: &[u8],
+) -> Result<Option<Vec<u8>>, u32> {
+    if request.query.ptr.is_null() && request.query.len != 0 {
+        return Err(INTERNAL_ERROR);
+    }
+    // SAFETY: The query view is borrowed from the connection-owned request bytes.
+    let query = unsafe { slice::from_raw_parts(request.query.ptr, request.query.len) };
+    for part in query.split(|byte| *byte == b'&') {
+        if part.is_empty() {
+            continue;
+        }
+        let separator = part.iter().position(|byte| *byte == b'=');
+        let name = separator.map_or(part, |index| &part[..index]);
+        if form_urlencoded_name_equals(name, expected) {
+            let value = separator.map_or(&[][..], |index| &part[index + 1..]);
+            return decode_form_urlencoded_value(value, 256).map(Some);
+        }
+    }
+    Ok(None)
+}
+
+fn decode_form_urlencoded_value(encoded: &[u8], limit: usize) -> Result<Vec<u8>, u32> {
+    let mut output = Vec::with_capacity(encoded.len().min(limit));
+    let mut cursor = 0;
+    while cursor < encoded.len() {
+        let byte = if encoded[cursor] == b'+' {
+            cursor += 1;
+            b' '
+        } else if let Some(byte) = percent_byte(encoded, cursor) {
+            cursor += 3;
+            byte
+        } else {
+            let byte = encoded[cursor];
+            cursor += 1;
+            byte
+        };
+        if output.len() == limit {
+            return Err(BAD_REQUEST);
+        }
+        output.push(byte);
+    }
+    Ok(output)
 }
 
 #[unsafe(no_mangle)]

@@ -114,6 +114,7 @@ export interface SqliteTransactionStep {
 
 export type SqliteParameter =
   | {kind: "routeParameter"; segment: number}
+  | {kind: "queryParameter"; string: number; queryLength: number; fallbackLength: number}
   | {kind: "requestJsonField"; field: number}
   | {kind: "requestHeader"; header: number}
   | {kind: "randomUuid"}

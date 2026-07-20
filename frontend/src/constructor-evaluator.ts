@@ -4310,6 +4310,17 @@ function sqliteParameters(
   for (const parameter of parameters.items) {
     if (parameter.kind === "routeParameter") {
       output.push({kind: "routeParameter", name: parameter.name});
+    } else if (parameter.kind === "queryParameter") {
+      if (
+        parameter.fallback === undefined
+        || parameter.name.length === 0
+        || Buffer.byteLength(parameter.name, "utf8") > 128
+        || parameter.name.includes("\0")
+        || Buffer.byteLength(parameter.fallback, "utf8") > 256
+      ) {
+        return {reason: "SQLite query parameter requires a static name and bounded string fallback"};
+      }
+      output.push({kind: "queryParameter", name: parameter.name, fallback: parameter.fallback});
     } else if (parameter.kind === "requestJsonField") {
       output.push({kind: "requestJsonField", path: parameter.path});
     } else if (parameter.kind === "requestHeader" && (
@@ -4348,13 +4359,16 @@ function sameSqliteParameters(left: SqliteParameter[], right: SqliteParameter[])
       case "null":
         return true;
       case "routeParameter":
+      case "queryParameter":
       case "requestJsonField":
       case "requestHeader":
         return candidate.kind === parameter.kind && (parameter.kind === "requestJsonField"
           ? candidate.kind === "requestJsonField"
             && candidate.path.length === parameter.path.length
             && candidate.path.every((segment, index) => segment === parameter.path[index])
-          : candidate.kind !== "requestJsonField" && candidate.name === parameter.name);
+          : candidate.kind !== "requestJsonField" && candidate.name === parameter.name
+            && (parameter.kind !== "queryParameter"
+              || (candidate.kind === "queryParameter" && candidate.fallback === parameter.fallback)));
       case "staticString":
       case "staticInteger":
       case "staticReal":

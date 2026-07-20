@@ -63,6 +63,22 @@ fn emit_parameters_at(
                 asm_line!(assembly, "    str x9, [sp, #{}]", offset + 8);
                 asm_line!(assembly, "    str xzr, [sp, #{}]", offset + 16);
             }
+            SqliteParameter::QueryParameter {
+                string,
+                query_length,
+                fallback_length,
+            } => {
+                emit_immediate(assembly, "x9", 10);
+                asm_line!(assembly, "    str x9, [sp, #{offset}]");
+                emit_immediate(
+                    assembly,
+                    "x9",
+                    ((*fallback_length as u64) << 32) | *query_length as u64,
+                );
+                asm_line!(assembly, "    str x9, [sp, #{}]", offset + 8);
+                assembly.address("x9", format_args!("Ltinytsx_string_{string}"));
+                asm_line!(assembly, "    str x9, [sp, #{}]", offset + 16);
+            }
             SqliteParameter::RequestJsonField { field } => {
                 emit_immediate(assembly, "x9", 2);
                 asm_line!(assembly, "    str x9, [sp, #{offset}]");

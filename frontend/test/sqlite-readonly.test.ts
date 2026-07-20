@@ -38,6 +38,35 @@ test("lowers a declared read-only SQLite binding to a named database", () => {
   assert.match(JSON.stringify(hir.handlers[0]?.response), /sqliteQuery/);
 });
 
+test("lowers a bounded Hono query parameter into a read-only SQLite query", () => {
+  const entry = write(`
+    import {Hono} from "hono";
+    import {openReadonlyDatabase} from "tinytsx:sqlite";
+
+    const database = openReadonlyDatabase("AIR_DB");
+    const history = database.prepare(
+      "SELECT recorded_at, co2 FROM readings WHERE recorded_at >= CAST(?1 AS INTEGER) ORDER BY recorded_at LIMIT 256",
+    );
+    const app = new Hono();
+    app.get("/history", async context => {
+      return context.json({readings: await history.all([context.req.query("since") ?? "0"])});
+    });
+    export default app;
+  `);
+
+  const hir = compileEntry(entry, {
+    sdkPath,
+    aliases,
+    apiAliases,
+    sqliteReadonlyBindings: new Set(["AIR_DB"]),
+  });
+
+  const response = hir.handlers.find(handler => handler.path === "/history")?.response;
+  assert.match(JSON.stringify(response), /"kind":"sqliteQuery"/);
+  assert.match(JSON.stringify(response),
+    /"parameters":\[\{"kind":"queryParameter","string":\d+,"queryLength":5,"fallbackLength":1\}\]/);
+});
+
 test("rejects missing bindings and mutation through a read-only database", () => {
   const missing = write(`
     import {openReadonlyDatabase} from "tinytsx:sqlite";

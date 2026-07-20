@@ -191,6 +191,15 @@ fn emit_parameters(
             SqliteParameter::RouteParameter { segment } => {
                 (1, segment.to_string(), "(const tiny_u8 *)0".to_owned())
             }
+            SqliteParameter::QueryParameter {
+                string,
+                query_length,
+                fallback_length,
+            } => (
+                10,
+                format!("((tiny_usize){fallback_length} << 32) | {query_length}"),
+                format!("tinytsx_string_{string}"),
+            ),
             SqliteParameter::RequestJsonField { field } => (
                 2,
                 program.static_strings[*field].value.len().to_string(),

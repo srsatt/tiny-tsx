@@ -233,6 +233,13 @@ pub struct SqliteTransactionStep {
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum SqliteParameter {
     RouteParameter { segment: usize },
+    QueryParameter {
+        string: usize,
+        #[serde(rename = "queryLength")]
+        query_length: usize,
+        #[serde(rename = "fallbackLength")]
+        fallback_length: usize,
+    },
     RequestJsonField { field: usize },
     RequestHeader { header: usize },
     RandomUuid,
@@ -1755,6 +1762,20 @@ impl Program {
                 {
                     return Err("SQLite parameter does not reference a route parameter".to_owned());
                 }
+                SqliteParameter::QueryParameter {
+                    string,
+                    query_length,
+                    fallback_length,
+                } if *query_length == 0
+                    || *query_length > 128
+                    || *fallback_length > 256
+                    || self.static_strings.get(*string).is_none_or(|value| {
+                        value.value.len() != query_length + fallback_length
+                            || value.value.as_bytes()[..*query_length].contains(&0)
+                    }) =>
+                {
+                    return Err("SQLite query parameter has an invalid name or fallback".to_owned());
+                }
                 SqliteParameter::RequestJsonField { field }
                     if self
                         .static_strings
@@ -1792,6 +1813,7 @@ impl Program {
                     return Err("SQLite request-header parameter has an invalid name".to_owned());
                 }
                 SqliteParameter::RandomUuid => {}
+                SqliteParameter::QueryParameter { .. } => {}
                 SqliteParameter::StaticString { string }
                     if self
                         .static_strings

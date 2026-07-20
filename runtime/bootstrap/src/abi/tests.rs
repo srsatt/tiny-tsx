@@ -344,6 +344,35 @@ fn sqlite_parameters_reject_missing_empty_oversized_and_invalid_utf8_headers() {
 }
 
 #[test]
+fn sqlite_parameters_decode_query_text_and_use_the_closed_fallback() {
+    use tinytsx_runtime_sqlite::SqlValue;
+
+    let static_value = b"since0";
+    let parameter = TinySqlParameter {
+        kind: 10,
+        value: (1_usize << 32) | 5,
+        pointer: static_value.as_ptr(),
+    };
+    let first_request = request(b"GET", b"/history?other=x&since=100%2B20");
+    assert_eq!(
+        unsafe { decode_sqlite_parameters(&first_request, &parameter, 1) },
+        Ok(vec![SqlValue::Text("100+20".into())]),
+    );
+
+    let fallback_request = request(b"GET", b"/history?other=x");
+    assert_eq!(
+        unsafe { decode_sqlite_parameters(&fallback_request, &parameter, 1) },
+        Ok(vec![SqlValue::Text("0".into())]),
+    );
+
+    let invalid_request = request(b"GET", b"/history?since=%ff");
+    assert_eq!(
+        unsafe { decode_sqlite_parameters(&invalid_request, &parameter, 1) },
+        Err(BAD_REQUEST),
+    );
+}
+
+#[test]
 fn request_path_matching_uses_the_path_without_the_query() {
     let request = request(b"GET", b"/users?expand=true");
 
