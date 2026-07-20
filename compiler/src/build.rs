@@ -14,6 +14,7 @@ use crate::{
     target::Target,
 };
 
+#[derive(Clone)]
 pub struct Options {
     pub entry: String,
     pub output: PathBuf,
@@ -32,6 +33,12 @@ pub struct Options {
     pub allowed_read_roots: Vec<String>,
     pub allowed_write_roots: Vec<String>,
     pub target: Target,
+    pub runtime_target_directory: Option<PathBuf>,
+}
+
+pub struct Output {
+    pub executable: PathBuf,
+    pub dependencies: Vec<PathBuf>,
 }
 
 #[derive(Serialize)]
@@ -81,7 +88,7 @@ struct BuildPermissions<'a> {
     write: &'a [String],
 }
 
-pub fn execute(options: &Options) -> Result<PathBuf, String> {
+pub fn execute(options: &Options) -> Result<Output, String> {
     options.target.ensure_native()?;
     let mut compilation = frontend::compile(
         &options.entry,
@@ -119,7 +126,10 @@ pub fn execute(options: &Options) -> Result<PathBuf, String> {
     assemble(&assembly_path, &object_path, options.target)?;
     let runtime_binary = link_runtime(
         &root,
-        &temporary,
+        options
+            .runtime_target_directory
+            .clone()
+            .unwrap_or_else(|| temporary.join("target")),
         &object_path,
         &compilation,
         options.release,
@@ -152,7 +162,15 @@ pub fn execute(options: &Options) -> Result<PathBuf, String> {
     }
 
     print_summary(&output, &compilation, options, port)?;
-    Ok(output)
+    Ok(Output {
+        executable: output,
+        dependencies: compilation
+            .program
+            .modules
+            .iter()
+            .map(|module| PathBuf::from(&module.path))
+            .collect(),
+    })
 }
 
 fn temporary_directory() -> Result<PathBuf, String> {
@@ -182,13 +200,12 @@ fn assemble(assembly: &Path, object: &Path, target: Target) -> Result<(), String
 
 fn link_runtime(
     root: &Path,
-    temporary: &Path,
+    target_directory: PathBuf,
     object: &Path,
     compilation: &Compilation,
     release: bool,
     target: Target,
 ) -> Result<PathBuf, String> {
-    let target_directory = temporary.join("target");
     let mut command = Command::new("cargo");
     let runtime_features = runtime_cargo_features(compilation);
     command

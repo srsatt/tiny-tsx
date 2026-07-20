@@ -2,6 +2,7 @@ mod build;
 mod builtins;
 mod cli;
 mod codegen;
+mod dev;
 mod frontend;
 mod hir;
 mod target;

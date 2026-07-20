@@ -1,6 +1,6 @@
 use std::{ffi::OsString, path::PathBuf};
 
-use crate::{build, builtins, codegen, frontend, target::Target, test262_build, wpt_build};
+use crate::{build, builtins, codegen, dev, frontend, target::Target, test262_build, wpt_build};
 
 const USAGE: &str = "\
 TinyTSX native TSX compiler
@@ -9,6 +9,7 @@ Usage:
   tinytsx check <entry.tsx> [--emit-hir | --emit-asm] [--target triple] [--alias specifier=path] [--api specifier=path] [--binding name=sqlite-kv:path] [--allow-env name]... [--allow-read root]... [--allow-write root]...
   tinytsx build <entry.tsx> [options]
   tinytsx run <entry.tsx> [options]
+  tinytsx dev <entry.tsx> [options]
   tinytsx test262 <case.js> [--output path]
   tinytsx wpt <case.js> [--output path]
   tinytsx --list-builtins
@@ -28,6 +29,7 @@ pub fn run(arguments: impl Iterator<Item = OsString>) -> Result<(), String> {
         Some("check") => check(&arguments[1..]),
         Some("build") => build(&arguments[1..]),
         Some("run") => run_server(&arguments[1..]),
+        Some("dev") => dev_server(&arguments[1..]),
         Some("test262") => test262(&arguments[1..]),
         Some("wpt") => wpt(&arguments[1..]),
         Some("--list-builtins") if arguments.len() == 1 => {
@@ -93,9 +95,14 @@ fn build(arguments: &[String]) -> Result<(), String> {
     build::execute(&options).map(|_| ())
 }
 
+fn dev_server(arguments: &[String]) -> Result<(), String> {
+    let options = parse_build_options(arguments, PathBuf::from(".tinytsx/dev/server"))?;
+    dev::execute(options)
+}
+
 fn run_server(arguments: &[String]) -> Result<(), String> {
     let options = parse_build_options(arguments, PathBuf::from(".tinytsx/run/server"))?;
-    let output = build::execute(&options)?;
+    let output = build::execute(&options)?.executable;
     let status = std::process::Command::new(&output)
         .status()
         .map_err(|error| format!("could not start {}: {error}", output.display()))?;
@@ -128,6 +135,7 @@ fn parse_build_options(
         allowed_read_roots: Vec::new(),
         allowed_write_roots: Vec::new(),
         target: Target::default_for_host(),
+        runtime_target_directory: None,
     };
     let mut index = 0;
     while index < arguments.len() {
