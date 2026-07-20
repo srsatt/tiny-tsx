@@ -144,9 +144,15 @@ pub fn todo_operation(
         if count != 0 {
             output.push(b',');
         }
-        let id: String = row.get(0).map_err(|error| Error::sqlite(ErrorKind::Sql, error))?;
-        let text: String = row.get(1).map_err(|error| Error::sqlite(ErrorKind::Sql, error))?;
-        let completed: i64 = row.get(2).map_err(|error| Error::sqlite(ErrorKind::Sql, error))?;
+        let id: String = row
+            .get(0)
+            .map_err(|error| Error::sqlite(ErrorKind::Sql, error))?;
+        let text: String = row
+            .get(1)
+            .map_err(|error| Error::sqlite(ErrorKind::Sql, error))?;
+        let completed: i64 = row
+            .get(2)
+            .map_err(|error| Error::sqlite(ErrorKind::Sql, error))?;
         output.extend_from_slice(b"{\"id\":");
         write_json_string(&mut output, &id);
         output.extend_from_slice(b",\"text\":");
@@ -223,12 +229,37 @@ pub fn open(path: &str) -> Result<Connection, Error> {
     Ok(connection)
 }
 
+pub fn open_readonly(path: &str) -> Result<Connection, Error> {
+    if path == ":memory:" {
+        return Err(Error::bounded(ErrorKind::UnsafePath));
+    }
+    prepare_readonly_database_path(path)?;
+    let flags = OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NOFOLLOW;
+    let connection = Connection::open_with_flags(path, flags)
+        .map_err(|error| Error::sqlite(ErrorKind::Open, error))?;
+    validate_opened_database_path(path)?;
+    connection
+        .busy_timeout(BUSY_TIMEOUT)
+        .map_err(|error| Error::sqlite(ErrorKind::Open, error))?;
+    connection
+        .pragma_update(None, "query_only", true)
+        .map_err(|error| Error::sqlite(ErrorKind::Open, error))?;
+    Ok(connection)
+}
+
 fn prepare_database_path(path: &str) -> Result<(), Error> {
     if path == ":memory:" {
         return Ok(());
     }
     #[cfg(unix)]
     return unix_path::prepare(Path::new(path));
+    #[cfg(not(unix))]
+    Err(Error::bounded(ErrorKind::UnsafePath))
+}
+
+fn prepare_readonly_database_path(path: &str) -> Result<(), Error> {
+    #[cfg(unix)]
+    return unix_path::prepare_readonly(Path::new(path));
     #[cfg(not(unix))]
     Err(Error::bounded(ErrorKind::UnsafePath))
 }
@@ -272,6 +303,13 @@ mod unix_path {
             }
             Err(_) => Err(unsafe_path()),
         }?;
+        validate_named_files(path)
+    }
+
+    pub(super) fn prepare_readonly(path: &Path) -> Result<(), Error> {
+        validate_directories(path)?;
+        let metadata = fs::symlink_metadata(path).map_err(|_| unsafe_path())?;
+        validate_owned_file(&metadata)?;
         validate_named_files(path)
     }
 
@@ -657,6 +695,51 @@ mod tests {
         )
         .expect("create schema");
         connection
+    }
+
+    #[test]
+    fn opens_an_existing_database_without_write_or_create_access() {
+        let directory = test_directory("readonly");
+        let path = directory.join("collector.db");
+        let path = path.to_str().expect("UTF-8 database path");
+        let writable = open(path).expect("create database");
+        execute_batch(
+            &writable,
+            "CREATE TABLE readings (value INTEGER NOT NULL); INSERT INTO readings VALUES (42)",
+        )
+        .expect("seed database");
+        drop(writable);
+
+        let readonly = open_readonly(path).expect("open database read-only");
+        assert_eq!(
+            query(&readonly, "SELECT value FROM readings", &[], 1, 128)
+                .expect("read row")
+                .rows,
+            [vec![SqlValue::Integer(42)]],
+        );
+        assert_eq!(
+            execute(&readonly, "INSERT INTO readings VALUES (43)", &[])
+                .expect_err("read-only connection must reject writes")
+                .kind,
+            ErrorKind::Sql,
+        );
+        drop(readonly);
+
+        let missing = directory.join("missing.db");
+        assert_eq!(
+            open_readonly(missing.to_str().expect("UTF-8 missing path"))
+                .expect_err("read-only open must not create a database")
+                .kind,
+            ErrorKind::UnsafePath,
+        );
+        assert!(!missing.exists());
+        assert_eq!(
+            open_readonly(":memory:")
+                .expect_err("read-only binding requires an on-disk database")
+                .kind,
+            ErrorKind::UnsafePath,
+        );
+        std::fs::remove_dir_all(directory).expect("remove database directory");
     }
 
     #[test]
