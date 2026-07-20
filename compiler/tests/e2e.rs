@@ -1480,6 +1480,13 @@ fn repository_root() -> PathBuf {
 }
 
 fn build_frontend(root: &Path) {
+    if std::env::var_os("TINYTSX_TEST_RUNNER").is_some() {
+        assert!(
+            root.join("frontend/dist/src/cli.js").is_file(),
+            "test runner did not prepare the TypeScript frontend"
+        );
+        return;
+    }
     let status = Command::new("npm")
         .current_dir(root)
         .args(["run", "build", "--prefix", "frontend"])
