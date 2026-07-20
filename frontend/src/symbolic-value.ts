@@ -52,6 +52,7 @@ export type Value =
   | {kind: "actor"; state: ActorState}
   | {kind: "actorCall"; actor: ActorState; message: number | string; timeoutMs?: number}
   | {kind: "database"; state: DatabaseState}
+  | {kind: "assetStore"; state: AssetStoreState}
   | {kind: "statement"; state: StatementState}
   | {kind: "sqliteQuery"; statement: StatementState; mode: "all" | "first"; parameters: SqliteParameter[]}
   | {kind: "sqliteRunChanges"; result: number}
@@ -163,6 +164,14 @@ export interface DatabaseState {
   readonly?: boolean;
 }
 
+export interface AssetStoreState {
+  id: number;
+  key: string;
+  name: string;
+  index: string;
+  spaFallback: boolean;
+}
+
 export interface StatementState {
   database: DatabaseState;
   sql: string;
@@ -196,6 +205,7 @@ export type ResponseBody =
   | string
   | RuntimeStringPart[]
   | StreamResponseBody
+  | {kind: "asset"; store: AssetStoreState}
   | {
       kind: "queryConditional";
       query: string;

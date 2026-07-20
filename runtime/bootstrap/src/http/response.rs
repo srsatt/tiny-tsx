@@ -53,6 +53,27 @@ pub(super) fn write_response(
     stream.flush()
 }
 
+pub(super) fn write_head_response(
+    stream: &mut impl Write,
+    head: &mut Vec<u8>,
+    status: u16,
+    content_type: u16,
+    content_length: usize,
+    headers: &[TinyHeader],
+    connection: ConnectionDirective,
+) -> io::Result<()> {
+    write_response_head(
+        head,
+        status,
+        content_type,
+        headers,
+        connection,
+        BodyFraming::ContentLength(content_length),
+    )?;
+    stream.write_all(head)?;
+    stream.flush()
+}
+
 pub(super) fn write_stream_response<'a>(
     stream: &mut impl Write,
     head: &mut Vec<u8>,
@@ -100,6 +121,7 @@ fn write_response_head(
         201 => "Created",
         301 => "Moved Permanently",
         302 => "Found",
+        304 => "Not Modified",
         307 => "Temporary Redirect",
         308 => "Permanent Redirect",
         400 => "Bad Request",

@@ -192,6 +192,20 @@ pub(super) fn emit_static_data(
             database.binding.as_deref().unwrap_or_default().as_bytes(),
         );
     }
+    for (store_index, store) in options.asset_stores.iter().enumerate() {
+        for (file_index, file) in store.files.iter().enumerate() {
+            for (suffix, bytes) in [
+                ("path", file.path.as_bytes()),
+                ("mime", file.mime.as_bytes()),
+                ("etag", file.etag.as_bytes()),
+                ("data", file.bytes.as_slice()),
+            ] {
+                asm_line!(assembly, ".p2align 3");
+                asm_line!(assembly, "Ltinytsx_asset_{store_index}_{file_index}_{suffix}:");
+                emit_bytes(assembly, bytes);
+            }
+        }
+    }
     for (index, actor) in program.actors.iter().enumerate() {
         if let Some(persistence) = &actor.persistence {
             asm_line!(assembly, ".p2align 3");

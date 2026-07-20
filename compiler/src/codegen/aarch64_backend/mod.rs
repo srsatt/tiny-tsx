@@ -348,4 +348,70 @@ fn emit_config(assembly: &mut Emitter, options: &Options, program: &Program) {
         asm_line!(assembly, "    mov x0, #0");
         asm_line!(assembly, "    ret");
     }
+
+    assembly.global_function(format_args!("tinytsx_config_asset_stores"));
+    emit_immediate(assembly, "x0", options.asset_stores.len() as u64);
+    asm_line!(assembly, "    ret");
+    emit_asset_usize_config(assembly, "tinytsx_config_asset_files", options, |store| store.files.len());
+    emit_asset_usize_config(assembly, "tinytsx_config_asset_index", options, |store| store.index);
+    emit_asset_usize_config(assembly, "tinytsx_config_asset_spa_fallback", options, |store| usize::from(store.spa_fallback));
+    emit_asset_view_config(assembly, "path", options, |file| file.path.len());
+    emit_asset_view_config(assembly, "mime", options, |file| file.mime.len());
+    emit_asset_view_config(assembly, "etag", options, |file| file.etag.len());
+    emit_asset_view_config(assembly, "data", options, |file| file.bytes.len());
+}
+
+fn emit_asset_usize_config(
+    assembly: &mut Emitter,
+    name: &str,
+    options: &Options,
+    value: impl Fn(&crate::codegen::AssetStore) -> usize,
+) {
+    assembly.global_function(format_args!("{name}"));
+    for (index, _store) in options.asset_stores.iter().enumerate() {
+        asm_line!(assembly, "    cmp x0, #{index}");
+        asm_line!(assembly, "    b.eq L{name}_{index}");
+    }
+    asm_line!(assembly, "    mov x0, #0");
+    asm_line!(assembly, "    ret");
+    for (index, store) in options.asset_stores.iter().enumerate() {
+        asm_line!(assembly, "L{name}_{index}:");
+        emit_immediate(assembly, "x0", value(store) as u64);
+        asm_line!(assembly, "    ret");
+    }
+}
+
+fn emit_asset_view_config(
+    assembly: &mut Emitter,
+    suffix: &str,
+    options: &Options,
+    length: impl Fn(&crate::codegen::AssetFile) -> usize,
+) {
+    let name = format!("tinytsx_config_asset_file_{suffix}");
+    assembly.global_function(format_args!("{name}"));
+    asm_line!(assembly, "    cbz x2, L{name}_invalid");
+    asm_line!(assembly, "    cbz x3, L{name}_invalid");
+    for (store_index, store) in options.asset_stores.iter().enumerate() {
+        for (file_index, _) in store.files.iter().enumerate() {
+            asm_line!(assembly, "    cmp x0, #{store_index}");
+            asm_line!(assembly, "    b.ne L{name}_{store_index}_{file_index}_next");
+            asm_line!(assembly, "    cmp x1, #{file_index}");
+            asm_line!(assembly, "    b.eq L{name}_{store_index}_{file_index}");
+            asm_line!(assembly, "L{name}_{store_index}_{file_index}_next:");
+        }
+    }
+    asm_line!(assembly, "L{name}_invalid:");
+    emit_immediate(assembly, "x0", 4);
+    asm_line!(assembly, "    ret");
+    for (store_index, store) in options.asset_stores.iter().enumerate() {
+        for (file_index, file) in store.files.iter().enumerate() {
+            asm_line!(assembly, "L{name}_{store_index}_{file_index}:");
+            assembly.address("x4", format_args!("Ltinytsx_asset_{store_index}_{file_index}_{suffix}"));
+            asm_line!(assembly, "    str x4, [x2]");
+            emit_immediate(assembly, "x4", length(file) as u64);
+            asm_line!(assembly, "    str x4, [x3]");
+            asm_line!(assembly, "    mov x0, #0");
+            asm_line!(assembly, "    ret");
+        }
+    }
 }

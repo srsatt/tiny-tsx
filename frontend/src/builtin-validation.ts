@@ -13,7 +13,7 @@ interface ImportedOperation {
   operation: string;
 }
 
-type BuiltinResource = "actor" | "database" | "readonlyDatabase" | "statement" | "readonlyStatement" | "supervisor";
+type BuiltinResource = "actor" | "assetStore" | "database" | "readonlyDatabase" | "statement" | "readonlyStatement" | "supervisor";
 
 /** Validates protected built-ins before symbolic application execution. */
 export function validateBuiltinOperations(
@@ -22,6 +22,7 @@ export function validateBuiltinOperations(
   allowedReadRoots: readonly string[],
   allowedWriteRoots: readonly string[],
   sqliteReadonlyBindings: ReadonlySet<string>,
+  assetBindings: ReadonlySet<string>,
 ): void {
   const diagnostics: Diagnostic[] = [];
   const supervisorDeclarations: Array<{node: ts.Node; sourceFile: ts.SourceFile}> = [];
@@ -33,7 +34,7 @@ export function validateBuiltinOperations(
       if (
         !ts.isImportDeclaration(statement)
         || !ts.isStringLiteral(statement.moduleSpecifier)
-        || (!["tinytsx:env", "tinytsx:fs", "tinytsx:sqlite", "tinytsx:actors"].includes(statement.moduleSpecifier.text)
+        || (!["tinytsx:env", "tinytsx:fs", "tinytsx:sqlite", "tinytsx:actors", "tinytsx:assets"].includes(statement.moduleSpecifier.text)
           && !unavailableBuiltins.has(statement.moduleSpecifier.text))
       ) continue;
       const bindings = statement.importClause?.namedBindings;
@@ -119,6 +120,21 @@ export function validateBuiltinOperations(
             module.sourceFile,
             sqliteReadonlyBindings,
           );
+        } else if (imported.specifier === "tinytsx:assets" && imported.operation === "openAssets") {
+          const argument = invocation?.arguments?.[0];
+          const name = argument !== undefined && ts.isStringLiteral(argument) ? argument.text : undefined;
+          const argumentCount = invocation?.arguments?.length;
+          if (argumentCount === undefined || argumentCount < 1 || argumentCount > 2
+            || name === undefined || !assetBindings.has(name)) {
+            addDiagnostic(
+              diagnostics,
+              "TINY1530",
+              "openAssets requires one statically declared asset store name",
+              node,
+              module.sourceFile,
+              name === undefined ? "use openAssets(\"WEB\")" : `re-run with \`--asset ${name}=<directory>\``,
+            );
+          }
         } else if (imported.specifier === "tinytsx:actors" && imported.operation === "spawn") {
           validateActorSpawn(diagnostics, invocation, node, module.sourceFile, resources);
           const supervisor = actorSupervisorBinding(invocation, resources);
@@ -149,6 +165,8 @@ export function validateBuiltinOperations(
             module.sourceFile,
             "use spawn, supervise, and declared actor refs from `tinytsx --list-builtins`",
           );
+        } else if (imported.specifier === "tinytsx:assets") {
+          addDiagnostic(diagnostics, "TINY1530", `asset operation \`${imported.operation}\` is unsupported`, node, module.sourceFile);
         }
       } else if (
         ts.isCallExpression(node)
@@ -298,6 +316,11 @@ function collectResourceBindings(
           changed = true;
           continue;
         }
+        if (imported?.specifier === "tinytsx:assets" && imported.operation === "openAssets") {
+          resources.set(name, "assetStore");
+          changed = true;
+          continue;
+        }
         if (imported?.specifier === "tinytsx:actors" && imported.operation === "spawn") {
           resources.set(name, "actor");
           changed = true;
@@ -341,6 +364,12 @@ function validateResourceCall(
   const member = invocation.expression;
   if (!ts.isPropertyAccessExpression(member)) return;
   const operation = member.name.text;
+  if (resource === "assetStore") {
+    if (operation !== "fetch" || invocation.arguments.length !== 1) {
+      addDiagnostic(diagnostics, "TINY1530", "AssetStore supports fetch(request) only", invocation, sourceFile);
+    }
+    return;
+  }
   if (resource === "database" || resource === "readonlyDatabase") {
     if (
       resource === "readonlyDatabase"

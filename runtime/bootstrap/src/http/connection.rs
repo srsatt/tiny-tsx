@@ -121,7 +121,7 @@ impl Connection {
             write_terminal_response(stream, response_head, 400, b"bad request")?;
             return Ok(Turn::Complete);
         };
-        if !matches!(method, b"GET" | b"POST" | b"PUT" | b"DELETE" | b"OPTIONS") {
+        if !matches!(method, b"GET" | b"HEAD" | b"POST" | b"PUT" | b"DELETE" | b"OPTIONS") {
             write_terminal_response(stream, response_head, 405, b"method not allowed")?;
             return Ok(Turn::Complete);
         }
@@ -146,6 +146,7 @@ impl Connection {
             }
         };
 
+        let head_only = method == b"HEAD";
         let request = request_with_body(method, target, request_headers, &body);
         let response = render_with_client(&request, arena, stream);
         let http11 = version == b"HTTP/1.1";
@@ -167,6 +168,15 @@ impl Connection {
                 response.http_status,
                 response.content_type,
                 response.stream_chunks(),
+                response.headers,
+                directive,
+            ),
+            OK if head_only => super::response::write_head_response(
+                stream,
+                response_head,
+                response.http_status,
+                response.content_type,
+                response.body.len(),
                 response.headers,
                 directive,
             ),

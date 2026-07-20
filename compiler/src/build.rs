@@ -8,7 +8,7 @@ use std::{
 use serde::Serialize;
 
 use crate::{
-    codegen::{self, Options as CodegenOptions},
+    codegen::{self, AssetStore, Options as CodegenOptions},
     frontend::{self, Compilation},
     hir::MemoryReport,
     target::Target,
@@ -29,6 +29,7 @@ pub struct Options {
     pub aliases: Vec<String>,
     pub api_aliases: Vec<String>,
     pub bindings: Vec<String>,
+    pub assets: Vec<String>,
     pub allowed_environment: Vec<String>,
     pub allowed_read_roots: Vec<String>,
     pub allowed_write_roots: Vec<String>,
@@ -65,6 +66,9 @@ struct BuildReport<'a> {
     supervisors: usize,
     actors: usize,
     sqlite_databases: usize,
+    asset_stores: usize,
+    asset_files: usize,
+    embedded_asset_bytes: usize,
     provider_workers: usize,
     provider_transport: bool,
     filesystem: bool,
@@ -102,6 +106,7 @@ pub fn execute(options: &Options) -> Result<Output, String> {
         &options.aliases,
         &options.api_aliases,
         &options.bindings,
+        &options.assets,
         &options.allowed_environment,
         &options.allowed_read_roots,
         &options.allowed_write_roots,
@@ -120,6 +125,7 @@ pub fn execute_compilation(
     } else {
         compilation.program.server.port.unwrap_or(options.port)
     };
+    let asset_stores = crate::assets::load(&options.assets, &compilation.program.asset_stores)?;
     let codegen_started = Instant::now();
     let assembly = codegen::emit(
         &compilation.program,
@@ -129,6 +135,7 @@ pub fn execute_compilation(
             workers: options.workers,
             request_memory: options.request_memory,
             read_roots: options.allowed_read_roots.clone(),
+            asset_stores: asset_stores.clone(),
         },
     )?;
     let codegen_duration = codegen_started.elapsed();
@@ -176,7 +183,7 @@ pub fn execute_compilation(
             .map_err(|error| format!("could not preserve emitted assembly: {error}"))?;
     }
 
-    write_report(&output, &compilation, options, port)?;
+    write_report(&output, &compilation, &asset_stores, options, port)?;
     if !options.keep_temps {
         fs::remove_dir_all(&temporary)
             .map_err(|error| format!("could not remove {}: {error}", temporary.display()))?;
@@ -335,6 +342,7 @@ fn with_suffix(path: &Path, suffix: &str) -> PathBuf {
 fn write_report(
     output: &Path,
     compilation: &Compilation,
+    asset_stores: &[AssetStore],
     options: &Options,
     port: u16,
 ) -> Result<(), String> {
@@ -376,6 +384,9 @@ fn write_report(
     if sqlite {
         runtime_features.push("bounded-sqlite");
     }
+    if !asset_stores.is_empty() {
+        runtime_features.push("embedded-assets");
+    }
     if allocation_metrics_requested() {
         runtime_features.push("allocation-metrics");
     }
@@ -393,6 +404,13 @@ fn write_report(
         supervisors: compilation.program.supervisors.len(),
         actors: compilation.program.actors.len(),
         sqlite_databases: compilation.program.sqlite_databases.len(),
+        asset_stores: asset_stores.len(),
+        asset_files: asset_stores.iter().map(|store| store.files.len()).sum(),
+        embedded_asset_bytes: asset_stores
+            .iter()
+            .flat_map(|store| &store.files)
+            .map(|file| file.bytes.len())
+            .sum(),
         provider_workers: usize::from(provider_transport) * options.workers,
         provider_transport,
         filesystem,

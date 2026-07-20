@@ -47,6 +47,7 @@ pub fn execute(
         &options.aliases,
         &options.api_aliases,
         &options.bindings,
+        &options.assets,
         &options.allowed_environment,
         &options.allowed_read_roots,
         &options.allowed_write_roots,

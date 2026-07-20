@@ -56,6 +56,7 @@ impl Session {
         aliases: &[String],
         api_aliases: &[String],
         bindings: &[String],
+        assets: &[String],
         allowed_environment: &[String],
         allowed_read_roots: &[String],
         allowed_write_roots: &[String],
@@ -74,6 +75,7 @@ impl Session {
             aliases,
             api_aliases,
             bindings,
+            assets,
             allowed_environment,
             allowed_read_roots,
             allowed_write_roots,
@@ -145,6 +147,7 @@ pub fn compile(
     aliases: &[String],
     api_aliases: &[String],
     bindings: &[String],
+    assets: &[String],
     allowed_environment: &[String],
     allowed_read_roots: &[String],
     allowed_write_roots: &[String],
@@ -163,6 +166,7 @@ pub fn compile(
         aliases,
         api_aliases,
         bindings,
+        assets,
         allowed_environment,
         allowed_read_roots,
         allowed_write_roots,
@@ -204,6 +208,7 @@ fn append_options(
     aliases: &[String],
     api_aliases: &[String],
     bindings: &[String],
+    assets: &[String],
     allowed_environment: &[String],
     allowed_read_roots: &[String],
     allowed_write_roots: &[String],
@@ -216,6 +221,9 @@ fn append_options(
     }
     for binding in bindings {
         command.arg("--binding").arg(binding);
+    }
+    for asset in assets {
+        command.arg("--asset").arg(asset);
     }
     for name in allowed_environment {
         command.arg("--allow-env").arg(name);

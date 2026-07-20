@@ -277,6 +277,14 @@ unsafe extern "C" {
         pointer: *mut *const u8,
         length: *mut usize,
     ) -> u32;
+    pub fn tinytsx_config_asset_stores() -> usize;
+    pub fn tinytsx_config_asset_files(store: usize) -> usize;
+    pub fn tinytsx_config_asset_index(store: usize) -> usize;
+    pub fn tinytsx_config_asset_spa_fallback(store: usize) -> usize;
+    pub fn tinytsx_config_asset_file_path(store: usize, file: usize, pointer: *mut *const u8, length: *mut usize) -> u32;
+    pub fn tinytsx_config_asset_file_mime(store: usize, file: usize, pointer: *mut *const u8, length: *mut usize) -> u32;
+    pub fn tinytsx_config_asset_file_etag(store: usize, file: usize, pointer: *mut *const u8, length: *mut usize) -> u32;
+    pub fn tinytsx_config_asset_file_data(store: usize, file: usize, pointer: *mut *const u8, length: *mut usize) -> u32;
     pub fn tinytsx_actor_operation(actor: usize) -> u32;
     pub fn tinytsx_actor_initial_state(actor: usize) -> i64;
     pub fn tinytsx_actor_failure_message(actor: usize) -> i64;
@@ -421,6 +429,24 @@ unsafe extern "C" fn tinytsx_config_sqlite_database_binding(
 ) -> u32 {
     INTERNAL_ERROR
 }
+
+#[cfg(not(feature = "generated"))]
+unsafe extern "C" fn tinytsx_config_asset_stores() -> usize { 0 }
+#[cfg(not(feature = "generated"))]
+unsafe extern "C" fn tinytsx_config_asset_files(_store: usize) -> usize { 0 }
+#[cfg(not(feature = "generated"))]
+unsafe extern "C" fn tinytsx_config_asset_index(_store: usize) -> usize { 0 }
+#[cfg(not(feature = "generated"))]
+unsafe extern "C" fn tinytsx_config_asset_spa_fallback(_store: usize) -> usize { 0 }
+
+#[cfg(not(feature = "generated"))]
+unsafe extern "C" fn tinytsx_config_asset_file_path(_store: usize, _file: usize, _pointer: *mut *const u8, _length: *mut usize) -> u32 { INTERNAL_ERROR }
+#[cfg(not(feature = "generated"))]
+unsafe extern "C" fn tinytsx_config_asset_file_mime(_store: usize, _file: usize, _pointer: *mut *const u8, _length: *mut usize) -> u32 { INTERNAL_ERROR }
+#[cfg(not(feature = "generated"))]
+unsafe extern "C" fn tinytsx_config_asset_file_etag(_store: usize, _file: usize, _pointer: *mut *const u8, _length: *mut usize) -> u32 { INTERNAL_ERROR }
+#[cfg(not(feature = "generated"))]
+unsafe extern "C" fn tinytsx_config_asset_file_data(_store: usize, _file: usize, _pointer: *mut *const u8, _length: *mut usize) -> u32 { INTERNAL_ERROR }
 
 #[cfg(not(feature = "generated"))]
 unsafe extern "C" fn tinytsx_actor_operation(_actor: usize) -> u32 {
@@ -1488,13 +1514,135 @@ pub unsafe extern "C" fn tinytsx_request_method_equals(
     }
     // SAFETY: Generated code passes the request supplied by this runtime.
     let method = unsafe { &(*request).method };
-    if method.len != expected_len || (method.ptr.is_null() && method.len != 0) {
+    let possible_head_for_get = method.len == 4 && expected_len == 3;
+    if (method.len != expected_len && !possible_head_for_get)
+        || (method.ptr.is_null() && method.len != 0)
+    {
         return 0;
     }
     // SAFETY: Both views are valid for their declared lengths during this call.
     let actual = unsafe { slice::from_raw_parts(method.ptr, method.len) };
     let expected = unsafe { slice::from_raw_parts(expected, expected_len) };
-    u32::from(actual == expected)
+    u32::from(actual == expected || actual == b"HEAD" && expected == b"GET")
+}
+
+type AssetViewFunction = unsafe extern "C" fn(
+    usize,
+    usize,
+    *mut *const u8,
+    *mut usize,
+) -> u32;
+
+unsafe fn asset_view(
+    function: AssetViewFunction,
+    store: usize,
+    file: usize,
+    max_length: usize,
+) -> Result<&'static [u8], u32> {
+    let mut pointer = ptr::null();
+    let mut length = 0;
+    let status = unsafe { function(store, file, &mut pointer, &mut length) };
+    if status != OK || pointer.is_null() || length > max_length {
+        return Err(INTERNAL_ERROR);
+    }
+    Ok(unsafe { slice::from_raw_parts(pointer, length) })
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tinytsx_asset_fetch(
+    request: *const TinyRequest,
+    writer: *mut TinyResponseWriter,
+    store: usize,
+) -> u32 {
+    if request.is_null() || writer.is_null() || store >= unsafe { tinytsx_config_asset_stores() } {
+        return INTERNAL_ERROR;
+    }
+    let request = unsafe { &*request };
+    let path = if request.path.ptr.is_null() && request.path.len != 0 {
+        return INTERNAL_ERROR;
+    } else {
+        unsafe { slice::from_raw_parts(request.path.ptr, request.path.len) }
+    };
+    if !path.starts_with(b"/")
+        || path.contains(&0)
+        || path.contains(&b'\\')
+        || path.split(|byte| *byte == b'/').any(|part| part == b"..")
+    {
+        return unsafe { tinytsx_response_begin(writer, 404, CONTENT_TYPE_NONE) };
+    }
+    let file_count = unsafe { tinytsx_config_asset_files(store) };
+    let index = unsafe { tinytsx_config_asset_index(store) };
+    if file_count == 0 || index >= file_count {
+        return INTERNAL_ERROR;
+    }
+    let mut selected = None;
+    if path == b"/" {
+        selected = Some(index);
+    } else {
+        for file in 0..file_count {
+            let candidate = match unsafe {
+                asset_view(tinytsx_config_asset_file_path, store, file, 4096)
+            } {
+                Ok(candidate) => candidate,
+                Err(status) => return status,
+            };
+            if candidate == path {
+                selected = Some(file);
+                break;
+            }
+        }
+    }
+    let selected = selected.or_else(|| {
+        (unsafe { tinytsx_config_asset_spa_fallback(store) } != 0).then_some(index)
+    });
+    let Some(file) = selected else {
+        return unsafe { tinytsx_response_begin(writer, 404, CONTENT_TYPE_NONE) };
+    };
+    let mime = match unsafe { asset_view(tinytsx_config_asset_file_mime, store, file, 256) } {
+        Ok(value) => value,
+        Err(status) => return status,
+    };
+    let etag = match unsafe { asset_view(tinytsx_config_asset_file_etag, store, file, 128) } {
+        Ok(value) => value,
+        Err(status) => return status,
+    };
+    let not_modified = unsafe {
+        tinytsx_request_if_none_match(request, etag.as_ptr(), etag.len()) != 0
+    };
+    let status = unsafe {
+        tinytsx_response_begin(
+            writer,
+            if not_modified { 304 } else { 200 },
+            CONTENT_TYPE_NONE,
+        )
+    };
+    if status != OK {
+        return status;
+    }
+    for (name, value) in [(b"Content-Type".as_slice(), mime), (b"ETag".as_slice(), etag)] {
+        let status = unsafe {
+            tinytsx_response_header_static(
+                writer,
+                name.as_ptr(),
+                name.len(),
+                value.as_ptr(),
+                value.len(),
+            )
+        };
+        if status != OK {
+            return status;
+        }
+    }
+    if not_modified {
+        return OK;
+    }
+    let data = match unsafe {
+        asset_view(tinytsx_config_asset_file_data, store, file, 4 * 1024 * 1024)
+    } {
+        Ok(value) => value,
+        Err(status) => return status,
+    };
+    unsafe { tinytsx_html_write_static(writer, data.as_ptr(), data.len()) }
 }
 
 #[unsafe(no_mangle)]

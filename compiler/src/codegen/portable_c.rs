@@ -29,6 +29,7 @@ pub(super) fn emit(program: &Program, options: &Options) -> Result<String, Strin
          extern tiny_u64 tinytsx_date_now_millis(void);\n\
          extern tiny_u32 tinytsx_response_header_elapsed_millis(void *, const tiny_u8 *, tiny_usize, tiny_u64, tiny_u64, const tiny_u8 *, tiny_usize);\n\
          extern tiny_u32 tinytsx_response_begin(void *, tiny_u16, tiny_u16);\n\
+         extern tiny_u32 tinytsx_asset_fetch(const void *, void *, tiny_usize);\n\
          extern tiny_u32 tinytsx_response_stream_begin(void *);\n\
          extern tiny_u32 tinytsx_response_stream_chunk_static(void *, const tiny_u8 *, tiny_usize);\n\
          extern tiny_u32 tinytsx_response_stream_chunk_begin(void *);\n\
@@ -233,6 +234,15 @@ fn emit_data(source: &mut String, program: &Program, options: &Options) {
             database.binding.as_deref().unwrap_or_default().as_bytes(),
         );
     }
+    for (store_index, store) in options.asset_stores.iter().enumerate() {
+        for (file_index, file) in store.files.iter().enumerate() {
+            let prefix = format!("tinytsx_asset_{store_index}_{file_index}");
+            emit_bytes(source, &format!("{prefix}_path"), file.path.as_bytes());
+            emit_bytes(source, &format!("{prefix}_mime"), file.mime.as_bytes());
+            emit_bytes(source, &format!("{prefix}_etag"), file.etag.as_bytes());
+            emit_bytes(source, &format!("{prefix}_data"), &file.bytes);
+        }
+    }
 }
 
 fn emit_config(source: &mut String, program: &Program, options: &Options) {
@@ -331,6 +341,44 @@ fn emit_config(source: &mut String, program: &Program, options: &Options) {
                 )
             }),
     );
+    writeln!(source, "tiny_usize tinytsx_config_asset_stores(void) {{ return {}; }}", options.asset_stores.len()).unwrap();
+    emit_asset_usize_function(source, "tinytsx_config_asset_files", options, |store| store.files.len());
+    emit_asset_usize_function(source, "tinytsx_config_asset_index", options, |store| store.index);
+    emit_asset_usize_function(source, "tinytsx_config_asset_spa_fallback", options, |store| usize::from(store.spa_fallback));
+    emit_asset_view_function(source, "tinytsx_config_asset_file_path", "path", options, |file| file.path.len());
+    emit_asset_view_function(source, "tinytsx_config_asset_file_mime", "mime", options, |file| file.mime.len());
+    emit_asset_view_function(source, "tinytsx_config_asset_file_etag", "etag", options, |file| file.etag.len());
+    emit_asset_view_function(source, "tinytsx_config_asset_file_data", "data", options, |file| file.bytes.len());
+}
+
+fn emit_asset_usize_function(
+    source: &mut String,
+    name: &str,
+    options: &Options,
+    value: impl Fn(&super::AssetStore) -> usize,
+) {
+    writeln!(source, "tiny_usize {name}(tiny_usize store) {{ switch (store) {{").unwrap();
+    for (index, store) in options.asset_stores.iter().enumerate() {
+        writeln!(source, "case {index}: return {};", value(store)).unwrap();
+    }
+    source.push_str("default: return 0; } }\n");
+}
+
+fn emit_asset_view_function(
+    source: &mut String,
+    name: &str,
+    suffix: &str,
+    options: &Options,
+    length: impl Fn(&super::AssetFile) -> usize,
+) {
+    writeln!(source, "tiny_u32 {name}(tiny_usize store, tiny_usize file, const tiny_u8 **pointer, tiny_usize *size) {{").unwrap();
+    source.push_str("if (pointer == (const tiny_u8 **)0 || size == (tiny_usize *)0) return 4;\n");
+    for (store_index, store) in options.asset_stores.iter().enumerate() {
+        for (file_index, file) in store.files.iter().enumerate() {
+            writeln!(source, "if (store == {store_index} && file == {file_index}) {{ *pointer = tinytsx_asset_{store_index}_{file_index}_{suffix}; *size = {}; return 0; }}", length(file)).unwrap();
+        }
+    }
+    source.push_str("return 4; }\n");
 }
 
 fn emit_view_function(
@@ -600,6 +648,18 @@ fn emit_response_mode(
             writeln!(
                 source,
                 "{indent}status = tinytsx_component_{component}(request, writer);"
+            )
+            .unwrap();
+            if terminal {
+                writeln!(source, "{indent}return status;").unwrap();
+            } else {
+                writeln!(source, "{indent}if (status != 0) return status;").unwrap();
+            }
+        }
+        HandlerResponse::Asset { store } => {
+            writeln!(
+                source,
+                "{indent}tiny_u32 status = tinytsx_asset_fetch(request, writer, {store});"
             )
             .unwrap();
             if terminal {

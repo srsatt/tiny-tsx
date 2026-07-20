@@ -54,6 +54,7 @@ export interface CompileOptions {
   allowedWriteRoots?: readonly string[];
   sqliteKvBindings?: Readonly<Record<string, string>>;
   sqliteReadonlyBindings?: ReadonlySet<string>;
+  assetBindings?: ReadonlySet<string>;
 }
 
 export interface CompileSession {
@@ -132,6 +133,7 @@ export function compileEntry(
     options.allowedReadRoots ?? [],
     options.allowedWriteRoots ?? [],
     options.sqliteReadonlyBindings ?? new Set(),
+    options.assetBindings ?? new Set(),
   );
   const entryDiagnostics = ts.getPreEmitDiagnostics(program, sourceFile)
     .filter(diagnostic => !isResponseIntrinsicDiagnostic(diagnostic));
@@ -158,6 +160,7 @@ export function compileEntry(
         application,
         options.sqliteKvBindings,
         options.sqliteReadonlyBindings,
+        options.assetBindings,
       );
       if (initialization !== undefined && initialization.issues.length === 0) {
         const lowered = lowerApplicationInitialization(
@@ -273,6 +276,7 @@ export function compileEntry(
     supervisors: [],
     actors: [],
     sqliteDatabases: [],
+    assetStores: [],
     handlers: [handler],
     staticStrings: strings.values,
     constants,
@@ -298,6 +302,7 @@ function builtinRuntimeAliases(sdk: string): Record<string, string> {
     "tinytsx:fs": path.join(builtins, "fs.ts"),
     "tinytsx:sqlite": path.join(builtins, "sqlite.ts"),
     "tinytsx:actors": path.join(builtins, "actors.ts"),
+    "tinytsx:assets": path.join(builtins, "assets.ts"),
   };
 }
 
@@ -408,7 +413,14 @@ function lowerApplicationInitialization(
       && response.body.kind === "stream"
       ? response.body
       : undefined;
-    const loweredResponse = streamBody !== undefined
+    const assetBody = typeof response.body !== "string"
+      && !Array.isArray(response.body)
+      && response.body.kind === "asset"
+      ? response.body
+      : undefined;
+    const loweredResponse = assetBody !== undefined
+      ? {kind: "asset" as const, store: assetBody.store.id}
+      : streamBody !== undefined
       ? {
         kind: "stream" as const,
         chunks: streamBody.chunks.map(chunk => typeof chunk === "string"
@@ -559,6 +571,12 @@ function lowerApplicationInitialization(
       ...(database.path === undefined ? {} : {path: database.path}),
       ...(database.binding === undefined ? {} : {binding: database.binding}),
       ...(database.readonly === true ? {readonly: true} : {}),
+    })),
+    assetStores: initialization.assetStores.map(store => ({
+      id: store.id,
+      name: store.name,
+      index: store.index,
+      spaFallback: store.spaFallback,
     })),
     handlers,
     staticStrings: strings.values,
@@ -795,6 +813,7 @@ function isLowerableResponseBody(body: ResponseBody): boolean {
     return body.chunks.every(chunk => typeof chunk === "string"
       || chunk.every(part => part.kind !== "elapsedMilliseconds"));
   }
+  if (body.kind === "asset") return true;
   return isLowerableResponseBody(body.whenPresent) && isLowerableResponseBody(body.whenAbsent);
 }
 
@@ -813,6 +832,9 @@ function lowerResponseBody(
   }
   if (body.kind === "stream") {
     throw new Error("stream body must lower through a stream response");
+  }
+  if (body.kind === "asset") {
+    throw new Error("asset body must lower through an asset response");
   }
   return {
     kind: "queryConditional",
@@ -1013,6 +1035,7 @@ function dynamicResponseExpressions(body: ResponseBody): number {
     return body.chunks.reduce((total, chunk) =>
       total + (typeof chunk === "string" ? 0 : dynamicResponseExpressions(chunk)), 0);
   }
+  if (body.kind === "asset") return 0;
   return 1
     + dynamicResponseExpressions(body.whenPresent)
     + dynamicResponseExpressions(body.whenAbsent);

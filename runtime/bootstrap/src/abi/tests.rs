@@ -18,6 +18,14 @@ use super::{
     tinytsx_response_stream_chunk_begin, tinytsx_response_stream_chunk_end,
     tinytsx_response_stream_chunk_static, write_console_error,
 };
+
+#[test]
+fn head_matches_generated_get_handlers() {
+    let request = super::request(b"HEAD", b"/asset.js");
+    assert_eq!(unsafe {
+        super::tinytsx_request_method_equals(&request, b"GET".as_ptr(), 3)
+    }, 1);
+}
 use std::{
     io::{Read, Write},
     net::TcpListener,

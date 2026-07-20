@@ -1,3 +1,4 @@
+mod assets;
 mod build;
 mod builtins;
 mod cli;

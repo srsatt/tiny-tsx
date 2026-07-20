@@ -20,6 +20,22 @@ pub struct Options {
     pub workers: usize,
     pub request_memory: usize,
     pub read_roots: Vec<String>,
+    pub asset_stores: Vec<AssetStore>,
+}
+
+#[derive(Clone)]
+pub struct AssetStore {
+    pub files: Vec<AssetFile>,
+    pub index: usize,
+    pub spa_fallback: bool,
+}
+
+#[derive(Clone)]
+pub struct AssetFile {
+    pub path: String,
+    pub mime: String,
+    pub etag: String,
+    pub bytes: Vec<u8>,
 }
 
 impl Default for Options {
@@ -29,6 +45,7 @@ impl Default for Options {
             workers: 1,
             request_memory: 262_144,
             read_roots: Vec::new(),
+            asset_stores: Vec::new(),
         }
     }
 }

@@ -176,6 +176,7 @@ fn parse_build_options(
         aliases: Vec::new(),
         api_aliases: Vec::new(),
         bindings: Vec::new(),
+        assets: Vec::new(),
         allowed_environment: Vec::new(),
         allowed_read_roots: Vec::new(),
         allowed_write_roots: Vec::new(),
@@ -211,6 +212,9 @@ fn parse_build_options(
                 .push(option_value(arguments, &mut index)?.to_owned()),
             "--binding" => options
                 .bindings
+                .push(option_value(arguments, &mut index)?.to_owned()),
+            "--asset" => options
+                .assets
                 .push(option_value(arguments, &mut index)?.to_owned()),
             "--allow-env" => options
                 .allowed_environment
@@ -261,6 +265,7 @@ fn parse_build_options(
     }
     validate_environment_capabilities(&mut options.allowed_environment)?;
     validate_bindings(&mut options.bindings)?;
+    validate_assets(&mut options.assets)?;
     validate_read_capabilities(&mut options.allowed_read_roots)?;
     validate_write_capabilities(&mut options.allowed_write_roots)?;
     Ok(options)
@@ -290,6 +295,7 @@ fn check(arguments: &[String]) -> Result<(), String> {
     let mut aliases = Vec::new();
     let mut api_aliases = Vec::new();
     let mut bindings = Vec::new();
+    let mut assets = Vec::new();
     let mut allowed_environment = Vec::new();
     let mut allowed_read_roots = Vec::new();
     let mut allowed_write_roots = Vec::new();
@@ -303,6 +309,7 @@ fn check(arguments: &[String]) -> Result<(), String> {
             "--alias" => aliases.push(option_value(arguments, &mut index)?.to_owned()),
             "--api" => api_aliases.push(option_value(arguments, &mut index)?.to_owned()),
             "--binding" => bindings.push(option_value(arguments, &mut index)?.to_owned()),
+            "--asset" => assets.push(option_value(arguments, &mut index)?.to_owned()),
             "--allow-env" => {
                 allowed_environment.push(option_value(arguments, &mut index)?.to_owned())
             }
@@ -328,6 +335,7 @@ fn check(arguments: &[String]) -> Result<(), String> {
     let entry = entry.ok_or_else(|| format!("check requires an entry module\n\n{USAGE}"))?;
     validate_environment_capabilities(&mut allowed_environment)?;
     validate_bindings(&mut bindings)?;
+    validate_assets(&mut assets)?;
     validate_read_capabilities(&mut allowed_read_roots)?;
     validate_write_capabilities(&mut allowed_write_roots)?;
     let mut compilation = frontend::compile(
@@ -335,6 +343,7 @@ fn check(arguments: &[String]) -> Result<(), String> {
         &aliases,
         &api_aliases,
         &bindings,
+        &assets,
         &allowed_environment,
         &allowed_read_roots,
         &allowed_write_roots,
@@ -349,6 +358,7 @@ fn check(arguments: &[String]) -> Result<(), String> {
             options.port = port;
         }
         options.read_roots = allowed_read_roots;
+        options.asset_stores = crate::assets::load(&assets, &compilation.program.asset_stores)?;
         print!("{}", codegen::emit(&compilation.program, target, options)?);
     } else {
         println!(
@@ -358,6 +368,34 @@ fn check(arguments: &[String]) -> Result<(), String> {
             compilation.program.statistics.components,
             compilation.program.statistics.static_html_bytes,
         );
+    }
+    Ok(())
+}
+
+fn validate_assets(assets: &mut [String]) -> Result<(), String> {
+    assets.sort();
+    if assets.len() > 16 {
+        return Err("at most 16 embedded asset stores may be configured".to_owned());
+    }
+    let mut previous = None;
+    for asset in assets {
+        let (name, directory) = asset
+            .split_once('=')
+            .ok_or_else(|| "--asset requires <name>=<directory>".to_owned())?;
+        let valid_name = !name.is_empty()
+            && name.len() <= 128
+            && name.is_ascii()
+            && !name.as_bytes()[0].is_ascii_digit()
+            && name
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_');
+        if !valid_name || directory.is_empty() || directory.len() > 4096 || directory.contains('\0') {
+            return Err(format!("invalid asset store `{asset}`; expected <name>=<directory>"));
+        }
+        if previous == Some(name) {
+            return Err(format!("duplicate asset store `{name}`"));
+        }
+        previous = Some(name);
     }
     Ok(())
 }

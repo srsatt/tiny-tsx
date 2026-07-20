@@ -62,7 +62,7 @@ pub(super) fn emit_handlers(assembly: &mut Emitter, program: &Program) -> Result
                     .map(expression_parameter_count)
                     .max()
                     .unwrap_or(0),
-                HandlerResponse::Html { .. } => 0,
+                HandlerResponse::Html { .. } | HandlerResponse::Asset { .. } => 0,
             };
             let existence = handler
                 .sqlite_existence
@@ -75,7 +75,7 @@ pub(super) fn emit_handlers(assembly: &mut Emitter, program: &Program) -> Result
                             .map(expression_parameter_count)
                             .max()
                             .unwrap_or(0),
-                        HandlerResponse::Html { .. } => 0,
+                        HandlerResponse::Html { .. } | HandlerResponse::Asset { .. } => 0,
                     })
                 })
                 .unwrap_or(0);
@@ -557,7 +557,7 @@ fn handler_response_frame_size(response: &HandlerResponse) -> Result<usize, Stri
             .map(|chunk| value_frame_size(HANDLER_SCRATCH_BASE, chunk))
             .collect::<Result<Vec<_>, _>>()
             .map(|sizes| sizes.into_iter().max().unwrap_or(HANDLER_SCRATCH_BASE)),
-        HandlerResponse::Html { .. } => Ok(HANDLER_SCRATCH_BASE),
+        HandlerResponse::Html { .. } | HandlerResponse::Asset { .. } => Ok(HANDLER_SCRATCH_BASE),
     }
 }
 

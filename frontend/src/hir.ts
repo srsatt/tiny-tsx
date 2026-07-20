@@ -90,6 +90,13 @@ export interface SqliteDatabase {
   readonly?: boolean;
 }
 
+export interface AssetStore {
+  id: number;
+  name: string;
+  index: string;
+  spaFallback: boolean;
+}
+
 export type ActorAction =
   | {kind: "tell"; actor: number; message?: number; jsonMessage?: number}
   | {kind: "stop"; actor: number};
@@ -325,6 +332,7 @@ export interface HirFunction {
 
 export type HandlerResponse =
   | {kind: "html"; component: number}
+  | {kind: "asset"; store: number}
   | {
       kind: "text";
       value: ValueExpression;
@@ -472,6 +480,7 @@ export interface HirProgram {
   supervisors: SupervisorModule[];
   actors: ActorModule[];
   sqliteDatabases: SqliteDatabase[];
+  assetStores: AssetStore[];
   handlers: Handler[];
   staticStrings: StaticString[];
   constants: Constant[];

@@ -124,6 +124,7 @@ function parseCompilation(args: string[]): {
   const defaultSdk = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../sdk/index.d.ts");
   const options = parseOptions(args.slice(1), new Set([
     "--sdk", "--alias", "--api", "--allow-env", "--allow-read", "--allow-write", "--binding",
+    "--asset",
   ]));
   if (options === undefined) {
     return;
@@ -132,7 +133,8 @@ function parseCompilation(args: string[]): {
   const aliases = parseAliases(options.values.get("--alias") ?? []);
   const apiAliases = parseAliases(options.values.get("--api") ?? []);
   const bindings = parseBindings(options.values.get("--binding") ?? []);
-  if (aliases === undefined || apiAliases === undefined || bindings === undefined) {
+  const assetBindings = parseAssetBindings(options.values.get("--asset") ?? []);
+  if (aliases === undefined || apiAliases === undefined || bindings === undefined || assetBindings === undefined) {
     return;
   }
   if ((options.values.get("--sdk")?.length ?? 0) > 1) {
@@ -151,8 +153,31 @@ function parseCompilation(args: string[]): {
       allowedWriteRoots: options.values.get("--allow-write") ?? [],
       sqliteKvBindings: bindings.sqliteKv,
       sqliteReadonlyBindings: bindings.sqliteReadonly,
+      assetBindings,
     },
   };
+}
+
+function parseAssetBindings(values: string[]): Set<string> | undefined {
+  const bindings = new Set<string>();
+  for (const value of values) {
+    const separator = value.indexOf("=");
+    const name = value.slice(0, separator);
+    const directory = value.slice(separator + 1);
+    if (
+      separator <= 0
+      || !/^[A-Za-z_][A-Za-z0-9_]{0,127}$/.test(name)
+      || directory.length === 0
+      || Buffer.byteLength(directory, "utf8") > 4096
+      || bindings.has(name)
+    ) {
+      process.stderr.write("error: --asset requires one unique <name>=<directory> value\n");
+      process.exitCode = 2;
+      return undefined;
+    }
+    bindings.add(name);
+  }
+  return bindings;
 }
 
 function parseBindings(values: string[]): {
@@ -249,6 +274,7 @@ function usage(): void {
     "usage: tinytsx-frontend <entry.tsx> [--sdk <index.d.ts>] [--alias <specifier>=<path>]..."
     + " [--api <specifier>=<api.d.ts>]... [--allow-env <name>]... [--allow-read <root>]... [--allow-write <root>]...\n"
     + "       bindings: [--binding <name>=sqlite-kv:<path>|sqlite-ro]...\n"
+    + "       assets: [--asset <name>=<directory>]...\n"
     + "       tinytsx-frontend --audit-compat <entry> [--alias <specifier>=<path>]...\n"
     + "       tinytsx-frontend --test262 <entry.js>\n"
     + "       tinytsx-frontend --wpt <entry.js>\n",

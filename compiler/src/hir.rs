@@ -21,6 +21,8 @@ pub struct Program {
     pub actors: Vec<ActorModule>,
     #[serde(default, rename = "sqliteDatabases")]
     pub sqlite_databases: Vec<SqliteDatabase>,
+    #[serde(default, rename = "assetStores")]
+    pub asset_stores: Vec<AssetStore>,
     pub handlers: Vec<Handler>,
     pub static_strings: Vec<StaticString>,
     #[serde(default)]
@@ -185,6 +187,15 @@ pub struct SqliteDatabase {
     pub binding: Option<String>,
     #[serde(default)]
     pub readonly: bool,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AssetStore {
+    pub id: usize,
+    pub name: String,
+    pub index: String,
+    pub spa_fallback: bool,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -356,6 +367,9 @@ pub struct GuardedResponse {
 pub enum HandlerResponse {
     Html {
         component: usize,
+    },
+    Asset {
+        store: usize,
     },
     Text {
         value: ValueExpression,
@@ -1249,6 +1263,26 @@ impl Program {
                 ));
             }
         }
+        for (index, store) in self.asset_stores.iter().enumerate() {
+            let valid_name = !store.name.is_empty()
+                && store.name.len() <= 128
+                && store.name.is_ascii()
+                && !store.name.as_bytes()[0].is_ascii_digit()
+                && store
+                    .name
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_');
+            let valid_index = !store.index.is_empty()
+                && store.index.len() <= 256
+                && !store.index.starts_with('/')
+                && store
+                    .index
+                    .split('/')
+                    .all(|part| !part.is_empty() && part != "." && part != "..");
+            if store.id != index || !valid_name || !valid_index {
+                return Err(format!("asset store {index} is outside the bounded contract"));
+            }
+        }
         for (index, constant) in self.constants.iter().enumerate() {
             if constant.id != index {
                 return Err(format!("constant id {} is not canonical", constant.id));
@@ -1821,6 +1855,9 @@ impl Program {
             HandlerResponse::Html { component } if *component >= self.components.len() => {
                 Err("GET handler references a missing component".to_owned())
             }
+            HandlerResponse::Asset { store } if *store >= self.asset_stores.len() => {
+                Err("handler references a missing asset store".to_owned())
+            }
             HandlerResponse::Text {
                 value,
                 status,
@@ -2344,7 +2381,7 @@ impl Program {
 
     fn response_may_throw(&self, response: &HandlerResponse, memo: &mut [Option<bool>]) -> bool {
         match response {
-            HandlerResponse::Html { .. } => false,
+            HandlerResponse::Html { .. } | HandlerResponse::Asset { .. } => false,
             HandlerResponse::Text { value, .. } => self.expression_may_throw(value, memo),
             HandlerResponse::Stream { chunks, .. } => chunks
                 .iter()
@@ -2477,7 +2514,7 @@ fn handler_responses(handler: &Handler) -> Vec<&HandlerResponse> {
 
 fn collect_request_json_response_fields(response: &HandlerResponse, output: &mut HashSet<usize>) {
     match response {
-        HandlerResponse::Html { .. } => {}
+        HandlerResponse::Html { .. } | HandlerResponse::Asset { .. } => {}
         HandlerResponse::Text { value, .. } => {
             collect_request_json_expression_fields(value, output);
         }
@@ -2599,7 +2636,7 @@ fn validate_request_id_response(
     request_id: Option<&RequestId>,
 ) -> Result<(), String> {
     match response {
-        HandlerResponse::Html { .. } => Ok(()),
+        HandlerResponse::Html { .. } | HandlerResponse::Asset { .. } => Ok(()),
         HandlerResponse::Text { value, .. } => {
             validate_request_id_expression(value, request_id.map(|config| config.header))
         }
@@ -2688,7 +2725,7 @@ fn validate_sqlite_result_response(
     actions: &[SqliteAction],
 ) -> Result<(), String> {
     match response {
-        HandlerResponse::Html { .. } => Ok(()),
+        HandlerResponse::Html { .. } | HandlerResponse::Asset { .. } => Ok(()),
         HandlerResponse::Text { value, .. } => validate_sqlite_result_expression(value, actions),
         HandlerResponse::Stream { chunks, .. } => chunks
             .iter()
@@ -2801,7 +2838,7 @@ fn validate_sqlite_result_expression(
 
 fn response_uses_openai(response: &HandlerResponse) -> bool {
     match response {
-        HandlerResponse::Html { .. } => false,
+        HandlerResponse::Html { .. } | HandlerResponse::Asset { .. } => false,
         HandlerResponse::Text { value, .. } => expression_uses_openai(value),
         HandlerResponse::Stream { chunks, .. } => chunks.iter().any(expression_uses_openai),
     }
@@ -2809,7 +2846,7 @@ fn response_uses_openai(response: &HandlerResponse) -> bool {
 
 fn response_uses_filesystem(response: &HandlerResponse) -> bool {
     match response {
-        HandlerResponse::Html { .. } => false,
+        HandlerResponse::Html { .. } | HandlerResponse::Asset { .. } => false,
         HandlerResponse::Text { value, .. } => expression_uses_filesystem(value),
         HandlerResponse::Stream { chunks, .. } => chunks.iter().any(expression_uses_filesystem),
     }
@@ -2870,7 +2907,7 @@ fn expression_uses_filesystem(expression: &ValueExpression) -> bool {
 
 fn collect_response_environment_ids(response: &HandlerResponse, ids: &mut BTreeSet<usize>) {
     match response {
-        HandlerResponse::Html { .. } => {}
+        HandlerResponse::Html { .. } | HandlerResponse::Asset { .. } => {}
         HandlerResponse::Text { value, .. } => collect_environment_ids(value, ids),
         HandlerResponse::Stream { chunks, .. } => {
             for chunk in chunks {
@@ -3012,7 +3049,7 @@ fn expression_uses_openai(expression: &ValueExpression) -> bool {
 
 fn response_uses_network(response: &HandlerResponse) -> bool {
     match response {
-        HandlerResponse::Html { .. } => false,
+        HandlerResponse::Html { .. } | HandlerResponse::Asset { .. } => false,
         HandlerResponse::Text { value, .. } => expression_uses_network(value),
         HandlerResponse::Stream { chunks, .. } => chunks.iter().any(expression_uses_network),
     }

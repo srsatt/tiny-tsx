@@ -24,6 +24,12 @@ pub(super) fn emit_handler_response(
             asm_line!(assembly, "    ldr x1, [sp, #16]");
             assembly.call(format_args!("tinytsx_component_{component}"));
         }
+        HandlerResponse::Asset { store } => {
+            asm_line!(assembly, "    ldr x0, [sp, #24]");
+            asm_line!(assembly, "    ldr x1, [sp, #16]");
+            emit_immediate(assembly, "x2", *store as u64);
+            assembly.call(format_args!("tinytsx_asset_fetch"));
+        }
         HandlerResponse::Text {
             value,
             status,

@@ -38,6 +38,7 @@ import {
   type ActorState,
   type SupervisorState,
   type DatabaseState,
+  type AssetStoreState,
   type SqliteParameter,
   type StreamState,
   valuesEqual,
@@ -171,6 +172,7 @@ export interface ApplicationInitializationEvaluation extends ConstructorEvaluati
   actors: ActorState[];
   supervisors: SupervisorState[];
   databases: DatabaseState[];
+  assetStores: AssetStoreState[];
 }
 
 interface Evaluator {
@@ -196,6 +198,8 @@ interface Evaluator {
   databases: Map<string, DatabaseState>;
   sqliteKvBindings: Readonly<Record<string, string>>;
   sqliteReadonlyBindings: ReadonlySet<string>;
+  assetBindings: ReadonlySet<string>;
+  assetStores: Map<string, AssetStoreState>;
 }
 
 interface MemorySiteState {
@@ -235,6 +239,7 @@ export function evaluateApplicationInitialization(
   application: ApplicationEntry,
   sqliteKvBindings: Readonly<Record<string, string>> = {},
   sqliteReadonlyBindings: ReadonlySet<string> = new Set(),
+  assetBindings: ReadonlySet<string> = new Set(),
 ): ApplicationInitializationEvaluation | undefined {
   const resolved = resolveApplicationRuntimeClass(graph, application);
   if (resolved === undefined) {
@@ -246,6 +251,7 @@ export function evaluateApplicationInitialization(
     resolved,
     sqliteKvBindings,
     sqliteReadonlyBindings,
+    assetBindings,
   );
   executeApplicationCalls(evaluator, application, instance);
   const installedErrorHandler = application.calls.some(call => call.method === "onError")
@@ -271,6 +277,7 @@ export function evaluateApplicationInitialization(
     actors: [...evaluator.actors.values()],
     supervisors: [...evaluator.supervisors.values()],
     databases: [...evaluator.databases.values()],
+    assetStores: [...evaluator.assetStores.values()],
   };
 }
 
@@ -305,6 +312,7 @@ function initializeConstructor(
   resolved: ResolvedRuntimeClass,
   sqliteKvBindings: Readonly<Record<string, string>> = {},
   sqliteReadonlyBindings: ReadonlySet<string> = new Set(),
+  assetBindings: ReadonlySet<string> = new Set(),
 ): {evaluator: Evaluator; instance: Value & {kind: "instance"}} {
   const evaluator: Evaluator = {
     graph,
@@ -326,6 +334,8 @@ function initializeConstructor(
     databases: new Map(),
     sqliteKvBindings,
     sqliteReadonlyBindings,
+    assetBindings,
+    assetStores: new Map(),
   };
   const instance: Value & {kind: "instance"} = {kind: "instance", fields: new Map()};
   evaluator.instanceClasses.set(instance, resolved);
@@ -1358,6 +1368,7 @@ function responseBodyUsesRequestId(body: ResponseBody): boolean {
       typeof chunk !== "string" && chunk.some(part => part.kind === "requestId")
     );
   }
+  if (body.kind === "asset") return false;
   return headerValueUsesRequestId(body.whenPresent)
     || headerValueUsesRequestId(body.whenAbsent);
 }
@@ -1391,6 +1402,7 @@ function bindResponseBodyRequestId(body: ResponseBody, headerName: string): Resp
         : bindRuntimePartsRequestId(chunk, headerName)),
     };
   }
+  if (body.kind === "asset") return body;
   return {
     ...body,
     whenPresent: bindHeaderValueRequestId(body.whenPresent, headerName),
@@ -2890,6 +2902,47 @@ function evaluateCall(
       }
       return {kind: "database", state};
     }
+    if (callable.kind === "reference" && isOpenAssetsBuiltin(callable)) {
+      const binding = arguments_[0];
+      const options = arguments_[1];
+      const fields = options?.kind === "record" ? options.fields : undefined;
+      const indexValue = fields?.get("index");
+      const fallbackValue = fields?.get("spaFallback");
+      const index = indexValue === undefined
+        ? "index.html"
+        : indexValue.kind === "string" ? indexValue.value : undefined;
+      const spaFallback = fallbackValue === undefined
+        ? false
+        : fallbackValue.kind === "boolean" ? fallbackValue.value : undefined;
+      if (
+        arguments_.length < 1
+        || arguments_.length > 2
+        || binding?.kind !== "string"
+        || !evaluator.assetBindings.has(binding.value)
+        || fields !== undefined && fields.size > 2
+        || index === undefined
+        || index.length === 0
+        || index.length > 256
+        || index.startsWith("/")
+        || index.split("/").some(part => part === "" || part === "." || part === "..")
+        || spaFallback === undefined
+      ) {
+        return unknown("embedded assets require one declared binding and bounded static options");
+      }
+      const key = `asset:${binding.value}:${index}:${spaFallback}`;
+      let state = evaluator.assetStores.get(key);
+      if (state === undefined) {
+        state = {
+          id: evaluator.assetStores.size,
+          key,
+          name: binding.value,
+          index,
+          spaFallback,
+        };
+        evaluator.assetStores.set(key, state);
+      }
+      return {kind: "assetStore", state};
+    }
     if (callable.kind === "reference" && isActorSuperviseBuiltin(callable)) {
       const options = arguments_[0];
       const fields = options?.kind === "record" ? options.fields : undefined;
@@ -3115,6 +3168,18 @@ function evaluateCall(
         sql: sql.value,
       });
       return UNDEFINED;
+    }
+    if (receiver.kind === "assetStore" && name === "fetch") {
+      const request = arguments_[0];
+      return arguments_.length === 1 && request?.kind === "request"
+        ? {
+          kind: "response",
+          body: {kind: "asset", store: receiver.state},
+          status: 200,
+          contentType: "",
+          headers: new Map(),
+        }
+        : unknown("AssetStore.fetch requires the current Web Request");
     }
     if (receiver.kind === "database" && name === "transaction") {
       if (receiver.state.readonly === true) {
@@ -3978,6 +4043,14 @@ function isReadonlySqliteBuiltin(value: Value & {kind: "reference"}): boolean {
     && ts.isFunctionDeclaration(declaration)
     && declaration.name?.text === "openReadonlyDatabase"
     && value.callable?.module.path.replaceAll("\\", "/").endsWith("/sdk/builtins/sqlite.ts") === true;
+}
+
+function isOpenAssetsBuiltin(value: Value & {kind: "reference"}): boolean {
+  const declaration = value.callable?.declaration;
+  return declaration !== undefined
+    && ts.isFunctionDeclaration(declaration)
+    && declaration.name?.text === "openAssets"
+    && value.callable?.module.path.replaceAll("\\", "/").endsWith("/sdk/builtins/assets.ts") === true;
 }
 
 function isActorSpawnBuiltin(value: Value & {kind: "reference"}): boolean {

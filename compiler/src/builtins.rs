@@ -108,6 +108,17 @@ fn manifest() -> Manifest {
                     ..empty_limits()
                 },
             },
+            Builtin {
+                specifier: "tinytsx:assets",
+                status: "native",
+                targets: TARGETS,
+                permissions: &["asset"],
+                limits: Limits {
+                    path_bytes: Some(4_096),
+                    value_bytes: Some(16_777_216),
+                    ..empty_limits()
+                },
+            },
         ],
     }
 }
@@ -146,6 +157,7 @@ mod tests {
                 "tinytsx:fs",
                 "tinytsx:sqlite",
                 "tinytsx:actors",
+                "tinytsx:assets",
             ]
         );
         assert_eq!(manifest().builtins[1].status, "native");
@@ -168,5 +180,6 @@ mod tests {
         );
         assert_eq!(manifest().builtins[4].limits.root_supervisors, Some(8));
         assert_eq!(manifest().builtins[4].limits.supervisor_children, Some(16));
+        assert_eq!(manifest().builtins[5].status, "native");
     }
 }
