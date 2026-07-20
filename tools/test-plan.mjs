@@ -110,6 +110,7 @@ export const tasks = [
     id: "test:workspace",
     dependencies: frontend,
     resources: ["cargo-workspace-target"],
+    timeoutMs: 20 * 60_000,
     commands: [{
       ...command("cargo", "test", "--workspace"),
       env: {CARGO_TARGET_DIR: ".tinytsx/cache/test-runner/workspace-target"},

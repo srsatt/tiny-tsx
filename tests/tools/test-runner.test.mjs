@@ -5,6 +5,7 @@ import {
   selectTaskIds,
   validateTasks,
 } from "../../tools/test-runner-lib.mjs";
+import {tasks as releaseTasks} from "../../tools/test-plan.mjs";
 
 const command = {command: "node", args: ["--version"]};
 
@@ -91,4 +92,9 @@ test("rejects duplicate ids, missing dependencies, and cycles", () => {
     ]),
     /dependency cycle/,
   );
+});
+
+test("allows the complete workspace suite to finish on slower native runners", () => {
+  const workspace = releaseTasks.find(task => task.id === "test:workspace");
+  assert.equal(workspace.timeoutMs, 20 * 60_000);
 });

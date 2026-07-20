@@ -4,10 +4,11 @@ import os from "node:os";
 import path from "node:path";
 import {spawn} from "node:child_process";
 import test from "node:test";
-import {availablePort, stopChild, waitForBody, waitForOutput} from "./helpers.mjs";
+import {availablePort, positiveMilliseconds, stopChild, waitForBody, waitForOutput} from "./helpers.mjs";
 
 const root = path.resolve(import.meta.dirname, "../..");
 const compiler = path.join(root, "target/debug/tinytsx");
+const reloadThresholdMs = positiveMilliseconds(process.env.TINYTSX_DEV_RELOAD_THRESHOLD_MS, 1_500);
 
 test("dev replaces the running server after a dependency changes", async context => {
   const project = await mkdtemp(path.join(os.tmpdir(), "tinytsx-dev-"));
@@ -45,7 +46,7 @@ test("dev replaces the running server after a dependency changes", async context
   await writeFile(message, 'export const MESSAGE = "second";\n');
   assert.equal(await waitForBody(port, "second", child, () => output), "second");
   const reloadMs = Date.now() - changedAt;
-  assert.ok(reloadMs <= 1_500, `warm reload took ${reloadMs}ms\n${output}`);
+  assert.ok(reloadMs <= reloadThresholdMs, `warm reload took ${reloadMs}ms (limit ${reloadThresholdMs}ms)\n${output}`);
 
   const failureOffset = output.length;
   await writeFile(entry, [

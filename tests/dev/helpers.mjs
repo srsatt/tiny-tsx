@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import net from "node:net";
 
+const waitTimeoutMs = positiveMilliseconds(process.env.TINYTSX_DEV_TEST_TIMEOUT_MS, 20_000);
+
 export async function availablePort() {
   const server = net.createServer();
   await new Promise((resolve, reject) => {
@@ -13,7 +15,7 @@ export async function availablePort() {
 }
 
 export async function waitForBody(port, expected, child, getOutput) {
-  const deadline = Date.now() + 20_000;
+  const deadline = Date.now() + waitTimeoutMs;
   let lastError;
   while (Date.now() < deadline) {
     if (child.exitCode !== null) {
@@ -32,7 +34,7 @@ export async function waitForBody(port, expected, child, getOutput) {
 }
 
 export async function waitForOutput(expected, child, getOutput) {
-  const deadline = Date.now() + 20_000;
+  const deadline = Date.now() + waitTimeoutMs;
   while (Date.now() < deadline) {
     if (child.exitCode !== null) {
       assert.fail(`dev process exited with ${child.exitCode}\n${getOutput()}`);
@@ -49,4 +51,10 @@ export async function stopChild(child) {
     new Promise(resolve => child.once("exit", resolve)),
     new Promise(resolve => setTimeout(resolve, 2_000)),
   ]);
+}
+
+export function positiveMilliseconds(value, fallback) {
+  if (value === undefined || value === "") return fallback;
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
