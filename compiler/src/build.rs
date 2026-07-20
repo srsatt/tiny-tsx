@@ -39,6 +39,7 @@ pub struct Options {
 pub struct Output {
     pub executable: PathBuf,
     pub dependencies: Vec<PathBuf>,
+    pub port: u16,
 }
 
 #[derive(Serialize)]
@@ -177,6 +178,7 @@ pub fn execute_compilation(
             .iter()
             .map(|module| PathBuf::from(&module.path))
             .collect(),
+        port,
     })
 }
 

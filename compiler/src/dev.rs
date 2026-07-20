@@ -1,9 +1,13 @@
 use std::{
     collections::BTreeMap,
     fs,
+    io::{BufRead, BufReader},
     path::{Path, PathBuf},
-    process::{Child, Command},
-    sync::atomic::{AtomicBool, Ordering},
+    process::{Child, Command, Stdio},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc,
+    },
     thread,
     time::{Duration, SystemTime},
 };
@@ -18,6 +22,13 @@ static SHUTDOWN_REQUESTED: AtomicBool = AtomicBool::new(false);
 struct FileVersion {
     modified: Option<SystemTime>,
     len: u64,
+}
+
+struct RunningGeneration {
+    child: Child,
+    executable: PathBuf,
+    port: u16,
+    number: u64,
 }
 
 pub fn execute(options: build::Options, restart_timeout: Duration) -> Result<(), String> {
@@ -35,14 +46,18 @@ pub fn execute(options: build::Options, restart_timeout: Duration) -> Result<(),
         &options.allowed_read_roots,
         &options.allowed_write_roots,
     )?;
-    let (mut child, mut watched) =
+    let (mut running, mut watched) =
         build_and_start(&options, &base_output, generation, frontend.compile()?)?;
     println!("TinyTSX dev: watching {} source file(s)", watched.len());
 
     while !SHUTDOWN_REQUESTED.load(Ordering::Acquire) {
         thread::sleep(POLL_INTERVAL);
         if !changed(&watched) {
-            if let Some(status) = child.try_wait().map_err(|error| error.to_string())? {
+            if let Some(status) = running
+                .child
+                .try_wait()
+                .map_err(|error| error.to_string())?
+            {
                 return Err(format!("development server exited with {status}"));
             }
             continue;
@@ -58,10 +73,26 @@ pub fn execute(options: build::Options, restart_timeout: Duration) -> Result<(),
             .and_then(|compilation| build::execute_compilation(&candidate_options, compilation))
         {
             Ok(output) => {
-                terminate(&mut child, restart_timeout)?;
-                child = start(&output.executable)?;
+                let fallback_executable = running.executable.clone();
+                let fallback_port = running.port;
+                let fallback_number = running.number;
+                terminate(&mut running.child, restart_timeout)?;
+                running = match start_ready(&output.executable, output.port, generation) {
+                    Ok(candidate) => candidate,
+                    Err(error) => {
+                        eprintln!("TinyTSX dev: candidate generation {generation} failed: {error}");
+                        let restored =
+                            start_ready(&fallback_executable, fallback_port, fallback_number)?;
+                        eprintln!(
+                            "TinyTSX dev: candidate failed; restored generation {fallback_number}"
+                        );
+                        restored
+                    }
+                };
                 watched = versions(&output.dependencies);
-                println!("TinyTSX dev: generation {generation} started");
+                if running.number == generation {
+                    println!("TinyTSX dev: generation {generation} started");
+                }
             }
             Err(error) => {
                 eprintln!("{error}");
@@ -73,7 +104,7 @@ pub fn execute(options: build::Options, restart_timeout: Duration) -> Result<(),
         }
     }
 
-    terminate(&mut child, restart_timeout)
+    terminate(&mut running.child, restart_timeout)
 }
 
 fn build_and_start(
@@ -81,18 +112,58 @@ fn build_and_start(
     base_output: &Path,
     generation: u64,
     compilation: frontend::Compilation,
-) -> Result<(Child, BTreeMap<PathBuf, FileVersion>), String> {
+) -> Result<(RunningGeneration, BTreeMap<PathBuf, FileVersion>), String> {
     let mut candidate_options = options.clone();
     candidate_options.output = generation_output(base_output, generation);
     let output = build::execute_compilation(&candidate_options, compilation)?;
-    let child = start(&output.executable)?;
-    Ok((child, versions(&output.dependencies)))
+    let running = start_ready(&output.executable, output.port, generation)?;
+    Ok((running, versions(&output.dependencies)))
 }
 
-fn start(executable: &Path) -> Result<Child, String> {
-    Command::new(executable)
+fn start_ready(executable: &Path, port: u16, generation: u64) -> Result<RunningGeneration, String> {
+    let mut child = Command::new(executable)
+        .stdout(Stdio::piped())
         .spawn()
-        .map_err(|error| format!("could not start {}: {error}", executable.display()))
+        .map_err(|error| format!("could not start {}: {error}", executable.display()))?;
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| "development server has no stdout pipe".to_owned())?;
+    let (ready_sender, ready_receiver) = mpsc::sync_channel(1);
+    thread::spawn(move || {
+        let mut ready_sender = Some(ready_sender);
+        for line in BufReader::new(stdout).lines() {
+            let Ok(line) = line else { break };
+            println!("[dev:{generation}] {line}");
+            if line.starts_with("TinyTSX listening on ") {
+                if let Some(sender) = ready_sender.take() {
+                    let _ = sender.send(());
+                }
+            }
+        }
+    });
+
+    let deadline = std::time::Instant::now() + Duration::from_secs(2);
+    while std::time::Instant::now() < deadline {
+        if ready_receiver.try_recv().is_ok() {
+            return Ok(RunningGeneration {
+                child,
+                executable: executable.to_owned(),
+                port,
+                number: generation,
+            });
+        }
+        if let Some(status) = child.try_wait().map_err(|error| error.to_string())? {
+            return Err(format!("{} exited with {status}", executable.display()));
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+    let _ = child.kill();
+    let _ = child.wait();
+    Err(format!(
+        "{} did not report listener readiness within 2000ms",
+        executable.display()
+    ))
 }
 
 fn terminate(child: &mut Child, timeout: Duration) -> Result<(), String> {
