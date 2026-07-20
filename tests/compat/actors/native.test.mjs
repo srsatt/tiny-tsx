@@ -19,7 +19,7 @@ const multiEntry = path.join(repository, "benchmarks/tiny/hono-actor-multi.ts");
 test("serves a local counter actor with ordered ask, tell, and idempotent stop", async context => {
   const directory = mkdtempSync(path.join(tmpdir(), "tinytsx-actors-native-"));
   const binary = path.join(directory, "server");
-  const port = 39_464;
+  const port = await availablePort();
   context.after(() => rmSync(directory, {recursive: true, force: true}));
 
   const result = build(binary, port);
@@ -29,7 +29,7 @@ test("serves a local counter actor with ordered ask, tell, and idempotent stop",
   assert.ok(report.runtimeFeatures.includes("bounded-local-actors"));
 
   const server = spawn(binary, [], {stdio: ["ignore", "pipe", "pipe"]});
-  context.after(() => server.kill("SIGTERM"));
+  context.after(() => stopProcess(server));
   await waitForServer(port, server);
 
   await assertResponse(port, "/", 200, "0");
@@ -61,7 +61,7 @@ test("assembles the actor tracer for Linux arm64", () => {
 test("retains a SQLite-backed counter across process restart", async context => {
   const directory = mkdtempSync(path.join(tmpdir(), "tinytsx-actors-persistent-"));
   const binary = path.join(directory, "server");
-  const port = 39_467;
+  const port = await availablePort();
   context.after(() => rmSync(directory, {recursive: true, force: true}));
 
   const result = buildPersistent(binary, port, directory);
@@ -79,7 +79,7 @@ test("retains a SQLite-backed counter across process restart", async context => 
   await new Promise(resolve => first.once("exit", resolve));
 
   const second = spawn(binary, [], {stdio: ["ignore", "pipe", "pipe"]});
-  context.after(() => second.kill("SIGTERM"));
+  context.after(() => stopProcess(second));
   await waitForServer(port, second);
   await assertResponse(port, "/", 200, "2");
   await assertResponse(port, "/increment", 200, "3");
@@ -127,7 +127,7 @@ test("assembles the persistent actor tracer for Linux arm64", () => {
 test("copies bounded primitive array and record actor messages", async context => {
   const directory = mkdtempSync(path.join(tmpdir(), "tinytsx-actor-messages-"));
   const binary = path.join(directory, "server");
-  const port = 39_491;
+  const port = await availablePort();
   context.after(() => rmSync(directory, {recursive: true, force: true}));
 
   const result = buildMessages(binary, port);
@@ -136,7 +136,7 @@ test("copies bounded primitive array and record actor messages", async context =
   assert.equal(report.actors, 3);
 
   const server = spawn(binary, [], {stdio: ["ignore", "pipe", "pipe"]});
-  context.after(() => server.kill("SIGTERM"));
+  context.after(() => stopProcess(server));
   await waitForServer(port, server, "/primitive");
   await assertResponse(port, "/primitive", 200, '"ready"');
   await assertResponse(port, "/array", 200, '["ready","warm"]');
@@ -163,7 +163,7 @@ test("assembles bounded actor messages for Linux arm64", () => {
 test("restarts a fallible counter within a bounded intensity window", async context => {
   const directory = mkdtempSync(path.join(tmpdir(), "tinytsx-actor-restart-"));
   const binary = path.join(directory, "server");
-  const port = 39_493;
+  const port = await availablePort();
   context.after(() => rmSync(directory, {recursive: true, force: true}));
 
   const result = buildRestart(binary, port);
@@ -172,7 +172,7 @@ test("restarts a fallible counter within a bounded intensity window", async cont
   assert.equal(report.actors, 1);
 
   const server = spawn(binary, [], {stdio: ["ignore", "pipe", "pipe"]});
-  context.after(() => server.kill("SIGTERM"));
+  context.after(() => stopProcess(server));
   await waitForServer(port, server);
   await assertResponse(port, "/", 200, "0");
   await assertResponse(port, "/increment", 200, "1");
@@ -204,7 +204,7 @@ test("assembles the fallible actor restart policy for Linux arm64", () => {
 test("supervises two fallible counters with one shared root intensity", async context => {
   const directory = mkdtempSync(path.join(tmpdir(), "tinytsx-actor-supervision-"));
   const binary = path.join(directory, "server");
-  const port = 39_500;
+  const port = await availablePort();
   context.after(() => rmSync(directory, {recursive: true, force: true}));
 
   const result = buildSupervision(binary, port);
@@ -215,7 +215,7 @@ test("supervises two fallible counters with one shared root intensity", async co
   assert.ok(report.runtimeFeatures.includes("bounded-one-for-one-supervision"));
 
   const server = spawn(binary, [], {stdio: ["ignore", "pipe", "pipe"]});
-  context.after(() => server.kill("SIGTERM"));
+  context.after(() => stopProcess(server));
   await waitForServer(port, server, "/supervision/outside/read");
 
   await assertResponse(port, "/supervision/left/add", 200, "15");
@@ -258,7 +258,7 @@ test("assembles the root supervisor ABI for Linux arm64", () => {
 test("keeps eight native counter actors isolated under concurrent mutation", async context => {
   const directory = mkdtempSync(path.join(tmpdir(), "tinytsx-actor-multi-"));
   const binary = path.join(directory, "server");
-  const port = 39_495;
+  const port = await availablePort();
   context.after(() => rmSync(directory, {recursive: true, force: true}));
 
   const result = buildMulti(binary, port);
@@ -267,7 +267,7 @@ test("keeps eight native counter actors isolated under concurrent mutation", asy
   assert.equal(report.actors, 8);
 
   const server = spawn(binary, [], {stdio: ["ignore", "pipe", "pipe"]});
-  context.after(() => server.kill("SIGTERM"));
+  context.after(() => stopProcess(server));
   await waitForServer(port, server, "/actor/0/read");
   for (let index = 0; index < 8; index++) {
     await assertResponse(port, `/actor/${index}/read`, 200, "0");
@@ -426,4 +426,29 @@ async function waitForServer(port, server, pathname = "/") {
     }
   }
   throw new Error("native actor server did not start");
+}
+
+async function availablePort() {
+  const server = net.createServer();
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address();
+  assert.ok(address !== null && typeof address === "object");
+  const port = address.port;
+  server.close();
+  await once(server, "close");
+  return port;
+}
+
+async function stopProcess(process) {
+  if (process.exitCode !== null) return;
+  process.kill("SIGTERM");
+  await Promise.race([
+    once(process, "exit"),
+    new Promise(resolve => setTimeout(resolve, 2_000)),
+  ]);
+  if (process.exitCode === null) {
+    process.kill("SIGKILL");
+    await once(process, "exit");
+  }
 }
