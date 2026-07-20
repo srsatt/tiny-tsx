@@ -1,6 +1,6 @@
 {
   "name": "eslint-plugin-tinytsx",
-  "version": "0.1.0-alpha.1",
+  "version": "0.1.0-beta.1",
   "description": "ESLint rules for TinyTSX's ahead-of-time TypeScript and TSX syntax boundary",
   "license": "MIT",
   "author": "srsatt <srsatt@gmail.com>",

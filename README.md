@@ -61,12 +61,12 @@ engine.
 
 ## Project status
 
-The current source version is `0.1.0-alpha.1`. Clean Apple ARM64 and native
-Linux ARM64 release verification has passed for the implemented alpha
-contract. The repository history was subsequently rewritten to replace the
-author identity, so fresh same-commit archives and manifests must be generated
-before publishing a Git tag or release assets. No release has been published
-yet; [`doc/RELEASE_CHECKLIST.md`](doc/RELEASE_CHECKLIST.md) tracks that gate.
+The current source version is `0.1.0-beta.1`. The beta compiler and separate
+Hono/Vite air-quality proof pass their Apple ARM64 functional and performance
+gates. Fresh same-commit archives are still required on all four native targets,
+and Raspberry Pi deployment remains open before publishing a Git tag or release
+assets. No beta release has been published; [`doc/RELEASE_CHECKLIST.md`](doc/RELEASE_CHECKLIST.md)
+tracks that gate.
 
 The executable compatibility matrix currently includes:
 

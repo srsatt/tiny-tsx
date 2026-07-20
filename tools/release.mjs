@@ -5,7 +5,7 @@ import {spawn, spawnSync} from "node:child_process";
 import {fileURLToPath} from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const version = "0.1.0-alpha.1";
+const version = "0.1.0-beta.1";
 const target = new Map([
   ["darwin/arm64", "aarch64-apple-darwin"],
   ["darwin/x64", "x86_64-apple-darwin"],

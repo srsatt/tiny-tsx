@@ -1,4 +1,4 @@
-name: alpha release
+name: beta release
 
 on:
   pull_request:
@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: alpha-release-${{ github.ref }}
+  group: beta-release-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -42,25 +42,25 @@ jobs:
         run: npm ci --prefix frontend
       - name: Install example dependencies
         run: npm ci --prefix examples
-      - name: Verify native alpha archive
+      - name: Verify native beta archive
         run: npm run release:verify
       - name: Check artifact target
         shell: bash
         run: |
-          base="dist/release/tinytsx-0.1.0-alpha.1-${{ matrix.target }}"
+          base="dist/release/tinytsx-0.1.0-beta.1-${{ matrix.target }}"
           test -f "$base.tar.gz"
           jq -e --arg target "${{ matrix.target }}" --arg commit "$GITHUB_SHA" '
             .schemaVersion == 2 and
-            .version == "0.1.0-alpha.1" and
+            .version == "0.1.0-beta.1" and
             .target == $target and
             .source.commit == $commit and
             .source.dirty == false
           ' "$base.manifest.json"
       - uses: actions/upload-artifact@v4
         with:
-          name: tinytsx-0.1.0-alpha.1-${{ matrix.target }}
+          name: tinytsx-0.1.0-beta.1-${{ matrix.target }}
           path: |
-            dist/release/tinytsx-0.1.0-alpha.1-${{ matrix.target }}.tar.gz
-            dist/release/tinytsx-0.1.0-alpha.1-${{ matrix.target }}.tar.gz.sha256
-            dist/release/tinytsx-0.1.0-alpha.1-${{ matrix.target }}.manifest.json
+            dist/release/tinytsx-0.1.0-beta.1-${{ matrix.target }}.tar.gz
+            dist/release/tinytsx-0.1.0-beta.1-${{ matrix.target }}.tar.gz.sha256
+            dist/release/tinytsx-0.1.0-beta.1-${{ matrix.target }}.manifest.json
           if-no-files-found: error
