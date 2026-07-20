@@ -53,6 +53,7 @@ export interface CompileOptions {
   allowedReadRoots?: readonly string[];
   allowedWriteRoots?: readonly string[];
   sqliteKvBindings?: Readonly<Record<string, string>>;
+  sqliteReadonlyBindings?: ReadonlySet<string>;
 }
 
 export interface CompileSession {
@@ -130,6 +131,7 @@ export function compileEntry(
     options.allowedEnvironment ?? new Set(),
     options.allowedReadRoots ?? [],
     options.allowedWriteRoots ?? [],
+    options.sqliteReadonlyBindings ?? new Set(),
   );
   const entryDiagnostics = ts.getPreEmitDiagnostics(program, sourceFile)
     .filter(diagnostic => !isResponseIntrinsicDiagnostic(diagnostic));
@@ -155,6 +157,7 @@ export function compileEntry(
         graph,
         application,
         options.sqliteKvBindings,
+        options.sqliteReadonlyBindings,
       );
       if (initialization !== undefined && initialization.issues.length === 0) {
         const lowered = lowerApplicationInitialization(
@@ -553,7 +556,9 @@ function lowerApplicationInitialization(
     })),
     sqliteDatabases: initialization.databases.map(database => ({
       id: database.id,
-      path: database.path,
+      ...(database.path === undefined ? {} : {path: database.path}),
+      ...(database.binding === undefined ? {} : {binding: database.binding}),
+      ...(database.readonly === true ? {readonly: true} : {}),
     })),
     handlers,
     staticStrings: strings.values,
@@ -1077,6 +1082,19 @@ function validateLoweredSqliteCapabilities(
   sourceFile: ts.SourceFile,
 ): void {
   for (const database of program.sqliteDatabases) {
+    if (database.readonly === true) {
+      if (database.binding === undefined || database.path !== undefined) {
+        throw tinyError(
+          "TINY1513",
+          "read-only SQLite databases require one deploy-time binding",
+          sourceFile,
+        );
+      }
+      continue;
+    }
+    if (database.path === undefined) {
+      throw tinyError("TINY1510", "SQLite database path is missing", sourceFile);
+    }
     if (database.path === ":memory:") continue;
     const portable = database.path.length > 0
       && database.path.length <= 4096

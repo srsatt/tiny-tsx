@@ -195,6 +195,7 @@ interface Evaluator {
   }>;
   databases: Map<string, DatabaseState>;
   sqliteKvBindings: Readonly<Record<string, string>>;
+  sqliteReadonlyBindings: ReadonlySet<string>;
 }
 
 interface MemorySiteState {
@@ -233,12 +234,19 @@ export function evaluateApplicationInitialization(
   graph: ModuleGraph,
   application: ApplicationEntry,
   sqliteKvBindings: Readonly<Record<string, string>> = {},
+  sqliteReadonlyBindings: ReadonlySet<string> = new Set(),
 ): ApplicationInitializationEvaluation | undefined {
   const resolved = resolveApplicationRuntimeClass(graph, application);
   if (resolved === undefined) {
     return undefined;
   }
-  const {evaluator, instance} = initializeConstructor(graph, application, resolved, sqliteKvBindings);
+  const {evaluator, instance} = initializeConstructor(
+    graph,
+    application,
+    resolved,
+    sqliteKvBindings,
+    sqliteReadonlyBindings,
+  );
   executeApplicationCalls(evaluator, application, instance);
   const installedErrorHandler = application.calls.some(call => call.method === "onError")
     ? instance.fields.get("errorHandler")
@@ -296,6 +304,7 @@ function initializeConstructor(
   application: ApplicationEntry,
   resolved: ResolvedRuntimeClass,
   sqliteKvBindings: Readonly<Record<string, string>> = {},
+  sqliteReadonlyBindings: ReadonlySet<string> = new Set(),
 ): {evaluator: Evaluator; instance: Value & {kind: "instance"}} {
   const evaluator: Evaluator = {
     graph,
@@ -316,6 +325,7 @@ function initializeConstructor(
     sqliteExistence: new WeakMap(),
     databases: new Map(),
     sqliteKvBindings,
+    sqliteReadonlyBindings,
   };
   const instance: Value & {kind: "instance"} = {kind: "instance", fields: new Map()};
   evaluator.instanceClasses.set(instance, resolved);
@@ -2858,6 +2868,28 @@ function evaluateCall(
         }
         : unknown("filesystem read requires a closed path and maxBytes");
     }
+    if (callable.kind === "reference" && isReadonlySqliteBuiltin(callable)) {
+      const binding = arguments_[0];
+      if (
+        arguments_.length !== 1
+        || binding?.kind !== "string"
+        || !evaluator.sqliteReadonlyBindings.has(binding.value)
+      ) {
+        return unknown("read-only SQLite requires one declared binding name");
+      }
+      const key = `sqlite-ro:${binding.value}`;
+      let state = evaluator.databases.get(key);
+      if (state === undefined) {
+        state = {
+          id: evaluator.databases.size,
+          key,
+          binding: binding.value,
+          readonly: true,
+        };
+        evaluator.databases.set(key, state);
+      }
+      return {kind: "database", state};
+    }
     if (callable.kind === "reference" && isActorSuperviseBuiltin(callable)) {
       const options = arguments_[0];
       const fields = options?.kind === "record" ? options.fields : undefined;
@@ -3070,6 +3102,9 @@ function evaluateCall(
       return unknown(`Map.${name} is outside the bounded local Map subset`);
     }
     if (receiver.kind === "database" && name === "exec") {
+      if (receiver.state.readonly === true) {
+        return unknown("read-only SQLite databases do not support exec");
+      }
       const sql = arguments_[0];
       if (arguments_.length !== 1 || sql?.kind !== "string" || Buffer.byteLength(sql.value, "utf8") > 65_536) {
         return unknown("Database.exec requires one closed SQL string up to 65536 bytes");
@@ -3082,6 +3117,9 @@ function evaluateCall(
       return UNDEFINED;
     }
     if (receiver.kind === "database" && name === "transaction") {
+      if (receiver.state.readonly === true) {
+        return unknown("read-only SQLite databases do not support transaction");
+      }
       const transaction = arguments_[0];
       if (arguments_.length !== 1 || transaction === undefined) {
         return unknown("Database.transaction requires one closed SQL string or bounded async callback");
@@ -3159,6 +3197,9 @@ function evaluateCall(
       };
     }
     if (receiver.kind === "statement" && name === "run") {
+      if (receiver.state.database.readonly === true) {
+        return unknown("read-only SQLite statements do not support run");
+      }
       const parameters = sqliteParameters(arguments_);
       if (parameters === undefined) {
         return unknown("Statement.run accepts up to 16 bounded SQLite values");
@@ -3929,6 +3970,14 @@ function isFilesystemBuiltin(value: Value & {kind: "reference"}): boolean {
     && ts.isFunctionDeclaration(declaration)
     && declaration.name?.text === "readTextFile"
     && value.callable?.module.path.replaceAll("\\", "/").endsWith("/sdk/builtins/fs.ts") === true;
+}
+
+function isReadonlySqliteBuiltin(value: Value & {kind: "reference"}): boolean {
+  const declaration = value.callable?.declaration;
+  return declaration !== undefined
+    && ts.isFunctionDeclaration(declaration)
+    && declaration.name?.text === "openReadonlyDatabase"
+    && value.callable?.module.path.replaceAll("\\", "/").endsWith("/sdk/builtins/sqlite.ts") === true;
 }
 
 function isActorSpawnBuiltin(value: Value & {kind: "reference"}): boolean {

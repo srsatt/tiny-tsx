@@ -179,7 +179,12 @@ pub enum ActorAction {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct SqliteDatabase {
     pub id: usize,
-    pub path: String,
+    #[serde(default)]
+    pub path: Option<String>,
+    #[serde(default)]
+    pub binding: Option<String>,
+    #[serde(default)]
+    pub readonly: bool,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -1222,12 +1227,25 @@ impl Program {
                     database.id
                 ));
             }
-            if database.path.is_empty()
-                || database.path.len() > 4096
-                || database.path.contains('\0')
-            {
+            let valid_static = !database.readonly
+                && database.binding.is_none()
+                && database.path.as_ref().is_some_and(|path| {
+                    !path.is_empty() && path.len() <= 4096 && !path.contains('\0')
+                });
+            let valid_readonly = database.readonly
+                && database.path.is_none()
+                && database.binding.as_ref().is_some_and(|binding| {
+                    !binding.is_empty()
+                        && binding.len() <= 128
+                        && binding.is_ascii()
+                        && !binding.as_bytes()[0].is_ascii_digit()
+                        && binding
+                            .bytes()
+                            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+                });
+            if !valid_static && !valid_readonly {
                 return Err(format!(
-                    "SQLite database {index} path is outside the bounded contract"
+                    "SQLite database {index} configuration is outside the bounded contract"
                 ));
             }
         }
@@ -2066,7 +2084,9 @@ impl Program {
                             return Err("TODO store user references a missing string".to_owned());
                         };
                         if user.value.is_empty() || user.value.len() > 1024 {
-                            return Err("TODO store user is outside the bounded contract".to_owned());
+                            return Err(
+                                "TODO store user is outside the bounded contract".to_owned()
+                            );
                         }
                     }
                     TodoUser::RequestCookie { cookie } => {
@@ -2074,7 +2094,9 @@ impl Program {
                             return Err("TODO store cookie references a missing string".to_owned());
                         };
                         if cookie.value.is_empty() || cookie.value.len() > 128 {
-                            return Err("TODO store cookie is outside the bounded contract".to_owned());
+                            return Err(
+                                "TODO store cookie is outside the bounded contract".to_owned()
+                            );
                         }
                     }
                 }
@@ -2085,7 +2107,9 @@ impl Program {
                             return Err("TODO add references a missing JSON field".to_owned());
                         };
                         if !valid_request_json_path(&field.value) {
-                            return Err("TODO add JSON field is outside the native limit".to_owned());
+                            return Err(
+                                "TODO add JSON field is outside the native limit".to_owned()
+                            );
                         }
                     }
                     (
@@ -2096,7 +2120,11 @@ impl Program {
                             .split('/')
                             .filter(|part| !part.is_empty())
                             .collect::<Vec<_>>();
-                        if segments.get(*segment).and_then(|part| route_parameter_name(part)).is_none() {
+                        if segments
+                            .get(*segment)
+                            .and_then(|part| route_parameter_name(part))
+                            .is_none()
+                        {
                             return Err("TODO mutation route parameter is missing".to_owned());
                         }
                     }

@@ -85,7 +85,9 @@ export interface SupervisorModule {
 
 export interface SqliteDatabase {
   id: number;
-  path: string;
+  path?: string;
+  binding?: string;
+  readonly?: boolean;
 }
 
 export type ActorAction =

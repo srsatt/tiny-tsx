@@ -82,7 +82,7 @@ fn manifest() -> Manifest {
                 specifier: "tinytsx:sqlite",
                 status: "native",
                 targets: TARGETS,
-                permissions: &["allow-read", "allow-write"],
+                permissions: &["allow-read", "allow-write", "binding:sqlite-ro"],
                 limits: Limits {
                     path_bytes: Some(4_096),
                     value_bytes: Some(1_048_576),

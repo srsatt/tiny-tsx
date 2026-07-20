@@ -32,7 +32,11 @@ struct RunningGeneration {
     startup: Duration,
 }
 
-pub fn execute(options: build::Options, restart_timeout: Duration) -> Result<(), String> {
+pub fn execute(
+    options: build::Options,
+    restart_timeout: Duration,
+    runtime_bindings: Vec<String>,
+) -> Result<(), String> {
     install_signal_handlers()?;
     let base_output = absolute(&options.output)?;
     let mut options = options;
@@ -47,8 +51,13 @@ pub fn execute(options: build::Options, restart_timeout: Duration) -> Result<(),
         &options.allowed_read_roots,
         &options.allowed_write_roots,
     )?;
-    let (mut running, mut watched) =
-        build_and_start(&options, &base_output, generation, frontend.compile()?)?;
+    let (mut running, mut watched) = build_and_start(
+        &options,
+        &base_output,
+        generation,
+        frontend.compile()?,
+        &runtime_bindings,
+    )?;
     println!("TinyTSX dev: watching {} source file(s)", watched.len());
 
     while !SHUTDOWN_REQUESTED.load(Ordering::Acquire) {
@@ -83,12 +92,21 @@ pub fn execute(options: build::Options, restart_timeout: Duration) -> Result<(),
                 let shutdown_started = Instant::now();
                 terminate(&mut running.child, restart_timeout)?;
                 let shutdown_duration = shutdown_started.elapsed();
-                running = match start_ready(&output.executable, output.port, generation) {
+                running = match start_ready(
+                    &output.executable,
+                    output.port,
+                    generation,
+                    &runtime_bindings,
+                ) {
                     Ok(candidate) => candidate,
                     Err(error) => {
                         eprintln!("TinyTSX dev: candidate generation {generation} failed: {error}");
-                        let restored =
-                            start_ready(&fallback_executable, fallback_port, fallback_number)?;
+                        let restored = start_ready(
+                            &fallback_executable,
+                            fallback_port,
+                            fallback_number,
+                            &runtime_bindings,
+                        )?;
                         eprintln!(
                             "TinyTSX dev: candidate failed; restored generation {fallback_number}"
                         );
@@ -128,17 +146,32 @@ fn build_and_start(
     base_output: &Path,
     generation: u64,
     compilation: frontend::Compilation,
+    runtime_bindings: &[String],
 ) -> Result<(RunningGeneration, BTreeMap<PathBuf, FileVersion>), String> {
     let mut candidate_options = options.clone();
     candidate_options.output = generation_output(base_output, generation);
     let output = build::execute_compilation(&candidate_options, compilation)?;
-    let running = start_ready(&output.executable, output.port, generation)?;
+    let running = start_ready(
+        &output.executable,
+        output.port,
+        generation,
+        runtime_bindings,
+    )?;
     Ok((running, versions(&output.dependencies)))
 }
 
-fn start_ready(executable: &Path, port: u16, generation: u64) -> Result<RunningGeneration, String> {
+fn start_ready(
+    executable: &Path,
+    port: u16,
+    generation: u64,
+    runtime_bindings: &[String],
+) -> Result<RunningGeneration, String> {
     let startup_started = Instant::now();
-    let mut child = Command::new(executable)
+    let mut command = Command::new(executable);
+    for binding in runtime_bindings {
+        command.arg("--bind").arg(binding);
+    }
+    let mut child = command
         .stdout(Stdio::piped())
         .spawn()
         .map_err(|error| format!("could not start {}: {error}", executable.display()))?;

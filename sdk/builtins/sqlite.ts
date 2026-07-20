@@ -15,6 +15,21 @@ export interface Statement {
   dispose(): void;
 }
 
+export interface ReadonlyStatement {
+  all(parameters?: SqlParameters): Promise<readonly SqlRow[]>;
+  get(parameters?: SqlParameters): Promise<SqlRow | undefined>;
+  close(): void;
+  dispose(): void;
+}
+
+export interface ReadonlyDatabase {
+  prepare(sql: string): ReadonlyStatement;
+  close(): void;
+  dispose(): void;
+}
+
+export declare function openReadonlyDatabase(binding: string): ReadonlyDatabase;
+
 export declare class Database {
   constructor(path: string);
   prepare(sql: string): Statement;

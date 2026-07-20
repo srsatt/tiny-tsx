@@ -454,7 +454,9 @@ fn emits_todo_store_operations_for_both_x86_targets() {
             ]);
             program.sqlite_databases.push(crate::hir::SqliteDatabase {
                 id: 0,
-                path: ":memory:".to_owned(),
+                path: Some(":memory:".to_owned()),
+                binding: None,
+                readonly: false,
             });
             program.handlers[0].response = crate::hir::HandlerResponse::Text {
                 value: crate::hir::ValueExpression::TodoStore {

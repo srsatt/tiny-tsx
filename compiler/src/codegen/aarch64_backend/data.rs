@@ -181,7 +181,16 @@ pub(super) fn emit_static_data(
     for (index, database) in program.sqlite_databases.iter().enumerate() {
         asm_line!(assembly, ".p2align 3");
         asm_line!(assembly, "Ltinytsx_sqlite_database_path_data_{index}:");
-        emit_bytes(assembly, database.path.as_bytes());
+        emit_bytes(
+            assembly,
+            database.path.as_deref().unwrap_or_default().as_bytes(),
+        );
+        asm_line!(assembly, ".p2align 3");
+        asm_line!(assembly, "Ltinytsx_sqlite_database_binding_data_{index}:");
+        emit_bytes(
+            assembly,
+            database.binding.as_deref().unwrap_or_default().as_bytes(),
+        );
     }
     for (index, actor) in program.actors.iter().enumerate() {
         if let Some(persistence) = &actor.persistence {

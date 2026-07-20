@@ -158,7 +158,9 @@ export interface SupervisorState {
 export interface DatabaseState {
   id: number;
   key: string;
-  path: string;
+  path?: string;
+  binding?: string;
+  readonly?: boolean;
 }
 
 export interface StatementState {

@@ -272,6 +272,11 @@ unsafe extern "C" {
         pointer: *mut *const u8,
         length: *mut usize,
     ) -> u32;
+    pub fn tinytsx_config_sqlite_database_binding(
+        index: usize,
+        pointer: *mut *const u8,
+        length: *mut usize,
+    ) -> u32;
     pub fn tinytsx_actor_operation(actor: usize) -> u32;
     pub fn tinytsx_actor_initial_state(actor: usize) -> i64;
     pub fn tinytsx_actor_failure_message(actor: usize) -> i64;
@@ -401,6 +406,15 @@ unsafe extern "C" fn tinytsx_config_sqlite_databases() -> usize {
 
 #[cfg(not(feature = "generated"))]
 unsafe extern "C" fn tinytsx_config_sqlite_database_path(
+    _index: usize,
+    _pointer: *mut *const u8,
+    _length: *mut usize,
+) -> u32 {
+    INTERNAL_ERROR
+}
+
+#[cfg(not(feature = "generated"))]
+unsafe extern "C" fn tinytsx_config_sqlite_database_binding(
     _index: usize,
     _pointer: *mut *const u8,
     _length: *mut usize,
@@ -3398,6 +3412,26 @@ pub fn configured_sqlite_database_path(index: usize) -> Result<Vec<u8>, u32> {
     }
     // SAFETY: Successful generated configuration points at `length` static bytes.
     Ok(unsafe { slice::from_raw_parts(pointer, length) }.to_vec())
+}
+
+pub fn configured_sqlite_database_binding(index: usize) -> Result<Option<Vec<u8>>, u32> {
+    let mut pointer = ptr::null();
+    let mut length = 0;
+    // SAFETY: The generated object writes one immutable static binding-name view.
+    let status = unsafe {
+        tinytsx_config_sqlite_database_binding(index, &mut pointer, &mut length)
+    };
+    if status != OK {
+        return Err(status);
+    }
+    if length == 0 {
+        return Ok(None);
+    }
+    if pointer.is_null() || length > 128 {
+        return Err(INTERNAL_ERROR);
+    }
+    // SAFETY: Successful generated configuration points at `length` static bytes.
+    Ok(Some(unsafe { slice::from_raw_parts(pointer, length) }.to_vec()))
 }
 
 pub fn actor_operation(actor: usize) -> u32 {

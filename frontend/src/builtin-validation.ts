@@ -13,7 +13,7 @@ interface ImportedOperation {
   operation: string;
 }
 
-type BuiltinResource = "actor" | "database" | "statement" | "supervisor";
+type BuiltinResource = "actor" | "database" | "readonlyDatabase" | "statement" | "readonlyStatement" | "supervisor";
 
 /** Validates protected built-ins before symbolic application execution. */
 export function validateBuiltinOperations(
@@ -21,6 +21,7 @@ export function validateBuiltinOperations(
   allowedEnvironment: ReadonlySet<string>,
   allowedReadRoots: readonly string[],
   allowedWriteRoots: readonly string[],
+  sqliteReadonlyBindings: ReadonlySet<string>,
 ): void {
   const diagnostics: Diagnostic[] = [];
   const supervisorDeclarations: Array<{node: ts.Node; sourceFile: ts.SourceFile}> = [];
@@ -106,6 +107,17 @@ export function validateBuiltinOperations(
             module.sourceFile,
             allowedReadRoots,
             allowedWriteRoots,
+          );
+        } else if (
+          imported.specifier === "tinytsx:sqlite"
+          && imported.operation === "openReadonlyDatabase"
+        ) {
+          validateReadonlySqliteBinding(
+            diagnostics,
+            invocation,
+            node,
+            module.sourceFile,
+            sqliteReadonlyBindings,
           );
         } else if (imported.specifier === "tinytsx:actors" && imported.operation === "spawn") {
           validateActorSpawn(diagnostics, invocation, node, module.sourceFile, resources);
@@ -278,6 +290,14 @@ function collectResourceBindings(
           changed = true;
           continue;
         }
+        if (
+          imported?.specifier === "tinytsx:sqlite"
+          && imported.operation === "openReadonlyDatabase"
+        ) {
+          resources.set(name, "readonlyDatabase");
+          changed = true;
+          continue;
+        }
         if (imported?.specifier === "tinytsx:actors" && imported.operation === "spawn") {
           resources.set(name, "actor");
           changed = true;
@@ -293,10 +313,17 @@ function collectResourceBindings(
         ts.isCallExpression(initializer)
         && ts.isPropertyAccessExpression(initializer.expression)
         && ts.isIdentifier(initializer.expression.expression)
-        && resources.get(initializer.expression.expression.text) === "database"
+        && ["database", "readonlyDatabase"].includes(
+          resources.get(initializer.expression.expression.text) ?? "",
+        )
         && initializer.expression.name.text === "prepare"
       ) {
-        resources.set(name, "statement");
+        resources.set(
+          name,
+          resources.get(initializer.expression.expression.text) === "readonlyDatabase"
+            ? "readonlyStatement"
+            : "statement",
+        );
         changed = true;
       }
     }
@@ -314,7 +341,21 @@ function validateResourceCall(
   const member = invocation.expression;
   if (!ts.isPropertyAccessExpression(member)) return;
   const operation = member.name.text;
-  if (resource === "database") {
+  if (resource === "database" || resource === "readonlyDatabase") {
+    if (
+      resource === "readonlyDatabase"
+      && !["prepare", "close", "dispose"].includes(operation)
+    ) {
+      addDiagnostic(
+        diagnostics,
+        "TINY1512",
+        `read-only SQLite operation \`Database.${operation}\` is not permitted`,
+        invocation,
+        sourceFile,
+        "read-only databases support prepare, close, and dispose",
+      );
+      return;
+    }
     if (["exec", "prepare"].includes(operation)) {
       const sql = invocation.arguments[0];
       const value = sql === undefined ? undefined : staticString(sql);
@@ -375,7 +416,17 @@ function validateResourceCall(
     return;
   }
 
-  if (resource === "statement") {
+  if (resource === "statement" || resource === "readonlyStatement") {
+    if (resource === "readonlyStatement" && operation === "run") {
+      addDiagnostic(
+        diagnostics,
+        "TINY1512",
+        "read-only SQLite statements do not support run",
+        invocation,
+        sourceFile,
+      );
+      return;
+    }
     if (["all", "get", "run"].includes(operation)) {
       if (!validSqliteParameters(invocation.arguments)) {
         addDiagnostic(
@@ -918,6 +969,41 @@ function validateSqliteDatabase(
       span: spanOf(argument ?? node, sourceFile),
       help: "re-run with matching `--allow-read <root>` and `--allow-write <root>`",
     });
+  }
+}
+
+function validateReadonlySqliteBinding(
+  diagnostics: Diagnostic[],
+  invocation: ts.CallExpression | ts.NewExpression | undefined,
+  node: ts.Node,
+  sourceFile: ts.SourceFile,
+  bindings: ReadonlySet<string>,
+): void {
+  const argument = invocation?.arguments?.[0];
+  const name = argument !== undefined && ts.isStringLiteral(argument) ? argument.text : undefined;
+  if (
+    invocation?.arguments?.length !== 1
+    || name === undefined
+    || !/^[A-Za-z_][A-Za-z0-9_]{0,127}$/.test(name)
+  ) {
+    addDiagnostic(
+      diagnostics,
+      "TINY1513",
+      "openReadonlyDatabase requires one static portable binding name",
+      node,
+      sourceFile,
+    );
+    return;
+  }
+  if (!bindings.has(name)) {
+    addDiagnostic(
+      diagnostics,
+      "TINY1513",
+      `read-only SQLite binding \`${name}\` is not declared`,
+      node,
+      sourceFile,
+      `re-run with \`--binding ${name}=sqlite-ro\``,
+    );
   }
 }
 

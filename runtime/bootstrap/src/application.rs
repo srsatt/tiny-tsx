@@ -1,5 +1,9 @@
 use std::{
+    collections::{BTreeMap, BTreeSet},
+    env,
+    ffi::OsString,
     io,
+    path::Path,
     sync::{
         OnceLock,
         atomic::{AtomicUsize, Ordering},
@@ -17,9 +21,9 @@ use crate::abi::{
     actor_failure_message, actor_initial_json, actor_initial_state, actor_mailbox_capacity,
     actor_operation, actor_persistence_database, actor_persistence_key, actor_restart_max,
     actor_restart_within_ms, actor_supervisor, configured_actors, configured_provider_transport,
-    configured_sqlite_database_path, configured_sqlite_databases, configured_supervisors,
-    configured_worker_modules, supervisor_restart_max, supervisor_restart_within_ms,
-    worker_operation,
+    configured_sqlite_database_binding, configured_sqlite_database_path,
+    configured_sqlite_databases, configured_supervisors, configured_worker_modules,
+    supervisor_restart_max, supervisor_restart_within_ms, worker_operation,
 };
 
 const APPLICATION_QUEUE_PER_EXECUTOR: usize = 64;
@@ -76,6 +80,116 @@ struct ActorPersistence {
     key: String,
 }
 
+#[derive(Clone)]
+struct DatabaseConfig {
+    path: String,
+    readonly: bool,
+}
+
+fn runtime_bindings(
+    arguments: impl IntoIterator<Item = OsString>,
+    expected: &BTreeSet<String>,
+) -> io::Result<BTreeMap<String, String>> {
+    let mut arguments = arguments.into_iter();
+    let mut bindings = BTreeMap::new();
+    while let Some(option) = arguments.next() {
+        if option != "--bind" {
+            return Err(io::Error::other(format!(
+                "unknown runtime option `{}`",
+                option.to_string_lossy()
+            )));
+        }
+        let value = arguments
+            .next()
+            .ok_or_else(|| io::Error::other("--bind requires NAME=/absolute/path"))?;
+        let value = value
+            .into_string()
+            .map_err(|_| io::Error::other("runtime bindings must be valid UTF-8"))?;
+        let (name, path) = value
+            .split_once('=')
+            .ok_or_else(|| io::Error::other("--bind requires NAME=/absolute/path"))?;
+        if !expected.contains(name) {
+            return Err(io::Error::other(format!(
+                "unknown read-only SQLite binding `{name}`"
+            )));
+        }
+        if path.is_empty()
+            || path.len() > 4096
+            || path.contains('\0')
+            || !Path::new(path).is_absolute()
+        {
+            return Err(io::Error::other(format!(
+                "read-only SQLite binding `{name}` requires an absolute path"
+            )));
+        }
+        if bindings.insert(name.to_owned(), path.to_owned()).is_some() {
+            return Err(io::Error::other(format!(
+                "duplicate read-only SQLite binding `{name}`"
+            )));
+        }
+    }
+    for name in expected {
+        if !bindings.contains_key(name) {
+            return Err(io::Error::other(format!(
+                "missing read-only SQLite binding `{name}`; pass --bind {name}=/absolute/path"
+            )));
+        }
+    }
+    Ok(bindings)
+}
+
+fn configured_databases() -> io::Result<Vec<DatabaseConfig>> {
+    let count = configured_sqlite_databases();
+    let binding_names = (0..count)
+        .map(|database| {
+            configured_sqlite_database_binding(database)
+                .map_err(|_| io::Error::other("invalid generated SQLite database binding"))
+                .and_then(|binding| {
+                    binding
+                        .map(String::from_utf8)
+                        .transpose()
+                        .map_err(|_| io::Error::other("SQLite database binding is not UTF-8"))
+                })
+        })
+        .collect::<io::Result<Vec<_>>>()?;
+    let expected = binding_names
+        .iter()
+        .flatten()
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    let bindings = runtime_bindings(env::args_os().skip(1), &expected)?;
+    (0..count)
+        .map(|database| {
+            if let Some(binding) = &binding_names[database] {
+                let path = bindings
+                    .get(binding)
+                    .cloned()
+                    .ok_or_else(|| io::Error::other("missing validated SQLite binding"))?;
+                tinytsx_runtime_sqlite::open_readonly(&path).map_err(|error| {
+                    io::Error::other(format!(
+                        "could not open read-only SQLite binding `{binding}`: {error}"
+                    ))
+                })?;
+                Ok(DatabaseConfig {
+                    path,
+                    readonly: true,
+                })
+            } else {
+                configured_sqlite_database_path(database)
+                    .map_err(|_| io::Error::other("invalid generated SQLite database path"))
+                    .and_then(|path| {
+                        String::from_utf8(path)
+                            .map_err(|_| io::Error::other("SQLite database path is not UTF-8"))
+                    })
+                    .map(|path| DatabaseConfig {
+                        path,
+                        readonly: false,
+                    })
+            }
+        })
+        .collect()
+}
+
 struct ApplicationRuntime {
     _pool: Pool,
     workers: Vec<Worker>,
@@ -90,7 +204,7 @@ static APPLICATION: OnceLock<ApplicationRuntime> = OnceLock::new();
 fn initialize_actor_persistence(
     actor: Option<usize>,
     initial_state: i64,
-    database_paths: &[String],
+    databases: &[DatabaseConfig],
 ) -> (i64, Option<Result<ActorPersistence, u32>>) {
     let Some(actor) = actor else {
         return (initial_state, None);
@@ -99,10 +213,10 @@ fn initialize_actor_persistence(
         return (initial_state, None);
     };
     let persistence = (|| {
-        let path = database_paths.get(database).ok_or(INTERNAL_ERROR)?;
+        let database = databases.get(database).ok_or(INTERNAL_ERROR)?;
         let key = actor_persistence_key(actor).map_err(|_| INTERNAL_ERROR)?;
         let key = String::from_utf8(key).map_err(|_| INTERNAL_ERROR)?;
-        let connection = tinytsx_runtime_sqlite::open(path).map_err(|_| RENDER_ERROR)?;
+        let connection = tinytsx_runtime_sqlite::open(&database.path).map_err(|_| RENDER_ERROR)?;
         tinytsx_runtime_sqlite::execute_batch(
             &connection,
             "CREATE TABLE IF NOT EXISTS _tinytsx_actor_state (key TEXT PRIMARY KEY, value INTEGER NOT NULL)",
@@ -123,13 +237,16 @@ fn initialize_actor_persistence(
                 tinytsx_runtime_sqlite::execute(
                     &connection,
                     "INSERT INTO _tinytsx_actor_state (key, value) VALUES (?1, ?2)",
-                    &[SqlValue::Text(key.clone()), SqlValue::Integer(initial_state)],
+                    &[
+                        SqlValue::Text(key.clone()),
+                        SqlValue::Integer(initial_state),
+                    ],
                 )
                 .map_err(|_| RENDER_ERROR)?;
                 initial_state
             }
         };
-        Ok((state, ActorPersistence {connection, key}))
+        Ok((state, ActorPersistence { connection, key }))
     })();
     match persistence {
         Ok((state, persistence)) => (state, Some(Ok(persistence))),
@@ -143,19 +260,8 @@ pub fn initialize(executor_count: usize) -> io::Result<(usize, bool)> {
     let actor_count = configured_actors();
     let supervisor_count = configured_supervisors();
     let database_count = configured_sqlite_databases();
-    let database_paths = (0..database_count)
-        .map(|database| {
-            configured_sqlite_database_path(database)
-                .map_err(|_| io::Error::other("invalid generated SQLite database path"))
-                .and_then(|path| String::from_utf8(path)
-                    .map_err(|_| io::Error::other("SQLite database path is not UTF-8")))
-        })
-        .collect::<io::Result<Vec<_>>>()?;
-    if worker_count == 0
-        && !provider_enabled
-        && actor_count == 0
-        && database_count == 0
-    {
+    let database_configs = configured_databases()?;
+    if worker_count == 0 && !provider_enabled && actor_count == 0 && database_count == 0 {
         return Ok((0, false));
     }
     let queue_capacity = executor_count
@@ -171,11 +277,8 @@ pub fn initialize(executor_count: usize) -> io::Result<(usize, bool)> {
                 .filter(|actor| *actor < actor_count);
             let initial_state = actor.map_or(0, actor_initial_state);
             let actor_operation = actor.map_or(0, actor_operation);
-            let (actor_counter, actor_persistence) = initialize_actor_persistence(
-                actor,
-                initial_state,
-                &database_paths,
-            );
+            let (actor_counter, actor_persistence) =
+                initialize_actor_persistence(actor, initial_state, &database_configs);
             WorkerState {
                 operation: worker_operation(id),
                 actor_operation,
@@ -189,8 +292,15 @@ pub fn initialize(executor_count: usize) -> io::Result<(usize, bool)> {
                 sqlite: id
                     .checked_sub(worker_count + actor_count)
                     .filter(|database| *database < database_count)
-                    .and_then(|database| database_paths.get(database))
-                    .map(|path| tinytsx_runtime_sqlite::open(path).map_err(|_| RENDER_ERROR)),
+                    .and_then(|database| database_configs.get(database))
+                    .map(|database| {
+                        if database.readonly {
+                            tinytsx_runtime_sqlite::open_readonly(&database.path)
+                        } else {
+                            tinytsx_runtime_sqlite::open(&database.path)
+                        }
+                        .map_err(|_| RENDER_ERROR)
+                    }),
             }
         },
         |state, message| match message {
@@ -629,6 +739,72 @@ pub fn sqlite_todo_operation(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::{collections::BTreeSet, ffi::OsString};
+
+    fn expected_bindings() -> BTreeSet<String> {
+        BTreeSet::from(["AIR_DB".to_owned()])
+    }
+
+    #[test]
+    fn accepts_each_expected_absolute_runtime_binding_once() {
+        let bindings = runtime_bindings(
+            [
+                OsString::from("--bind"),
+                OsString::from("AIR_DB=/srv/air.db"),
+            ],
+            &expected_bindings(),
+        )
+        .expect("valid binding");
+        assert_eq!(
+            bindings.get("AIR_DB").map(String::as_str),
+            Some("/srv/air.db")
+        );
+    }
+
+    #[test]
+    fn rejects_missing_unknown_duplicate_and_relative_runtime_bindings() {
+        assert!(
+            runtime_bindings([], &expected_bindings())
+                .unwrap_err()
+                .to_string()
+                .contains("missing")
+        );
+        assert!(
+            runtime_bindings(
+                [
+                    OsString::from("--bind"),
+                    OsString::from("OTHER=/srv/air.db")
+                ],
+                &expected_bindings(),
+            )
+            .unwrap_err()
+            .to_string()
+            .contains("unknown")
+        );
+        assert!(
+            runtime_bindings(
+                [
+                    OsString::from("--bind"),
+                    OsString::from("AIR_DB=/srv/air.db"),
+                    OsString::from("--bind"),
+                    OsString::from("AIR_DB=/srv/other.db"),
+                ],
+                &expected_bindings(),
+            )
+            .unwrap_err()
+            .to_string()
+            .contains("duplicate")
+        );
+        assert!(
+            runtime_bindings(
+                [OsString::from("--bind"), OsString::from("AIR_DB=air.db")],
+                &expected_bindings(),
+            )
+            .unwrap_err()
+            .to_string()
+            .contains("absolute")
+        );
+    }
 
     #[test]
     fn actor_wait_failures_map_to_transport_statuses() {

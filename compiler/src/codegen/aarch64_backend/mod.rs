@@ -312,7 +312,38 @@ fn emit_config(assembly: &mut Emitter, options: &Options, program: &Program) {
         asm_line!(assembly, "Ltinytsx_sqlite_database_path_{index}:");
         assembly.address("x3", format_args!("Ltinytsx_sqlite_database_path_data_{index}"));
         asm_line!(assembly, "    str x3, [x1]");
-        emit_immediate(assembly, "x3", database.path.len() as u64);
+        emit_immediate(
+            assembly,
+            "x3",
+            database.path.as_deref().unwrap_or_default().len() as u64,
+        );
+        asm_line!(assembly, "    str x3, [x2]");
+        asm_line!(assembly, "    mov x0, #0");
+        asm_line!(assembly, "    ret");
+    }
+
+    assembly.global_function(format_args!("tinytsx_config_sqlite_database_binding"));
+    asm_line!(assembly, "    cbz x1, Ltinytsx_sqlite_database_binding_invalid");
+    asm_line!(assembly, "    cbz x2, Ltinytsx_sqlite_database_binding_invalid");
+    for (index, _) in program.sqlite_databases.iter().enumerate() {
+        asm_line!(assembly, "    cmp x0, #{index}");
+        asm_line!(assembly, "    b.eq Ltinytsx_sqlite_database_binding_{index}");
+    }
+    asm_line!(assembly, "Ltinytsx_sqlite_database_binding_invalid:");
+    emit_immediate(assembly, "x0", 4);
+    asm_line!(assembly, "    ret");
+    for (index, database) in program.sqlite_databases.iter().enumerate() {
+        asm_line!(assembly, "Ltinytsx_sqlite_database_binding_{index}:");
+        assembly.address(
+            "x3",
+            format_args!("Ltinytsx_sqlite_database_binding_data_{index}"),
+        );
+        asm_line!(assembly, "    str x3, [x1]");
+        emit_immediate(
+            assembly,
+            "x3",
+            database.binding.as_deref().unwrap_or_default().len() as u64,
+        );
         asm_line!(assembly, "    str x3, [x2]");
         asm_line!(assembly, "    mov x0, #0");
         asm_line!(assembly, "    ret");

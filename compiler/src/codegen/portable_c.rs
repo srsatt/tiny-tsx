@@ -225,7 +225,12 @@ fn emit_data(source: &mut String, program: &Program, options: &Options) {
         emit_bytes(
             source,
             &format!("tinytsx_sqlite_path_{index}"),
-            database.path.as_bytes(),
+            database.path.as_deref().unwrap_or_default().as_bytes(),
+        );
+        emit_bytes(
+            source,
+            &format!("tinytsx_sqlite_binding_{index}"),
+            database.binding.as_deref().unwrap_or_default().as_bytes(),
         );
     }
 }
@@ -305,7 +310,26 @@ fn emit_config(source: &mut String, program: &Program, options: &Options) {
             .sqlite_databases
             .iter()
             .enumerate()
-            .map(|(index, database)| (format!("tinytsx_sqlite_path_{index}"), database.path.len())),
+            .map(|(index, database)| {
+                (
+                    format!("tinytsx_sqlite_path_{index}"),
+                    database.path.as_deref().unwrap_or_default().len(),
+                )
+            }),
+    );
+    emit_view_function(
+        source,
+        "tinytsx_config_sqlite_database_binding",
+        program
+            .sqlite_databases
+            .iter()
+            .enumerate()
+            .map(|(index, database)| {
+                (
+                    format!("tinytsx_sqlite_binding_{index}"),
+                    database.binding.as_deref().unwrap_or_default().len(),
+                )
+            }),
     );
 }
 
@@ -399,8 +423,7 @@ fn emit_handler(source: &mut String, program: &Program) -> Result<(), String> {
             writeln!(
                 source,
                 "    if (!tinytsx_request_path_segment_min_length(request, {}, {})) {{",
-                validation.segment,
-                validation.min_length,
+                validation.segment, validation.min_length,
             )
             .unwrap();
             emit_console_errors(source, &validation.rejected.stderr, program, "      ");
@@ -574,8 +597,11 @@ fn emit_response_mode(
             )
             .unwrap();
             writeln!(source, "{indent}if (status != 0) return status;").unwrap();
-            writeln!(source, "{indent}status = tinytsx_component_{component}(request, writer);")
-                .unwrap();
+            writeln!(
+                source,
+                "{indent}status = tinytsx_component_{component}(request, writer);"
+            )
+            .unwrap();
             if terminal {
                 writeln!(source, "{indent}return status;").unwrap();
             } else {
@@ -897,7 +923,7 @@ fn emit_text_expression(
             writeln!(source, "{indent}}}").unwrap();
         }
         _ => {
-            return Err("portable x86 backend does not yet support this text expression".to_owned())
+            return Err("portable x86 backend does not yet support this text expression".to_owned());
         }
     }
     Ok(())

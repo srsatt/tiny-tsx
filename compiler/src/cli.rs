@@ -6,7 +6,7 @@ const USAGE: &str = "\
 TinyTSX native TSX compiler
 
 Usage:
-  tinytsx check <entry.tsx> [--emit-hir | --emit-asm] [--target triple] [--alias specifier=path] [--api specifier=path] [--binding name=sqlite-kv:path] [--allow-env name]... [--allow-read root]... [--allow-write root]...
+  tinytsx check <entry.tsx> [--emit-hir | --emit-asm] [--target triple] [--alias specifier=path] [--api specifier=path] [--binding name=sqlite-kv:path|sqlite-ro] [--allow-env name]... [--allow-read root]... [--allow-write root]...
   tinytsx build <entry.tsx> [options]
   tinytsx run <entry.tsx> [options]
   tinytsx dev <entry.tsx> [options]
@@ -96,6 +96,7 @@ fn build(arguments: &[String]) -> Result<(), String> {
 }
 
 fn dev_server(arguments: &[String]) -> Result<(), String> {
+    let (arguments, runtime_bindings) = split_runtime_bindings(arguments)?;
     let mut build_arguments = Vec::with_capacity(arguments.len());
     let mut restart_timeout_ms = 2_000_u64;
     let mut timeout_seen = false;
@@ -106,10 +107,8 @@ fn dev_server(arguments: &[String]) -> Result<(), String> {
                 return Err("--restart-timeout-ms may only be provided once".to_owned());
             }
             timeout_seen = true;
-            restart_timeout_ms = parse_number(
-                option_value(arguments, &mut index)?,
-                "restart timeout",
-            )?;
+            restart_timeout_ms =
+                parse_number(option_value(&arguments, &mut index)?, "restart timeout")?;
         } else {
             build_arguments.push(arguments[index].clone());
         }
@@ -119,13 +118,22 @@ fn dev_server(arguments: &[String]) -> Result<(), String> {
         return Err("restart timeout must be between 100 and 30000 milliseconds".to_owned());
     }
     let options = parse_build_options(&build_arguments, PathBuf::from(".tinytsx/dev/server"))?;
-    dev::execute(options, std::time::Duration::from_millis(restart_timeout_ms))
+    dev::execute(
+        options,
+        std::time::Duration::from_millis(restart_timeout_ms),
+        runtime_bindings,
+    )
 }
 
 fn run_server(arguments: &[String]) -> Result<(), String> {
-    let options = parse_build_options(arguments, PathBuf::from(".tinytsx/run/server"))?;
+    let (build_arguments, runtime_bindings) = split_runtime_bindings(arguments)?;
+    let options = parse_build_options(&build_arguments, PathBuf::from(".tinytsx/run/server"))?;
     let output = build::execute(&options)?.executable;
-    let status = std::process::Command::new(&output)
+    let mut command = std::process::Command::new(&output);
+    for binding in runtime_bindings {
+        command.arg("--bind").arg(binding);
+    }
+    let status = command
         .status()
         .map_err(|error| format!("could not start {}: {error}", output.display()))?;
     if status.success() {
@@ -133,6 +141,21 @@ fn run_server(arguments: &[String]) -> Result<(), String> {
     } else {
         Err(format!("{} exited with {status}", output.display()))
     }
+}
+
+fn split_runtime_bindings(arguments: &[String]) -> Result<(Vec<String>, Vec<String>), String> {
+    let mut build_arguments = Vec::with_capacity(arguments.len());
+    let mut bindings = Vec::new();
+    let mut index = 0;
+    while index < arguments.len() {
+        if arguments[index] == "--bind" {
+            bindings.push(option_value(arguments, &mut index)?.to_owned());
+        } else {
+            build_arguments.push(arguments[index].clone());
+        }
+        index += 1;
+    }
+    Ok((build_arguments, bindings))
 }
 
 fn parse_build_options(
@@ -346,9 +369,9 @@ fn validate_bindings(bindings: &mut [String]) -> Result<(), String> {
     }
     let mut previous = None;
     for binding in bindings.iter() {
-        let (name, adapter) = binding
-            .split_once('=')
-            .ok_or_else(|| "--binding requires <name>=sqlite-kv:<path>".to_owned())?;
+        let (name, adapter) = binding.split_once('=').ok_or_else(|| {
+            "--binding requires <name>=sqlite-kv:<path> or <name>=sqlite-ro".to_owned()
+        })?;
         let path = adapter.strip_prefix("sqlite-kv:").unwrap_or_default();
         let valid_name = !name.is_empty()
             && name.len() <= 128
@@ -357,9 +380,11 @@ fn validate_bindings(bindings: &mut [String]) -> Result<(), String> {
             && name
                 .bytes()
                 .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_');
-        if !valid_name || path.is_empty() || path.len() > 4096 || path.contains('\0') {
+        let valid_adapter = adapter == "sqlite-ro"
+            || (!path.is_empty() && path.len() <= 4096 && !path.contains('\0'));
+        if !valid_name || !valid_adapter {
             return Err(format!(
-                "invalid binding `{binding}`; expected <name>=sqlite-kv:<path>"
+                "invalid binding `{binding}`; expected <name>=sqlite-kv:<path> or <name>=sqlite-ro"
             ));
         }
         if previous == Some(name) {
