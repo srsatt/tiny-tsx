@@ -69,6 +69,17 @@ open before tagging.
   fallback, and rejection. The same generated parameter forms assemble for
   Linux ARM64. The ESLint preflight accepts the complete beta source shape.
 
+## Separate air-quality application (2026-07-20)
+
+- `../tinytsx-air-quality` is an independent Git repository owned by
+  `srsatt <srsatt@gmail.com>`. It uses Hono 4.12.30 from npm, Vite 7.3.6,
+  `tinytsx:sqlite`, and `tinytsx:assets`; it stores no declaration overlay.
+- TinyTSX and Bun pass the same seeded current/history, malformed query, and
+  SPA behavior suite against the real `luft-control` measurement schema.
+- The clean two-worker Apple release candidate passes its enforced comparison:
+  80,328/87,503 TinyTSX RPS versus 84,326/85,747 Bun, p99 within 1.04x, startup
+  15.87 versus 20.07 ms, and RSS 7.50 versus 40.58 MiB. Pi evidence is open.
+
 ## Alpha implementation evidence
 
 ### Pinned Stytch-auth TODO backend (2026-07-18)

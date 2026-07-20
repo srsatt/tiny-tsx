@@ -1,47 +1,42 @@
-# TinyTSX alpha release checklist
+# TinyTSX beta release checklist
 
-Release: `0.1.0-alpha.1`
+Release: `0.1.0-beta.1`
 
-Current decision: **NOT READY after the author-history rewrite.** Native Apple
-arm64 and native Linux arm64 both passed this contract before the rewrite, but
-all commit hashes changed and the retained schema-v2 manifests identify the
-now-unreachable pre-rewrite source. The compiler now also supports Intel macOS
-and Linux x86-64. Generate all four archives from one new clean commit before
-tagging. No tag has been created.
+Current decision: **NOT READY TO TAG.** The beta compiler surface and the
+separate air-quality application's Apple functional/performance gates pass.
+Fresh exact-source archives remain required on all four native targets, and the
+air-quality application still needs Raspberry Pi ARM64 deployment evidence.
+No beta tag or release has been created.
 
-This checklist prepares a release candidate; it does not create or push a tag.
-Run it from the exact commit intended for `v0.1.0-alpha.1`.
-
-The complete Stytch TODO slice has native Apple/Linux, installed-package, and
-response-checked benchmark evidence. That functional evidence remains valid,
-but the release source identity does not: promoting the rewritten history and
-the new x86-64 targets requires fresh clean archives from the same new commit.
-The open gates are tracked in `doc/BACKLOG.md`.
+This checklist prepares a candidate; it does not create or push a tag. Run all
+archive gates from the exact commit intended for `v0.1.0-beta.1`.
 
 ## Contract and source
 
-- [x] Workspace, frontend, and SDK versions are `0.1.0-alpha.1`.
-- [x] `CHANGELOG.md`, `doc/ALPHA.md`, compatibility/capability matrices, known
-      limitations, licenses, and third-party notices are present.
-- [x] The Hono documentation audit has no unqualified compatibility claim and
-      every admitted row names executable evidence.
-- [x] The complete pinned Hono examples and focused file, SQLite, and actor
-      examples are packaged.
-- [x] `@hono/zod-openapi`, `@hono/node-server`, and Hono-neutral
-      `tinytsx:serve` have reference, native HTTP, installed-resource, and
-      Linux-assembly gates appropriate to their contracts.
-- [x] The pressure-aware Hono control, actor, SQLite, and nested-profile
-      TinyTSX/Bun benchmark and raw samples are committed under
-      `benchmarks/results/2026-07-18-m5-max-pressure-aware-15s-*`.
-- [x] Remaining syntax, Web, Hono, actor, SQLite, OS, performance, and
-      managed-memory work is explicitly bounded outside this release.
+- [x] Workspace, SDK, release tooling, ESLint package, and CI versions are
+      `0.1.0-beta.1`.
+- [x] Cached AOT dev restart, last-known-good recovery, listener readiness, and
+      per-stage timings have executable integration coverage.
+- [x] Deploy-time read-only SQLite bindings fail before listen and expose no
+      mutation API.
+- [x] Embedded Vite assets cover deterministic bytes, MIME, ETag/304, `HEAD`,
+      SPA fallback, traversal denial, and Linux ARM64 assembly.
+- [x] The bounded Hono text/safe-integer history parameters have frontend,
+      runtime ABI, Apple native HTTP, ESLint, and Linux ARM64 evidence.
+- [x] `tinytsx-air-quality` is a separate repository, compiles published Hono
+      without an application declaration overlay, and passes matching
+      TinyTSX/Bun behavior.
+- [x] The clean Apple two-worker air-quality gate passes: 0.95x/1.02x Bun RPS,
+      0.99x/1.04x p99, 0.79x startup, and 0.18x RSS.
+- [x] Documentation keeps compatibility claims bounded and names the remaining
+      Pi, GC, Web, language, and npm boundaries.
 
 ## Clean native verification
 
 For each native target, start from a clean recursive checkout and install the
 declared prerequisites. The release command rejects a dirty tree and runs the
-Rust, frontend, Hono, Test262/WPT allowlists, native APIs, Zod/OpenAPI,
-release-runtime failures, installed examples, and archive smoke build.
+Rust/frontend/native/reference suites, installed examples, archive smoke build,
+and source-identifying manifest.
 
 ```sh
 npm ci --prefix frontend
@@ -49,29 +44,20 @@ npm ci --prefix examples
 npm run release:verify
 ```
 
-- [ ] Apple arm64 has completed the clean `release:verify` contract at the
-      final exact-source candidate commit.
-- [ ] Linux arm64 has completed the clean `release:verify` contract on a native
-      `ubuntu-24.04-arm` or equivalent host.
-- [ ] Intel macOS has completed the clean `release:verify` contract on a native
-      `macos-15-intel` or equivalent host.
-- [ ] Linux x86-64 has completed the clean `release:verify` contract on a native
-      `ubuntu-24.04` x86-64 or equivalent host.
-- [ ] The exact release-candidate commit has completed all four native jobs without
-      generated tracked changes.
+- [ ] Apple ARM64 completes `release:verify` at the final candidate commit.
+- [ ] Intel macOS completes `release:verify` at the same candidate commit.
+- [ ] Linux ARM64 completes `release:verify` at the same candidate commit.
+- [ ] Linux x86-64 completes `release:verify` at the same candidate commit.
+- [ ] All four jobs finish without generated tracked changes.
 
 ## Artifact inspection
 
-Perform these checks independently for all four target names:
-
-- `aarch64-apple-darwin`
-- `x86_64-apple-darwin`
-- `aarch64-unknown-linux-gnu`
-- `x86_64-unknown-linux-gnu`
+Repeat for `aarch64-apple-darwin`, `x86_64-apple-darwin`,
+`aarch64-unknown-linux-gnu`, and `x86_64-unknown-linux-gnu`:
 
 ```sh
-target=aarch64-apple-darwin # repeat with every target listed above
-base="dist/release/tinytsx-0.1.0-alpha.1-$target"
+target=aarch64-apple-darwin
+base="dist/release/tinytsx-0.1.0-beta.1-$target"
 commit=$(git rev-parse HEAD)
 test -f "$base.tar.gz"
 test -f "$base.tar.gz.sha256"
@@ -79,42 +65,41 @@ test -f "$base.manifest.json"
 (cd dist/release && shasum -a 256 -c "$(basename "$base.tar.gz.sha256")")
 jq -e --arg target "$target" --arg commit "$commit" '
   .schemaVersion == 2 and
-  .version == "0.1.0-alpha.1" and
+  .version == "0.1.0-beta.1" and
   .target == $target and
   .source.commit == $commit and
   .source.dirty == false and
-  (.versionOutput | startswith("tinytsx 0.1.0-alpha.1;")) and
+  (.versionOutput | startswith("tinytsx 0.1.0-beta.1;")) and
   .layout.binary == "bin/tinytsx" and
   .layout.resources == "lib/tinytsx"
 ' "$base.manifest.json"
 tar -tzf "$base.tar.gz" | grep '/bin/tinytsx$'
-tar -tzf "$base.tar.gz" | grep '/lib/tinytsx/examples/README.md$'
+tar -tzf "$base.tar.gz" | grep '/lib/tinytsx/sdk/builtins/assets.ts$'
 ```
 
-- [ ] Both Apple archive checksums, manifests, version outputs, installed layouts, and
-      outside-checkout HTTP smoke have been verified.
-- [ ] Both Linux archive checksums, manifests, version outputs, installed layouts, and
-      outside-checkout HTTP smoke have been verified.
-- [ ] All four artifact manifests identify the same source contract, HIR 2, runtime
-      ABI 1, built-in schema 1, and pinned compatibility revisions.
+- [ ] Both Apple archives have valid checksums, manifests, installed layouts,
+      and outside-checkout HTTP smoke evidence.
+- [ ] Both Linux archives have the same evidence.
+- [ ] All manifests identify one source commit, HIR 2, runtime ABI 1, built-in
+      schema 1, and the pinned Hono/Test262 revisions.
 
-The generated archive checksums belong in the uploaded `.sha256` files and
-manifests. Do not copy a checksum into this tracked document: changing the
-document would change the archive being attested.
+## Air-quality deployment
+
+- [x] Apple behavior and performance artifacts identify both repository commits.
+- [ ] Cross-build the application with the Linux ARM64 candidate archive.
+- [ ] Deploy it beside `luft-control` using only the read-only absolute database
+      binding and verify current/history/assets against the live service-owned DB.
+- [ ] Record Pi startup, RSS, RPS, p99, service installation, rollback, and Bun
+      control evidence without publishing private host paths or credentials.
 
 ## Release decision
 
-Before tagging, confirm all of the following:
+- [ ] Every open item above is checked at the exact candidate commits.
+- [ ] The TinyTSX and air-quality repositories are clean and identify the tested
+      commits in their retained artifacts.
+- [ ] All four archives and manifests are collected together.
+- [ ] No release note claims general TypeScript, ECMAScript, Web API, Node, Bun,
+      Deno, Hono, npm, actor, SQLite, AI SDK, or GC compatibility.
 
-- [ ] Every exact-source alpha exit gate in `doc/BACKLOG.md` is checked.
-- [ ] All four native archives are collected together with their `.sha256` and
-      manifest files.
-- [x] The limitations in `doc/ALPHA.md` match the shipped compiler diagnostics
-      and executable tests.
-- [x] No release note claims general TypeScript, ECMAScript, Node, Bun, Deno,
-      Web API, Hono, actor, SQLite, AI SDK, or GC compatibility.
-- [ ] The release commit is clean and is the commit verified by all four native
-      jobs.
-
-Only after this section is green may a separate release action create
-`v0.1.0-alpha.1`.
+Only after this section is green may a separate release action create and push
+`v0.1.0-beta.1`.

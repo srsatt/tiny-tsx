@@ -16,7 +16,7 @@ alpha module is a release feature. `native-partial` names an executable tracer
 whose remaining operations are still release gates. `declared` operations must
 fail compilation with a stable diagnostic until promoted.
 
-All five modules reported by the `0.1.0-alpha.1` release manifest are `native`
+All six modules reported by the `0.1.0-beta.1` release manifest are `native`
 for their bounded contracts below. That status does not promote operations that
 are absent from those contracts.
 

@@ -156,6 +156,10 @@ ordered by the application tracer rather than general JavaScript breadth.
       history API without application-owned declaration overlays.
 - [ ] Build and deploy `tinytsx-air-quality` as a separate repository, then
       require its functional and TinyTSX/Bun performance gates before beta.
+  - 2026-07-20: the separate local repository compiles published Hono without
+    an application overlay; TinyTSX/Bun behavior is green. Its clean Apple
+    two-worker gate passes at 0.95x/1.02x RPS, 0.99x/1.04x p99, 0.79x startup,
+    and 0.18x RSS. Raspberry Pi deploy/performance evidence remains open.
 
 ## Alpha critical path
 
