@@ -462,6 +462,9 @@ npm test -- --suite test:dev
 # Override the default min(CPU count, 4) worker limit
 npm test -- --jobs 2
 
+# Retain staged simple and pinned-Hono dev reload timings
+npm run benchmark:dev
+
 # Clean release verification and archive smoke tests
 npm run release:verify
 ```

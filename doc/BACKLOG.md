@@ -143,8 +143,12 @@ ordered by the application tracer rather than general JavaScript breadth.
       and frontend session on termination.
 - [x] Wait for candidate listener readiness and restart the last known-good
       executable if candidate initialization fails.
-- [ ] Publish per-stage frontend, HIR, assembly, link, shutdown, startup, and
+- [x] Publish per-stage frontend, HIR, assembly, link, shutdown, startup, and
       edit-to-listening timings for simple and pinned Hono applications.
+  - 2026-07-20: seven retained Apple M5 Max reloads record simple medians of
+    81/0/47/459/108/304/998 ms by stage and 1,091 ms observed, and pinned Hono
+    medians of 404/0/51/478/107/284/1,326 ms by stage and 1,397 ms observed.
+    See `benchmarks/results/2026-07-20-m5-max-beta-dev-reload.{json,md}`.
 
 ### B2 — Backend platform proof
 

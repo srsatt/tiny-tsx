@@ -28,8 +28,10 @@ open before tagging.
 - Warm simple-app reloads are bounded at 1.5 seconds in the integration gate;
   each successful reload now reports frontend, code generation, assembly,
   link, shutdown, startup, and end-to-end milliseconds. The beta performance
-  report must still publish repeated medians and the pinned Hono result before
-  the backlog timing item is complete.
+  harness retains seven clean-source samples for both a transitive simple app
+  and the exact pinned upstream Hono basic source. Simple median total/observed
+  reload is 998/1,091 ms; pinned Hono is 1,326/1,397 ms. The JSON and Markdown
+  reports preserve every stage, p95, host, compiler version, and source commit.
 
 ## Beta read-only SQLite bindings (2026-07-20)
 

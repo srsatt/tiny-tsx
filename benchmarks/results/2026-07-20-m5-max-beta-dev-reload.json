@@ -1,0 +1,291 @@
+{
+  "schemaVersion": 1,
+  "measuredAt": "2026-07-20T13:05:25.938Z",
+  "source": {
+    "commit": "d7fe6a5b21babbaf90522e04250bb26cf59e2bf6",
+    "dirty": false
+  },
+  "compiler": {
+    "path": "target/release/tinytsx",
+    "version": "tinytsx 0.1.0-beta.1; hir=2; runtime-abi=1; target=aarch64-apple-darwin; builtins-schema=1; hono=v4.12.30@b2ae3a2204a48ce15a26448fd746d39745eb1837; hono-examples=3b0b6287; test262=f2d14356"
+  },
+  "host": {
+    "platform": "darwin",
+    "architecture": "arm64",
+    "release": "25.5.0",
+    "cpu": "Apple M5 Max"
+  },
+  "iterations": 7,
+  "thresholds": {
+    "simpleObservedMedianMs": 1500,
+    "honoObservedMedianMs": 2500
+  },
+  "scenarios": [
+    {
+      "name": "simple-transitive-module",
+      "source": "generated two-module Request/Response server",
+      "samples": [
+        {
+          "generation": 3,
+          "frontendMs": 85,
+          "codegenMs": 0,
+          "assemblyMs": 47,
+          "linkMs": 456,
+          "shutdownMs": 112,
+          "startupMs": 284,
+          "totalMs": 987,
+          "observedMs": 1066.774
+        },
+        {
+          "generation": 4,
+          "frontendMs": 94,
+          "codegenMs": 0,
+          "assemblyMs": 50,
+          "linkMs": 458,
+          "shutdownMs": 108,
+          "startupMs": 690,
+          "totalMs": 1401,
+          "observedMs": 1500.562
+        },
+        {
+          "generation": 5,
+          "frontendMs": 87,
+          "codegenMs": 0,
+          "assemblyMs": 46,
+          "linkMs": 459,
+          "shutdownMs": 110,
+          "startupMs": 285,
+          "totalMs": 991,
+          "observedMs": 1063.976
+        },
+        {
+          "generation": 6,
+          "frontendMs": 81,
+          "codegenMs": 0,
+          "assemblyMs": 46,
+          "linkMs": 457,
+          "shutdownMs": 105,
+          "startupMs": 392,
+          "totalMs": 1085,
+          "observedMs": 1142.115
+        },
+        {
+          "generation": 7,
+          "frontendMs": 80,
+          "codegenMs": 0,
+          "assemblyMs": 40,
+          "linkMs": 466,
+          "shutdownMs": 105,
+          "startupMs": 304,
+          "totalMs": 998,
+          "observedMs": 1091.974
+        },
+        {
+          "generation": 8,
+          "frontendMs": 79,
+          "codegenMs": 0,
+          "assemblyMs": 48,
+          "linkMs": 468,
+          "shutdownMs": 109,
+          "startupMs": 306,
+          "totalMs": 1013,
+          "observedMs": 1090.863
+        },
+        {
+          "generation": 9,
+          "frontendMs": 81,
+          "codegenMs": 0,
+          "assemblyMs": 50,
+          "linkMs": 462,
+          "shutdownMs": 106,
+          "startupMs": 294,
+          "totalMs": 995,
+          "observedMs": 1063.301
+        }
+      ],
+      "summary": {
+        "frontendMs": {
+          "min": 79,
+          "median": 81,
+          "p95": 94,
+          "max": 94
+        },
+        "codegenMs": {
+          "min": 0,
+          "median": 0,
+          "p95": 0,
+          "max": 0
+        },
+        "assemblyMs": {
+          "min": 40,
+          "median": 47,
+          "p95": 50,
+          "max": 50
+        },
+        "linkMs": {
+          "min": 456,
+          "median": 459,
+          "p95": 468,
+          "max": 468
+        },
+        "shutdownMs": {
+          "min": 105,
+          "median": 108,
+          "p95": 112,
+          "max": 112
+        },
+        "startupMs": {
+          "min": 284,
+          "median": 304,
+          "p95": 690,
+          "max": 690
+        },
+        "totalMs": {
+          "min": 987,
+          "median": 998,
+          "p95": 1401,
+          "max": 1401
+        },
+        "observedMs": {
+          "min": 1063.301,
+          "median": 1090.863,
+          "p95": 1500.562,
+          "max": 1500.562
+        }
+      }
+    },
+    {
+      "name": "pinned-hono-basic",
+      "source": "vendor/hono-examples/basic/src/index.ts",
+      "samples": [
+        {
+          "generation": 3,
+          "frontendMs": 419,
+          "codegenMs": 0,
+          "assemblyMs": 61,
+          "linkMs": 493,
+          "shutdownMs": 107,
+          "startupMs": 300,
+          "totalMs": 1384,
+          "observedMs": 1485.255
+        },
+        {
+          "generation": 4,
+          "frontendMs": 404,
+          "codegenMs": 0,
+          "assemblyMs": 56,
+          "linkMs": 458,
+          "shutdownMs": 105,
+          "startupMs": 282,
+          "totalMs": 1307,
+          "observedMs": 1376.388
+        },
+        {
+          "generation": 5,
+          "frontendMs": 414,
+          "codegenMs": 0,
+          "assemblyMs": 43,
+          "linkMs": 478,
+          "shutdownMs": 111,
+          "startupMs": 278,
+          "totalMs": 1326,
+          "observedMs": 1397.169
+        },
+        {
+          "generation": 6,
+          "frontendMs": 475,
+          "codegenMs": 0,
+          "assemblyMs": 63,
+          "linkMs": 641,
+          "shutdownMs": 107,
+          "startupMs": 278,
+          "totalMs": 1568,
+          "observedMs": 1659.045
+        },
+        {
+          "generation": 7,
+          "frontendMs": 366,
+          "codegenMs": 0,
+          "assemblyMs": 50,
+          "linkMs": 486,
+          "shutdownMs": 108,
+          "startupMs": 293,
+          "totalMs": 1307,
+          "observedMs": 1371.852
+        },
+        {
+          "generation": 8,
+          "frontendMs": 363,
+          "codegenMs": 0,
+          "assemblyMs": 51,
+          "linkMs": 463,
+          "shutdownMs": 103,
+          "startupMs": 410,
+          "totalMs": 1393,
+          "observedMs": 1477.467
+        },
+        {
+          "generation": 9,
+          "frontendMs": 368,
+          "codegenMs": 0,
+          "assemblyMs": 48,
+          "linkMs": 460,
+          "shutdownMs": 111,
+          "startupMs": 284,
+          "totalMs": 1274,
+          "observedMs": 1346.786
+        }
+      ],
+      "summary": {
+        "frontendMs": {
+          "min": 363,
+          "median": 404,
+          "p95": 475,
+          "max": 475
+        },
+        "codegenMs": {
+          "min": 0,
+          "median": 0,
+          "p95": 0,
+          "max": 0
+        },
+        "assemblyMs": {
+          "min": 43,
+          "median": 51,
+          "p95": 63,
+          "max": 63
+        },
+        "linkMs": {
+          "min": 458,
+          "median": 478,
+          "p95": 641,
+          "max": 641
+        },
+        "shutdownMs": {
+          "min": 103,
+          "median": 107,
+          "p95": 111,
+          "max": 111
+        },
+        "startupMs": {
+          "min": 278,
+          "median": 284,
+          "p95": 410,
+          "max": 410
+        },
+        "totalMs": {
+          "min": 1274,
+          "median": 1326,
+          "p95": 1568,
+          "max": 1568
+        },
+        "observedMs": {
+          "min": 1346.786,
+          "median": 1397.169,
+          "p95": 1659.045,
+          "max": 1659.045
+        }
+      }
+    }
+  ]
+}
