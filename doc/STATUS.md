@@ -26,7 +26,7 @@ open before tagging.
   to observe the missing listener-ready signal, and proves that it restores the
   previous generation before accepting another successful edit.
 - Warm simple-app reloads are bounded at 1.5 seconds by default in the local
-  integration and dedicated benchmark gates. Shared CI runners use a 2.5-second
+  integration and dedicated benchmark gates. Shared CI runners use a 4-second
   correctness ceiling and a 60-second initial-build readiness wait;
   each successful reload now reports frontend, code generation, assembly,
   link, shutdown, startup, and end-to-end milliseconds. The beta performance

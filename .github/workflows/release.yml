@@ -20,7 +20,7 @@ jobs:
       # Correctness waits are relaxed for shared/legacy runners. The dedicated
       # benchmark keeps the 1.5-second simple reload performance gate.
       TINYTSX_DEV_TEST_TIMEOUT_MS: "60000"
-      TINYTSX_DEV_RELOAD_THRESHOLD_MS: "2500"
+      TINYTSX_DEV_RELOAD_THRESHOLD_MS: "4000"
     strategy:
       fail-fast: false
       matrix:
