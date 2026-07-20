@@ -25,7 +25,9 @@ open before tagging.
 - A second tracer moves a Hono candidate to an occupied port, requires dev mode
   to observe the missing listener-ready signal, and proves that it restores the
   previous generation before accepting another successful edit.
-- Warm simple-app reloads are bounded at 1.5 seconds in the integration gate;
+- Warm simple-app reloads are bounded at 1.5 seconds by default in the local
+  integration and dedicated benchmark gates. Shared CI runners use a 2.5-second
+  correctness ceiling and a 60-second initial-build readiness wait;
   each successful reload now reports frontend, code generation, assembly,
   link, shutdown, startup, and end-to-end milliseconds. The beta performance
   harness retains seven clean-source samples for both a transitive simple app

@@ -86,7 +86,8 @@ tar -tzf "$base.tar.gz" | grep '/lib/tinytsx/sdk/builtins/assets.ts$'
 ## Air-quality deployment
 
 - [x] Apple behavior and performance artifacts identify both repository commits.
-- [ ] Cross-build the application with the Linux ARM64 candidate archive.
+- [ ] Build the application natively on Linux ARM64 from the exact candidate
+      commit and retain the application/compiler provenance manifest.
 - [ ] Deploy it beside `luft-control` using only the read-only absolute database
       binding and verify current/history/assets against the live service-owned DB.
 - [ ] Record Pi startup, RSS, RPS, p99, service installation, rollback, and Bun
