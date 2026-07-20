@@ -80,6 +80,26 @@ open before tagging.
   80,328/87,503 TinyTSX RPS versus 84,326/85,747 Bun, p99 within 1.04x, startup
   15.87 versus 20.07 ms, and RSS 7.50 versus 40.58 MiB. Pi evidence is open.
 
+## Parallel test runner (2026-07-20)
+
+- `npm test` now executes a declared task graph instead of a 43-command shell
+  chain. Shared npm fixtures, the TypeScript frontend, and the debug compiler
+  are prerequisites; independent native, reference, specification, and Rust
+  suites run with four jobs by default.
+- Exact fixed-port resources prevent incompatible native suites from
+  overlapping. The dev hot-reload latency gate is explicitly exclusive so CPU
+  and linker contention cannot turn its 1.5-second contract into a flaky test.
+- Each task writes an isolated log and the run writes a machine-readable summary
+  below `.tinytsx/test-logs/`. `--list`, repeated `--suite`, `--profile`, and
+  `--jobs` make local and CI selection explicit.
+- All 43 default suites passed in 295.7 seconds on Apple ARM64 before frontend
+  reuse. The workspace task now consumes the runner-prepared frontend instead
+  of rebuilding it from every Rust e2e case; its isolated duration fell from
+  226.9 to 159.7 seconds while standalone `cargo test` remains self-contained.
+  Isolating workspace Cargo artifacts prevents it from replacing the debug
+  compiler used by parallel native suites; the final four-job profile passed in
+  232.1 seconds, with the workspace task at 163.7 seconds.
+
 ## Alpha implementation evidence
 
 ### Pinned Stytch-auth TODO backend (2026-07-18)

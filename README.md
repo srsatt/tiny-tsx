@@ -455,12 +455,22 @@ npm run test:wpt-native
 # Complete repository suite
 npm test
 
+# Discover or select suites
+npm run test:list
+npm test -- --suite test:dev
+
+# Override the default min(CPU count, 4) worker limit
+npm test -- --jobs 2
+
 # Clean release verification and archive smoke tests
 npm run release:verify
 ```
 
-The complete suite builds and launches many native servers and can take several
-minutes. Bun is required for the reference-test portions of `npm test`.
+The dependency-aware test runner prepares shared fixtures once, runs independent
+suites in parallel, serializes fixed-port and timing-sensitive conflicts, and
+writes one log per task plus `summary.json` under `.tinytsx/test-logs/`. The
+complete suite builds and launches many native servers and can still take
+several minutes. Bun is required for its reference-test portions.
 
 ## Repository layout
 

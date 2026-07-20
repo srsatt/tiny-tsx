@@ -161,6 +161,18 @@ ordered by the application tracer rather than general JavaScript breadth.
     two-worker gate passes at 0.95x/1.02x RPS, 0.99x/1.04x p99, 0.79x startup,
     and 0.18x RSS. Raspberry Pi deploy/performance evidence remains open.
 
+### B3 — Beta verification loop
+
+- [x] Replace the serial root `npm test` chain with a dependency-aware runner
+      that deduplicates setup and executes independent suites in parallel.
+- [x] Model fixed listener ports and timing-sensitive tests as scheduler
+      resources, terminate running process groups on failure, and retain
+      per-task logs plus a machine-readable summary.
+- [x] Make `release:verify` use an explicit release profile that includes the
+      complete default suite and the Zod OpenAPI native/reference gates.
+- [ ] Complete `release:verify` from the final clean beta commit on every
+      supported native host and retain the candidate manifests and checksums.
+
 ## Alpha critical path
 
 ### A0 — Freeze the developer-preview contract
