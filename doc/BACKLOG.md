@@ -151,7 +151,7 @@ ordered by the application tracer rather than general JavaScript breadth.
 - [x] Add deploy-time read-only SQLite bindings, including compiler-declared
       names, runtime `--bind` values, fail-before-listen validation, and
       query-only owner connections.
-- [ ] Add deterministic embedded binary asset stores for Vite output.
+- [x] Add deterministic embedded binary asset stores for Vite output.
 - [ ] Admit the bounded Hono query/numeric parameter slice required by the
       history API without application-owned declaration overlays.
 - [ ] Build and deploy `tinytsx-air-quality` as a separate repository, then

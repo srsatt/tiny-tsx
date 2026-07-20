@@ -194,6 +194,7 @@ Common build options include:
 --alias <specifier=path>   Runtime source alias
 --api <specifier=path>     Declaration overlay
 --binding <name=value>     Explicit native resource binding
+--asset <name=directory>   Embed one bounded static asset directory
 --bind <name=/abs/path>    Runtime value for run/dev deploy-time bindings
 --allow-env <name>         Permit one environment value
 --allow-read <root>        Permit filesystem/database reads
@@ -264,6 +265,7 @@ TinyTSX exposes a small protected backend API rather than emulating Node.js:
 | `tinytsx:env` | Immutable, explicitly permitted startup environment values |
 | `tinytsx:fs` | Capability-scoped bounded UTF-8 file reads |
 | `tinytsx:sqlite` | Single-owner bounded SQLite operations, transactions, and deploy-time read-only databases |
+| `tinytsx:assets` | Deterministic binary asset stores with MIME, ETag, HEAD, and SPA fallback support |
 | `tinytsx:actors` | Lightweight local actors on a fixed native executor pool |
 | `tinytsx:serve` | Hono-neutral native HTTP entrypoint |
 
@@ -310,6 +312,26 @@ tinytsx build server.ts --binding AIR_DB=sqlite-ro --output dist/server
 every generated process. Missing, duplicate, unknown, relative, absent, or
 unsafe bindings fail before the HTTP listener opens. Read-only statements expose
 only `all()` and `get()`; write operations fail compilation.
+
+To embed a Vite output directory, name the store in source and bind its bytes at
+build time:
+
+```ts
+import {openAssets} from "tinytsx:assets";
+
+const web = openAssets("WEB", {index: "index.html", spaFallback: true});
+app.get("*", context => web.fetch(context.req.raw));
+```
+
+```sh
+tinytsx build server.ts --asset WEB=web/dist --output dist/server
+```
+
+The directory is traversed deterministically and becomes part of the executable;
+it is not read at runtime. Symbolic links and non-regular files are rejected.
+One store is limited to 1,024 files, 4 MiB per file, and 16 MiB total. Exact
+paths, `HEAD`, MIME types, stable ETags/304, index routing, and optional SPA
+fallback are supported; traversal never falls back to the index.
 
 ## Performance
 

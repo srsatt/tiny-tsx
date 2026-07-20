@@ -54,7 +54,8 @@ The compiler reserves `TINY1500`–`TINY1599` for built-in diagnostics:
 - `TINY1512`: unsupported SQLite operation, argument shape, or exceeded limit;
 - `TINY1513`: invalid, missing, or undeclared read-only SQLite binding;
 - `TINY1520`: unsupported actor spawn behavior, persistence, or capacity;
-- `TINY1521`: unsupported actor-reference operation or message.
+- `TINY1521`: unsupported actor-reference operation or message;
+- `TINY1530`: invalid embedded asset declaration, options, or operation.
 
 Focused frontend/native tests pin these codes. Runtime failures use stable error
 categories rather than exposing host errno text.
@@ -108,6 +109,22 @@ The generated executable requires `--bind AIR_DB=/absolute/path`; `run` and
 unknown names, relative paths, missing files, unsafe ownership/link state, or a
 failed SQLite read-only open terminate before HTTP starts. The runtime cannot
 create or mutate the bound database.
+
+`--asset WEB=<directory>` is a build-time resource binding. Source opens the
+same static name with `openAssets("WEB", options)` from `tinytsx:assets`. Every
+declared store must be opened exactly once. Its sorted, normalized file tree is
+embedded into generated read-only data; the resulting executable performs no
+asset filesystem access. The build report records store count, file count, and
+embedded byte count.
+
+Roots and descendants must be real directories or regular files: symbolic
+links and other filesystem objects fail the build. A store contains 1..=1,024
+files, at most 4 MiB per file and 16 MiB total. The configured index must exist.
+Runtime lookup accepts exact normalized paths, `/` through the index, and an
+optional SPA fallback. Backslashes, NUL, and `.`/`..` path components return
+404 without fallback. Responses include a compile-time MIME type and stable
+content ETag; matching `If-None-Match` produces 304, and `HEAD` preserves the
+GET representation length without writing a body.
 
 ## Alpha modules
 

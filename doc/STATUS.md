@@ -45,6 +45,19 @@ open before tagging.
   verifies the named-binding ABI. The complete earlier writable SQLite native
   suite remains green.
 
+## Beta embedded assets (2026-07-20)
+
+- `openAssets("WEB", {index: "index.html", spaFallback: true})` pairs with
+  `--asset WEB=<directory>` and embeds a deterministic, target-independent file
+  table into the native executable.
+- Build-time intake rejects symlinks, non-regular files, missing indexes, and
+  stores beyond the 1,024-file, 4-MiB-per-file, or 16-MiB aggregate limits.
+- Native HTTP covers binary fidelity, MIME, stable ETags/304, `HEAD`, index and
+  SPA routing, and raw traversal denial. Repeated Linux ARM64 emission is
+  byte-identical and assembles with Clang.
+- Build reports expose embedded store, file, and byte totals. Asset bytes are
+  never read from the deployment filesystem.
+
 ## Alpha implementation evidence
 
 ### Pinned Stytch-auth TODO backend (2026-07-18)

@@ -139,3 +139,18 @@ read-only type exposes prepared `all`/`get` queries but no mutation API, and the
 runtime still applies the service-owned, no-follow SQLite path policy. Dynamic
 binding lookup, optional bindings, path defaults, database creation, and
 write escalation are outside the beta contract.
+
+## D-016: Frontend assets are deterministic executable data
+
+The beta deployment artifact is self-contained: a statically named
+`tinytsx:assets` store is paired with one build-time `--asset` directory. The
+compiler validates a closed file tree, sorts normalized paths, computes MIME
+and ETag metadata, and emits all bytes into the target object. Runtime asset
+responses therefore need no filesystem capability, allocator, cache, or
+application-worker hop.
+
+Symlinks, special files, traversal, missing indexes, and exceeded file/byte
+limits fail closed. Exact paths, `HEAD`, conditional ETag requests, index
+routing, and an explicitly selected SPA fallback are the beta surface. Runtime
+directory mounting, compression negotiation, range requests, mutable assets,
+and general static-file middleware remain separate work.
