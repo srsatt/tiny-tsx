@@ -152,13 +152,17 @@ fn build_and_start(
     let mut candidate_options = options.clone();
     candidate_options.output = generation_output(base_output, generation);
     let output = build::execute_compilation(&candidate_options, compilation)?;
+    // Arm the watch baseline before the server becomes reachable. Otherwise a
+    // dependency edit made as soon as readiness is observed can become the
+    // baseline and never trigger a rebuild.
+    let watched = versions(&output.dependencies);
     let running = start_ready(
         &output.executable,
         output.port,
         generation,
         runtime_bindings,
     )?;
-    Ok((running, versions(&output.dependencies)))
+    Ok((running, watched))
 }
 
 fn start_ready(
