@@ -87,6 +87,10 @@ pub fn execute(
             .and_then(|compilation| build::execute_compilation(&candidate_options, compilation))
         {
             Ok(output) => {
+                // Arm the new dependency baseline before the candidate can
+                // become reachable. A client may observe the new response and
+                // edit another source file before start_ready returns.
+                let next_watched = versions(&output.dependencies);
                 let fallback_executable = running.executable.clone();
                 let fallback_port = running.port;
                 let fallback_number = running.number;
@@ -114,7 +118,7 @@ pub fn execute(
                         restored
                     }
                 };
-                watched = versions(&output.dependencies);
+                watched = next_watched;
                 if running.number == generation {
                     println!("TinyTSX dev: generation {generation} started");
                     println!(
