@@ -61,12 +61,13 @@ engine.
 
 ## Project status
 
-The current source version is `0.1.0-beta.1`. The beta compiler and separate
-Hono/Vite air-quality proof pass their Apple ARM64 functional and performance
-gates. Fresh same-commit archives are still required on all four native targets,
-and Raspberry Pi deployment remains open before publishing a Git tag or release
-assets. No beta release has been published; [`doc/RELEASE_CHECKLIST.md`](doc/RELEASE_CHECKLIST.md)
-tracks that gate.
+The current source version is `0.1.0-beta.1`. Candidate `91e235a` passes clean
+same-commit Apple ARM64, Intel macOS, Linux ARM64, and Linux x86-64 release
+verification. The separate Hono/Vite air-quality proof passes Linux ARM64
+packaging, live Raspberry Pi deployment and rollback, and its enforced
+TinyTSX/Bun startup, RSS, throughput, and p99 gates. The candidate is ready to
+tag, but no beta release has been published; [`doc/RELEASE_CHECKLIST.md`](doc/RELEASE_CHECKLIST.md)
+retains the exact evidence and bounded release decision.
 
 The executable compatibility matrix currently includes:
 

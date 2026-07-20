@@ -4,13 +4,12 @@ Last updated: 2026-07-20
 
 ## Current state
 
-The alpha contract and pinned Stytch-auth TODO P1-P4 slice are functionally
-complete, including native Apple/Linux, installed-archive, bounded-failure, and
-measured-load evidence. The repository's author-history rewrite preserved the
-verified trees but changed every commit hash, so the old schema-v2 artifact
-manifests no longer identify a reachable release source. Fresh clean Apple and
-Linux verification for ARM64 and x86-64 at one rewritten-history commit remains
-open before tagging.
+The `0.1.0-beta.1` candidate is ready to tag. TinyTSX `91e235a` passes clean
+same-commit release verification and schema-v2 archive inspection on Apple
+ARM64, Intel macOS, Linux ARM64, and Linux x86-64. The separate air-quality
+candidate `628ae2d` passes native ARM64 packaging, live Raspberry Pi service
+deployment and rollback, and the enforced TinyTSX/Bun performance contract.
+No tag or GitHub release has been created.
 
 ## Beta development loop (2026-07-20)
 
@@ -82,7 +81,14 @@ open before tagging.
   SPA behavior suite against the real `luft-control` measurement schema.
 - The clean two-worker Apple release candidate passes its enforced comparison:
   80,328/87,503 TinyTSX RPS versus 84,326/85,747 Bun, p99 within 1.04x, startup
-  15.87 versus 20.07 ms, and RSS 7.50 versus 40.58 MiB. Pi evidence is open.
+  15.87 versus 20.07 ms, and RSS 7.50 versus 40.58 MiB.
+- The Linux ARM64 artifact identifies application `628ae2d` and TinyTSX
+  `91e235a`, serves live current/history data and embedded Vite assets under a
+  hardened systemd unit, and survives an explicit rollback/forward-deploy cycle.
+- The final Pi/Bun run isolates both targets from live collector write locks by
+  using one SQLite-consistent snapshot. TinyTSX records 114 ms startup,
+  9.63 MiB RSS, 157.72/199.26 RPS, and 89.64/693.18 ms p99 at concurrency 8/64;
+  Bun records 757 ms, 48.42 MiB, 162.73/191.24 RPS, and 78.85/655.94 ms.
 
 ## Parallel test runner (2026-07-20)
 

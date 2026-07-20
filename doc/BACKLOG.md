@@ -158,12 +158,17 @@ ordered by the application tracer rather than general JavaScript breadth.
 - [x] Add deterministic embedded binary asset stores for Vite output.
 - [x] Admit the bounded Hono query/numeric parameter slice required by the
       history API without application-owned declaration overlays.
-- [ ] Build and deploy `tinytsx-air-quality` as a separate repository, then
+- [x] Build and deploy `tinytsx-air-quality` as a separate repository, then
       require its functional and TinyTSX/Bun performance gates before beta.
   - 2026-07-20: the separate local repository compiles published Hono without
     an application overlay; TinyTSX/Bun behavior is green. Its clean Apple
     two-worker gate passes at 0.95x/1.02x RPS, 0.99x/1.04x p99, 0.79x startup,
-    and 0.18x RSS. Raspberry Pi deploy/performance evidence remains open.
+    and 0.18x RSS.
+  - 2026-07-20: Linux ARM64 application `628ae2d` built against TinyTSX
+    `91e235a`, deployed under hardened systemd with live read-only SQLite and
+    embedded Vite assets, and passed rollback. Its snapshot-isolated Pi gate
+    records 0.15x startup, 0.20x RSS, 0.97x/1.04x RPS, and 1.14x/1.06x p99
+    versus Bun at concurrency 8/64.
 
 ### B3 — Beta verification loop
 
@@ -174,8 +179,11 @@ ordered by the application tracer rather than general JavaScript breadth.
       per-task logs plus a machine-readable summary.
 - [x] Make `release:verify` use an explicit release profile that includes the
       complete default suite and the Zod OpenAPI native/reference gates.
-- [ ] Complete `release:verify` from the final clean beta commit on every
+- [x] Complete `release:verify` from the final clean beta commit on every
       supported native host and retain the candidate manifests and checksums.
+  - 2026-07-20: workflow `29759036385` passed Apple ARM64, Intel macOS,
+    Linux ARM64, and Linux x86-64 at `91e235a`; all four checksum and manifest
+    bundles were collected and independently inspected.
 
 ## Alpha critical path
 
