@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import path from "node:path";
 import process from "node:process";
+import readline from "node:readline";
 import {fileURLToPath} from "node:url";
 import {auditCompatibility} from "./compatibility-audit.js";
 import {CompileFailure, formatDiagnostic} from "./diagnostics.js";
@@ -11,6 +12,11 @@ import {compileWptEntry} from "./wpt.js";
 const args = process.argv.slice(2);
 if (args[0] === "--audit-compat") {
   audit(args.slice(1));
+} else if (args[0] === "--session") {
+  runSession(args.slice(1)).catch(error => {
+    process.stderr.write(`${error instanceof Error ? error.stack ?? error.message : String(error)}\n`);
+    process.exitCode = 1;
+  });
 } else if (args[0] === "--test262") {
   compileTest262(args.slice(1));
 } else if (args[0] === "--wpt") {
@@ -62,7 +68,59 @@ function compileTest262(args: string[]): void {
 }
 
 function compile(args: string[]): void {
-  const entry = args[0]!;
+  const request = parseCompilation(args);
+  if (request === undefined) return;
+  try {
+    process.stdout.write(`${JSON.stringify(compileEntry(request.entry, request.options), null, 2)}\n`);
+  } catch (error) {
+    if (error instanceof CompileFailure) {
+      process.stderr.write(`${formatFailure(error)}\n`);
+      process.exitCode = 1;
+    } else {
+      throw error;
+    }
+  }
+}
+
+async function runSession(args: string[]): Promise<void> {
+  const request = parseCompilation(args);
+  if (request === undefined) return;
+  const compilationSession = {};
+  const lines = readline.createInterface({input: process.stdin, crlfDelay: Infinity});
+  for await (const line of lines) {
+    if (line !== '{"command":"compile"}') {
+      process.stdout.write(`${JSON.stringify({ok: false, error: "invalid frontend session command"})}\n`);
+      continue;
+    }
+    try {
+      process.stdout.write(`${JSON.stringify({
+        ok: true,
+        hir: compileEntry(request.entry, request.options, compilationSession),
+      })}\n`);
+    } catch (error) {
+      if (error instanceof CompileFailure) {
+        process.stdout.write(`${JSON.stringify({ok: false, error: formatFailure(error)})}\n`);
+      } else {
+        throw error;
+      }
+    }
+  }
+}
+
+function formatFailure(error: CompileFailure): string {
+  return error.diagnostics.map(formatDiagnostic).join("\n\n");
+}
+
+function parseCompilation(args: string[]): {
+  entry: string;
+  options: Parameters<typeof compileEntry>[1];
+} | undefined {
+  const entry = args[0];
+  if (entry === undefined) {
+    usage();
+    process.exitCode = 2;
+    return undefined;
+  }
   const defaultSdk = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../sdk/index.d.ts");
   const options = parseOptions(args.slice(1), new Set([
     "--sdk", "--alias", "--api", "--allow-env", "--allow-read", "--allow-write", "--binding",
@@ -80,27 +138,20 @@ function compile(args: string[]): void {
   if ((options.values.get("--sdk")?.length ?? 0) > 1) {
     process.stderr.write("error: --sdk may only be provided once\n");
     process.exitCode = 2;
-  } else {
-    try {
-      const hir = compileEntry(entry, {
-        sdkPath,
-        aliases,
-        apiAliases,
-        allowedEnvironment: new Set(options.values.get("--allow-env") ?? []),
-        allowedReadRoots: options.values.get("--allow-read") ?? [],
-        allowedWriteRoots: options.values.get("--allow-write") ?? [],
-        sqliteKvBindings,
-      });
-      process.stdout.write(`${JSON.stringify(hir, null, 2)}\n`);
-    } catch (error) {
-      if (error instanceof CompileFailure) {
-        process.stderr.write(`${error.diagnostics.map(formatDiagnostic).join("\n\n")}\n`);
-        process.exitCode = 1;
-      } else {
-        throw error;
-      }
-    }
+    return undefined;
   }
+  return {
+    entry,
+    options: {
+      sdkPath,
+      aliases,
+      apiAliases,
+      allowedEnvironment: new Set(options.values.get("--allow-env") ?? []),
+      allowedReadRoots: options.values.get("--allow-read") ?? [],
+      allowedWriteRoots: options.values.get("--allow-write") ?? [],
+      sqliteKvBindings,
+    },
+  };
 }
 
 function parseSqliteKvBindings(values: string[]): Record<string, string> | undefined {

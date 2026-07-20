@@ -27,6 +27,23 @@ fn rejects_unknown_build_target_before_compilation() {
 }
 
 #[test]
+fn rejects_dev_restart_timeout_outside_the_bounded_range() {
+    let error = run([
+        "dev",
+        "app.tsx",
+        "--restart-timeout-ms",
+        "0",
+    ]
+    .into_iter()
+    .map(Into::into))
+    .unwrap_err();
+    assert_eq!(
+        error,
+        "restart timeout must be between 100 and 30000 milliseconds"
+    );
+}
+
+#[test]
 fn rejects_non_portable_environment_capabilities_before_compilation() {
     let error = run(["build", "app.tsx", "--allow-env", "9INVALID"]
         .into_iter()

@@ -55,7 +55,15 @@ export interface CompileOptions {
   sqliteKvBindings?: Readonly<Record<string, string>>;
 }
 
-export function compileEntry(entryPath: string, options: CompileOptions): HirProgram {
+export interface CompileSession {
+  program?: ts.Program;
+}
+
+export function compileEntry(
+  entryPath: string,
+  options: CompileOptions,
+  session?: CompileSession,
+): HirProgram {
   const entry = path.resolve(entryPath);
   const sdk = path.resolve(options.sdkPath);
   const builtins = builtinRuntimeAliases(sdk);
@@ -93,7 +101,9 @@ export function compileEntry(entryPath: string, options: CompileOptions): HirPro
   const program = ts.createProgram({
     rootNames: [entry, sdk, ...graph.modules.map(module => module.path)],
     options: compilerOptions,
+    ...(session?.program === undefined ? {} : {oldProgram: session.program}),
   });
+  if (session !== undefined) session.program = program;
 
   const sourceFile = program.getSourceFile(entry);
   if (sourceFile === undefined) {

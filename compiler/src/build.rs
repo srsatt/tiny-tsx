@@ -89,8 +89,7 @@ struct BuildPermissions<'a> {
 }
 
 pub fn execute(options: &Options) -> Result<Output, String> {
-    options.target.ensure_native()?;
-    let mut compilation = frontend::compile(
+    let compilation = frontend::compile(
         &options.entry,
         &options.aliases,
         &options.api_aliases,
@@ -99,6 +98,14 @@ pub fn execute(options: &Options) -> Result<Output, String> {
         &options.allowed_read_roots,
         &options.allowed_write_roots,
     )?;
+    execute_compilation(options, compilation)
+}
+
+pub fn execute_compilation(
+    options: &Options,
+    mut compilation: Compilation,
+) -> Result<Output, String> {
+    options.target.ensure_native()?;
     compilation.retarget(options.target)?;
     let port = if options.port_explicit {
         options.port

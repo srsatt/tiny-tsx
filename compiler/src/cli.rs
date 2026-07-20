@@ -96,8 +96,30 @@ fn build(arguments: &[String]) -> Result<(), String> {
 }
 
 fn dev_server(arguments: &[String]) -> Result<(), String> {
-    let options = parse_build_options(arguments, PathBuf::from(".tinytsx/dev/server"))?;
-    dev::execute(options)
+    let mut build_arguments = Vec::with_capacity(arguments.len());
+    let mut restart_timeout_ms = 2_000_u64;
+    let mut timeout_seen = false;
+    let mut index = 0;
+    while index < arguments.len() {
+        if arguments[index] == "--restart-timeout-ms" {
+            if timeout_seen {
+                return Err("--restart-timeout-ms may only be provided once".to_owned());
+            }
+            timeout_seen = true;
+            restart_timeout_ms = parse_number(
+                option_value(arguments, &mut index)?,
+                "restart timeout",
+            )?;
+        } else {
+            build_arguments.push(arguments[index].clone());
+        }
+        index += 1;
+    }
+    if !(100..=30_000).contains(&restart_timeout_ms) {
+        return Err("restart timeout must be between 100 and 30000 milliseconds".to_owned());
+    }
+    let options = parse_build_options(&build_arguments, PathBuf::from(".tinytsx/dev/server"))?;
+    dev::execute(options, std::time::Duration::from_millis(restart_timeout_ms))
 }
 
 fn run_server(arguments: &[String]) -> Result<(), String> {

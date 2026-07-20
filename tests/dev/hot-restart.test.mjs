@@ -50,6 +50,19 @@ test("dev replaces the running server after a dependency changes", async context
   assert.equal(await waitForBody(port, "second", child, () => output), "second");
   const reloadMs = Date.now() - changedAt;
   assert.ok(reloadMs <= 1_500, `warm reload took ${reloadMs}ms\n${output}`);
+
+  const failureOffset = output.length;
+  await writeFile(entry, [
+    'import {LATE} from "./late.js";',
+    "export function GET(_request: Request): Response {",
+    "  return Response.text(LATE);",
+    "}",
+    "",
+  ].join("\n"));
+  await waitForOutput("build failed", child, () => output.slice(failureOffset));
+  assert.equal(await waitForBody(port, "second", child, () => output), "second");
+  await writeFile(path.join(project, "late.ts"), 'export const LATE = "third";\n');
+  assert.equal(await waitForBody(port, "third", child, () => output), "third");
   assert.equal(child.exitCode, null, output);
 });
 

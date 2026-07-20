@@ -8,10 +8,9 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-use crate::build;
+use crate::{build, frontend};
 
 const POLL_INTERVAL: Duration = Duration::from_millis(75);
-const RESTART_TIMEOUT: Duration = Duration::from_secs(2);
 
 static SHUTDOWN_REQUESTED: AtomicBool = AtomicBool::new(false);
 
@@ -21,13 +20,23 @@ struct FileVersion {
     len: u64,
 }
 
-pub fn execute(options: build::Options) -> Result<(), String> {
+pub fn execute(options: build::Options, restart_timeout: Duration) -> Result<(), String> {
     install_signal_handlers()?;
     let base_output = absolute(&options.output)?;
     let mut options = options;
     options.runtime_target_directory = Some(absolute(Path::new(".tinytsx/cache/runtime"))?);
     let mut generation = 1_u64;
-    let (mut child, mut watched) = build_and_start(&options, &base_output, generation)?;
+    let mut frontend = frontend::Session::start(
+        &options.entry,
+        &options.aliases,
+        &options.api_aliases,
+        &options.bindings,
+        &options.allowed_environment,
+        &options.allowed_read_roots,
+        &options.allowed_write_roots,
+    )?;
+    let (mut child, mut watched) =
+        build_and_start(&options, &base_output, generation, frontend.compile()?)?;
     println!("TinyTSX dev: watching {} source file(s)", watched.len());
 
     while !SHUTDOWN_REQUESTED.load(Ordering::Acquire) {
@@ -40,12 +49,16 @@ pub fn execute(options: build::Options) -> Result<(), String> {
         }
 
         println!("TinyTSX dev: change detected; rebuilding");
+        refresh(&mut watched);
         generation += 1;
         let mut candidate_options = options.clone();
         candidate_options.output = generation_output(&base_output, generation);
-        match build::execute(&candidate_options) {
+        match frontend
+            .compile()
+            .and_then(|compilation| build::execute_compilation(&candidate_options, compilation))
+        {
             Ok(output) => {
-                terminate(&mut child, RESTART_TIMEOUT)?;
+                terminate(&mut child, restart_timeout)?;
                 child = start(&output.executable)?;
                 watched = versions(&output.dependencies);
                 println!("TinyTSX dev: generation {generation} started");
@@ -56,22 +69,22 @@ pub fn execute(options: build::Options) -> Result<(), String> {
                     "TinyTSX dev: build failed; generation {} is still running",
                     generation - 1
                 );
-                refresh(&mut watched);
             }
         }
     }
 
-    terminate(&mut child, RESTART_TIMEOUT)
+    terminate(&mut child, restart_timeout)
 }
 
 fn build_and_start(
     options: &build::Options,
     base_output: &Path,
     generation: u64,
+    compilation: frontend::Compilation,
 ) -> Result<(Child, BTreeMap<PathBuf, FileVersion>), String> {
     let mut candidate_options = options.clone();
     candidate_options.output = generation_output(base_output, generation);
-    let output = build::execute(&candidate_options)?;
+    let output = build::execute_compilation(&candidate_options, compilation)?;
     let child = start(&output.executable)?;
     Ok((child, versions(&output.dependencies)))
 }
@@ -115,10 +128,16 @@ fn terminate(child: &mut Child, timeout: Duration) -> Result<(), String> {
 }
 
 fn versions(paths: &[PathBuf]) -> BTreeMap<PathBuf, FileVersion> {
-    paths
-        .iter()
-        .map(|path| (path.clone(), version(path)))
-        .collect()
+    let mut watched = BTreeMap::new();
+    for path in paths {
+        watched.insert(path.clone(), version(path));
+        if let Some(parent) = path.parent() {
+            watched
+                .entry(parent.to_owned())
+                .or_insert_with(|| version(parent));
+        }
+    }
+    watched
 }
 
 fn version(path: &Path) -> FileVersion {
@@ -164,7 +183,8 @@ fn absolute(path: &Path) -> Result<PathBuf, String> {
 
 fn install_signal_handlers() -> Result<(), String> {
     for signal in [libc::SIGINT, libc::SIGTERM] {
-        let previous = unsafe { libc::signal(signal, handle_signal as libc::sighandler_t) };
+        let previous =
+            unsafe { libc::signal(signal, handle_signal as *const () as libc::sighandler_t) };
         if previous == libc::SIG_ERR {
             return Err(format!(
                 "could not install development signal handler: {}",
