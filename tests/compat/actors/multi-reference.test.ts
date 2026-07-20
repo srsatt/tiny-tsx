@@ -1,11 +1,13 @@
 import {afterAll, beforeAll, expect, test} from "bun:test";
 
-const port = 39_495;
+let port = 0;
 let stop: (() => void) | undefined;
 
 beforeAll(async () => {
-  process.env.TINYTSX_BENCH_PORT = String(port);
-  ({stop} = await import("../../../benchmarks/bun/hono-actor-multi-server.ts"));
+  process.env.TINYTSX_BENCH_PORT = "0";
+  const reference = await import("../../../benchmarks/bun/hono-actor-multi-server.ts");
+  stop = reference.stop;
+  port = reference.server.port;
 });
 
 afterAll(() => stop?.());

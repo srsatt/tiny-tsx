@@ -1,8 +1,8 @@
 import {Hono} from "hono";
 
 const port = Number.parseInt(Bun.env.TINYTSX_BENCH_PORT ?? "3000", 10);
-if (!Number.isInteger(port) || port < 1 || port > 65_535) {
-  throw new Error("TINYTSX_BENCH_PORT must be a valid TCP port");
+if (!Number.isInteger(port) || port < 0 || port > 65_535) {
+  throw new Error("TINYTSX_BENCH_PORT must be zero or a valid TCP port");
 }
 
 type Reply = {id: number; output: string};
