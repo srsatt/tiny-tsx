@@ -96,7 +96,7 @@ tester.run('no-unsupported-syntax', plugin.rules['no-unsupported-syntax'], {
         app.get('/history', async context => context.json({readings: await history.all([
           Number(context.req.query('limit') ?? '256'),
         ])}))
-        app.get('*', context => web.fetch(context.req.raw))
+        app.get('*', context => web.fetch(context.req))
       `,
     },
     {
