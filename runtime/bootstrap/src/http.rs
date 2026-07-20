@@ -3,18 +3,19 @@ mod request;
 mod response;
 
 use std::{
+    ffi::OsString,
     io::{self, ErrorKind},
-    net::TcpListener,
+    net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener},
     os::fd::AsRawFd,
 };
 
 use tinytsx_runtime_worker::{EventControl, EventWorkerPool};
 
 use crate::abi::{
-    RequestArena, TinyHeader, configured_port, configured_request_memory, configured_workers,
+    configured_port, configured_request_memory, configured_workers, RequestArena, TinyHeader,
 };
 use crate::shutdown;
-use connection::{Connection, Turn, write_overload_response};
+use connection::{write_overload_response, Connection, Turn};
 
 const CONNECTION_QUEUE_PER_WORKER: usize = 64;
 const ACCEPT_POLL_TIMEOUT_MS: i32 = 100;
@@ -27,6 +28,7 @@ struct HttpWorker {
 
 pub fn serve() -> std::io::Result<()> {
     let port = configured_port();
+    let host = listen_host(std::env::var_os("TINYTSX_LISTEN_HOST"))?;
     let workers = configured_workers();
     let request_memory = configured_request_memory();
     let queue_capacity = workers
@@ -56,9 +58,10 @@ pub fn serve() -> std::io::Result<()> {
             }
         },
     )?;
-    let listener = TcpListener::bind(("127.0.0.1", port))?;
+    let address = SocketAddr::new(host, port);
+    let listener = TcpListener::bind(address)?;
     listener.set_nonblocking(true)?;
-    println!("TinyTSX listening on http://127.0.0.1:{port}");
+    println!("TinyTSX listening on http://{address}");
     println!("Workers: {workers}; live connections: {queue_capacity}");
 
     while !shutdown::requested() {
@@ -95,6 +98,24 @@ pub fn serve() -> std::io::Result<()> {
     println!("TinyTSX shutting down");
     pool.join();
     Ok(())
+}
+
+fn listen_host(value: Option<OsString>) -> io::Result<IpAddr> {
+    let Some(value) = value else {
+        return Ok(IpAddr::V4(Ipv4Addr::LOCALHOST));
+    };
+    let value = value.into_string().map_err(|_| {
+        io::Error::new(
+            ErrorKind::InvalidInput,
+            "TINYTSX_LISTEN_HOST must be valid UTF-8",
+        )
+    })?;
+    value.parse().map_err(|_| {
+        io::Error::new(
+            ErrorKind::InvalidInput,
+            "TINYTSX_LISTEN_HOST must be an IPv4 or IPv6 address",
+        )
+    })
 }
 
 fn descriptor_ready(listener: &TcpListener, timeout_ms: i32) -> io::Result<bool> {

@@ -201,6 +201,10 @@ Common build options include:
 --allow-write <root>       Permit database writes
 ```
 
+Native servers listen on `127.0.0.1` by default. Set
+`TINYTSX_LISTEN_HOST` to an explicit IPv4 or IPv6 address, such as `0.0.0.0`,
+when a deployment must accept connections from outside the host.
+
 `tinytsx run` performs one build and starts it. `tinytsx dev` keeps the
 TypeScript frontend and native runtime cache warm, watches the reachable module
 graph, and replaces the child server after a successful rebuild. A failed edit
@@ -287,6 +291,8 @@ TinyTSX is designed around explicit bounds rather than a general managed heap:
 - filesystem, database, and environment access is denied unless granted at
   compile time; deploy-time read-only database paths must also be bound before
   the listener starts;
+- the HTTP listener is loopback-only unless the operator explicitly sets
+  `TINYTSX_LISTEN_HOST` to an IP address;
 - unsupported dynamic lifetime or identity requirements fail compilation.
 
 This model reduces runtime state, but it is not an operating-system sandbox.
