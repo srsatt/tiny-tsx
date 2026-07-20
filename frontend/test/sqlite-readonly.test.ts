@@ -67,6 +67,31 @@ test("lowers a bounded Hono query parameter into a read-only SQLite query", () =
     /"parameters":\[\{"kind":"queryParameter","string":\d+,"queryLength":5,"fallbackLength":1\}\]/);
 });
 
+test("lowers Number over a bounded Hono query parameter into a SQLite integer", () => {
+  const entry = write(`
+    import {Hono} from "hono";
+    import {openReadonlyDatabase} from "tinytsx:sqlite";
+
+    const database = openReadonlyDatabase("AIR_DB");
+    const history = database.prepare("SELECT recorded_at FROM readings LIMIT ?1");
+    const app = new Hono();
+    app.get("/history", async context => context.json({
+      readings: await history.all([Number(context.req.query("limit") ?? "64")]),
+    }));
+    export default app;
+  `);
+
+  const hir = compileEntry(entry, {
+    sdkPath,
+    aliases,
+    apiAliases,
+    sqliteReadonlyBindings: new Set(["AIR_DB"]),
+  });
+  const response = hir.handlers.find(handler => handler.path === "/history")?.response;
+  assert.match(JSON.stringify(response),
+    /"parameters":\[\{"kind":"queryInteger","query":\d+,"fallback":64\}\]/);
+});
+
 test("rejects missing bindings and mutation through a read-only database", () => {
   const missing = write(`
     import {openReadonlyDatabase} from "tinytsx:sqlite";

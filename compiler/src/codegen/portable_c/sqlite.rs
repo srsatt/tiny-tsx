@@ -200,6 +200,14 @@ fn emit_parameters(
                 format!("((tiny_usize){fallback_length} << 32) | {query_length}"),
                 format!("tinytsx_string_{string}"),
             ),
+            SqliteParameter::QueryInteger { query, fallback } => (
+                11,
+                format!(
+                    "(((tiny_usize)(tiny_i64){fallback}) << 8) | {}",
+                    program.static_strings[*query].value.len()
+                ),
+                format!("tinytsx_string_{query}"),
+            ),
             SqliteParameter::RequestJsonField { field } => (
                 2,
                 program.static_strings[*field].value.len().to_string(),

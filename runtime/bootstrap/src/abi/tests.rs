@@ -373,6 +373,40 @@ fn sqlite_parameters_decode_query_text_and_use_the_closed_fallback() {
 }
 
 #[test]
+fn sqlite_parameters_decode_bounded_query_integers() {
+    use tinytsx_runtime_sqlite::SqlValue;
+
+    let name = b"limit";
+    let parameter = TinySqlParameter {
+        kind: 11,
+        value: (64_usize << 8) | name.len(),
+        pointer: name.as_ptr(),
+    };
+    let supplied = request(b"GET", b"/history?limit=-2");
+    assert_eq!(
+        unsafe { decode_sqlite_parameters(&supplied, &parameter, 1) },
+        Ok(vec![SqlValue::Integer(-2)]),
+    );
+
+    let missing = request(b"GET", b"/history");
+    assert_eq!(
+        unsafe { decode_sqlite_parameters(&missing, &parameter, 1) },
+        Ok(vec![SqlValue::Integer(64)]),
+    );
+
+    for target in [
+        b"/history?limit=nope".as_slice(),
+        b"/history?limit=9007199254740992".as_slice(),
+    ] {
+        let invalid = request(b"GET", target);
+        assert_eq!(
+            unsafe { decode_sqlite_parameters(&invalid, &parameter, 1) },
+            Err(BAD_REQUEST),
+        );
+    }
+}
+
+#[test]
 fn request_path_matching_uses_the_path_without_the_query() {
     let request = request(b"GET", b"/users?expand=true");
 

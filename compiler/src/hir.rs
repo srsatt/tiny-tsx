@@ -240,6 +240,7 @@ pub enum SqliteParameter {
         #[serde(rename = "fallbackLength")]
         fallback_length: usize,
     },
+    QueryInteger { query: usize, fallback: i64 },
     RequestJsonField { field: usize },
     RequestHeader { header: usize },
     RandomUuid,
@@ -1776,6 +1777,16 @@ impl Program {
                 {
                     return Err("SQLite query parameter has an invalid name or fallback".to_owned());
                 }
+                SqliteParameter::QueryInteger { query, fallback }
+                    if fallback.unsigned_abs() > 9_007_199_254_740_991
+                        || self.static_strings.get(*query).is_none_or(|value| {
+                            value.value.is_empty()
+                                || value.value.len() > 128
+                                || value.value.as_bytes().contains(&0)
+                        }) =>
+                {
+                    return Err("SQLite integer query parameter has an invalid name or fallback".to_owned());
+                }
                 SqliteParameter::RequestJsonField { field }
                     if self
                         .static_strings
@@ -1814,6 +1825,7 @@ impl Program {
                 }
                 SqliteParameter::RandomUuid => {}
                 SqliteParameter::QueryParameter { .. } => {}
+                SqliteParameter::QueryInteger { .. } => {}
                 SqliteParameter::StaticString { string }
                     if self
                         .static_strings

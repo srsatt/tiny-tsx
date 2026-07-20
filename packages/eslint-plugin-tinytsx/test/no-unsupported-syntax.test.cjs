@@ -83,6 +83,23 @@ tester.run('no-unsupported-syntax', plugin.rules['no-unsupported-syntax'], {
       `,
     },
     {
+      filename: 'beta-air-quality.ts',
+      code: `
+        import {Hono} from 'hono'
+        import {openAssets} from 'tinytsx:assets'
+        import {openReadonlyDatabase} from 'tinytsx:sqlite'
+
+        const database = openReadonlyDatabase('AIR_DB')
+        const history = database.prepare('SELECT co2 FROM readings LIMIT ?1')
+        const web = openAssets('WEB', {index: 'index.html', spaFallback: true})
+        const app = new Hono()
+        app.get('/history', async context => context.json({readings: await history.all([
+          Number(context.req.query('limit') ?? '256'),
+        ])}))
+        app.get('*', context => web.fetch(context.req.raw))
+      `,
+    },
+    {
       filename: 'api.d.ts',
       code: `
         declare module 'hono/cors' { export function cors(): unknown }

@@ -66,6 +66,7 @@ export type Value =
       argument?: {kind: "requestJsonField"; path: string[]} | {kind: "routeParameter"; name: string};
     }
   | {kind: "queryParameter"; name: string; fallback?: string}
+  | {kind: "queryInteger"; name: string; fallback: number}
   | {kind: "queryPredicate"; name: string; test: "truthy" | "empty" | "present"}
   | {kind: "runtimeString"; parts: RuntimeStringPart[]}
   | {kind: "runtimeHtml"; parts: RuntimeStringPart[]}
@@ -180,6 +181,7 @@ export interface StatementState {
 export type SqliteParameter =
   | {kind: "routeParameter"; name: string}
   | {kind: "queryParameter"; name: string; fallback: string}
+  | {kind: "queryInteger"; name: string; fallback: number}
   | {kind: "requestJsonField"; path: string[]}
   | {kind: "requestHeader"; name: string}
   | {kind: "randomUuid"}
@@ -426,6 +428,7 @@ export function truthiness(value: Value): boolean | undefined {
     case "fileText": return undefined;
     case "elapsedMilliseconds": return undefined;
     case "queryParameter":
+    case "queryInteger":
     case "queryPredicate": return undefined;
     case "runtimeString":
     case "runtimeHtml": return value.parts.length > 0;
@@ -458,6 +461,7 @@ export function typeOf(value: Value): string {
     case "fileText": return "string";
     case "fetchStatus": return "number";
     case "queryParameter": return "string";
+    case "queryInteger": return "number";
     case "queryPredicate": return "boolean";
     case "readableStream":
     case "writableStream":

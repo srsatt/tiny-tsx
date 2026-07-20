@@ -696,6 +696,12 @@ function lowerSqliteParameters(
           fallbackLength,
         };
       }
+      case "queryInteger":
+        return {
+          kind: "queryInteger" as const,
+          query: strings.intern(parameter.name),
+          fallback: parameter.fallback,
+        };
       case "requestJsonField":
         return {kind: "requestJsonField" as const, field: strings.intern(encodeRequestJsonPath(parameter.path))};
       case "requestHeader":

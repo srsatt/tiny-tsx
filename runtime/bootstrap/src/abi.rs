@@ -1269,6 +1269,21 @@ pub(super) unsafe fn decode_sqlite_parameters(
                     String::from_utf8(value).map_err(|_| BAD_REQUEST)?,
                 ));
             }
+            11 => {
+                let query_len = parameter.value & 0xff;
+                if query_len == 0 || query_len > 128 || parameter.pointer.is_null() {
+                    return Err(INTERNAL_ERROR);
+                }
+                // SAFETY: Generated integer query parameters point at a validated static name.
+                let name = unsafe { slice::from_raw_parts(parameter.pointer, query_len) };
+                // SAFETY: The request and its query view remain valid during dispatch.
+                let value = unsafe { decoded_request_query_parameter(&*request, name) }?;
+                let value = match value {
+                    Some(value) => decode_query_integer(&value)?,
+                    None => (parameter.value as i64) >> 8,
+                };
+                output.push(tinytsx_runtime_sqlite::SqlValue::Integer(value));
+            }
             _ => return Err(INTERNAL_ERROR),
         }
     }
@@ -1776,6 +1791,20 @@ fn decode_form_urlencoded_value(encoded: &[u8], limit: usize) -> Result<Vec<u8>,
         output.push(byte);
     }
     Ok(output)
+}
+
+fn decode_query_integer(value: &[u8]) -> Result<i64, u32> {
+    const MAX_SAFE_INTEGER: u64 = 9_007_199_254_740_991;
+
+    let value = std::str::from_utf8(value).map_err(|_| BAD_REQUEST)?.trim();
+    if value.is_empty() {
+        return Ok(0);
+    }
+    let parsed = value.parse::<i64>().map_err(|_| BAD_REQUEST)?;
+    if parsed.unsigned_abs() > MAX_SAFE_INTEGER {
+        return Err(BAD_REQUEST);
+    }
+    Ok(parsed)
 }
 
 #[unsafe(no_mangle)]

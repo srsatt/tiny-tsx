@@ -57,15 +57,18 @@ test("requires and serves a deploy-time read-only SQLite binding", async context
     ],
   });
 
-  const history = await fetch(`http://127.0.0.1:${port}/history?since=200`);
+  const history = await fetch(`http://127.0.0.1:${port}/history?since=100&limit=2`);
   assert.equal(history.status, 200);
   assert.deepEqual(await history.json(), {
-    readings: [{recorded_at: 200, co2: 620}, {recorded_at: 300, co2: 630}],
+    readings: [{recorded_at: 100, co2: 612}, {recorded_at: 200, co2: 620}],
   });
 
   const fallback = await fetch(`http://127.0.0.1:${port}/history`);
   assert.equal(fallback.status, 200);
   assert.equal((await fallback.json()).readings.length, 3);
+
+  const invalid = await fetch(`http://127.0.0.1:${port}/history?limit=nope`);
+  assert.equal(invalid.status, 400);
 });
 
 test("assembles the read-only binding ABI for Linux arm64", () => {
