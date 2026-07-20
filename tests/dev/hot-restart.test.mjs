@@ -59,5 +59,9 @@ test("dev replaces the running server after a dependency changes", async context
   assert.equal(await waitForBody(port, "second", child, () => output), "second");
   await writeFile(path.join(project, "late.ts"), 'export const LATE = "third";\n');
   assert.equal(await waitForBody(port, "third", child, () => output), "third");
+  assert.match(
+    output,
+    /reload timings: frontend=\d+ms codegen=\d+ms assembly=\d+ms link=\d+ms shutdown=\d+ms startup=\d+ms total=\d+ms/,
+  );
   assert.equal(child.exitCode, null, output);
 });

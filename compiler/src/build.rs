@@ -2,7 +2,7 @@ use std::{
     fs,
     path::{Path, PathBuf},
     process::Command,
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 use serde::Serialize;
@@ -40,6 +40,13 @@ pub struct Output {
     pub executable: PathBuf,
     pub dependencies: Vec<PathBuf>,
     pub port: u16,
+    pub timings: BuildTimings,
+}
+
+pub struct BuildTimings {
+    pub codegen: Duration,
+    pub assembly: Duration,
+    pub link: Duration,
 }
 
 #[derive(Serialize)]
@@ -113,6 +120,7 @@ pub fn execute_compilation(
     } else {
         compilation.program.server.port.unwrap_or(options.port)
     };
+    let codegen_started = Instant::now();
     let assembly = codegen::emit(
         &compilation.program,
         options.target,
@@ -123,6 +131,7 @@ pub fn execute_compilation(
             read_roots: options.allowed_read_roots.clone(),
         },
     )?;
+    let codegen_duration = codegen_started.elapsed();
 
     let root = frontend::resource_root()?;
     let temporary = temporary_directory()?;
@@ -131,7 +140,10 @@ pub fn execute_compilation(
     fs::write(&assembly_path, &assembly)
         .map_err(|error| format!("could not write {}: {error}", assembly_path.display()))?;
 
+    let assembly_started = Instant::now();
     assemble(&assembly_path, &object_path, options.target)?;
+    let assembly_duration = assembly_started.elapsed();
+    let link_started = Instant::now();
     let runtime_binary = link_runtime(
         &root,
         options
@@ -143,6 +155,7 @@ pub fn execute_compilation(
         options.release,
         options.target,
     )?;
+    let link_duration = link_started.elapsed();
     let output = absolute_output(&options.output)?;
     if let Some(parent) = output.parent() {
         fs::create_dir_all(parent)
@@ -179,6 +192,11 @@ pub fn execute_compilation(
             .map(|module| PathBuf::from(&module.path))
             .collect(),
         port,
+        timings: BuildTimings {
+            codegen: codegen_duration,
+            assembly: assembly_duration,
+            link: link_duration,
+        },
     })
 }
 
@@ -275,8 +293,7 @@ fn runtime_cargo_features(compilation: &Compilation) -> String {
 }
 
 fn allocation_metrics_requested() -> bool {
-    std::env::var_os("TINYTSX_INTERNAL_ALLOC_METRICS").as_deref()
-        == Some(std::ffi::OsStr::new("1"))
+    std::env::var_os("TINYTSX_INTERNAL_ALLOC_METRICS").as_deref() == Some(std::ffi::OsStr::new("1"))
 }
 
 fn strip_binary(binary: &Path, target: Target) -> Result<(), String> {
@@ -427,10 +444,7 @@ fn print_summary(
     println!(
         "Application workers: {} executors; {} logical workers; provider transport {}",
         usize::from(
-            !compilation.program.workers.is_empty()
-                || provider_transport
-                || actors
-                || sqlite
+            !compilation.program.workers.is_empty() || provider_transport || actors || sqlite
         ) * options.workers,
         compilation.program.workers.len(),
         if provider_transport {

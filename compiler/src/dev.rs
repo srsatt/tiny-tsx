@@ -9,7 +9,7 @@ use std::{
         mpsc,
     },
     thread,
-    time::{Duration, SystemTime},
+    time::{Duration, Instant, SystemTime},
 };
 
 use crate::{build, frontend};
@@ -29,6 +29,7 @@ struct RunningGeneration {
     executable: PathBuf,
     port: u16,
     number: u64,
+    startup: Duration,
 }
 
 pub fn execute(options: build::Options, restart_timeout: Duration) -> Result<(), String> {
@@ -64,19 +65,24 @@ pub fn execute(options: build::Options, restart_timeout: Duration) -> Result<(),
         }
 
         println!("TinyTSX dev: change detected; rebuilding");
+        let reload_started = Instant::now();
         refresh(&mut watched);
         generation += 1;
         let mut candidate_options = options.clone();
         candidate_options.output = generation_output(&base_output, generation);
-        match frontend
-            .compile()
+        let frontend_started = Instant::now();
+        let compilation = frontend.compile();
+        let frontend_duration = frontend_started.elapsed();
+        match compilation
             .and_then(|compilation| build::execute_compilation(&candidate_options, compilation))
         {
             Ok(output) => {
                 let fallback_executable = running.executable.clone();
                 let fallback_port = running.port;
                 let fallback_number = running.number;
+                let shutdown_started = Instant::now();
                 terminate(&mut running.child, restart_timeout)?;
+                let shutdown_duration = shutdown_started.elapsed();
                 running = match start_ready(&output.executable, output.port, generation) {
                     Ok(candidate) => candidate,
                     Err(error) => {
@@ -92,6 +98,16 @@ pub fn execute(options: build::Options, restart_timeout: Duration) -> Result<(),
                 watched = versions(&output.dependencies);
                 if running.number == generation {
                     println!("TinyTSX dev: generation {generation} started");
+                    println!(
+                        "TinyTSX dev: reload timings: frontend={}ms codegen={}ms assembly={}ms link={}ms shutdown={}ms startup={}ms total={}ms",
+                        frontend_duration.as_millis(),
+                        output.timings.codegen.as_millis(),
+                        output.timings.assembly.as_millis(),
+                        output.timings.link.as_millis(),
+                        shutdown_duration.as_millis(),
+                        running.startup.as_millis(),
+                        reload_started.elapsed().as_millis(),
+                    );
                 }
             }
             Err(error) => {
@@ -121,6 +137,7 @@ fn build_and_start(
 }
 
 fn start_ready(executable: &Path, port: u16, generation: u64) -> Result<RunningGeneration, String> {
+    let startup_started = Instant::now();
     let mut child = Command::new(executable)
         .stdout(Stdio::piped())
         .spawn()
@@ -151,6 +168,7 @@ fn start_ready(executable: &Path, port: u16, generation: u64) -> Result<RunningG
                 executable: executable.to_owned(),
                 port,
                 number: generation,
+                startup: startup_started.elapsed(),
             });
         }
         if let Some(status) = child.try_wait().map_err(|error| error.to_string())? {
